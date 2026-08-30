@@ -9,7 +9,7 @@
 
 **当前阶段**：M0 最小可靠骨架 —— G1 已过门（2026-08-30 用户指示开工），工序 3 编码 **T01~T17 已完成**（329 单测 + 32 集成测试全绿），剩 T18 部署验证
 
-**下一步动作**：T18（compose 双容器部署到 195，DP-01~05）→ 测试全绿后推送 GitHub（推送前当场确认）→ G2 阶段门
+**下一步动作**：T18（compose 双容器部署到 195，DP-01~05）→ 本地 commit 353b688 已落（用户指示暂不 push）→ G2 阶段门等待用户确认 M0 完成
 
 ## 六道工序状态（M0）
 
@@ -58,3 +58,4 @@
 - 2026-08-30：**T15/T16 完成**：双应用启动自检（Control：写凭证 env 扫描 + `has_table_privilege` 断言 outbox 无 UPDATE 权；Publisher：非 root + 私钥只读 + 无模型 key + DB 权限矩阵；违规即拒绝启动）+ ArchUnit AFT-01/02s/03/04 全套（红绿验证留证）。**主会话复跑 `mvn clean test` 亲验：shared-kernel 98 + control 136 + publisher 95 = 329 全绿，BUILD SUCCESS**。注：T15/T16 期间检测到工作区有第二个写入方（docs 被并行更新，内容与主会话一致无冲突）——已留档，待用户确认是否有并行会话。
 - 2026-08-30：**T17 完成**：§12 集成矩阵在 195 真跑（Testcontainers PG16 + WireMock + 双进程单 JVM harness）——L2 CT-01~07（CT-05 占位待 M5）、L3 ST-01~08、L4 EX-01~10 共 32 IT 全绿；本机 `mvn clean test` 329 单测全绿。集成暴露并修复 5 个生产缺陷（INC-11 V2 grants 列级授权偏差、INC-12 claim SQL 类型、INC-13 jsonb 绑定、INC-14 账本失败路径缺事件、INC-15 换届事件挂错流），全部有 IT 回归。工程修复：control 胖 jar 加 `classifier=exec`（T18 部署注意用 `*-exec.jar`）。已知 spec gap：T0 入口拒绝恶意 tar 时无 Run 可标失败（仅 webhook 登记），是否补 Run 级登记留 G2 评审。服务器构建现场 `/opt/build/pr`，m2 缓存在卷 `m2repo`。
 - 2026-08-30：**T18 完成，M0 部署验证收官**：195 上 compose 五服务栈（postgres + migrate one-shot + control-app + publisher-app + github-stub）起栈，`deploy/smoke-test.sh` **DP-01~05 全 PASS（40/0）**，证据 `/opt/build/pr/deploy/smoke-evidence/20260830-195729/`。亮点：DP-05 走真实百炼 qwen-plus 完成评审闭环，stub journal 证实 check/review 各恰好 1 次（effectively-once 远端证据）。部署暴露并修复 INC-17（CAS 600 权限跨 uid 拒读，IT 盲区）、INC-18（compose secrets target 后缀）。本机最终回归 329 全绿。**栈保持运行**：control webhook `127.0.0.1:8080`、stub admin `127.0.0.1:19090`。剩余：推送 GitHub（当场确认）→ G2 阶段门。
+- 2026-08-30：本地 git commit `353b688` 落盘（297 文件，+23630 行，含 docs/deploy/skill；密钥泄漏检查通过）。用户指示暂不 push。
