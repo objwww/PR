@@ -86,15 +86,18 @@ public final class ReviewAgentLoop {
         // 4) 解析：整体乱输出 → 安全失败异常（不产出半个 ReviewOutcome）
         FindingJsonParser.ParseResult parsed = new FindingJsonParser().parse(result.content());
 
-        // 5) 行号工程映射：不信模型行号，按 existing_code 重定位
+        // 5) 行号工程映射：不信模型行号，按 existing_code 重定位。
+        //    映射面 = 全量快照（不是仅入选 prompt 的文件）：INC-19 真实联调发现模型从
+        //    diff 全文中正确抓到了预算截断文件里的 bug 并逐字引用原文——预算是 prompt 大小约束，
+        //    不是锚定真源的范围约束；快照才是"这段代码是否真实存在"的唯一判定依据。
         Map<String, String> contents = new LinkedHashMap<>();
-        for (SnapshotTree.Entry entry : selected) {
+        for (SnapshotTree.Entry entry : snapshot.entries()) {
             contents.put(entry.path(), new String(entry.content(), StandardCharsets.UTF_8));
         }
         FindingMapper.MappingResult mapped = findingMapper.map(headSha, contents, parsed.findings());
 
         return new ReviewOutcome(mapped.findings(), mapped.droppedCount(), parsed.malformedCount(),
-                candidates.size(), selected.size(), truncated, result.tokenUsage());
+                candidates.size(), selected.size(), truncated, result.tokenUsage(), result.content());
     }
 
     /** prompt 组装（确定性：文件按定序清单逐节拼接） */
@@ -106,6 +109,12 @@ public final class ReviewAgentLoop {
                 {"file": 文件路径, "line": 你估计的行号, "existing_code": 问题代码的原文片段(逐字引用),
                  "rule": 规则标识, "severity": BLOCKER|MAJOR|MINOR|INFO, "message": 问题描述}
                 没有发现就输出 []。
+
+                硬性要求（违反将无法定位，finding 会被工程侧丢弃）：
+                1. existing_code 必须逐字引用下方 ==== FILES ==== 节里的源码原文行，
+                   禁止包含 diff 的 +、- 或前导空格等任何行前缀字符；一次引用 1~3 行最短必要片段；
+                2. file 必须与 ==== FILES ==== 节标题里的路径完全一致（仓库相对路径，
+                   不带 diff 的 a/ 或 b/ 前缀，不带前导 /）。
 
                 ==== DIFF ====
                 """);

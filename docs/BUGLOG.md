@@ -166,3 +166,12 @@
 - **解决方案**：secrets 改长语法显式 `target: /run/secrets/github-app-key.pem`。回归：DP-01 起栈自检常驻。
 - **预防措施**：部署描述文件的每个"默认行为"都要实测一次；smoke-test.sh 的崩溃循环检测即兜底。
 - **关联**：DP-01、T18。
+
+### INC-19 —— 修复中（真实模型联调暴露）
+
+- **现象**：mall_R 真实 PR #1（故意埋 5 类 bug）评审闭环机械成功（Check/Review 恰好一次落 GitHub），但 review_finding=0、review 正文为空——stats 显示模型实际返回 6 条 finding，全部被 FindingMapper 丢弃（dropped=6, malformed=0）。IT 的 ST-06 用 mock 模型（verbatim 引用）全绿，真实 qwen-plus 输出却 100% 过不了两级锚定。
+- **前因后果**：M0 设计"不信模型行号、用 existing_code 片段工程锚定"，但喂给模型的是 diff 格式文本，模型回摘的片段极可能带 diff 行前缀（+/-/空格）或轻微改写；两级匹配（精确子串 + 行级 trim）均未覆盖该污染形态。叠加 MODEL_RESPONSE 未落 CAS（V1 已预留 artifact_type 但代码没写），线上无法取证模型原始输出。
+- **根因**：与模型的输出契约只写在测试 fixture 里，没有在 prompt 中显式约束"逐字引用、禁止 diff 标记"；工程防线（锚定）与输入呈现格式（diff）不匹配。这是"mock 绿 ≠ 真实模型绿"的第二次印证（第一次是 INC-11/12）。
+- **解决方案**：① locate() 增加 diff 前缀归一化层级（片段各行剥 `+`/`-`/前导空格后再匹配）；② 文件路径容忍 `a/`、`b/` 前缀差异；③ prompt 显式约束逐字引用规则；④ MODEL_RESPONSE 落 CAS + artifact 登记（可取证）；⑤ 新增污染片段单测。
+- **预防措施**：凡"模型输出→工程校验"的契约，必须同时存在 prompt 约束 + 防御性归一化 + 真实模型回归（不能只用 mock 验收）；模型原始响应一律落 CAS。
+- **关联**：T08、ST-06、UT-05。

@@ -108,4 +108,105 @@ class FindingMapperTest {
         assertThat(base.fingerprint()).isNotEqualTo(otherLine.fingerprint());
         assertThat(otherLine.lineStart()).isEqualTo(6);
     }
+
+    // ---------------------------------------------------------- INC-19
+
+    @Test
+    void inc19_diffPlusPrefixedSnippetAnchors() {
+        // 模型把 diff 的 '+' 行前缀抄进片段（真实 qwen-plus 联调暴露的形态）
+        ModelFinding mf = new ModelFinding(FILE, 5, "+    return a / b;", "divide-by-zero", "MAJOR", "除零");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(5);
+        assertThat(result.findings().get(0).lineEnd()).isEqualTo(5);
+    }
+
+    @Test
+    void inc19_diffMinusPrefixedSnippetAnchorsWhenLineExistsElsewhere() {
+        ModelFinding mf = new ModelFinding(FILE, 5, "-    return a / b;", "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(5);
+    }
+
+    @Test
+    void inc19_multiLinePlusPrefixedSnippetAnchors() {
+        String snippet = "+    public int div(int a, int b) {\n+        return a / b;\n+    }";
+        ModelFinding mf = new ModelFinding(FILE, 1, snippet, "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(4);
+        assertThat(result.findings().get(0).lineEnd()).isEqualTo(6);
+    }
+
+    @Test
+    void inc19_uniformSpacePrefixedSnippetAnchors() {
+        // diff 上下文行的统一前导单空格（剥离后应命中）
+        String snippet = "     public int div(int a, int b) {\n         return a / b;";
+        ModelFinding mf = new ModelFinding(FILE, 1, snippet, "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(4);
+        assertThat(result.findings().get(0).lineEnd()).isEqualTo(5);
+    }
+
+    @Test
+    void inc19_mixedDiffPrefixesRefused() {
+        // +/- 混合前缀不是"统一抄来的同种前缀"，拒绝剥离 → 片段失配计 dropped
+        String snippet = "+    return a / b;\n-    return a / b;";
+        ModelFinding mf = new ModelFinding(FILE, 5, snippet, "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.droppedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void inc19_normalIndentedCodeNotStripped() {
+        // 回归保护：正常缩进的代码片段逐字存在于文件 → 第一级精确命中，剥离逻辑不参与
+        String snippet = "    public int div(int a, int b) {\n        return a / b;";
+        ModelFinding mf = new ModelFinding(FILE, 1, snippet, "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(4);
+        assertThat(result.findings().get(0).lineEnd()).isEqualTo(5);
+    }
+
+    @Test
+    void inc19_diffStyleFilePathAnchors() {
+        // diff 里的 a//b/ 前缀路径 → 归一化到快照规范路径，finding 落规范路径
+        for (String variant : new String[]{"a/" + FILE, "b/" + FILE, "/" + FILE}) {
+            ModelFinding mf = new ModelFinding(variant, 5, "return a / b;", "rule", "MAJOR", "m");
+
+            FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, CONTENT), List.of(mf));
+
+            assertThat(result.droppedCount()).as("variant %s", variant).isZero();
+            assertThat(result.findings().get(0).filePath()).isEqualTo(FILE);
+            assertThat(result.findings().get(0).lineStart()).isEqualTo(5);
+        }
+    }
+
+    @Test
+    void inc19_exactPathMatchWinsOverPrefixStripping() {
+        // 仓库里真实存在 "a/" 顶层目录时，精确命中优先，不误剥前缀
+        String nested = "a/Foo.java";
+        ModelFinding mf = new ModelFinding(nested, 1, "int x = 0/1;", "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD,
+                Map.of(nested, "int x = 0/1;\n"), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).filePath()).isEqualTo(nested);
+    }
 }

@@ -98,6 +98,14 @@ public class ReviewStepExecutor implements StepExecutor {
         artifactRepository.register(new ArtifactRecord(outputDigest, ArtifactType.FINDING_BODY,
                 body.length, path, Instant.now()));
 
+        // 4) 模型原始响应全文落 CAS（INC-19：模型真实输出的唯一事实源，排查 dropped 必查；
+        //    表/事件只记 digest，§5.5 大对象纪律）
+        byte[] modelBody = outcome.modelResponse().getBytes(StandardCharsets.UTF_8);
+        Digest modelDigest = Digest.sha256Of(new String(modelBody, StandardCharsets.UTF_8));
+        String modelPath = artifactStore.putIfAbsent(modelDigest, modelBody);
+        artifactRepository.register(new ArtifactRecord(modelDigest, ArtifactType.MODEL_RESPONSE,
+                modelBody.length, modelPath, Instant.now()));
+
         return new StepOutcome.Succeeded(outputDigest, outcome);
     }
 

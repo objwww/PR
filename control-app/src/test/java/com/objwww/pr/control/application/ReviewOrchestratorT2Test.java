@@ -70,7 +70,7 @@ class ReviewOrchestratorT2Test {
                     "rule-" + i, "MAJOR", "msg " + i, Digest.sha256Of("fp-" + i)));
         }
         return new StepOutcome.Succeeded(Digest.sha256Of("output"),
-                new ReviewOutcome(drafts, 1, 0, 5, 4, 1, new TokenUsage(10, 20, 30)));
+                new ReviewOutcome(drafts, 1, 0, 5, 4, 1, new TokenUsage(10, 20, 30), "[]"));
     }
 
     @Test

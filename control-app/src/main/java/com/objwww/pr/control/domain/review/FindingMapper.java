@@ -12,11 +12,17 @@ import java.util.Objects;
  * 不信任模型自报行号——用 {@code existing_code} 片段在对应文件内容里重新定位精确行号；
  * 片段找不到 → 丢弃该 finding 并计数（UT-05）。
  *
- * <p>定位算法（确定性，两级）：
+ * <p>定位算法（确定性，三级）：
  * <ol>
  *   <li>片段整体在文件内容中精确子串匹配；</li>
- *   <li>退化为行级匹配：片段与文件行各自 trim 后做连续子序列匹配（容忍模型回显时的缩进漂移）。</li>
+ *   <li>退化为行级匹配：片段与文件行各自 trim 后做连续子序列匹配（容忍模型回显时的缩进漂移）；</li>
+ *   <li>INC-19：片段所有非空行带同一种 diff 行前缀（{@code +}/{@code -}/统一前导单空格）时，
+ *       整体剥离一个字符后重走前两级（混合前缀拒绝剥离，防误伤正常缩进）。</li>
  * </ol>
+ *
+ * <p>文件路径归一化（INC-19）：模型回写的 file 先精确查找，未命中再剥 diff 风格
+ * {@code a/}/{@code b/} 前缀与前导 {@code /}；落 finding 的路径与 fingerprint 一律用
+ * 快照内的规范路径（GitHub review 评论也要求仓库相对路径）。
  *
  * <p>finding_fingerprint = SHA256(head_sha | file | line_range | rule | normalize(message))，
  * message 做空白归一化（trim + 连续空白折叠为单空格，UT-06）。
@@ -42,7 +48,8 @@ public final class FindingMapper {
         List<ReviewFindingDraft> drafts = new ArrayList<>();
         int dropped = 0;
         for (ModelFinding mf : modelFindings) {
-            String content = mf.file() == null ? null : fileContents.get(mf.file());
+            String path = resolvePath(fileContents, mf.file());
+            String content = path == null ? null : fileContents.get(path);
             if (content == null) {
                 dropped++; // 模型幻觉出的文件路径
                 continue;
@@ -52,12 +59,33 @@ public final class FindingMapper {
                 dropped++; // 片段找不到：丢弃并计数（UT-05）
                 continue;
             }
-            Digest fingerprint = fingerprint(headSha, mf.file(), range[0], range[1],
+            Digest fingerprint = fingerprint(headSha, path, range[0], range[1],
                     mf.rule(), mf.message());
-            drafts.add(new ReviewFindingDraft(mf.file(), range[0], range[1],
+            drafts.add(new ReviewFindingDraft(path, range[0], range[1],
                     mf.rule(), mf.severity(), mf.message(), fingerprint));
         }
         return new MappingResult(drafts, dropped);
+    }
+
+    /**
+     * 模型回写路径 → 快照规范路径（INC-19）：精确命中优先；否则剥前导 "/" 与
+     * diff 风格 {@code a/}/{@code b/} 前缀再试一次；仍不命中返回 null（计 dropped）。
+     */
+    static String resolvePath(Map<String, String> fileContents, String file) {
+        if (file == null) {
+            return null;
+        }
+        if (fileContents.containsKey(file)) {
+            return file;
+        }
+        String stripped = file;
+        if (stripped.startsWith("/")) {
+            stripped = stripped.substring(1);
+        }
+        if (stripped.startsWith("a/") || stripped.startsWith("b/")) {
+            stripped = stripped.substring(2);
+        }
+        return !stripped.equals(file) && fileContents.containsKey(stripped) ? stripped : null;
     }
 
     /**
@@ -68,6 +96,17 @@ public final class FindingMapper {
         if (snippet == null || snippet.isBlank()) {
             return null; // 无定位锚点
         }
+        int[] range = locateRaw(content, snippet);
+        if (range != null) {
+            return range;
+        }
+        // 3) INC-19：模型把 diff 行前缀抄进了片段 → 同种前缀整体剥离后重试
+        String stripped = stripDiffLinePrefix(snippet);
+        return stripped == null ? null : locateRaw(content, stripped);
+    }
+
+    /** 前两级：精确子串 → 行级 trim 连续子序列 */
+    private static int[] locateRaw(String content, String snippet) {
         // 1) 精确子串匹配
         int idx = content.indexOf(snippet);
         if (idx >= 0) {
@@ -89,6 +128,42 @@ public final class FindingMapper {
             return new int[]{start + 1, start + snippetLines.length};
         }
         return null;
+    }
+
+    /**
+     * INC-19 diff 行前缀剥离：所有非空行带同一种前缀（{@code +}/{@code -}/单空格）时
+     * 每行剥一个字符；任一行无前缀或前缀混种 → 返回 null 拒绝剥离（防误伤正常缩进代码）。
+     */
+    static String stripDiffLinePrefix(String snippet) {
+        String[] lines = snippet.split("\n", -1);
+        char prefix = 0;
+        for (String line : lines) {
+            if (line.isEmpty()) {
+                continue; // 空行无前缀可言，不参与判定
+            }
+            char c = line.charAt(0);
+            if (c != '+' && c != '-' && c != ' ') {
+                return null;
+            }
+            if (prefix == 0) {
+                prefix = c;
+            } else if (c != prefix) {
+                return null; // 混合前缀：不是统一抄来的 diff 块，拒绝剥离
+            }
+        }
+        if (prefix == 0) {
+            return null; // 全空行
+        }
+        StringBuilder sb = new StringBuilder(snippet.length());
+        for (int i = 0; i < lines.length; i++) {
+            if (!lines[i].isEmpty()) {
+                sb.append(lines[i].substring(1));
+            }
+            if (i < lines.length - 1) {
+                sb.append('\n');
+            }
+        }
+        return sb.toString();
     }
 
     /** 字符偏移 → 1-based 行号（endExclusive 偏移落在片段后一个字符时算片段最后一行） */

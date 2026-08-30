@@ -94,6 +94,27 @@ class ReviewStepExecutorTest {
     }
 
     @Test
+    void modelResponseStoredInCasAndRegistered() {
+        // INC-19：模型原始响应全文落 CAS + MODEL_RESPONSE 登记（诊断模型真实输出的事实源）
+        stageInput();
+        String modelOutput = "[{\"file\":\"a/Foo.java\",\"line\":50,\"existing_code\":\"int x = 0/1;\","
+                + "\"rule\":\"div-zero\",\"severity\":\"MAJOR\",\"message\":\"除零\"}]";
+        modelClient.enqueueContent(modelOutput);
+
+        StepOutcome outcome = executor.execute(context(), () -> true);
+
+        assertThat(outcome).isInstanceOf(StepOutcome.Succeeded.class);
+        Digest modelDigest = Digest.sha256Of(modelOutput);
+        assertThat(fx.cas.exists(modelDigest)).isTrue();
+        assertThat(new String(fx.cas.get(modelDigest).orElseThrow(), StandardCharsets.UTF_8))
+                .isEqualTo(modelOutput);
+        assertThat(fx.artifacts.all()).anySatisfy(a -> {
+            assertThat(a.artifactType()).isEqualTo(ArtifactType.MODEL_RESPONSE);
+            assertThat(a.digest()).isEqualTo(modelDigest);
+        });
+    }
+
+    @Test
     void missingSnapshotBlobFails() {
         fx.cas.putIfAbsent(DIFF_DIGEST, "d".getBytes(StandardCharsets.UTF_8));
 

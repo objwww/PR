@@ -133,4 +133,27 @@ class ReviewAgentLoopTest {
         assertThat(outcome.findings()).isEmpty();
         assertThat(outcome.droppedFindings()).isEqualTo(1);
     }
+
+    @Test
+    void inc19_findingInBudgetTruncatedFileStillAnchors() {
+        // INC-19 第二轮真实回归：模型从 diff 全文抓到预算截断文件里的 bug 并逐字引用原文。
+        // 映射面是全量快照（预算只约束 prompt 大小），该 finding 必须锚定而不是误丢。
+        SnapshotTree tree = treeOf(
+                "a/A.java", "class A {}\n",
+                "b/B.java", "class B {}\n",
+                "z/Service.java", "class S {\n  String sql = \"SELECT * FROM t WHERE u='\" + u + \"'\";\n}\n");
+        ReviewBudget budget = new ReviewBudget(2, 1L * 1024 * 1024, 1000, Duration.ofSeconds(10));
+        model.enqueueContent("""
+                [{"file":"z/Service.java","line":2,"existing_code":"String sql = \\"SELECT * FROM t WHERE u='\\" + u + \\"'\\";","rule":"sql-injection","severity":"BLOCKER","message":"拼接 SQL"}]
+                """);
+
+        ReviewOutcome outcome = loop.review(tree, "h", "d", budget);
+
+        assertThat(outcome.selectedFiles()).isEqualTo(2); // z/Service.java 未入选 prompt
+        assertThat(outcome.truncatedFiles()).isEqualTo(1);
+        assertThat(outcome.droppedFindings()).isZero(); // 但仍锚定成功
+        assertThat(outcome.findings()).hasSize(1);
+        assertThat(outcome.findings().get(0).filePath()).isEqualTo("z/Service.java");
+        assertThat(outcome.findings().get(0).lineStart()).isEqualTo(2);
+    }
 }
