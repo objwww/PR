@@ -1,0 +1,12 @@
+# 密钥与本地配置
+.env
+*.pem
+*private-key*
+
+# 构建产物
+target/
+build/
+node_modules/
+
+# 备份
+backups/

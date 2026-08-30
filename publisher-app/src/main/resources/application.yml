@@ -1,0 +1,23 @@
+# 默认 profile：无数据库环境空跑启动。
+# 已引入 spring-jdbc（T11–T13 的 PG 实现在 infrastructure，不加组件注解、只在 docker
+# profile 装配），这里显式排除 DataSource 自动配置；docker profile 用空列表覆盖恢复。
+spring:
+  application:
+    name: publisher-app
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+publisher:
+  # CAS 只读挂载点（与 control 的 app.artifact.cas-dir 同一内容寻址目录）
+  payload:
+    cas-root: ${APP_CAS_DIR:./var/cas}
+  github:
+    api-base: ${GITHUB_API_BASE:https://api.github.com}
+  instance-id: ${PUBLISHER_INSTANCE_ID:publisher-1}
+  # 只读 token 窄接口共享密钥（默认 profile 仅占位——该 profile 不暴露端点；docker 必须注入）
+  internal-token-secret: ${INTERNAL_TOKEN_SECRET:placeholder-not-configured}
+
+# 与 control-app 错开端口，便于本机同跑
+server:
+  port: 8081

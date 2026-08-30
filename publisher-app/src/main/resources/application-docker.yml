@@ -1,0 +1,25 @@
+# docker 部署占位（M0-T18 compose 起栈时启用：--spring.profiles.active=docker）
+# datasource 指向 postgres 容器别名；密码只走环境变量，不落库不落文件。
+spring:
+  # 覆盖默认 profile 的排除项，恢复 DataSource 自动配置
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:pr_agent}
+    username: publisher_app
+    password: ${PUBLISHER_DB_PASSWORD}
+  flyway:
+    # 迁移唯一执行者是 control（表 owner）；publisher 只消费已建表，
+    # publisher_app 角色无 schema CREATE 权，不关会启动即崩
+    enabled: false
+
+publisher:
+  github:
+    # GitHub App 凭证（T14 CredentialBroker）：私钥只读挂载（B16），不出进程不落日志
+    app-id: ${GITHUB_APP_ID}
+    installation-id: ${GITHUB_INSTALLATION_ID}
+    private-key-path: ${GITHUB_APP_KEY_PATH:/run/secrets/github-app-key.pem}
+    # 铸造 token 时收窄到的仓库名列表（逗号分隔；空 = installation 全域，M0 建议收窄）
+    mint-repositories: ${GITHUB_MINT_REPOSITORIES:}
+  # 只读 token 窄接口共享密钥：docker 栈必须注入真实值（无默认值 = 端点 fail-closed 401）
+  internal-token-secret: ${INTERNAL_TOKEN_SECRET}

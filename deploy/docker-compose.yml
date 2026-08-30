@@ -1,0 +1,235 @@
+# ============================================================================
+# pr_agent M0 栈（T18）：postgres + migrate(one-shot) + control-app + publisher-app + github-stub
+#
+# B16 hardening 落点（DP-04 逐项断言）：
+#   - publisher 以 non-root（uid 10002，镜像内 USER）运行；control uid 10001，两容器身份不同；
+#   - 私钥仅 publisher 挂载（compose secrets → /run/secrets/github-app-key.pem，
+#     默认 mode 0444 且挂载只读——control 容器完全没有该文件）；
+#   - 两应用容器 read_only rootfs + tmpfs /tmp + cap_drop ALL + no-new-privileges；
+#   - 不挂载 docker socket（任何容器都没有 /var/run/docker.sock）；
+#   - publisher 端口不对外发布（仅 internal 网络别名可达）；
+#     control 的 8080 仅绑宿主机 127.0.0.1（webhook 冒烟从宿主机 curl，M0 不对公网开放）；
+#   - restart: unless-stopped；deploy.resources.limits；json-file 日志 max-size/max-file 轮转。
+#
+# Flyway 迁移接线（T18 交付物 3）——选「独立 one-shot 服务 migrate」而非「control 内嵌 owner 数据源」：
+#   1) 最小权限：owner（postgres 超级用户）凭证只存在于秒级生命周期的 migrate 容器，
+#      control/publisher 进程全生命周期不接触 DDL 凭证（control_app/publisher_app 无 DDL 权）；
+#   2) 顺序硬保证：depends_on + condition: service_completed_successfully——迁移完成前
+#      业务容器根本不会被创建，无"边迁移边启动"竞态；迁移失败 = 栈起不来（fail-closed）；
+#   3) 幂等：flyway migrate 可反复执行（compose up 重跑无副作用）。
+#   代价：多一个镜像 + 迁移 SQL 需随部署目录同步（README 部署步骤 2）。
+#   两应用以 SPRING_FLYWAY_ENABLED=false 关闭应用内 Flyway 自动迁移。
+#
+# 已定折衷（诚实边界，报告如实写）：
+#   - CAS 卷 cas-data 两容器共享：control rw、publisher ro 挂载。
+#     B16"不共享可写文件系统"的语义满足：publisher 侧只读、无任何写位；选只读共享而非
+#     各挂各的卷，因为 outbox payload 由 control 写、publisher 必须读同一份内容寻址文件，
+#     两个独立卷需要额外同步机制且违背"同一份事实"语义。
+#   - postgres 在 195（内核 3.10）上必须 seccomp:unconfined（INC-09，见 BUGLOG）；
+#     JVM 容器（eclipse-temurin:21-jre）实测默认 seccomp profile 可正常启动（java -version
+#     与 Spring Boot 全量启动均验证过），不放开；flyway:10-alpine（JRE）同。
+#   - github-stub 是 M0 默认模式（真实 GitHub App 凭证未提供）：token 铸造/tarball/
+#     compare/check-runs/reviews + 模型 /chat/completions 全部由 wiremock 替身
+#     （deploy/wiremock/mappings/stub.json）。接真实 GitHub 时移除该服务并改
+#     GITHUB_API_BASE=https://api.github.com。
+#
+# 密码/密钥全部走 deploy/.env（.gitignore 已排 .env 与 *.pem），不入库；模板见 .env.example。
+# ============================================================================
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # INC-09：195 内核 3.10，postgres:16 镜像的新 syscall 被默认 seccomp 拦，
+    # 必须显式放开；此为 postgres 独有例外，DP-04 报告如实说明
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      # initdb 角色脚本读取（deploy/db/01-roles.sh）
+      CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:?}
+      PUBLISHER_DB_PASSWORD: ${PUBLISHER_DB_PASSWORD:?}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+      # 注意：不挂 deploy/db/roles.sql——initdb 时表尚不存在，授权由 Flyway V2 做
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB:-pr_agent}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging: *logging
+    # 不发布端口：验证脚本经 docker compose exec 进容器跑 psql
+
+  migrate:
+    # Flyway one-shot（文件头注有选型理由）：owner 身份执行 V1/V2，完成后退出，
+    # control/publisher 经 depends_on: service_completed_successfully 排队其后
+    image: flyway/flyway:10-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pr_agent}
+      FLYWAY_USER: postgres # owner 身份（DDL）；该凭证不进入任何业务容器
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:?}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+    volumes:
+      # 直挂 control-app 资源目录（单一事实源，T18 裁决）：不复制到 deploy/db/migration
+      # 双份——V1/V2 改动只改一处，杜绝部署副本漂移；代价是 deploy 不能脱离仓库根单独分发
+      - ../control-app/src/main/resources/db/migration:/flyway/sql:ro
+    command: ["-connectRetries=30", "migrate"]
+    networks:
+      - internal
+    logging: *logging
+
+  github-stub:
+    # M0 默认模式的替身（真实 GitHub App 凭证未提供）：铸 token / tarball / compare /
+    # check-runs / reviews 全端点 + 模型 /chat/completions 兜底，见 wiremock/mappings/
+    image: wiremock/wiremock:3.13.1
+    restart: unless-stopped
+    volumes:
+      - ./wiremock/mappings:/home/wiremock/mappings:ro
+      - ./wiremock/__files:/home/wiremock/__files:ro
+    ports:
+      # 仅绑 loopback：smoke-test.sh 从宿主机查 /__admin/requests 做 DP-05 计数断言；
+      # 不对外暴露
+      - "127.0.0.1:${STUB_ADMIN_PORT:-19090}:8080"
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    logging: *logging
+
+  control-app:
+    build:
+      # 运行镜像只封装 jar（jar 由宿主机 maven 容器预先 package，见 README 步骤 3），
+      # 构建上下文 = 模块目录即可
+      context: ../control-app
+    image: pr-agent/control-app:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      github-stub:
+        condition: service_started
+      publisher-app:
+        condition: service_started
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:?}
+      SPRING_FLYWAY_ENABLED: "false" # 迁移唯一执行者 = migrate one-shot（文件头注）
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:?} # stub 模式 = http://github-stub:8080
+      AGENT_MODEL_API_KEY: ${AGENT_MODEL_API_KEY:?}       # stub 模式 = 占位串（stub 不验）
+      AGENT_MODEL: ${AGENT_MODEL:-qwen-plus}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?}
+      INTERNAL_TOKEN_SECRET: ${INTERNAL_TOKEN_SECRET:?}
+      PUBLISHER_TOKEN_ENDPOINT: http://publisher-app:8081
+      # stub 模式指向 github-stub；真实环境改为 https://api.github.com
+      GITHUB_API_BASE: ${GITHUB_API_BASE:-http://github-stub:8080}
+      APP_CAS_DIR: /var/cas
+    ports:
+      # 仅宿主机 loopback：webhook 冒烟口，M0 不对公网开放（安全底线）
+      - "127.0.0.1:${CONTROL_PORT:-8080}:8080"
+    volumes:
+      # CAS：control 读写（快照/产物落盘）
+      - cas-data:/var/cas
+    # B16（control 侧同样收紧，逐项可被 docker inspect 断言）
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+    logging: *logging
+
+  publisher-app:
+    build:
+      context: ../publisher-app
+    image: pr-agent/publisher-app:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      github-stub:
+        condition: service_started
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      PUBLISHER_DB_PASSWORD: ${PUBLISHER_DB_PASSWORD:?}
+      SPRING_FLYWAY_ENABLED: "false" # 迁移唯一执行者 = migrate one-shot
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?}
+      GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:?}
+      GITHUB_APP_KEY_PATH: /run/secrets/github-app-key.pem
+      GITHUB_MINT_REPOSITORIES: ${GITHUB_MINT_REPOSITORIES:-}
+      INTERNAL_TOKEN_SECRET: ${INTERNAL_TOKEN_SECRET:?}
+      GITHUB_API_BASE: ${GITHUB_API_BASE:-http://github-stub:8080}
+      APP_CAS_DIR: /var/cas
+      PUBLISHER_INSTANCE_ID: publisher-1
+      # 刻意不注入 AGENT_MODEL_API_KEY：publisher 启动自检断言其不存在（F1 隔离）
+    # 端口不发布：窄接口仅 internal 网络内 control 可达（B16 / 评审修正 #6）
+    volumes:
+      # 已定折衷：同一 CAS 卷 publisher 只读挂载（不共享可写文件系统）
+      - cas-data:/var/cas:ro
+    secrets:
+      # 长语法显式 target：短语法默认挂到 /run/secrets/<secret名>（无 .pem 后缀），
+      # 与应用读取路径 /run/secrets/github-app-key.pem 不一致（首轮冒烟 publisher 因此崩溃）
+      - source: github-app-key
+        target: /run/secrets/github-app-key.pem
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+    logging: *logging
+
+secrets:
+  github-app-key:
+    file: ./keys/github-app-key.pem
+
+volumes:
+  pg-data:
+  cas-data:
+
+networks:
+  internal:
+    driver: bridge

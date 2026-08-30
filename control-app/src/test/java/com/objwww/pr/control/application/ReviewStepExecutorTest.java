@@ -1,0 +1,158 @@
+package com.objwww.pr.control.application;
+
+import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
+import com.objwww.pr.control.domain.ai.ModelTimeoutException;
+import com.objwww.pr.control.domain.model.ArtifactType;
+import com.objwww.pr.control.domain.model.PrSubjectState;
+import com.objwww.pr.control.domain.model.ReviewRun;
+import com.objwww.pr.control.domain.model.RunStep;
+import com.objwww.pr.control.domain.model.WorkItem;
+import com.objwww.pr.control.domain.review.FindingMapper;
+import com.objwww.pr.control.domain.review.ModelOutputParseException;
+import com.objwww.pr.control.domain.review.ReviewAgentLoop;
+import com.objwww.pr.control.domain.review.ReviewBudget;
+import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.control.domain.snapshot.SecurityRejectionException;
+import com.objwww.pr.control.domain.tool.PolicyEngine;
+import com.objwww.pr.control.domain.tool.ToolRegistry;
+import com.objwww.pr.control.support.OrchestratorFixture;
+import com.objwww.pr.control.support.TestTarballs;
+import com.objwww.pr.shared.Digest;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * ReviewStepExecutor（T10 REVIEW 执行器）：装 input（CAS + 安全解包）→ ReviewAgentLoop
+ * → findings JSON 落 CAS + artifact 登记 → StepOutcome。异常上抛由 Worker 归类（见 WorkItemWorkerTest）。
+ */
+class ReviewStepExecutorTest {
+
+    private static final Digest SNAPSHOT_DIGEST = Digest.sha256Of("snap");
+    private static final Digest DIFF_DIGEST = Digest.sha256Of("diff");
+
+    private OrchestratorFixture fx;
+    private MockModelClient modelClient;
+    private ReviewStepExecutor executor;
+    private RunStep step;
+    private WorkItem item;
+
+    @BeforeEach
+    void setUp() {
+        fx = new OrchestratorFixture();
+        modelClient = new MockModelClient();
+        executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
+                new SafeTarExtractor(),
+                new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
+                        new PolicyEngine(new ToolRegistry())),
+                ReviewBudget.DEFAULT, new ObjectMapper());
+
+        ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
+                PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
+                DIFF_DIGEST, SNAPSHOT_DIGEST,
+                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1"));
+        step = fx.steps.findByRunId(run.getId()).get(0);
+        item = fx.workItems.findByStepId(step.getId()).orElseThrow();
+    }
+
+    private void stageInput() {
+        byte[] tarball = TestTarballs.tarGz(out ->
+                TestTarballs.file(out, TestTarballs.GH_PREFIX + "a/Foo.java", "int x = 0/1;\n"));
+        fx.cas.putIfAbsent(SNAPSHOT_DIGEST, tarball);
+        fx.cas.putIfAbsent(DIFF_DIGEST, "diff --git a/Foo.java".getBytes(StandardCharsets.UTF_8));
+    }
+
+    private StepExecutionContext context() {
+        return new StepExecutionContext(item, step);
+    }
+
+    @Test
+    void loadsInputRunsLoopAndStoresOutput() {
+        stageInput();
+        modelClient.enqueueContent("""
+                [{"file":"a/Foo.java","line":50,"existing_code":"int x = 0/1;","rule":"div-zero","severity":"MAJOR","message":"除零"}]
+                """);
+
+        StepOutcome outcome = executor.execute(context(), () -> true);
+
+        StepOutcome.Succeeded succeeded = (StepOutcome.Succeeded) outcome;
+        // 行号工程映射：模型报 50，按 existing_code 重定位到 1
+        assertThat(succeeded.reviewOutcome().findings()).hasSize(1);
+        assertThat(succeeded.reviewOutcome().findings().get(0).lineStart()).isEqualTo(1);
+        // 产出 JSON 落 CAS + FINDING_BODY 登记（大对象只进 CAS，库里存 digest）
+        assertThat(fx.cas.exists(succeeded.outputArtifactDigest())).isTrue();
+        assertThat(fx.artifacts.all()).anySatisfy(a -> {
+            assertThat(a.artifactType()).isEqualTo(ArtifactType.FINDING_BODY);
+            assertThat(a.digest()).isEqualTo(succeeded.outputArtifactDigest());
+        });
+    }
+
+    @Test
+    void missingSnapshotBlobFails() {
+        fx.cas.putIfAbsent(DIFF_DIGEST, "d".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> executor.execute(context(), () -> true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CAS 缺快照");
+    }
+
+    @Test
+    void missingDiffBlobFails() {
+        fx.cas.putIfAbsent(SNAPSHOT_DIGEST, TestTarballs.tarGz(out ->
+                TestTarballs.file(out, TestTarballs.GH_PREFIX + "a/Foo.java", "x")));
+
+        assertThatThrownBy(() -> executor.execute(context(), () -> true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CAS 缺 diff");
+    }
+
+    @Test
+    void maliciousTarballRejectedBySafeExtractor() {
+        // EX-10 防线在执行器装 input 路径同样生效（安全解包拒绝，不降级进评审）
+        fx.cas.putIfAbsent(SNAPSHOT_DIGEST, TestTarballs.tarGz(out ->
+                TestTarballs.file(out, TestTarballs.GH_PREFIX + "../../etc/passwd", "root:x:0:0")));
+        fx.cas.putIfAbsent(DIFF_DIGEST, "d".getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> executor.execute(context(), () -> true))
+                .isInstanceOf(SecurityRejectionException.class);
+    }
+
+    @Test
+    void modelGarbagePropagatesAsParseFailure() {
+        stageInput();
+        modelClient.enqueueContent("我觉得这个 PR 写得挺好的。（非 JSON）");
+
+        assertThatThrownBy(() -> executor.execute(context(), () -> true))
+                .isInstanceOf(ModelOutputParseException.class);
+    }
+
+    @Test
+    void modelTimeoutPropagates() {
+        stageInput();
+        ReviewStepExecutor timeoutExecutor = new ReviewStepExecutor(fx.runs, fx.revisions,
+                fx.cas, fx.artifacts, new SafeTarExtractor(),
+                new ReviewAgentLoop(req -> {
+                    throw new ModelTimeoutException("模型超时", null);
+                }, new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry())),
+                ReviewBudget.DEFAULT, new ObjectMapper());
+
+        assertThatThrownBy(() -> timeoutExecutor.execute(context(), () -> true))
+                .isInstanceOf(ModelTimeoutException.class);
+    }
+
+    @Test
+    void deadLeaseStopsBeforeModelCall() {
+        stageInput();
+        modelClient.enqueueContent("[]");
+
+        assertThatThrownBy(() -> executor.execute(context(), () -> false))
+                .isInstanceOf(LeaseLostException.class);
+        assertThat(modelClient.requests()).isEmpty(); // 检查点在模型调用前拦停
+    }
+}

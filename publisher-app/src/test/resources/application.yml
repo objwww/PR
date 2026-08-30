@@ -1,0 +1,24 @@
+# 测试 classpath 的 application.yml 会遮蔽 main 的同名文件，故此处复制 main 全量并追加。
+# 追加原因：T17 集成测试让本模块测试域依赖 control-app 主代码，spring-ai 的
+# OpenAI 自动配置随之进入测试 classpath，上下文装配（PublisherContextSmokeTest）
+# 要求 API key 属性存在。占位值只满足装配，无任何真实调用（测试不打真实模型端点）。
+spring:
+  application:
+    name: publisher-app
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  ai:
+    openai:
+      api-key: placeholder-not-configured
+
+publisher:
+  payload:
+    cas-root: ./var/cas
+  github:
+    api-base: https://api.github.com
+  instance-id: publisher-1
+  internal-token-secret: placeholder-not-configured
+
+server:
+  port: 8081

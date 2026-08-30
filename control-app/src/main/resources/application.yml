@@ -1,0 +1,33 @@
+# 默认 profile：无数据库环境空跑启动。
+# 已引入 spring-jdbc（M0-T03/T04 的 Postgres 实现在 infrastructure，不加组件注解、
+# 默认不装配），这里显式排除 DataSource/Flyway 自动配置；docker profile 用空列表覆盖恢复。
+spring:
+  application:
+    name: control-app
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+  flyway:
+    enabled: false
+  ai:
+    openai:
+      # 仅占位，保证默认 profile 无真实凭证时也能启动；真实值由环境变量注入
+      api-key: ${AGENT_MODEL_API_KEY:placeholder-not-configured}
+      chat:
+        options:
+          model: ${AGENT_MODEL:qwen-plus}
+
+# CAS（内容寻址存储）根目录：M0-T06 SnapshotService 落盘位置，不写死
+app:
+  artifact:
+    cas-dir: ${APP_CAS_DIR:./var/cas}
+  github:
+    # webhook 验签密钥（M0-T05）：默认 profile 仅占位（该 profile 不暴露 webhook 端点）；
+    # docker profile 必须经 GITHUB_WEBHOOK_SECRET 注入真实值
+    webhook-secret: ${GITHUB_WEBHOOK_SECRET:placeholder-not-configured}
+  review:
+    # run_key 的治理版本组分（变更 = 新 run_key = 重新评审；policy 变化不影响 revision fingerprint）
+    policy-version: ${APP_POLICY_VERSION:m0-policy-v1}
+    prompt-version: ${APP_PROMPT_VERSION:m0-prompt-v1}
+    toolset-version: ${APP_TOOLSET_VERSION:m0-toolset-v1}
