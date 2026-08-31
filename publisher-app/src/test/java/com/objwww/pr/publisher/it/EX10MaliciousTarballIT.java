@@ -17,9 +17,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>两个防线位置都演示：
  * <ol>
- *   <li>T0（IntakeService.dispatch → SnapshotService.prepare）：拒绝发生在建 Run 之前——
- *       已知 spec/实现 gap：dispatchSafely 只记日志，没有 Run/Step 可标 FAILED_TERMINAL，
- *       本用例如实断言"零评审行 + 仅 webhook 接收记录"（详见任务报告）；</li>
+ *   <li>T0（InboxProcessor → IntakeService.dispatch → SnapshotService.prepare，M1 两段式后
+ *       由 Processor 同步驱动）：拒绝发生在建 Run 之前——dispatch 上抛，Processor 按
+ *       EX-11 语义退避重试，重试永远不会变合法（载荷不可变），耗尽转 DEAD_LETTER；
+ *       全程零 Run/Step/事件，仅 webhook 原文的接收登记（T0 前的最小记录）；</li>
  *   <li>Step 执行期（ReviewStepExecutor 从 CAS 重装快照再解包）：拒绝 → Worker 归类
  *       SECURITY_REJECTION 不可重试 → Step FAILED + Run FAILED + SAFETY_REJECTED 落账。</li>
  * </ol>
@@ -44,12 +45,35 @@ class EX10MaliciousTarballIT extends PostgresITBase {
         harness.sourcePort.registerSnapshot(HEAD_SHA, malicious)
                 .registerDiff(ItHarness.BASE_SHA, HEAD_SHA, "diff");
 
-        WebhookController controller = new WebhookController(SECRET, harness.intakeService);
+        // M1 两段式入口：202 受理落 inbox，T0 在 Processor 段同步执行
+        WebhookController controller = new WebhookController(SECRET, harness.inboxRepo);
         byte[] body = ItHarness.webhookBody(3011L, "objwww/mall", 41, HEAD_SHA, "opened");
         var response = controller.handle(body, ItHarness.sign(SECRET, body),
                 "pull_request", "ex10-d1");
-        assertThat(response.getStatusCode().value()).isEqualTo(202); // 接收即返回，T0 异步拒绝
+        assertThat(response.getStatusCode().value()).isEqualTo(202);
 
+        StubPrMetadataPort metadata = new StubPrMetadataPort()
+                .remote("open", false, false, HEAD_SHA, ItHarness.BASE_SHA,
+                        java.time.Instant.parse("2025-06-01T12:00:00Z"));
+
+        // 首次处理：T0 安全拒绝上抛 → RETRY_WAIT；不进评审流程
+        harness.newInboxProcessor(metadata).runOnce();
+        assertThat(harness.inboxRepo.findByDeliveryId("ex10-d1").orElseThrow().getState().name())
+                .isEqualTo("RETRY_WAIT");
+        assertZeroReviewRows();
+
+        // 耗尽重试预算（载荷不可变，重试永不成功）→ DEAD_LETTER；仍零评审行
+        for (int i = 0; i < 4; i++) {
+            adminJdbc.sql("UPDATE webhook_inbox SET next_retry_at = now() - interval '1 second'"
+                    + " WHERE delivery_id = 'ex10-d1'").update();
+            harness.newInboxProcessor(metadata).runOnce();
+        }
+        assertThat(harness.inboxRepo.findByDeliveryId("ex10-d1").orElseThrow().getState().name())
+                .isEqualTo("DEAD_LETTER");
+        assertZeroReviewRows();
+    }
+
+    private void assertZeroReviewRows() {
         // 不进评审流程：零 Run/Step/事件；仅 webhook 原文的接收登记（T0 前的最小记录）
         assertThat(count("pr_subject")).isZero();
         assertThat(count("review_run")).isZero();

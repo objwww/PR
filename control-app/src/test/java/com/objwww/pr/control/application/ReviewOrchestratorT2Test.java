@@ -45,7 +45,7 @@ class ReviewOrchestratorT2Test {
                 PrSubjectState.OPEN, false, false,
                 "head1", "main", "basesha456", null,
                 Digest.sha256Of("diff"), Digest.sha256Of("snap"),
-                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1"));
+                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1", null));
         step = fx.steps.findByRunId(run.getId()).get(0);
         workItem = fx.workItems.findByStepId(step.getId()).orElseThrow();
         // worker 领租约（leaseEpoch 0→1, attemptCount 0→1）并记 STARTED attempt

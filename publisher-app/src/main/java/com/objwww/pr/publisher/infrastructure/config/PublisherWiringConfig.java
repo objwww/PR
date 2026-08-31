@@ -1,6 +1,7 @@
 package com.objwww.pr.publisher.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.publisher.application.DriftReconciler;
 import com.objwww.pr.publisher.application.OutboxClaimer;
 import com.objwww.pr.publisher.application.OutboxRecoveryScanner;
 import com.objwww.pr.publisher.domain.handler.CreateCheckHandler;
@@ -105,9 +106,10 @@ public class PublisherWiringConfig {
             GitHubWriteAdapter gitHubWriteAdapter, PublicationStore store, PayloadReader payloadReader,
             List<PublicationHandler> handlers,
             @Value("${publisher.reconcile.retry-delay-seconds:60}") long reconcileRetryDelaySeconds,
-            @Value("${publisher.reconcile.probe-max-pages:3}") int probeMaxPages) {
+            @Value("${publisher.reconcile.probe-max-pages:3}") int probeMaxPages,
+            @Value("${publisher.github.installation-id}") long installationId) {
         return new FencedPublicationExecutor(gitHubWriteAdapter, store, payloadReader, handlers,
-                Duration.ofSeconds(reconcileRetryDelaySeconds), probeMaxPages);
+                Duration.ofSeconds(reconcileRetryDelaySeconds), probeMaxPages, installationId);
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
@@ -133,5 +135,21 @@ public class PublisherWiringConfig {
         return new OutboxRecoveryScanner(store, executor, handlers,
                 Duration.ofSeconds(unknownRetryDelaySeconds), maxReconcileNotFound,
                 scanLimit, idleSleepMs, errorSleepMs);
+    }
+
+    /** M1-T08 DriftReconciler（方案 §4.6）：资源漂移巡检，只检测不修复（CT-20） */
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public DriftReconciler driftReconciler(
+            PublicationStore store, FencedPublicationExecutor executor, PayloadReader payloadReader,
+            ExecutionEventAppender eventAppender, List<PublicationHandler> handlers,
+            @Value("${publisher.drift.budget-per-round:50}") int budgetPerRound,
+            @Value("${publisher.drift.check-interval-minutes:60}") long checkIntervalMinutes,
+            @Value("${publisher.drift.missing-recheck-factor:8}") int missingRecheckFactor,
+            @Value("${publisher.drift.degraded-threshold:3}") int degradedThreshold,
+            @Value("${publisher.drift.idle-sleep-ms:60000}") long idleSleepMs,
+            @Value("${publisher.drift.error-sleep-ms:60000}") long errorSleepMs) {
+        return new DriftReconciler(store, executor, payloadReader, eventAppender, handlers,
+                budgetPerRound, Duration.ofMinutes(checkIntervalMinutes), missingRecheckFactor,
+                degradedThreshold, idleSleepMs, errorSleepMs);
     }
 }

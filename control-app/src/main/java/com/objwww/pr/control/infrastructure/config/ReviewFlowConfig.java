@@ -1,8 +1,11 @@
 package com.objwww.pr.control.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.application.InboxProcessor;
 import com.objwww.pr.control.application.IntakeService;
 import com.objwww.pr.control.application.OutboxWriter;
+import com.objwww.pr.control.application.PrEventAuthoritativeReader;
+import com.objwww.pr.control.application.PrStateReconciler;
 import com.objwww.pr.control.application.ReviewOrchestrator;
 import com.objwww.pr.control.application.ReviewStepExecutor;
 import com.objwww.pr.control.application.SnapshotService;
@@ -12,6 +15,7 @@ import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
 import com.objwww.pr.control.domain.ai.ModelClient;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.port.CredentialTokenPort;
+import com.objwww.pr.control.domain.port.GitHubPrMetadataPort;
 import com.objwww.pr.control.domain.port.GitHubSourcePort;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
 import com.objwww.pr.control.domain.repository.OutboxCommandRepository;
@@ -21,6 +25,7 @@ import com.objwww.pr.control.domain.repository.ReviewFindingRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
 import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
+import com.objwww.pr.control.domain.repository.WebhookInboxRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
@@ -33,6 +38,7 @@ import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
+import com.objwww.pr.control.infrastructure.github.GitHubPrMetadataAdapter;
 import com.objwww.pr.control.infrastructure.github.GitHubReadAdapter;
 import com.objwww.pr.control.infrastructure.github.HttpCredentialTokenPort;
 import com.objwww.pr.control.infrastructure.model.SpringAiModelClient;
@@ -42,10 +48,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 /**
  * 评审链路（webhook → T0/T1/T2）接线，仅 docker profile（理由同 PersistenceConfig：
@@ -117,6 +124,14 @@ public class ReviewFlowConfig {
             CredentialTokenPort credentialTokenPort,
             @Value("${app.github.api-base:https://api.github.com}") String apiBase) {
         return new GitHubReadAdapter(credentialTokenPort, apiBase);
+    }
+
+    /** M1-T05：权威读 port（只读元数据 + sanity 读；token 经同一窄接口，零凭证持有） */
+    @Bean
+    public GitHubPrMetadataPort gitHubPrMetadataPort(
+            CredentialTokenPort credentialTokenPort,
+            @Value("${app.github.api-base:https://api.github.com}") String apiBase) {
+        return new GitHubPrMetadataAdapter(credentialTokenPort, apiBase);
     }
 
     @Bean
@@ -194,20 +209,77 @@ public class ReviewFlowConfig {
                 revisionService, ledger, outboxWriter, objectMapper);
     }
 
-    /** intake 异步派发执行器：虚拟线程（每事件一线程，I/O 密集场景零池化心智负担） */
-    @Bean
-    public Executor intakeExecutor() {
-        return Executors.newVirtualThreadPerTaskExecutor();
-    }
-
     @Bean
     public IntakeService intakeService(SnapshotService snapshotService, ReviewOrchestrator orchestrator,
                                        ArtifactStore artifactStore, ArtifactRepository artifactRepository,
-                                       Executor intakeExecutor,
                                        @Value("${app.review.policy-version:m0-policy-v1}") String policyVersion,
                                        @Value("${app.review.prompt-version:m0-prompt-v1}") String promptVersion,
                                        @Value("${app.review.toolset-version:m0-toolset-v1}") String toolsetVersion) {
+        // M1-T04：IntakeService 不再是异步入口（Executor 已删），由 InboxProcessor 同步驱动
         return new IntakeService(snapshotService, orchestrator, artifactStore, artifactRepository,
-                intakeExecutor, policyVersion, promptVersion, toolsetVersion);
+                policyVersion, promptVersion, toolsetVersion);
+    }
+
+    /**
+     * InboxProcessor（M1-T04 worker 段 + T05/T06 真路由，方案 §4.2/§4.3/§4.4）：
+     * 零注解 worker，循环经 init/destroy 驱动。
+     * workerId 默认 hostname-pid（配置注入优先）；M1 单实例（B-R7：租约字段已为多实例留形）。
+     */
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public InboxProcessor inboxProcessor(WebhookInboxRepository inboxRepository, IntakeService intakeService,
+                                         PrEventAuthoritativeReader prEventAuthoritativeReader,
+                                         ReviewOrchestrator reviewOrchestrator,
+                                         @Value("${app.review.policy-version:m0-policy-v1}") String policyVersion,
+                                         @Value("${app.inbox.worker-id:}") String workerId,
+                                         @Value("${app.inbox.lease-ttl-seconds:600}") long leaseTtlSeconds,
+                                         @Value("${app.inbox.claim-limit:10}") int claimLimit,
+                                         @Value("${app.inbox.backoff-base-seconds:30}") long backoffBaseSeconds,
+                                         @Value("${app.inbox.max-attempts:5}") int maxAttempts,
+                                         @Value("${app.inbox.idle-sleep-ms:1000}") long idleSleepMs,
+                                         @Value("${app.inbox.error-sleep-ms:5000}") long errorSleepMs)
+            throws UnknownHostException {
+        String id = workerId.isBlank()
+                ? InetAddress.getLocalHost().getHostName() + "-" + ProcessHandle.current().pid()
+                : workerId;
+        return new InboxProcessor(inboxRepository, intakeService, prEventAuthoritativeReader,
+                reviewOrchestrator, policyVersion, id,
+                Duration.ofSeconds(leaseTtlSeconds), claimLimit,
+                Duration.ofSeconds(backoffBaseSeconds), maxAttempts, idleSleepMs, errorSleepMs);
+    }
+
+    /** M1-T05：权威读编排（§4.3 判定树，纯决策不写库）；policyVersion 与 IntakeService 同源 */
+    @Bean
+    public PrEventAuthoritativeReader prEventAuthoritativeReader(
+            PRSubjectRepository subjectRepository, PRRevisionRepository revisionRepository,
+            ReviewRunRepository runRepository, GitHubPrMetadataPort gitHubPrMetadataPort,
+            @Value("${app.review.policy-version:m0-policy-v1}") String policyVersion) {
+        return new PrEventAuthoritativeReader(subjectRepository, revisionRepository, runRepository,
+                gitHubPrMetadataPort, policyVersion);
+    }
+
+    /**
+     * PrStateReconciler（M1-T07，方案 §4.5）：公平扫描 + API 预算 + 速率感知退避的
+     * 周期对账 worker。零注解，循环经 init/destroy 驱动；单实例（B-R7）。
+     */
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public PrStateReconciler prStateReconciler(PRSubjectRepository subjectRepository,
+                                               PRRevisionRepository revisionRepository,
+                                               ReviewRunRepository runRepository,
+                                               PrEventAuthoritativeReader prEventAuthoritativeReader,
+                                               ReviewOrchestrator reviewOrchestrator,
+                                               IntakeService intakeService,
+                                               ExecutionLedger executionLedger,
+                                               @Value("${app.review.policy-version:m0-policy-v1}") String policyVersion,
+                                               @Value("${app.reconcile.pr-state.api-budget-per-round:20}") int apiBudgetPerRound,
+                                               @Value("${app.reconcile.pr-state.interval-seconds:1800}") long intervalSeconds,
+                                               @Value("${app.reconcile.pr-state.backoff-base-seconds:60}") long backoffBaseSeconds,
+                                               @Value("${app.reconcile.pr-state.degraded-threshold:3}") int degradedThreshold,
+                                               @Value("${app.reconcile.pr-state.scan-interval-ms:60000}") long scanIntervalMs,
+                                               @Value("${app.reconcile.pr-state.error-sleep-ms:30000}") long errorSleepMs) {
+        return new PrStateReconciler(subjectRepository, revisionRepository, runRepository,
+                prEventAuthoritativeReader, reviewOrchestrator, intakeService, executionLedger,
+                policyVersion, apiBudgetPerRound,
+                Duration.ofSeconds(intervalSeconds), Duration.ofSeconds(backoffBaseSeconds),
+                degradedThreshold, scanIntervalMs, errorSleepMs);
     }
 }

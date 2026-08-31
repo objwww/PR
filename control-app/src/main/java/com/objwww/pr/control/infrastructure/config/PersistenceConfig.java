@@ -9,6 +9,7 @@ import com.objwww.pr.control.domain.repository.ReviewFindingRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
 import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
+import com.objwww.pr.control.domain.repository.WebhookInboxRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
 import com.objwww.pr.control.domain.service.SequenceAllocator;
@@ -22,6 +23,7 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresReviewRunReposit
 import com.objwww.pr.control.infrastructure.persistence.PostgresRunStepRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSequenceAllocator;
 import com.objwww.pr.control.infrastructure.persistence.PostgresStepAttemptRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresWebhookInboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWorkItemRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -75,6 +77,11 @@ public class PersistenceConfig {
     @Bean
     public WorkItemRepository workItemRepository(JdbcClient jdbc) {
         return new PostgresWorkItemRepository(jdbc);
+    }
+
+    @Bean
+    public WebhookInboxRepository webhookInboxRepository(JdbcClient jdbc) {
+        return new PostgresWebhookInboxRepository(jdbc);
     }
 
     @Bean

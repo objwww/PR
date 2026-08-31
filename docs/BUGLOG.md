@@ -167,7 +167,7 @@
 - **预防措施**：部署描述文件的每个"默认行为"都要实测一次；smoke-test.sh 的崩溃循环检测即兜底。
 - **关联**：DP-01、T18。
 
-### INC-19 —— 修复中（真实模型联调暴露）
+### INC-19 —— 已修复（真实模型联调暴露）
 
 - **现象**：mall_R 真实 PR #1（故意埋 5 类 bug）评审闭环机械成功（Check/Review 恰好一次落 GitHub），但 review_finding=0、review 正文为空——stats 显示模型实际返回 6 条 finding，全部被 FindingMapper 丢弃（dropped=6, malformed=0）。IT 的 ST-06 用 mock 模型（verbatim 引用）全绿，真实 qwen-plus 输出却 100% 过不了两级锚定。
 - **前因后果**：M0 设计"不信模型行号、用 existing_code 片段工程锚定"，但喂给模型的是 diff 格式文本，模型回摘的片段极可能带 diff 行前缀（+/-/空格）或轻微改写；两级匹配（精确子串 + 行级 trim）均未覆盖该污染形态。叠加 MODEL_RESPONSE 未落 CAS（V1 已预留 artifact_type 但代码没写），线上无法取证模型原始输出。
@@ -175,3 +175,113 @@
 - **解决方案**：① locate() 增加 diff 前缀归一化层级（片段各行剥 `+`/`-`/前导空格后再匹配）；② 文件路径容忍 `a/`、`b/` 前缀差异；③ prompt 显式约束逐字引用规则；④ MODEL_RESPONSE 落 CAS + artifact 登记（可取证）；⑤ 新增污染片段单测。
 - **预防措施**：凡"模型输出→工程校验"的契约，必须同时存在 prompt 约束 + 防御性归一化 + 真实模型回归（不能只用 mock 验收）；模型原始响应一律落 CAS。
 - **关联**：T08、ST-06、UT-05。
+
+### INC-20 —— 已修复（V3 迁移实库暴露）
+
+- **现象**：V3 在 195 实库执行失败——`ck_publication_resource_state` 旧 CHECK 约束未删就插入新枚举值，校验冲突。
+- **前因后果**：V3 初版按"加新约束→改数据→删旧约束"顺序写，PostgreSQL 对既有行立即校验新/旧约束，旧约束不认 `PRESENT/MISSING` 新值。
+- **根因**：想当然认为 CHECK 约束只拦新写入；实际上改名/改枚举区间的标准顺序是 drop 旧约束 → update 数据 → add 新约束。
+- **解决方案**：V3 改为先 `DROP CONSTRAINT`、再 `UPDATE` 观测态映射（ACTIVE→PRESENT、DRIFTED→MISSING）、最后 `ADD CONSTRAINT`。
+- **预防措施**：迁移脚本一律先在沙箱容器按 V1→…→Vn 顺序真跑（本条已固化为 T01 工序），再进运行栈。
+- **关联**：M1-T01、V3__m1_inbox_reconcile.sql。
+
+### INC-21 —— 已修复（V3 迁移实库暴露，M0 遗留数据）
+
+- **现象**：V3 建 `uq_review_run_active_gen` 部分唯一索引失败——实库存在 11 个同 `(pr_revision_id, generation)` 的 REVIEW_COMPLETE 活跃 Run（M0 联调反复重放的真实残留）。
+- **前因后果**：M0 真实联调为复现 INC-19 多轮重放同一 PR，旧 Run 未被 SUPERSEDED（M0 无收敛唯一约束，靠应用层串行假设）；V3 引入 DB 级兜底索引时被存量脏数据挡住。
+- **根因**：M0 应用层"同世代只一个活跃 Run"只是惯例不是约束；真实联调的非常规操作（手工重放）绕过了惯例。
+- **解决方案**：V3 内加一次性规整 UPDATE——每 `(pr_revision_id, generation)` 组保留 `created_at` 最新者，其余置 SUPERSEDED，然后再建索引；迁移在 195 实库一次通过。
+- **预防措施**：凡应用层不变量，能在 DB 落唯一/检查约束的尽早落；联调期的手工重放要在事后核对账本形态。
+- **关联**：M1-T01、ST-21（该索引是 ST-21 双源并发的最后一道防线）。
+
+### INC-22 —— 已修复（195 部署暴露，IT 盲区）
+
+- **现象**：control 部署后 `InboxProcessor.runOnce` 每 5 秒刷 `PSQLException: syntax error at or near "RETURNINGdelivery_id"`。
+- **前因后果**：`PostgresWebhookInboxRepository.CLAIM_SQL` 用文本块 `RETURNING""" + SELECT_COLUMNS` 拼接，文本块内容不以换行开头（附带缩进剥离），拼出 `RETURNINGdelivery_id`；本机无 docker，claim 路径的 IT（CT-12/13/15/17）从未真跑，单测不触 SQL 字符串本身。
+- **根因**：Java 文本块拼接边界丢失空白 + "本机无 docker → SQL 层 IT 全跳过"的验证盲区叠加。
+- **解决方案**：`RETURNING` 后显式换行再拼列清单；全库 grep 同类 `""" +` 拼接，确认仅此一处（`PostgresReviewRunRepository` 用 `\s` 转义无问题）。本地全 reactor 443 复跑绿后 scp 单文件 + 195 重打包重建镜像，control 日志连续轮询周期无错。
+- **预防措施**：195 侧 `mvn verify`（挂 docker.sock 真跑 IT）纳入部署门禁，不得仅凭本机单测绿就部署；文本块拼接 SQL 一律在拼接边界显式 `\s` 或换行。
+- **关联**：M1-T02、M1-T09a。
+
+### INC-23 —— 已修复（M1-T09a 部署门禁暴露，测试脚本/stub 保真度问题，非产品 bug）
+
+- **现象**：DP 门禁首跑 75 PASS / 2 FAIL。FAIL①：DP-12 "DriftReconciler 重启后未再启动"；FAIL②：DP-14 "stub 收到 check-runs POST 恰好 1 次，实际=2"。
+- **前因后果**：FAIL② 初判为"崩溃落在效果已发未确认窗口→RECONCILING 重发"（设计内行为），但取证 dp14-stub-checks.json 发现两条 POST 的 external_id 分别是 DP-05 与 DP-14 的命令——journal 清零从未生效：脚本沿用 WireMock 2 时代的 `POST /__admin/requests/reset`，3.13 已 404，curl -s 静默吞掉。M0 的 DP-05 通过纯属侥幸（当时 stub 容器新起 journal 本为空）。FAIL① 是 `publisher_started()` 匹配全量日志被首次启动旧标记骗过，wait_for 瞬时返回，sleep 5 不够重启启动完成。
+- **根因**：① 对工具 admin API 版本的想当然（与 INC-10/INC-18 同族：未实证依赖工具真实行为）；② 测试脚本用"日志含标记"当等待条件，对重启场景不成立。
+- **解决方案**：journal 清零改 `DELETE /__admin/requests`（实测 200，journal 24→0，mappings 12 条无损）；DP-12 publisher 等待改计数式（重启前标记数+1）；DP-14 重构为确定性窗口——202 落库即 SIGKILL（崩溃窗口 1：已受理未处理），去掉"等 PROCESSING"（该窗口亚秒级，不可稳定命中）与手工拨租约的 hack，PR 号随机化保证脚本可重跑。
+- **预防措施**：stub/工具的 admin API 调用必须实证响应码，禁止 `-s` 吞错后默认成功；测试等待条件一律用"可区分的增量"（计数/新 id），不用全量日志匹配。产品侧复核结论：崩溃恢复链路账本正确（无重复 outbox 命令、publication_resource 唯一约束生效），无需改代码。
+- **关联**：M1-T09a、DP-05/12/14；stub probe-list 恒空的保真度局限已记录（真实 GitHub 下 RECONCILING 探针可认领已建资源，stub 下会重发——交由测试 agent 的故障注入用例按需覆盖）。
+  - **复跑追加（同日第二轮）**：修复后又暴露两个脚本自身缺陷——① DP-05 固定 PR#7 重跑命中同 revision 去重（不重审已评审快照是产品正确行为），断言却期待新 outbox；② DP-14 重构后漏加 outbox 收敛等待，inbox PROCESSED（=T1 完成）不代表异步评审+发布完成，即时断言假性 FAIL。处置：DP-05/DP-14 PR 号随机化且区间错开（100~599 / 600~899），DP-14 补 `wait_for outbox 两条 CONFIRMED`。教训入档：**冒烟脚本自身必须可重跑（幂等），断言前必须有收敛等待**。
+
+### INC-24 —— 已修复（DP-13 真实联调暴露，M1 代码缺陷）
+
+- **现象**：真实 draft PR 事件落 inbox 后权威读连续失败：`authoritative_read_retry / forbidden`，重试 4/5 次。
+- **前因后果**：M1 新增"GitHub 权威读"（GET /pulls/{n}）与 DriftReconciler 探针（GET /check-runs/{id}）都走 publisher 窄接口签发的 `TokenScope.READ` token，但 M0 的 READ 定义只有 `contents:read`——M0 时代只读 tarball（contents 足够），M1 的 pulls/check-runs 端点分别要 `pull_requests:read`/`checks:read`，缺权被 GitHub 拒。stub 不验权限所以 IT/DP 全绿，真实联调才暴露（"stub 绿 ≠ 真实绿"第三次印证）。
+- **根因**：新增读路径时没有同步审计凭证 scope 的权限映射；stub 环境不建模权限语义，形成验证盲区。
+- **解决方案**：`READ → contents:read + pull_requests:read + checks:read` 只读三元组（仍是零写权限，不违反最小权限原则）；两处单测期望同步更新；本地全 reactor 绿后重建 publisher。inbox 第 5 次重试自动成功（PROCESSED，projection draft=t，零 Run——退避重试机制按设计工作，无需人工重投）。
+- **预防措施**：凡新增触网端点，必须同步审计"该端点所需的最小 GitHub 权限"并更新 TokenScope 映射；交接文档/测试矩阵中凡涉及真实模式的用例都要覆盖权限维度。
+- **关联**：M1-T05/T08、DP-13；证据 F-3（404 隐藏私有资源）同族权限语义。
+
+### INC-25 —— 已修复（DP-13 暴露，部署配置回归 + 工具操作坑）
+
+- **现象**：GitHub 创建 draft PR 后 webhook 投递 502（status: "failed to connect to host"）；用 API 重投时首次 404。
+- **前因后果**：① M0 真实联调期把服务器上 compose 的 control 端口改为公网绑定，但该改动没回写仓库（仓库版仍是 `127.0.0.1:` 硬编码）；M1 tar 同步用仓库版覆盖了服务器文件，公网入口消失。② 首次重投 404 是 jq 把 delivery ID（19 位整数）按 float64 处理丢精度（...925664 → ...539300）。
+- **根因**：① "服务器现场改配置不回写仓库"的漂移惯例——凡 tar 全量同步都会冲掉未入库的服务器侧修改；② jq 大整数精度陷阱。
+- **解决方案**：compose 端口绑定 env 化（`${CONTROL_BIND:-127.0.0.1}`，默认保持 loopback 安全底线），真实模式 .env 与 .env.realmode.bak 均写入 `CONTROL_BIND=0.0.0.0`；重投用原始 JSON 文本取精确 ID 后成功（202，事件落 inbox）。
+- **预防措施**：服务器侧任何配置修改必须当天回写仓库或 .env 模板；处理 GitHub 大整数 ID 一律用字符串/grep 原文，不经 jq 数值化。
+- **关联**：M1-T09a、DP-13；M0 PROGRESS 中"control 8080 改公网发布"一行即当时未回写的现场修改。
+
+### INC-26 —— 已修复（DP-13 真实联调暴露，M1 代码缺陷 + 单测编码错误预期）
+
+- **现象**：DP-13 断言⑤——PR#2 close（epoch 1→2）后 reopen，新 Run 建了但 `publication_epoch` 停在 2（应为 3）；旧世代语义未被切断。
+- **前因后果**：`PrEventAuthoritativeReader` 对 `reopened` action 没有任何特判（全文零命中），reopened 走普通 FullReview 路由；而 T1 的换届判定只在 revision/policy 变化时 bump epoch——head/base 未变的 reopen 自然不换届，违反方案 §4.4"I15/ST-20：reopened 即使代码未变也新 epoch 新 Run（换届是状态语义不是 diff 语义）"。更隐蔽的是：单测 `reopenedWithUnchangedCodeYieldsFullReview` 本身就编码了错误预期，ST-20 的 IT 因本机无 docker 从未真跑——"单测绿"反而掩盖了方案违背。
+- **根因**：决策表七值里漏了 Reopen 这一值；"close 是状态语义要换届"在代码里落实了，对称的 reopen 被默认归并到 FullReview 路径，方案评审与编码都未发现不对称。
+- **解决方案**：① `PrRouteDecision` 新增 `Reopen(FetchResult.Found)` 决策值；② Reader 在 draft 分支后、收敛点前判 `action=reopened` → Reopen；③ InboxProcessor 新增 case：先 `orchestrator.reopenGeneration(...)`（幂等守卫：已 OPEN 非 draft 只刷投影不 bump，重放安全）再以远端权威值走 T1 dispatch，换届与 T1 分两笔事务；④ PrStateReconciler 补同 case（探针 action 恒 synchronize 不可达，防御性按 FullReview）；⑤ 修正编码错误预期的单测 + 新增 Reader/InboxProcessor/Orchestrator 三层 reopened 用例（含重放不双 bump）。本机 242+106 全绿。
+- **验证**：195 重部署后真实 close→reopen 重验：close epoch 2→3（CLOSED），reopen（代码未变）epoch 3→4（OPEN）+ 新 Run REVIEW_COMPLETE + 2 条 outbox CONFIRMED（同 head Revision 复用，秒级完成属预期）。DP-13 五断言全部通过。
+- **预防措施**：对称语义（close/reopen、freeze/unfreeze）必须成对检查实现与测试；方案决策表的每个枚举值都要有对应的"该值存在"的静态/行为断言；195 真跑 IT 入部署门禁（本 bug 的回归测试 `st20_reopenedWithUnchangedCodeGetsNewEpochAndNewRun` 正是漏跑的那条）。
+- **关联**：M1-T05/T06、DP-13、ST-20、I15；与 INC-22 同族（IT 盲区），与 INC-24 同批暴露。
+
+### INC-27 —— 已修复（195 首跑 M1 IT 暴露，两条 IT 测试缺陷，非产品 bug）
+
+- **现象**：195 挂 docker.sock 首跑 `mvn verify`，control IT 22 条中 2  FAIL：① `InboxProcessorIT.st09` 断言重投返回 200 duplicate，实际 202；② `AuthoritativeRoutingIT.st12` 断言 draft 4 事件 fetchCalls=4，实际=2。
+- **前因后果**：① st09 在处理前重投——inbox 行还是 RECEIVED（在途），按 RedeliveryDecision 设计应答 202 {"status":"processing"}（如实回放"处理中"），测试却断言只有终态重投才该有的 200 duplicate。② st12 一次插入 4 条 inbox 再一把 `runOnce()` 批量 claim——`UPDATE ... WHERE id IN (SELECT ... ORDER BY ...) RETURNING` 的 RETURNING 顺序不受子查询 ORDER BY 保证，d4 先于 d2/d3 被处理时水印推进到 T4，旧事件被 StaleEventGuard 正确判 STALE 零 API——这正是 LWW 防线的设计行为，测试却假设严格按序处理。
+- **根因**：两条 IT 从未真跑（本机无 docker），断言建立在"批处理保序"和"重投即终态"两个未经验证的假设上；单测层面这两处语义分别有 RedeliveryDecisionTest/StaleEventGuardTest 覆盖且正确，是 IT 编排错了。
+- **解决方案**：① st09 改为两段式断言——处理前重投→202 processing，处理后重投→200 duplicate（顺带把在途重投语义钉进回归）；② st12 改为插入一条处理一条，顺序确定，"每次 draft push 一次 GET"的语义断言不变。产品代码零改动（行为经核对均属设计内）。
+- **预防措施**：涉及"应答语义""处理顺序"的断言必须先核对实现契约再写；批处理场景不得假设 RETURNING/消费顺序，要么逐条喂要么断言乱序鲁棒性；195 真跑 IT 已证实为不可替代的验证层（本族第 4 次：INC-22/24/26/27）。
+- **关联**：M1-T03/T05、ST-09、ST-12；DP-13 重验通过后首跑 verify 暴露。
+
+### INC-28 —— 已修复（测试执行回流 TB-03，smoke 脚本缺陷，非产品 bug）
+
+- **现象**：DP-02（给 control 注入写凭证 → 拒启）第 4 断言 FAIL：`dp02-control 稳定运行中（State=running RestartCount=0），自检门失效`。
+- **前因后果**：测试执行 agent 手工复现取证（0.2s 轮询 + 5s/15s 复查）证实：自检正确检出写凭证、抛异常、优雅关停约 300ms、最终 exited/ExitCode=1——产品行为完全正确；脚本在"检出失败日志→立即 inspect"窗口内采样到 running 属竞态。且脚本注释假设"compose run 继承 unless-stopped、崩溃循环重启、RestartCount>0 兜底"不成立——`docker compose run` 一次性容器不继承 restart 策略。
+- **根因**：对 compose run 行为的想当然（INC-10/18/23 同族：未实证工具真实语义）+ 用瞬时采样断言一个需要等终态的性质。
+- **解决方案**：DP-02 改轮询等终态（`State=exited`，30s 超时）+ 断言非零退出码；修复后 195 复跑 DP 门禁 77/77 全绿（证据 smoke-evidence/20260831-105403）。
+- **预防措施**：凡断言"进程应死亡/应拒启"类性质，一律轮询等终态 + 验退出码，不做瞬时采样；注释里关于工具行为的假设必须实证（本条由测试 agent 的手工复现取证驱动定位，故障卡六要素的价值兑现）。
+- **关联**：DP-02、TB-03；首次"执行 agent 取证 → 主会话修复"回路完整走通。
+
+### INC-29 —— 已修复（测试执行回流 TB-06，smoke 脚本缺陷，非产品 bug）
+
+- **现象**：DP-01 第 2 断言 FAIL：期望 `dp01-migrate.log` 含 `[Migrating schema]`，实际为 `Schema "public" is up to date. No migration necessary.`（退出码断言 PASS）。
+- **前因后果**：E2E-24 设计内动作 `docker compose down/up` 使首启 migrate 容器被销毁重建，之后任何轮次的迁移日志恒为 "up to date"——断言永久失效。主会话 10:54 轮（pristine 栈）77/0 与执行方 11:33 轮 76/77 的差异全部由此解释。产品与迁移机制本身无缺陷（flyway_schema_history 至 V3 完好）。
+- **根因**：断言依赖"首启容器日志存续"这一环境态而非数据态——与 TB-03/INC-28 同族：把一个会随测试流程合法变化的环境性质当成了不变量。
+- **解决方案**：DP-01 日志断言改双态（首启 `Migrating schema` / 稳态 `up to date` 均 PASS），并新增真正门禁：断言 `flyway_schema_history` 已应用最大版本 == `control-app/src/main/resources/db/migration/V*.sql` 文件最大版本（V4 落地后脚本零改动）。
+- **预防措施**：部署门断言优先断言数据库/账本等持久态事实，日志文本断言仅在语义稳定时使用；含 `compose down` 的用例（E2E-24）会销毁一切"首启痕迹"，后续断言设计必须考虑这一顺序耦合。
+- **关联**：DP-01、TB-06、E2E-24；回归测试 = DP-01 本身（修复后复跑待执行方全量回归确认）。
+
+### INC-30 —— 已修复（外部评审对账 #25，FindingMapper 歧义锚定，产品缺陷）
+
+- **现象**：Finding 锚定时，若模型给出的 `existing_code` 片段在文件中出现多次（精确子串层或行级 trim 层），旧实现取第一次命中定行号——锚定结果取决于文本顺序而非唯一性，可能把 Finding 挂到错误位置。
+- **前因后果**：评审清单 #25 指出"片段多次出现时不能猜行号"；对账确认 FindingMapper 两级匹配（精确子串 → 行级 trim 退化）均无唯一性校验，属部分覆盖的真缺口。
+- **根因**：锚定逻辑只实现"找得到"，没实现"找得唯一"——多重命中在语义上是歧义而非定位，不应被静默解释成第一个。
+- **解决方案**：两级匹配均加唯一命中要求——精确子串层 `indexOf(snippet, idx+1)>=0` 即返回 null；行级 trim 层第二次命中即返回 null（Finding 丢弃并计 dropped）。类 javadoc 同步；`FindingMapperTest` 新增 3 条（歧义精确/歧义 trim/唯一仍定位），本地 18/18 绿。
+- **预防措施**：凡"按内容定位"的逻辑必须区分"未命中/唯一命中/多重命中"三态，多重命中默认丢弃并留计数证据；不确定时降级（丢弃）优于猜测。
+- **关联**：外部评审 #25、FindingMapper、FindingMapperTest::inc29_*（注：测试方法名沿用对账阶段编号，INC 编号以此条为准）；回归测试 = 该 3 条新增用例。
+
+### INC-30 —— 已修复（测试执行回流 TB-07，M0 遗留 I17 违例，潜伏缺陷）
+
+- **现象**：E2E-21 FAIL——`WorkItemWorker.claimNext/findExpiredLeases` 把应用侧 `Instant.now()` 作为 SQL `:now` 参数参与 work_item 租约/过期比较（`PostgresWorkItemRepository` 六条 SQL），违反 I17"一切过期/退避比较走 DB now()"的字面。（另更正：第二轮"应用时钟零命中"是执行方 grep 过度转义的假阴性。）
+- **前因后果**：M0 编码早于 I17 诞生（I17 是 M1 二审 E2E-21 引入的不变量），旧代码未被回溯核查；当前部署应用与 DB 同宿主机、时钟同源，实测偏差≈0，属潜伏态——但风险条件（应用与 DB 时钟域分离）在 M7 多实例/跨机时必然兑现。执行方行为级补验证实 lease_epoch 栅栏对接管危害的缓解有效（租约期内十轮零提前接管，过期 37s 内 epoch 推进重认领）。
+- **根因**：不变量新增后未对存量代码做全量回溯审计（M0 路径漏网）；比较时间戳与业务时间戳在签名上同型（Instant），编译器无法区分，靠人工纪律守不住。
+- **解决方案**：work_item 家族六条 SQL 的比较与 `updated_at`/`lease_until` 写入全部改 DB `now()`/`make_interval`；port 六方法签名摘除应用时钟参数（heartbeat 改传租约秒数）；InMemoryStores fake 引入可设置时钟承接原时间旅行测试；调用方（WorkItemWorker×3、ReviewOrchestrator×4、publisher ItHarness×1）同步。新增 `PostgresWorkItemRepositorySqlGuardTest` 纯文本守卫（六条 SQL 禁 `:now`）。主会话全 reactor 亲验：98+249+107 全绿。
+- **预防措施**：新增不变量必须带"存量代码回溯审计"动作；SQL 文本守卫单测把 I17 变成编译期后仍有保障的红线；`PrStateReconciler:141/292` 内存节奏门裁定豁免留档（M7 多实例时需改 DB 后盾，已记 M2 方案 §8 观察项）；`PostgresPRSubjectRepository` 的 `:now` 属 updated_at 写入非比较，不在 I17 字面范围，留档观察。
+- **关联**：TB-07、E2E-21、I17；修复后待执行方全量回归确认。

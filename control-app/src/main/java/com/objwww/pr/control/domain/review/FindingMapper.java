@@ -12,13 +12,15 @@ import java.util.Objects;
  * 不信任模型自报行号——用 {@code existing_code} 片段在对应文件内容里重新定位精确行号；
  * 片段找不到 → 丢弃该 finding 并计数（UT-05）。
  *
- * <p>定位算法（确定性，三级）：
+ * <p>定位算法（确定性，三级，**全部要求唯一命中**）：
  * <ol>
  *   <li>片段整体在文件内容中精确子串匹配；</li>
  *   <li>退化为行级匹配：片段与文件行各自 trim 后做连续子序列匹配（容忍模型回显时的缩进漂移）；</li>
  *   <li>INC-19：片段所有非空行带同一种 diff 行前缀（{@code +}/{@code -}/统一前导单空格）时，
  *       整体剥离一个字符后重走前两级（混合前缀拒绝剥离，防误伤正常缩进）。</li>
  * </ol>
+ * INC-29：任一级命中次数大于一 = 锚定歧义，该 finding 丢弃并计 dropped——
+ * "取第一个命中"等价于猜行号，违反"不信模型行号"原则。
  *
  * <p>文件路径归一化（INC-19）：模型回写的 file 先精确查找，未命中再剥 diff 风格
  * {@code a/}/{@code b/} 前缀与前导 {@code /}；落 finding 的路径与 fingerprint 一律用
@@ -105,19 +107,26 @@ public final class FindingMapper {
         return stripped == null ? null : locateRaw(content, stripped);
     }
 
-    /** 前两级：精确子串 → 行级 trim 连续子序列 */
+    /** 前两级：精确子串 → 行级 trim 连续子序列；两级都要求**唯一命中** */
     private static int[] locateRaw(String content, String snippet) {
         // 1) 精确子串匹配
         int idx = content.indexOf(snippet);
         if (idx >= 0) {
+            // INC-29：锚点必须唯一。片段出现多次时"取第一个命中"等价于猜行号——
+            // 与"不信模型自报行号"的原则同样违反。歧义 → 返回 null（丢弃并计 dropped），
+            // 宁可少报一条 finding，不可把评论钉在错误的行上。
+            if (content.indexOf(snippet, idx + 1) >= 0) {
+                return null;
+            }
             return new int[]{lineOf(content, idx), lineOf(content, idx + snippet.length())};
         }
-        // 2) 行级 trim 匹配（容忍缩进/行尾漂移）
+        // 2) 行级 trim 匹配（容忍缩进/行尾漂移）；同样要求唯一命中
         String[] snippetLines = snippet.strip().split("\n", -1);
         String[] fileLines = content.split("\n", -1);
         if (snippetLines.length > fileLines.length) {
             return null;
         }
+        int[] found = null;
         outer:
         for (int start = 0; start + snippetLines.length <= fileLines.length; start++) {
             for (int j = 0; j < snippetLines.length; j++) {
@@ -125,9 +134,12 @@ public final class FindingMapper {
                     continue outer;
                 }
             }
-            return new int[]{start + 1, start + snippetLines.length};
+            if (found != null) {
+                return null; // INC-29：第二次命中 = 歧义，丢弃
+            }
+            found = new int[]{start + 1, start + snippetLines.length};
         }
-        return null;
+        return found;
     }
 
     /**

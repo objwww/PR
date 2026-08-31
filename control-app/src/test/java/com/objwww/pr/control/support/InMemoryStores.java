@@ -2,6 +2,7 @@ package com.objwww.pr.control.support;
 
 import com.objwww.pr.control.domain.model.PRRevision;
 import com.objwww.pr.control.domain.model.PRSubject;
+import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewFinding;
 import com.objwww.pr.control.domain.model.ReviewRun;
 import com.objwww.pr.control.domain.model.RunStep;
@@ -70,8 +71,45 @@ public final class InMemoryStores {
                     s.getRepositoryFullName(), s.getPrNumber(), s.getState(), s.isDraft(), s.isMerged(),
                     s.getCurrentRevisionId(), s.getCurrentPolicyVersion(),
                     s.getPublicationEpoch() + 1, s.getNextOutboxSequence(), s.getLastResolvedSequence(),
+                    s.getLastEventUpdatedAt(),
+                    s.getNextPrReconcileAt(), s.getPrReconcileErrorCount(),
                     s.getVersion() + 1, s.getCreatedAt(), s.getUpdatedAt());
             byId.put(id, bumped);
+        }
+
+        @Override
+        public void advanceWatermarkIfNewer(UUID id, Instant eventUpdatedAt, Instant now) {
+            // GREATEST 语义：旧值 NULL 或更旧才推进，并发下收敛于 max（CT-14）
+            PRSubject s = byId.get(id);
+            if (s == null) {
+                throw new IllegalStateException("pr_subject 不存在: " + id);
+            }
+            Instant watermark = s.getLastEventUpdatedAt();
+            Instant advanced = watermark == null || watermark.isBefore(eventUpdatedAt)
+                    ? eventUpdatedAt : watermark;
+            byId.put(id, new PRSubject(s.getId(), s.getGithubInstallationId(), s.getGithubRepositoryId(),
+                    s.getRepositoryFullName(), s.getPrNumber(), s.getState(), s.isDraft(), s.isMerged(),
+                    s.getCurrentRevisionId(), s.getCurrentPolicyVersion(),
+                    s.getPublicationEpoch(), s.getNextOutboxSequence(), s.getLastResolvedSequence(),
+                    advanced,
+                    s.getNextPrReconcileAt(), s.getPrReconcileErrorCount(),
+                    s.getVersion() + 1, s.getCreatedAt(), now));
+        }
+
+        @Override
+        public void refreshStateAndBumpEpoch(UUID id, PrSubjectState state, boolean draft, boolean merged,
+                                             Instant now) {
+            PRSubject s = byId.get(id);
+            if (s == null) {
+                throw new IllegalStateException("pr_subject 不存在: " + id);
+            }
+            byId.put(id, new PRSubject(s.getId(), s.getGithubInstallationId(), s.getGithubRepositoryId(),
+                    s.getRepositoryFullName(), s.getPrNumber(), state, draft, merged,
+                    s.getCurrentRevisionId(), s.getCurrentPolicyVersion(),
+                    s.getPublicationEpoch() + 1, s.getNextOutboxSequence(), s.getLastResolvedSequence(),
+                    s.getLastEventUpdatedAt(),
+                    s.getNextPrReconcileAt(), s.getPrReconcileErrorCount(),
+                    s.getVersion() + 1, s.getCreatedAt(), now));
         }
 
         @Override
@@ -84,6 +122,54 @@ public final class InMemoryStores {
             return byId.values().stream()
                     .filter(s -> s.getGithubRepositoryId() == githubRepositoryId && s.getPrNumber() == prNumber)
                     .findFirst();
+        }
+
+        /**
+         * 公平扫描的内存语义（与 FIND_DUE_FOR_RECONCILE_SQL 对齐）：OPEN 且到点，
+         * 按 nextPrReconcileAt 升序（最久未查先查），limit 截断。
+         * 内存假实现用应用时钟替代 DB now()（I17 的 DB 时钟断言归 IT）。
+         */
+        @Override
+        public List<PRSubject> findDueForReconcile(int limit) {
+            Instant now = Instant.now();
+            return byId.values().stream()
+                    .filter(s -> s.getState() == PrSubjectState.OPEN
+                            && !s.getNextPrReconcileAt().isAfter(now))
+                    .sorted(java.util.Comparator.comparing(PRSubject::getNextPrReconcileAt))
+                    .limit(limit)
+                    .toList();
+        }
+
+        @Override
+        public void markReconciled(UUID id, java.time.Duration interval) {
+            PRSubject s = byId.get(id);
+            if (s == null) {
+                throw new IllegalStateException("pr_subject 不存在: " + id);
+            }
+            byId.put(id, new PRSubject(s.getId(), s.getGithubInstallationId(), s.getGithubRepositoryId(),
+                    s.getRepositoryFullName(), s.getPrNumber(), s.getState(), s.isDraft(), s.isMerged(),
+                    s.getCurrentRevisionId(), s.getCurrentPolicyVersion(),
+                    s.getPublicationEpoch(), s.getNextOutboxSequence(), s.getLastResolvedSequence(),
+                    s.getLastEventUpdatedAt(),
+                    Instant.now().plus(interval), 0,
+                    s.getVersion() + 1, s.getCreatedAt(), Instant.now()));
+        }
+
+        @Override
+        public int markReconcileError(UUID id, java.time.Duration backoff) {
+            PRSubject s = byId.get(id);
+            if (s == null) {
+                throw new IllegalStateException("pr_subject 不存在: " + id);
+            }
+            int newCount = s.getPrReconcileErrorCount() + 1;
+            byId.put(id, new PRSubject(s.getId(), s.getGithubInstallationId(), s.getGithubRepositoryId(),
+                    s.getRepositoryFullName(), s.getPrNumber(), s.getState(), s.isDraft(), s.isMerged(),
+                    s.getCurrentRevisionId(), s.getCurrentPolicyVersion(),
+                    s.getPublicationEpoch(), s.getNextOutboxSequence(), s.getLastResolvedSequence(),
+                    s.getLastEventUpdatedAt(),
+                    Instant.now().plus(backoff), newCount,
+                    s.getVersion() + 1, s.getCreatedAt(), Instant.now()));
+            return newCount;
         }
     }
 
@@ -151,6 +237,14 @@ public final class InMemoryStores {
                             .isTerminal(r.getState()))
                     .toList();
         }
+
+        @Override
+        public Optional<ReviewRun> findLatestByPrSubjectId(UUID prSubjectId) {
+            return byId.values().stream()
+                    .filter(r -> revisions.findById(r.getPrRevisionId())
+                            .map(rev -> rev.getPrSubjectId().equals(prSubjectId)).orElse(false))
+                    .max(java.util.Comparator.comparing(ReviewRun::getCreatedAt));
+        }
     }
 
     public static final class Steps implements RunStepRepository {
@@ -175,6 +269,10 @@ public final class InMemoryStores {
     public static final class WorkItems implements WorkItemRepository {
         private final Map<UUID, WorkItem> byId = new LinkedHashMap<>();
         private final RunStepRepository steps; // 可为 null：lease 上限退化为 maxLeaseSeconds
+        // 内存语义时钟：模拟 DB now()（I17 的 DB 时钟断言归 IT）。
+        // null = 跟随系统时钟（默认，每次调用实时读取）；需要"时间旅行"的测试
+        // 用 setClock/advanceClock 固定/推进，而非向端口传应用侧 now
+        private Instant fixedClock;
 
         public WorkItems() {
             this(null);
@@ -182,6 +280,20 @@ public final class InMemoryStores {
 
         public WorkItems(RunStepRepository steps) {
             this.steps = steps;
+        }
+
+        /** 固定 fake 时钟（时间旅行） */
+        public void setClock(Instant now) {
+            this.fixedClock = Objects.requireNonNull(now);
+        }
+
+        /** 推进 fake 时钟（时间旅行，未固定时以当前系统时间为基准） */
+        public void advanceClock(java.time.Duration duration) {
+            this.fixedClock = now().plus(Objects.requireNonNull(duration));
+        }
+
+        private Instant now() {
+            return fixedClock != null ? fixedClock : Instant.now();
         }
 
         @Override
@@ -200,7 +312,8 @@ public final class InMemoryStores {
         }
 
         @Override
-        public Optional<WorkItem> claimNext(String owner, Instant now, int maxLeaseSeconds) {
+        public Optional<WorkItem> claimNext(String owner, int maxLeaseSeconds) {
+            Instant now = now();
             return byId.values().stream()
                     .filter(w -> (w.getState() == WorkItemState.READY || w.getState() == WorkItemState.RETRY_WAIT)
                             && !w.getAvailableAt().isAfter(now)
@@ -218,19 +331,20 @@ public final class InMemoryStores {
         }
 
         @Override
-        public boolean heartbeat(UUID id, String leaseOwner, long leaseEpoch,
-                                 Instant newLeaseUntil, Instant now) {
+        public boolean heartbeat(UUID id, String leaseOwner, long leaseEpoch, int leaseSeconds) {
+            Instant now = now();
             WorkItem w = byId.get(id);
             if (w == null || w.getState() != WorkItemState.LEASED
                     || !leaseOwner.equals(w.getLeaseOwner()) || leaseEpoch != w.getLeaseEpoch()) {
                 return false; // 已被判死/重领：0 行语义
             }
-            w.renewLease(newLeaseUntil, now);
+            w.renewLease(now.plusSeconds(leaseSeconds), now);
             return true;
         }
 
         @Override
-        public List<WorkItem> findExpiredLeases(Instant now, int limit) {
+        public List<WorkItem> findExpiredLeases(int limit) {
+            Instant now = now();
             return byId.values().stream()
                     .filter(w -> w.getState() == WorkItemState.LEASED
                             && w.getLeaseUntil() != null && w.getLeaseUntil().isBefore(now))
@@ -240,7 +354,8 @@ public final class InMemoryStores {
         }
 
         @Override
-        public boolean reclaimExpiredLease(UUID id, long leaseEpoch, Instant now, WorkItemState target) {
+        public boolean reclaimExpiredLease(UUID id, long leaseEpoch, WorkItemState target) {
+            Instant now = now();
             WorkItem w = byId.get(id);
             if (w == null || w.getState() != WorkItemState.LEASED || w.getLeaseEpoch() != leaseEpoch
                     || w.getLeaseUntil() == null || !w.getLeaseUntil().isBefore(now)) {
@@ -252,7 +367,8 @@ public final class InMemoryStores {
 
         @Override
         public boolean transitionIfLeaseCurrent(UUID id, String leaseOwner, long leaseEpoch,
-                                                WorkItemState to, Instant availableAt, Instant now) {
+                                                WorkItemState to, Instant availableAt) {
+            Instant now = now();
             WorkItem w = byId.get(id);
             if (w == null || !leaseOwner.equals(w.getLeaseOwner()) || leaseEpoch != w.getLeaseEpoch()) {
                 return false; // I11：租约已易主，晚到结果 0 行
@@ -266,7 +382,8 @@ public final class InMemoryStores {
         }
 
         @Override
-        public int cancelActiveByRunId(UUID reviewRunId, Instant now) {
+        public int cancelActiveByRunId(UUID reviewRunId) {
+            Instant now = now();
             int[] count = {0};
             byId.values().forEach(w -> {
                 if (w.getReviewRunId().equals(reviewRunId)

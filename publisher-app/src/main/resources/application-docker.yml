@@ -23,3 +23,15 @@ publisher:
     mint-repositories: ${GITHUB_MINT_REPOSITORIES:}
   # 只读 token 窄接口共享密钥：docker 栈必须注入真实值（无默认值 = 端点 fail-closed 401）
   internal-token-secret: ${INTERNAL_TOKEN_SECRET}
+  # M1-T08 DriftReconciler（方案 §4.6）：资源漂移巡检节奏/预算/间隔/退避/阈值
+  drift:
+    # 每轮 API 预算（LIMIT 即预算，next_check_at 公平排序不饿死尾部，E2E-15）
+    budget-per-round: ${DRIFT_BUDGET_PER_ROUND:50}
+    # 正常巡检间隔（分钟）：探针命中后下一轮排期
+    check-interval-minutes: ${DRIFT_CHECK_INTERVAL_MINUTES:60}
+    # MISSING 低频复核倍率：interval × factor 后再查（§4.6）
+    missing-recheck-factor: ${DRIFT_MISSING_RECHECK_FACTOR:8}
+    # ReconcilerDegraded 告警阈值：连续探测失败次数（措辞修正 #3，EX-14）
+    degraded-threshold: ${DRIFT_DEGRADED_THRESHOLD:3}
+    idle-sleep-ms: ${DRIFT_IDLE_SLEEP_MS:60000}
+    error-sleep-ms: ${DRIFT_ERROR_SLEEP_MS:60000}

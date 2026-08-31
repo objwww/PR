@@ -22,4 +22,11 @@ public interface ReviewRunRepository {
 
     /** T1 换届用：该 PR 所有未完成（非终态）Run，经 pr_revision 关联到 pr_subject */
     List<ReviewRun> findActiveByPrSubjectId(UUID prSubjectId);
+
+    /**
+     * 该 PR 最近一个 Run（任意状态，created_at 最新；M1-T07）：
+     * ReconcilerDegraded 账本事件的兜底挂载点——无 active Run 时挂最近 Run
+     * （execution_event.review_run_id/pr_revision_id 为 NOT NULL + FK，必须有 Run 才能落账）。
+     */
+    Optional<ReviewRun> findLatestByPrSubjectId(UUID prSubjectId);
 }

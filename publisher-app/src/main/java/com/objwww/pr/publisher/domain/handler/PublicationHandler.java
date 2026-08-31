@@ -2,6 +2,7 @@ package com.objwww.pr.publisher.domain.handler;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.shared.CommandType;
+import com.objwww.pr.shared.GitHubOperation;
 import com.objwww.pr.shared.PublicationResourceType;
 import com.objwww.pr.shared.TypedOutcome;
 import com.objwww.pr.shared.TypedReadRequest;
@@ -38,4 +39,13 @@ public interface PublicationHandler {
 
     /** 探测响应 → reconcile 判定；列表型探针的 notFound 只代表本页未命中 */
     ReconcileVerdict interpretProbe(TypedResponse response, ClaimedCommand command);
+
+    /**
+     * DriftReconciler 的 repo 级 sanity 读探针（M1-T08，方案 §4.6/F-3）：资源探针 404 时
+     * 用以确认 token/权限/仓库可达——通过才允许标 MISSING。repo 级探针与命令类型无关，
+     * 默认实现即可；触网仍只经 FencedPublicationExecutor（I4 不破）。
+     */
+    default TypedReadRequest buildSanityProbe(String repositoryFullName) {
+        return new TypedReadRequest(GitHubOperation.GET_REPO, repositoryFullName, Map.of());
+    }
 }

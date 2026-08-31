@@ -3,20 +3,46 @@ package com.objwww.pr.control.interfaces.webhook;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.time.Instant;
 import java.util.Set;
 
 /**
  * GitHub webhook payload 解析（纯函数，可单测）。
- * 两段式：先读 action 做事件过滤（不需处理的 action 不苛求字段完整），
- * 对要处理的 pull_request opened/synchronize/reopened 再做全量字段提取——缺必需字段即
- * {@link MalformedPayloadException}（400，EX-08：畸形 payload 不入库不建 Run）。
+ * M1-T03 两段式改造后，入口（HTTP 线程）只做 {@link #readEntryMeta} 一遍解析提取落库元数据
+ * （畸形 JSON 不报错——payload_json 置 NULL 落库审计，E2E-22）；事件过滤与全量解析后移到
+ * InboxProcessor（方案 §4.2）：六 action 之外 → IGNORED 留痕（ST-16），
+ * 六 action 且字段不全 → {@link MalformedPayloadException}（载荷不可变，重试无义，死信）。
  */
 public final class GitHubWebhookParser {
 
     public static final String EVENT_PULL_REQUEST = "pull_request";
-    public static final Set<String> HANDLED_ACTIONS = Set.of("opened", "synchronize", "reopened");
+    /** M1 六 action（方案 §4.4 决策表）：closed/converted_to_draft 的具体路由由 T06 接管 */
+    public static final Set<String> HANDLED_ACTIONS = Set.of(
+            "opened", "synchronize", "reopened",
+            "ready_for_review", "converted_to_draft", "closed");
+
+    /** 入口落库元数据（inbox 列：github_action / installation_id / repository_id）；三列均可空 */
+    public record EntryMeta(String action, Long installationId, Long repositoryId) {
+    }
 
     private final ObjectMapper mapper = new ObjectMapper();
+
+    /**
+     * 入口一遍解析（M1-T03 §4.2 HTTP 线程）：只提取落库元数据，不苛求字段完整；
+     * JSON 本身非法 → MalformedPayloadException（调用方置 payload_json=NULL 落库，E2E-22）。
+     */
+    public EntryMeta readEntryMeta(byte[] payload) {
+        JsonNode root = readTree(payload);
+        JsonNode action = root.get("action");
+        return new EntryMeta(
+                action != null && action.isTextual() ? action.asText() : null,
+                longOrNull(root.path("installation").path("id")),
+                longOrNull(root.path("repository").path("id")));
+    }
+
+    private static Long longOrNull(JsonNode node) {
+        return node.canConvertToLong() && !node.isTextual() ? node.asLong() : null;
+    }
 
     /** 只读 action 字段；JSON 本身非法 → MalformedPayloadException */
     public String readAction(byte[] payload) {
@@ -25,7 +51,7 @@ public final class GitHubWebhookParser {
         return action != null && action.isTextual() ? action.asText() : null;
     }
 
-    /** 本系统是否处理该事件（事件类型 + action 双过滤；其余 200 忽略） */
+    /** 本系统是否处理该事件（事件类型 + action 双过滤；InboxProcessor 据此路由 IGNORED，ST-16） */
     public boolean isHandled(String eventType, String action) {
         return EVENT_PULL_REQUEST.equals(eventType) && action != null && HANDLED_ACTIONS.contains(action);
     }
@@ -54,7 +80,20 @@ public final class GitHubWebhookParser {
                 pr.path("merged").asBoolean(false),
                 requiredText(head, "sha", "pull_request.head.sha"),
                 requiredText(base, "ref", "pull_request.base.ref"),
-                requiredText(base, "sha", "pull_request.base.sha"));
+                requiredText(base, "sha", "pull_request.base.sha"),
+                instantOrNull(pr.get("updated_at"))); // M1-T05：LWW 快筛输入，缺失/非法 → null（EX-18）
+    }
+
+    /** ISO-8601 宽松解析：非文本/非法格式一律 null（不猜不补，调用方转权威读，EX-18） */
+    static Instant instantOrNull(JsonNode node) {
+        if (node == null || !node.isTextual()) {
+            return null;
+        }
+        try {
+            return Instant.parse(node.asText());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private JsonNode readTree(byte[] payload) {

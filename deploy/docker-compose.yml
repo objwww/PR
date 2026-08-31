@@ -150,8 +150,9 @@ services:
       GITHUB_API_BASE: ${GITHUB_API_BASE:-http://github-stub:8080}
       APP_CAS_DIR: /var/cas
     ports:
-      # 仅宿主机 loopback：webhook 冒烟口，M0 不对公网开放（安全底线）
-      - "127.0.0.1:${CONTROL_PORT:-8080}:8080"
+      # 默认仅绑 loopback（安全底线）；真实联调需 GitHub 公网投递时在 .env 设
+      # CONTROL_BIND=0.0.0.0（HMAC 验签 fail-closed 兜底，M0 已实测）
+      - "${CONTROL_BIND:-127.0.0.1}:${CONTROL_PORT:-8080}:8080"
     volumes:
       # CAS：control 读写（快照/产物落盘）
       - cas-data:/var/cas

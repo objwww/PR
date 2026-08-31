@@ -2,6 +2,7 @@ package com.objwww.pr.publisher.fakes;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.publisher.domain.model.DependencyRow;
+import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
 import com.objwww.pr.publisher.domain.model.SubjectCursor;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
 import com.objwww.pr.publisher.domain.port.StaleLeaseException;
@@ -10,6 +11,7 @@ import com.objwww.pr.publisher.domain.service.T3ADecision;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.OutboxState;
 import com.objwww.pr.shared.OutboxStateMachine;
+import com.objwww.pr.shared.PublicationResourceState;
 import com.objwww.pr.shared.PublicationResourceType;
 
 import java.time.Duration;
@@ -222,5 +224,67 @@ public class FakePublicationStore implements PublicationStore {
         ClaimedCommand command = commands.get(operationId);
         transition(command, OutboxState.SUPERSEDED, "STALE_EPOCH");
         advanceCursor(command);
+    }
+
+    // ---------- Drift 巡检（M1-T08；内存版保持与 PG 实现相同的守卫语义） ----------
+
+    /** 扫描队列：测试预置到期资源 */
+    public final List<DriftCheckTarget> dueDriftChecks = new ArrayList<>();
+    /** resourceId → 观测态（默认视为 PRESENT） */
+    public final Map<UUID, PublicationResourceState> resourceStates = new HashMap<>();
+    /** resourceId → check_error_count */
+    public final Map<UUID, Integer> checkErrorCounts = new HashMap<>();
+
+    @Override
+    public List<DriftCheckTarget> findDueForDriftCheck(int limit) {
+        List<DriftCheckTarget> batch = dueDriftChecks.stream().limit(limit).toList();
+        dueDriftChecks.removeAll(batch);
+        return batch;
+    }
+
+    @Override
+    public void markCheckedPresent(UUID resourceId, Duration interval) {
+        resourceStates.put(resourceId, PublicationResourceState.PRESENT);
+        checkErrorCounts.put(resourceId, 0);
+    }
+
+    @Override
+    public boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event) {
+        PublicationResourceState old = resourceStates.getOrDefault(resourceId,
+                PublicationResourceState.PRESENT);
+        if (old == PublicationResourceState.RETIRED || old == PublicationResourceState.REPAIRED) {
+            return false; // 状态守卫：不参与巡检
+        }
+        resourceStates.put(resourceId, PublicationResourceState.MISSING);
+        checkErrorCounts.put(resourceId, 0);
+        if (old != PublicationResourceState.MISSING && event != null) {
+            events.add(event); // 恰好一次（ST-22）
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public void markUnknown(UUID resourceId, ExecutionEvent event) {
+        PublicationResourceState old = resourceStates.getOrDefault(resourceId,
+                PublicationResourceState.PRESENT);
+        if (old == PublicationResourceState.PRESENT) {
+            resourceStates.put(resourceId, PublicationResourceState.UNKNOWN);
+            if (event != null) {
+                events.add(event);
+            }
+        }
+    }
+
+    @Override
+    public int markCheckError(UUID resourceId, Duration backoff) {
+        PublicationResourceState old = resourceStates.getOrDefault(resourceId,
+                PublicationResourceState.PRESENT);
+        if (old != PublicationResourceState.PRESENT && old != PublicationResourceState.MISSING) {
+            return 0; // 守卫未命中
+        }
+        int count = checkErrorCounts.getOrDefault(resourceId, 0) + 1;
+        checkErrorCounts.put(resourceId, count);
+        return count;
     }
 }

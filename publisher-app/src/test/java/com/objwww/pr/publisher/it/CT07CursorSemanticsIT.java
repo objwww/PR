@@ -95,6 +95,48 @@ class CT07CursorSemanticsIT extends PostgresITBase {
     }
 
     @Test
+    void failedTerminalUnblocksNextCommand() {
+        // FAILED_TERMINAL 同为"解决"终态：游标推进，seq2 正常领取放行（对账缺口补齐）
+        ReviewRun run = seedSubject("ct07c-d1", 1009L, 14, "head" + "7".repeat(36));
+        UUID subjectId = harness.subjectRepo.findByRepositoryAndPrNumber(1009L, 14)
+                .orElseThrow().getId();
+        String agg = "pr:1009#14";
+        Map<String, Object> payload = Map.of("repo", "objwww/mall",
+                "head_sha", "head" + "7".repeat(36), "name", "ai-code-review", "finding_count", 0);
+        var b1 = harness.seedCommand(subjectId, run.getId(), run.getPrRevisionId(), agg,
+                CommandType.CREATE_CHECK, payload, List.of());
+        var b2 = harness.seedCommand(subjectId, run.getId(), run.getPrRevisionId(), agg,
+                CommandType.CREATE_CHECK, payload, List.of());
+
+        // 单批领取两条：B1 403 → AUTH_FAILED → FAILED_TERMINAL；同批 B2 游标已推进 → 放行 201
+        wiremock.stubFor(post(urlEqualTo("/repos/objwww/mall/check-runs"))
+                .atPriority(1)
+                .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock
+                        .containing(b1.operationId().toString()))
+                .willReturn(aResponse().withStatus(403).withHeader("Content-Type", "application/json")
+                        .withBody("{\"message\":\"Resource not accessible by integration\"}")));
+        wiremock.stubFor(post(urlEqualTo("/repos/objwww/mall/check-runs"))
+                .atPriority(5)
+                .willReturn(aResponse().withStatus(201).withHeader("Content-Type", "application/json")
+                        .withBody("{\"id\":43,\"html_url\":\"http://x/43\"}")));
+        harness.newClaimer().runOnce();
+
+        assertThat(stateOf(b1.operationId().value())).isEqualTo("FAILED_TERMINAL");
+        assertThat(stateOf(b2.operationId().value())).isEqualTo("CONFIRMED");
+        assertThat(subjectCursor(subjectId)[2]).isEqualTo(2);
+        // 403 确定性否定须落 SAFETY_REJECTED 告警（auth 失败语义不变）
+        boolean safetyLedgered = harness.eventsOf(run.getId()).stream()
+                .anyMatch(e -> e.eventType() == ExecutionEventType.SAFETY_REJECTED);
+        assertThat(safetyLedgered).isTrue();
+        wiremock.verify(exactly(1), postRequestedFor(urlEqualTo("/repos/objwww/mall/check-runs"))
+                .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock
+                        .containing(b1.operationId().toString())));
+        wiremock.verify(exactly(1), postRequestedFor(urlEqualTo("/repos/objwww/mall/check-runs"))
+                .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock
+                        .containing(b2.operationId().toString())));
+    }
+
+    @Test
     void manualBlocksNextCommandAndGapIsLedgered() {
         ReviewRun run = seedSubject("ct07b-d1", 1008L, 13, "head" + "9".repeat(36));
         UUID subjectId = harness.subjectRepo.findByRepositoryAndPrNumber(1008L, 13)

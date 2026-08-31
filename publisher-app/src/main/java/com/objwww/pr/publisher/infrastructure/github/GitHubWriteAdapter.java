@@ -94,6 +94,9 @@ public class GitHubWriteAdapter {
                             + "/pulls/" + required(params, "pr_number") + "/reviews"
                             + paging(params),
                     null, TokenScope.READ);
+            case GET_REPO -> send("GET",
+                    "/repos/" + request.repositoryFullName(),
+                    null, TokenScope.READ);
             default -> throw new IllegalArgumentException("非读操作: " + request.operation());
         };
     }

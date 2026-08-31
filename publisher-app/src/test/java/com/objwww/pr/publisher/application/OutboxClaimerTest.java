@@ -41,7 +41,8 @@ class OutboxClaimerTest {
         List<PublicationHandler> handlers = List.of(
                 new CreateCheckHandler(), new UpdateCheckHandler(), new PublishReviewHandler());
         FencedPublicationExecutor executor = new FencedPublicationExecutor(
-                github, store, payloadReader, handlers, Duration.ofSeconds(60), 3);
+                github, store, payloadReader, handlers, Duration.ofSeconds(60), 3,
+                TestFixtures.INSTALLATION_ID);
         claimer = new OutboxClaimer(store, executor, "publisher-test", Duration.ofSeconds(60),
                 10, 50, 50);
     }

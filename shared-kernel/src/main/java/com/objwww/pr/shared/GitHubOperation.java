@@ -17,7 +17,9 @@ public enum GitHubOperation {
     /** 读（reconcile 探测）：GET /repos/{repo}/commits/{sha}/check-runs，分页 */
     LIST_CHECKS_FOR_SHA,
     /** 读（reconcile 探测）：GET /repos/{repo}/pulls/{pr}/reviews，分页 */
-    LIST_REVIEWS;
+    LIST_REVIEWS,
+    /** 读（DriftReconciler sanity 读，M1 方案 §4.6/F-3）：GET /repos/{repo}——确认 token/权限/仓库可达 */
+    GET_REPO;
 
     /** 是否写操作（TypedWriteRequest 只接受写操作，TypedReadRequest 反之） */
     public boolean isWrite() {

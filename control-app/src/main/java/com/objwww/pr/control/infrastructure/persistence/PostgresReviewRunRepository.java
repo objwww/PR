@@ -123,6 +123,20 @@ public class PostgresReviewRunRepository implements ReviewRunRepository {
                 .list();
     }
 
+    @Override
+    public Optional<ReviewRun> findLatestByPrSubjectId(UUID prSubjectId) {
+        return jdbc.sql("""
+                        SELECT r.* FROM review_run r
+                        JOIN pr_revision rev ON rev.id = r.pr_revision_id
+                        WHERE rev.pr_subject_id = :prSubjectId
+                        ORDER BY r.created_at DESC
+                        LIMIT 1
+                        """)
+                .param("prSubjectId", Objects.requireNonNull(prSubjectId))
+                .query(this::map)
+                .optional();
+    }
+
     private ReviewRun map(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         Timestamp deadlineAt = rs.getTimestamp("deadline_at");
         Timestamp completedAt = rs.getTimestamp("completed_at");

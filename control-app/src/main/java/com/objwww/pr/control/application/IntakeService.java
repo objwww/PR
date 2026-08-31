@@ -16,16 +16,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Executor;
 
 /**
- * Intake 最小版（application，§3 IntakeService）：落最小接收记录 → 异步派发 T0/T1，
- * HTTP 线程立即返回（19 阶段表 #1）。B-3：M0 不做 inbox 去重——同一 delivery 重投
- * 由 run_key 唯一约束兜底（DuplicateKeyException 捕获后幂等返回已有 Run，ST-05）；
- * 完整 inbox 语义（乱序/半截处理）M1 补（P1）。
+ * Intake 纯执行段（application，M1-T04 改造，方案 §3.1 IntakeService 行）。
+ * M0 时自持 Executor 异步派发、失败只记日志（B-3/P1 诚实边界）；M1 起由
+ * {@link InboxProcessor} 经 inbox 租约**同步**驱动——重试/退避/死信由 inbox 六态机接管，
+ * 本类不再决定忽略事件、不再自持执行器、不再吞异常（失败上抛，由 Processor 按
+ * RETRY_WAIT/DEAD_LETTER 回写，EX-11/CT-16）。
  *
- * <p>显式 Executor 注入而非 @Async：测试可换直连执行器，派发时序可控。
- * 异步任务内的失败只记日志（M0 无 inbox 重放源，B-3/P1 诚实边界）。
+ * <p>职责不变的部分：webhook 原文落 CAS（WEBHOOK_PAYLOAD 登记）仍在 dispatch 内
+ * （输入现在来自 inbox.payload_raw）；run_key 唯一约束兜底重投/并发首建不变（B-3，ST-05）。
  */
 public class IntakeService {
 
@@ -35,44 +35,28 @@ public class IntakeService {
     private final ReviewOrchestrator orchestrator;
     private final ArtifactStore artifactStore;
     private final ArtifactRepository artifactRepository;
-    private final Executor intakeExecutor;
     private final String policyVersion;
     private final String promptVersion;
     private final String toolsetVersion;
 
     public IntakeService(SnapshotService snapshotService, ReviewOrchestrator orchestrator,
                          ArtifactStore artifactStore, ArtifactRepository artifactRepository,
-                         Executor intakeExecutor,
                          String policyVersion, String promptVersion, String toolsetVersion) {
         this.snapshotService = Objects.requireNonNull(snapshotService);
         this.orchestrator = Objects.requireNonNull(orchestrator);
         this.artifactStore = Objects.requireNonNull(artifactStore);
         this.artifactRepository = Objects.requireNonNull(artifactRepository);
-        this.intakeExecutor = Objects.requireNonNull(intakeExecutor);
         this.policyVersion = Objects.requireNonNull(policyVersion);
         this.promptVersion = Objects.requireNonNull(promptVersion);
         this.toolsetVersion = Objects.requireNonNull(toolsetVersion);
     }
 
-    /** 控制器入口：立即返回，实际派发在 intakeExecutor 上异步执行 */
-    public void accept(PullRequestEvent event, byte[] rawPayload) {
-        Objects.requireNonNull(event, "event");
-        Objects.requireNonNull(rawPayload, "rawPayload");
-        intakeExecutor.execute(() -> dispatchSafely(event, rawPayload));
-    }
-
-    /** 异步任务本体（包私有便于测试用直连执行器驱动） */
-    void dispatchSafely(PullRequestEvent event, byte[] rawPayload) {
-        try {
-            dispatch(event, rawPayload);
-        } catch (Exception e) {
-            // M0 无 inbox 重放源：失败只记日志（B-3/P1 边界）；token/密钥不入日志
-            log.error("intake 派发失败 delivery={} repo={}#{}", event.deliveryId(),
-                    event.repositoryFullName(), event.prNumber(), e);
-        }
-    }
-
-    void dispatch(PullRequestEvent event, byte[] rawPayload) {
+    /**
+     * M0 派发语义原样（CAS 接收记录 → T0 → T1），由 InboxProcessor 持租约同步调用。
+     * 异常一律上抛（Processor 据此退避/死信）；public 可见性同时供 IT 分步驱动
+     * 模拟崩溃窗口（ST-17）。
+     */
+    public void dispatch(PullRequestEvent event, byte[] rawPayload) {
         // 0) 落最小接收记录：webhook 原文 → CAS + artifact 登记（WEBHOOK_PAYLOAD）
         Digest payloadDigest = Digest.sha256Of(new String(rawPayload, StandardCharsets.UTF_8));
         String path = artifactStore.putIfAbsent(payloadDigest, rawPayload);
@@ -108,6 +92,6 @@ public class IntakeService {
                 event.headSha(), event.baseRef(), event.baseSha(), null,
                 snapshot.diffDigest(), snapshot.sourceSnapshotDigest(),
                 policyVersion, promptVersion, toolsetVersion,
-                event.deliveryId());
+                event.deliveryId(), event.updatedAt());
     }
 }

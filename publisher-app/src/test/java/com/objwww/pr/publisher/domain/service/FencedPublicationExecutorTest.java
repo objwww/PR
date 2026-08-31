@@ -44,7 +44,7 @@ class FencedPublicationExecutorTest {
         payloadReader = new FakePayloadReader();
         github = new StubGitHubWriteAdapter();
         executor = new FencedPublicationExecutor(github, store, payloadReader, handlers,
-                Duration.ofSeconds(60), 3);
+                Duration.ofSeconds(60), 3, TestFixtures.INSTALLATION_ID);
     }
 
     private ClaimedCommand pendingCheck() {
@@ -145,6 +145,22 @@ class FencedPublicationExecutorTest {
         github.respondWrite(TypedResponse.ofStatus(403));
 
         assertEquals(PublishOutcome.FAILED_TERMINAL, executor.execute(cmd));
+        assertTrue(store.events.stream().anyMatch(
+                e -> e.eventType() == ExecutionEventType.SAFETY_REJECTED));
+    }
+
+    @Test
+    void installationMismatchFailsTerminalWithSafetyEvent() {
+        // SEC 加固：payload installation_id ≠ 部署配置 → FAILED_TERMINAL + SAFETY_REJECTED，零触网
+        ClaimedCommand cmd = pendingCheck();
+        Map<String, Object> payload = TestFixtures.checkPayload(cmd);
+        payload.put("installation_id", TestFixtures.INSTALLATION_ID + 1);
+        payloadReader.put(cmd.payloadHash(), payload);
+
+        assertEquals(PublishOutcome.FAILED_TERMINAL, executor.execute(cmd));
+        assertTrue(github.writeRequests.isEmpty()); // 零触网
+        assertEquals(OutboxState.FAILED_TERMINAL, store.stateOf(cmd).state());
+        assertEquals("INSTALLATION_MISMATCH", store.errorCodes.get(cmd.operationId().value()));
         assertTrue(store.events.stream().anyMatch(
                 e -> e.eventType() == ExecutionEventType.SAFETY_REJECTED));
     }

@@ -3,6 +3,7 @@ package com.objwww.pr.control.application;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.shared.Digest;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -10,6 +11,9 @@ import java.util.Objects;
  * diffDigest / sourceSnapshotDigest 由 T0（SnapshotService，事务外）算好后传入——
  * PRRevision 构造时 digest 必须已就绪（评审修正 #3，I12）。
  * triggerKey = X-GitHub-Delivery：重投同 delivery → 同 run_key → 唯一约束幂等兜底（B-3）。
+ *
+ * <p>eventUpdatedAt（M1-T05）= 权威读返回的远端 updated_at，**可空**（EX-18：远端缺/非法
+ * 时不造）；T1 成功落库时用它推进 LWW 水印（GREATEST 条件更新，CT-14），为 null 则跳过。
  */
 public record IntakeCommand(
         long installationId,
@@ -28,7 +32,8 @@ public record IntakeCommand(
         String policyVersion,
         String promptVersion,
         String toolsetVersion,
-        String triggerKey) {
+        String triggerKey,
+        Instant eventUpdatedAt) {
 
     public IntakeCommand {
         Objects.requireNonNull(repositoryFullName, "repositoryFullName");

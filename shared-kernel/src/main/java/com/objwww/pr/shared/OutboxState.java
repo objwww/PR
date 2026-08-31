@@ -1,8 +1,8 @@
 package com.objwww.pr.shared;
 
 /**
- * Outbox 命令八态机（架构冻结文档 v2.2 §1；无 DRIFTED/CONFIRMED_STALE）。
- * 状态口径回答"尝试的历史"；资源现状见 publication_resource 表。
+ * Outbox 命令八态机（架构冻结文档 v2.2 §1；漂移观测永不进 Outbox，无 CONFIRMED_STALE）。
+ * 状态口径回答"尝试的历史"；资源现状见 publication_resource 表（PublicationResourceState）。
  */
 public enum OutboxState {
 

@@ -19,8 +19,10 @@ import java.util.Objects;
 /**
  * installation token 铸造的 HTTP 实现（JDK HttpClient）：
  * POST {apiBase}/app/installations/{id}/access_tokens，
- * body 收窄 permissions（E6：checks:write / pull_requests:write / contents:read）
- * + 可选 repositories 收窄。
+ * body 收窄 permissions（E6 写侧：checks:write / pull_requests:write；
+ * READ = contents:read + pull_requests:read + checks:read 只读三元组——M1 权威读
+ * 要读 pulls 元数据、DriftReconciler 探针要读 check-runs，仅 contents:read 会被
+ * GitHub 拒，INC-24，DP-13 真实联调暴露）+ 可选 repositories 收窄。
  *
  * <p>纪律：token 只进内存返回值；非 201 的异常消息只带状态码，不带响应体
  * （防对端错误内容意外带入日志）。
@@ -104,7 +106,7 @@ public class HttpInstallationTokenClient implements InstallationTokenClient {
         return switch (scope) {
             case CHECKS_WRITE -> Map.of("checks", "write");
             case PULL_REQUESTS_WRITE -> Map.of("pull_requests", "write");
-            case READ -> Map.of("contents", "read");
+            case READ -> Map.of("contents", "read", "pull_requests", "read", "checks", "read");
         };
     }
 }

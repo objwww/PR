@@ -1,6 +1,7 @@
 package com.objwww.pr.publisher.it;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
+import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
 import com.objwww.pr.publisher.domain.port.ExecutionEventAppender;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
 import com.objwww.pr.publisher.domain.service.T3AContext;
@@ -152,6 +153,33 @@ final class CrashyPublicationStore implements PublicationStore {
     @Override
     public void supersedeStaleEpoch(UUID operationId) {
         delegate.supersedeStaleEpoch(operationId);
+    }
+
+    // ---- Drift 巡检（M1-T08）：纯委托
+
+    @Override
+    public List<DriftCheckTarget> findDueForDriftCheck(int limit) {
+        return delegate.findDueForDriftCheck(limit);
+    }
+
+    @Override
+    public void markCheckedPresent(UUID resourceId, Duration interval) {
+        delegate.markCheckedPresent(resourceId, interval);
+    }
+
+    @Override
+    public boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event) {
+        return delegate.markMissing(resourceId, recheckInterval, event);
+    }
+
+    @Override
+    public void markUnknown(UUID resourceId, ExecutionEvent event) {
+        delegate.markUnknown(resourceId, event);
+    }
+
+    @Override
+    public int markCheckError(UUID resourceId, Duration backoff) {
+        return delegate.markCheckError(resourceId, backoff);
     }
 
     /** 让 ExecutionEventAppender 等未包装件可见（调试用） */

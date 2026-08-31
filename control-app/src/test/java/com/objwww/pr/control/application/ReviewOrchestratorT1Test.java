@@ -40,7 +40,7 @@ class ReviewOrchestratorT1Test {
                 PrSubjectState.OPEN, false, false,
                 headSha, "main", "basesha456", null,
                 Digest.sha256Of("diff-" + headSha), Digest.sha256Of("snap-" + headSha),
-                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", deliveryId);
+                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", deliveryId, null);
     }
 
     @Test
@@ -144,7 +144,7 @@ class ReviewOrchestratorT1Test {
                 PrSubjectState.OPEN, false, false,
                 "head1", "main", "basesha456", null,
                 Digest.sha256Of("diff-head1"), Digest.sha256Of("snap-head1"),
-                "m0-policy-v2", "m0-prompt-v1", "m0-toolset-v1", "d-3");
+                "m0-policy-v2", "m0-prompt-v1", "m0-toolset-v1", "d-3", null);
         ReviewRun second = fx.orchestrator.runIntake(policyChanged);
 
         assertThat(second.getPrRevisionId()).isEqualTo(first.getPrRevisionId()); // 同 revision

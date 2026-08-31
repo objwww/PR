@@ -74,10 +74,27 @@ class PublicationArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * AFT-13（M1 方案 L0）：DriftReconciler 只经 PublicationHandler 探针触网——
+     * 不引用 GitHubWriteAdapter（I4 已有全库规则兜底，此处显式钉死新 worker）、
+     * 不引用写请求类型（TypedWriteRequest = 写路径），不引用 control 侧 Outbox 插入路径。
+     */
+    @Test
+    void driftReconcilerTouchesNetworkOnlyViaHandlerProbes() {
+        noClasses().that().haveFullyQualifiedName(
+                        "com.objwww.pr.publisher.application.DriftReconciler")
+                .should().dependOnClassesThat()
+                .haveFullyQualifiedName(GitHubWriteAdapter.class.getName())
+                .orShould().dependOnClassesThat()
+                .haveFullyQualifiedName("com.objwww.pr.shared.TypedWriteRequest")
+                .orShould().dependOnClassesThat()
+                .haveFullyQualifiedName("com.objwww.pr.control.application.OutboxWriter")
+                .check(classes);
+    }
+
     /** AFT-04 契约：类型化请求无 raw url/method 字段（HTTP 拼装只存在于 GitHubWriteAdapter 内） */
     @Test
-    void typedRequestsHaveNoRawUrlOrMethodFields() {
-        for (Class<?> type : List.of(
+    void typedRequestsHaveNoRawUrlOrMethodFields() {        for (Class<?> type : List.of(
                 com.objwww.pr.shared.TypedWriteRequest.class,
                 com.objwww.pr.shared.TypedReadRequest.class)) {
             for (java.lang.reflect.RecordComponent component : type.getRecordComponents()) {

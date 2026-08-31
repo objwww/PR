@@ -19,6 +19,8 @@ public final class TestFixtures {
     public static final UUID SUBJECT_ID = UUID.randomUUID();
     public static final UUID RUN_ID = UUID.randomUUID();
     public static final UUID REVISION_ID = UUID.randomUUID();
+    /** 与 executor 预检配置同源（SEC 加固） */
+    public static final long INSTALLATION_ID = 77L;
 
     private TestFixtures() {
     }
@@ -62,6 +64,7 @@ public final class TestFixtures {
     public static Map<String, Object> checkPayload(ClaimedCommand command) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operation_id", command.operationId().toString());
+        payload.put("installation_id", INSTALLATION_ID);
         payload.put("repo", "octo/demo");
         payload.put("head_sha", "0123456789abcdef0123456789abcdef01234567");
         payload.put("name", "ai-code-review");
@@ -73,6 +76,7 @@ public final class TestFixtures {
     public static Map<String, Object> reviewPayload(ClaimedCommand command) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operation_id", command.operationId().toString());
+        payload.put("installation_id", INSTALLATION_ID);
         payload.put("repo", "octo/demo");
         payload.put("pr_number", 42);
         payload.put("commit_id", "0123456789abcdef0123456789abcdef01234567");
@@ -86,6 +90,7 @@ public final class TestFixtures {
     public static Map<String, Object> updatePayload(ClaimedCommand command) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operation_id", command.operationId().toString());
+        payload.put("installation_id", INSTALLATION_ID);
         payload.put("repo", "octo/demo");
         payload.put("check_run_id", "998877");
         payload.put("conclusion", "neutral");

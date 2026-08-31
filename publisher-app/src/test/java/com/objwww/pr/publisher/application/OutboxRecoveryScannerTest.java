@@ -42,7 +42,8 @@ class OutboxRecoveryScannerTest {
         payloadReader = new FakePayloadReader();
         github = new StubGitHubWriteAdapter();
         FencedPublicationExecutor executor = new FencedPublicationExecutor(
-                github, store, payloadReader, handlers, Duration.ofSeconds(60), 3);
+                github, store, payloadReader, handlers, Duration.ofSeconds(60), 3,
+                TestFixtures.INSTALLATION_ID);
         scanner = new OutboxRecoveryScanner(store, executor, handlers,
                 Duration.ofSeconds(120), 2, 50, 60_000, 60_000);
     }

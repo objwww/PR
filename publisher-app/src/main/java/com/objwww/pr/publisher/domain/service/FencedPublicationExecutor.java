@@ -54,10 +54,13 @@ public class FencedPublicationExecutor {
     private final RetryBackoff backoff;
     private final Duration reconcileRetryDelay;
     private final int probeMaxPages;
+    /** 本部署绑定的 GitHub App installation（写前本地预检，SEC 加固） */
+    private final long expectedInstallationId;
 
     public FencedPublicationExecutor(GitHubWriteAdapter github, PublicationStore store,
                                      PayloadReader payloadReader, List<PublicationHandler> handlerList,
-                                     Duration reconcileRetryDelay, int probeMaxPages) {
+                                     Duration reconcileRetryDelay, int probeMaxPages,
+                                     long expectedInstallationId) {
         this.github = Objects.requireNonNull(github);
         this.store = Objects.requireNonNull(store);
         this.payloadReader = Objects.requireNonNull(payloadReader);
@@ -65,6 +68,7 @@ public class FencedPublicationExecutor {
         this.backoff = new RetryBackoff();
         this.reconcileRetryDelay = Objects.requireNonNull(reconcileRetryDelay);
         this.probeMaxPages = probeMaxPages;
+        this.expectedInstallationId = expectedInstallationId;
         this.handlers = new EnumMap<>(CommandType.class);
         for (PublicationHandler handler : handlerList) {
             this.handlers.put(handler.commandType(), handler);
@@ -108,6 +112,21 @@ public class FencedPublicationExecutor {
                 return PublishOutcome.DEFERRED;
             }
             default -> throw new IllegalStateException("未知决策: " + decision.action());
+        }
+
+        // ⑤.5 installation 本地预检（SEC 加固）：命令 payload 携带的 installation_id 必须等于
+        // 本部署配置的 installation——此前"命令 repo/installation 与凭证不匹配"只靠 mint 收窄 +
+        // GitHub 403 兜底；不匹配 = 确定性拒绝（FAILED_TERMINAL + SAFETY_REJECTED），零触网
+        if (!installationIdMatches(resolvedPayload)) {
+            try {
+                store.markFailedTerminal(claimed.operationId().value(), claimed.leaseEpoch(),
+                        "INSTALLATION_MISMATCH", event(claimed, ExecutionEventType.SAFETY_REJECTED, Map.of(
+                                "operation_id", claimed.operationId().toString(),
+                                "reason", "installation_mismatch")));
+            } catch (StaleLeaseException e) {
+                return PublishOutcome.DEFERRED; // 租约已被收回（B-2）
+            }
+            return PublishOutcome.FAILED_TERMINAL;
         }
 
         // ⑥ 事务外触网（Handler 只翻译，不触网）
@@ -226,6 +245,20 @@ public class FencedPublicationExecutor {
         return ReconcileVerdict.unknown(); // 超窗口未命中：查不到也不能确认
     }
 
+    /**
+     * DriftReconciler 的 sanity 读（M1-T08，方案 §4.6）：执行 repo 级探针，200 = 通过
+     * （token/权限/仓库可达）；其余状态码与传输失败一律不通过——sanity 的职责是
+     * "能不能信任刚才那个 404"，任何不确定都按不通过处理（E2E-18：权限异常绝不冒充不存在）。
+     * 触网仍只经本类（I4）。
+     */
+    public boolean sanityRead(TypedReadRequest sanityProbe) {
+        try {
+            return github.executeRead(sanityProbe).status() == 200;
+        } catch (GitHubTransportException e) {
+            return false;
+        }
+    }
+
     private boolean isShortPage(TypedResponse response, TypedReadRequest probe) {
         int perPage = ((Number) probe.parameters().getOrDefault("per_page", 100)).intValue();
         if (response.arrayBody() != null) {
@@ -236,6 +269,12 @@ public class FencedPublicationExecutor {
             return list.size() < perPage;
         }
         return true; // 响应无列表 = 视为穷尽（异常形态已由 interpretProbe 归 UNKNOWN）
+    }
+
+    /** fail-closed（E5）：缺字段/非数字一律按不匹配拒绝 */
+    private boolean installationIdMatches(Map<String, Object> payload) {
+        Object value = payload.get("installation_id");
+        return value instanceof Number n && n.longValue() == expectedInstallationId;
     }
 
     private ExecutionEvent event(ClaimedCommand command, ExecutionEventType type, Map<String, Object> payload) {

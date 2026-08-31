@@ -18,7 +18,8 @@ import java.util.Objects;
 
 /**
  * 只读 token 签发窄接口（评审修正 #6：publisher interfaces 层唯一 HTTP 入站，T14）。
- * {@code GET /internal/tokens/readonly?installation_id=} → 短期只读（contents:read）token。
+ * {@code GET /internal/tokens/readonly?installation_id=} → 短期只读 token
+ * （contents:read + pull_requests:read + checks:read，INC-24 后）。
  *
  * <p>安全语义（MVP 形态 P8，诚实边界）：
  * <ul>

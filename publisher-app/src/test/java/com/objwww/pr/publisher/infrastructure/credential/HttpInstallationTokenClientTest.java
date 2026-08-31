@@ -84,7 +84,7 @@ class HttpInstallationTokenClientTest {
         assertThat(HttpInstallationTokenClient.permissionsOf(TokenScope.PULL_REQUESTS_WRITE))
                 .isEqualTo(Map.of("pull_requests", "write"));
         assertThat(HttpInstallationTokenClient.permissionsOf(TokenScope.READ))
-                .isEqualTo(Map.of("contents", "read"));
+                .isEqualTo(Map.of("contents", "read", "pull_requests", "read", "checks", "read"));
     }
 
     @Test
@@ -95,7 +95,8 @@ class HttpInstallationTokenClientTest {
                 new com.fasterxml.jackson.core.type.TypeReference<>() {
                 });
         assertThat(body).doesNotContainKey("repositories");
-        assertThat(body.get("permissions")).isEqualTo(Map.of("contents", "read"));
+        assertThat(body.get("permissions"))
+                .isEqualTo(Map.of("contents", "read", "pull_requests", "read", "checks", "read"));
     }
 
     @Test

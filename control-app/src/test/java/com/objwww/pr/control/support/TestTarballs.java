@@ -45,6 +45,18 @@ public final class TestTarballs {
         out.closeArchiveEntry();
     }
 
+    /** 带可执行位（0755）的常规文件样本（SEC-02 纵深防御断言用） */
+    public static void executableFile(TarArchiveOutputStream out, String name, String content)
+            throws IOException {
+        TarArchiveEntry entry = new TarArchiveEntry(name);
+        entry.setMode(0755);
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+        entry.setSize(bytes.length);
+        out.putArchiveEntry(entry);
+        out.write(bytes);
+        out.closeArchiveEntry();
+    }
+
     public static void symlink(TarArchiveOutputStream out, String name, String target) throws IOException {
         TarArchiveEntry entry = new TarArchiveEntry(name, TarConstants.LF_SYMLINK);
         entry.setLinkName(target);

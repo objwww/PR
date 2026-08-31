@@ -52,6 +52,23 @@ class ReviewAgentLoopTest {
     }
 
     @Test
+    void emptyFindingsArrayIsExplicitSuccess() {
+        // 合法空数组 "[]" 是显式成功语义（模型确认"无发现"）：review() 正常返回
+        // 0 findings / 0 malformed / 0 dropped——不抛 ModelOutputParseException（非失败）、
+        // 不计 dropped（非映射丢弃）。Step 层据此走 Succeeded 路径。
+        SnapshotTree tree = treeOf("a/Foo.java", "class Foo {}\n");
+        model.enqueueContent("[]");
+
+        ReviewOutcome outcome = loop.review(tree, "headsha1", "diff text", ReviewBudget.DEFAULT);
+
+        assertThat(outcome.findings()).isEmpty();
+        assertThat(outcome.malformedFindings()).isZero();
+        assertThat(outcome.droppedFindings()).isZero();
+        assertThat(outcome.candidateFiles()).isEqualTo(1);
+        assertThat(outcome.selectedFiles()).isEqualTo(1);
+    }
+
+    @Test
     void budgetTruncationIsDeterministicAndCounted() {
         // 6 个文件，maxFiles=3 → 字典序前 3 个入选，截断 3；跑两次结果一致
         SnapshotTree tree = treeOf(

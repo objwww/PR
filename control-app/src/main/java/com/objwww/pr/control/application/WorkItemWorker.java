@@ -88,7 +88,7 @@ public class WorkItemWorker {
     /** 单轮：恢复扫描 + 领取执行一个（测试与循环共用入口）；返回处理条数（回收 + 执行） */
     public int runOnce() {
         int recovered = recoverExpiredLeases();
-        Optional<WorkItem> claimed = workItems.claimNext(workerId, Instant.now(), maxLeaseSeconds);
+        Optional<WorkItem> claimed = workItems.claimNext(workerId, maxLeaseSeconds);
         claimed.ifPresent(this::executeClaimed);
         return recovered + (claimed.isPresent() ? 1 : 0);
     }
@@ -96,7 +96,7 @@ public class WorkItemWorker {
     /** 恢复扫描（独立可测）：过期 LEASED 逐条交 T2 侧回收收尾，单条失败不阻塞整批 */
     public int recoverExpiredLeases() {
         int recovered = 0;
-        for (WorkItem expired : workItems.findExpiredLeases(Instant.now(), recoveryScanLimit)) {
+        for (WorkItem expired : workItems.findExpiredLeases(recoveryScanLimit)) {
             try {
                 if (orchestrator.reclaimExpiredLease(expired.getId())) {
                     recovered++;
@@ -255,9 +255,8 @@ public class WorkItemWorker {
                     return;
                 }
                 try {
-                    Instant now = Instant.now();
                     boolean renewed = workItems.heartbeat(item.getId(), workerId, item.getLeaseEpoch(),
-                            now.plusSeconds(maxLeaseSeconds), now);
+                            maxLeaseSeconds);
                     if (!renewed) {
                         alive.set(false); // 0 行：已被判死/重领
                         log.warn("租约心跳失效，停止执行: work_item={}", item.getId());

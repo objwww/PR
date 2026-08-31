@@ -48,6 +48,7 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresReviewRunReposit
 import com.objwww.pr.control.infrastructure.persistence.PostgresRunStepRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSequenceAllocator;
 import com.objwww.pr.control.infrastructure.persistence.PostgresStepAttemptRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresWebhookInboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWorkItemRepository;
 import com.objwww.pr.control.interfaces.webhook.PullRequestEvent;
 import com.objwww.pr.publisher.application.OutboxClaimer;
@@ -99,6 +100,8 @@ import java.util.UUID;
 final class ItHarness {
 
     static final long INSTALLATION_ID = 77L;
+    /** 假 broker 铸币返回的 installation token 原文（SEC-05 泄漏扫描的探针值） */
+    static final String IT_TOKEN = "it-token";
     static final String BASE_REF = "main";
     static final String BASE_SHA = "base0" + "0".repeat(35);
     static final String POLICY = "policy-v1";
@@ -125,6 +128,8 @@ final class ItHarness {
     final ReviewFindingRepository findingRepo;
     final PostgresExecutionEventRepository eventRepo;
     final PostgresSequenceAllocator sequenceAllocator;
+    /** M1-T03 inbox（webhook 入口落库；ST05/EX08/EX10/ST19 经真实入口驱动） */
+    final PostgresWebhookInboxRepository inboxRepo;
     private final RevisionService revisionService = new RevisionService();
     private final ExecutionLedger ledger;
     private final OutboxWriter outboxWriter;
@@ -165,6 +170,7 @@ final class ItHarness {
         findingRepo = new PostgresReviewFindingRepository(control);
         eventRepo = new PostgresExecutionEventRepository(control, PostgresITBase.OM);
         sequenceAllocator = new PostgresSequenceAllocator(control);
+        inboxRepo = new PostgresWebhookInboxRepository(control);
         casStore = new LocalCasArtifactStore(casDir);
         ledger = new ExecutionLedger(eventRepo);
         outboxWriter = new OutboxWriter(new PostgresOutboxCommandRepository(control),
@@ -173,8 +179,9 @@ final class ItHarness {
         snapshotService = new SnapshotService(sourcePort, extractor, casStore, artifactRepo);
         agentLoop = new ReviewAgentLoop(modelClient, new ModelBudgetGuard(),
                 new FindingMapper(), new PolicyEngine(new ToolRegistry()));
+        // M1-T04：IntakeService 是纯执行段（同步 dispatch），不再有自持 Executor 的 accept 入口
         intakeService = new IntakeService(snapshotService, orchestratorProxy, casStore, artifactRepo,
-                Runnable::run, POLICY, PROMPT, TOOLSET);
+                POLICY, PROMPT, TOOLSET);
 
         // ---- Publisher 装配（手工等价 PublisherWiringConfig）
         ExecutionEventAppender appender = new PostgresExecutionEventAppender(publisher, PostgresITBase.OM);
@@ -252,7 +259,7 @@ final class ItHarness {
     /** 每次调用新建：executor/claimer/scanner 构造期捕获 store， sabotage 后必须重建 */
     FencedPublicationExecutor newExecutor() {
         return new FencedPublicationExecutor(newGitHubAdapter(), store(), payloadReader, handlers,
-                reconcileRetryDelay, probeMaxPages);
+                reconcileRetryDelay, probeMaxPages, INSTALLATION_ID);
     }
 
     OutboxClaimer newClaimer() {
@@ -265,16 +272,45 @@ final class ItHarness {
                 unknownRetryDelay, maxReconcileNotFound, 50, 0, 0);
     }
 
+    /**
+     * M1-T08 DriftReconciler（ST-15/ST-22/EX-14/EX-17/E2E-15）：runOnce() 单轮确定性驱动。
+     * 事件落账走 publisher 角色的真实 appender（与生产装配同源）。
+     */
+    com.objwww.pr.publisher.application.DriftReconciler newDriftReconciler(int budgetPerRound) {
+        return new com.objwww.pr.publisher.application.DriftReconciler(store(), newExecutor(),
+                payloadReader,
+                new PostgresExecutionEventAppender(PostgresITBase.publisherJdbc, PostgresITBase.OM),
+                handlers, budgetPerRound, Duration.ofMinutes(60), 8, 3, 0, 0);
+    }
+
+    com.objwww.pr.publisher.application.DriftReconciler newDriftReconciler() {
+        return newDriftReconciler(50);
+    }
+
+    /**
+     * M1-T05/T06 入口工作器：装配 InboxProcessor（真 PG 仓储 + 本线束 intakeService/
+     * orchestrator 代理），权威读由调用方注入 stub/fake port。runOnce() 单轮确定性驱动。
+     */
+    com.objwww.pr.control.application.InboxProcessor newInboxProcessor(
+            com.objwww.pr.control.domain.port.GitHubPrMetadataPort metadataPort) {
+        com.objwww.pr.control.application.PrEventAuthoritativeReader reader =
+                new com.objwww.pr.control.application.PrEventAuthoritativeReader(
+                        subjectRepo, revisionRepo, runRepo, metadataPort, POLICY);
+        return new com.objwww.pr.control.application.InboxProcessor(inboxRepo, intakeService,
+                reader, orchestratorProxy, POLICY, "it-inbox-worker",
+                Duration.ofMinutes(10), 10, Duration.ofSeconds(30), 5, 0, 0);
+    }
+
     private GitHubWriteAdapter newGitHubAdapter() {
         CredentialBroker broker = new CredentialBroker() {
             @Override
             public String token(TokenScope scope) {
-                return "it-token";
+                return IT_TOKEN;
             }
 
             @Override
             public String token(long installationId, TokenScope scope) {
-                return "it-token";
+                return IT_TOKEN;
             }
         };
         return new GitHubWriteAdapter(broker, githubApiBase, PostgresITBase.OM, Duration.ofSeconds(5));
@@ -282,11 +318,11 @@ final class ItHarness {
 
     // ------------------------------------------------------------------ 夹具
 
-    /** pull_request 事件（opened/synchronize/reopened 通用） */
+    /** pull_request 事件（opened/synchronize/reopened 通用；updatedAt=null = 不经 LWW 快筛） */
     static PullRequestEvent prEvent(String deliveryId, long repositoryId, String repoFullName,
                                     int prNumber, String headSha, String action) {
         return new PullRequestEvent(deliveryId, action, INSTALLATION_ID, repositoryId,
-                repoFullName, prNumber, "open", false, false, headSha, BASE_REF, BASE_SHA);
+                repoFullName, prNumber, "open", false, false, headSha, BASE_REF, BASE_SHA, null);
     }
 
     /** 最小 webhook 原文（EX-08/ST-05 用；与 GitHubWebhookParser 必需字段对齐） */
@@ -319,11 +355,11 @@ final class ItHarness {
         }
     }
 
-    /** 注册 T0 源内容并派发 intake（直连 Executor = 同步完成 T0+T1）；返回新 Run */
+    /** 注册 T0 源内容并派发 intake（M1-T04 后 dispatch 即同步完成 T0+T1）；返回新 Run */
     ReviewRun dispatchOpened(PullRequestEvent event, byte[] tarGz, String diffText) {
         sourcePort.registerSnapshot(event.headSha(), tarGz)
                 .registerDiff(event.baseSha(), event.headSha(), diffText);
-        intakeService.accept(event, webhookBody(event.repositoryId(), event.repositoryFullName(),
+        intakeService.dispatch(event, webhookBody(event.repositoryId(), event.repositoryFullName(),
                 event.prNumber(), event.headSha(), event.action()));
         return runRepo.findByRunKey(revisionService.runKey(currentRevisionId(event), POLICY,
                 PROMPT, TOOLSET, event.deliveryId())).orElseThrow();
@@ -340,7 +376,7 @@ final class ItHarness {
         return orchestrator().runIntake(new IntakeCommand(event.installationId(), event.repositoryId(),
                 event.repositoryFullName(), event.prNumber(), PrSubjectState.OPEN, false, false,
                 event.headSha(), event.baseRef(), event.baseSha(), null,
-                diffDigest, snapshotDigest, POLICY, PROMPT, TOOLSET, event.deliveryId()));
+                diffDigest, snapshotDigest, POLICY, PROMPT, TOOLSET, event.deliveryId(), null));
     }
 
     /** T2 完成（代理事务内） */
@@ -353,7 +389,7 @@ final class ItHarness {
     }
 
     ClaimedWork claimManually(String workerId) {
-        WorkItem item = workItemRepo.claimNext(workerId, Instant.now(), 60).orElseThrow();
+        WorkItem item = workItemRepo.claimNext(workerId, 60).orElseThrow();
         RunStep step = stepRepo.findById(item.getStepId()).orElseThrow();
         StepAttempt attempt = new StepAttempt(UUID.randomUUID(), step.getId(), item.getId(),
                 item.getAttemptCount(), item.getLeaseEpoch(), workerId,
@@ -371,6 +407,8 @@ final class ItHarness {
         OperationId opId = OperationId.random();
         Map<String, Object> full = new java.util.LinkedHashMap<>(payload);
         full.put("operation_id", opId.toString());
+        // 与 ReviewOrchestrator 真实 payload 同构：铸入 installation_id 供写前预检（SEC 加固）
+        full.put("installation_id", INSTALLATION_ID);
         if (type == CommandType.PUBLISH_REVIEW) {
             full.put("marker", PublishReviewHandler.markerOf(opId));
         }

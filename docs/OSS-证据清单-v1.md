@@ -221,6 +221,101 @@
 - 跨机内容寻址 artifact 传输 + digest 校验（B-4）；最近先例 OCI 镜像 digest。
 - "快照只经 git archive、绝不 checkout 不可信 ref"严于所有锚点（B-5）；OpenHands 的配套缓解（persist-credentials:false、人工门槛、禁用共享缓存）已记录备用。
 
+## F. M1 入口可信化证据（webhook inbox / LWW / reconciler 分工）
+
+### F-1 GitHub webhook 官方最佳实践【事实锚点，措辞逐句核对过】
+
+- 来源：GitHub Docs《Best practices for using webhooks》（docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks，2026-09 核对）。
+- 官方明示的事实（G1 评审措辞修正后）：
+  - "If your server goes down, you should redeliver missed webhooks"——**交付会丢失，且失败不保证自动重投**；官方提供的是手动 redelivery；
+  - 重投时 "the `X-GitHub-Delivery` header will be the same as in the original delivery"——**重投同 ID，ID 去重是官方推荐的幂等机制**（原文用于防 replay attack）；
+  - "Respond within 10 seconds" 否则 GitHub 判失败——**HTTP 线程零重活是官方硬约束**（M0 已守，M1 inbox 强化）。
+  - 因此 webhook 交付的准确表述是"**可能重复、失败不保证自动重投**"，不笼统称自动 at-least-once。
+- 官方**未承诺**交付顺序——本方案不声称"官方承认乱序"，而是按并发连接/重试的网络事实防御：
+  快路径 LWW 启发式 + PrStateReconciler 周期兜底（分工证据见 C-3）。
+
+### F-2 Idempotent Consumer 模式【同构成立】
+
+- 来源：Chris Richardson microservices.io《Idempotent Consumer》模式；EIP（Hohpe/Woolf）同名模式；
+  工程化实例：Debezium outbox/inbox 事件去重表、Kafka 消费者 dedup store。
+- 核心两段式：① 消息唯一 ID 入库去重（同事务或先行）；② 业务处理自身幂等兜底。
+  与 M1 设计逐条对应：webhook_inbox 主键去重（①）+ run_key 唯一约束/条件更新（②）。
+- 推论采纳：去重记录必须落在**与业务同一个可恢复存储**（Postgres），不放 Redis——
+  Redis 故障即去重记忆丢失，且引入第二种故障模式（与 M0 序号分配拒绝 Redis 锁同一判断）。
+
+### F-3 GitHub 用 404 替代 403 隐藏私有资源【404 语义歧义，EX-17/E2E-18 的设计依据】
+
+- 来源：GitHub Docs《Troubleshooting the REST API》（docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api，2026-09 核对）：
+  "GitHub uses a 404 Not Found response instead of a 403 Forbidden response to avoid confirming
+  the existence of private repositories."
+- 推论：对私有资源，**404 无法区分"对象不存在"与"无权限"**。因此任何"404 = 对象没了"的判定
+  都必须先做一次 sanity 读（如 GET repo）：sanity 通过 → 真不存在；sanity 失败 → 权限/可用性
+  问题，标 UNKNOWN + 权限告警，绝不标 MISSING。
+- 本推论同时否定了"新增 ACCESS_UNKNOWN 状态"的必要性：UNKNOWN + 告警事件已完备表达，
+  状态词集合保持 PRESENT/MISSING/UNKNOWN 三态不膨胀。
+
+### F-4 合并队列工具的组合验证是"入队后、按序、CI 确定性"【Merge Preview 市场定位证据，ADR-021】
+
+- GitHub Merge Queue（docs.github.com/en/repositories/.../managing-a-merge-queue，2026-08-31 核对）：
+  "the changes in the pull request are grouped into a merge_group with the latest version of the
+  base_branch as well as changes from pull requests ahead of it in the queue"；required checks 跑在
+  组合提交上。注意：是对**累积组合**逐 merge_group 验证，不是任意 PR 两两组合
+  （"Merge limits do not combine merge_group builds"）。
+- Mergify（docs.mergify.com/merge-queue/batches、/speculative-checks，同日核对）：
+  batch merging（batch_size 多 PR 合批过 CI）；speculative/parallel checks（临时 batch PR 并行验证
+  累积组合）；失败拆批二分定位（"Mergify binary-searches for the culprit"，状态含 bisecting）。
+- Trunk Merge Queue（docs.trunk.io/merge-queue/optimizations/parallel-queues，同日核对）：
+  按 impacted targets 动态建并行队列（"dynamically creating merge queues for pull requests that
+  affect different parts of your codebase"）；"every pull request is predictively tested against
+  the pull requests ahead of it"。需 PR 上传 impacted targets（Bazel/Nx action）否则不处理。
+- 结论：三家都做**组合验证**，但全部是入队后、按队列顺序、只跑确定性 CI——
+  "入队前主动选择 + 语义评审分层 + 双 PR 证据 + 可回放"的空间仍在（见 ADR-021）。
+
+### F-5 AI 评审工具的分析单位是单个 PR，无组合树验证【Merge Preview 市场定位证据，ADR-021】
+
+- CodeRabbit（docs.coderabbit.ai，2026-08-31 核对）：living memory 学历史 PR/反馈属实；
+  "多仓上下文"仅限 learnings/规则全局复用，无跨仓代码图；评审单位恒为单个 PR
+  （Change Stack = "review scope"）；无公开证据表明构造多个在飞 PR 的组合合并树做验证。
+- Greptile（greptile.com/docs，同日核对）：全仓代码图 + context.repos 跨仓上下文属实；
+  T-REX 沙箱执行粒度是逐 PR（"every PR"各自独立）；同样无组合树验证的公开描述。
+- 结论：评审类工具（语义层）不做组合；队列类工具（确定性层）不做语义。两层之间是空档。
+
+### F-6 Langfuse v3 自托管资源底线远超本项目余量【ADR-020 不部署裁定的硬数字】
+
+- 架构（langfuse.com/self-hosting，2026-08-31 核对）：Web + Worker + Postgres + ClickHouse +
+  Redis/Valkey + S3/Blob 六组件全部必需（v3 起无精简部署）；可选第七件 LLM Gateway。
+- 最低资源表（langfuse.com/self-hosting/configuration/scaling）：Web 2C/4Gi、Worker 2C/4Gi、
+  PG 2C/4Gi、Redis 1C/1.5Gi、ClickHouse 2C/8Gi、MinIO 2C/4Gi——合计约 11C/25.5Gi；
+  Compose 部署官方建议 4C/16Gi（t3.xlarge）。对照 195 余量约 2G：**超出约 13 倍**，
+  "不部署"不是偏好是硬约束。
+
+### F-7 OTel GenAI 约定全部 Development 且无独立发布【ADR-020 适配层+版本锁的强制依据】
+
+- GenAI semconv 已迁独立仓库 open-telemetry/semantic-conventions-genai（主仓库 v1.42.0 起旧位置
+  全部 deprecated）；新仓库 46 处 stability 声明**全部 development**（2026-08-31 main 快照统计），
+  且尚无 release、schema_url 仍是 TODO。
+- 主仓库当前 v1.44.0；version-selection 机制（声明式配置 + dual_emit + 降级到最近支持版本）
+  文档存在但自身也是 Development 状态、未发布到官网。
+- 结论：GenAI 字段**没有任何稳定锚点**——领域代码直接依赖必炸；适配层 + 版本锁不是
+  可选加固，是使用的先决条件。同时 webhook 不携带 traceparent，根 Trace 必须在入口自建，
+  业务关联仍用业务 ID（Trace ID 只做观测关联，不进账本身份）。
+
+### F-8 GitHub 官方限流处置：Retry-After 头必须等够；无头二级限流至少等 60s【M2 精确退避的依据】
+
+- 来源一：GitHub Docs《Best practices for using the REST API》与《Rate limits for the REST API》
+  （docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api，
+  2026-08-31 核对）：
+  "If the `retry-after` response header is present, you should not retry your request until
+  after that many seconds has elapsed."——**带头时等够秒数是官方明示义务**。
+- 来源二：GitHub Docs《Troubleshooting the REST API》（同域，同日核对）：二级限流无
+  `retry-after` 头时 "wait for at least one minute before retrying"，持续失败则
+  "wait for an exponentially increasing amount of time between retries"。
+- 佐证（社区实录）：hub4j/github-api issue #1805——GitHub 二级限流**不总是**带
+  `Retry-After` 头；粗放重试会放大处罚。故"无头时下限 60s + 指数"是必要兜底而非可选。
+- 推论（M2 I23）：publisher 侧 `TypedResponse` 必须携带响应头解析结果，三处重试调度
+  （outbox 写路径 / recovery 扫描 / drift 巡检）有头不早于 now+retryAfter，无头 429
+  下限 60s。
+
 ---
 
 *证据清单完。任何 v2.2 条文被质疑时，回查本文对应索引；新引入设计决策时，先补本清单再入冻结文档。*

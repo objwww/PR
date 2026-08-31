@@ -56,7 +56,7 @@ class ReviewStepExecutorTest {
         ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
                 PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
                 DIFF_DIGEST, SNAPSHOT_DIGEST,
-                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1"));
+                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1", null));
         step = fx.steps.findByRunId(run.getId()).get(0);
         item = fx.workItems.findByStepId(step.getId()).orElseThrow();
     }

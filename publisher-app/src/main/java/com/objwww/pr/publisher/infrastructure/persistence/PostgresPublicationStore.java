@@ -2,6 +2,7 @@ package com.objwww.pr.publisher.infrastructure.persistence;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.publisher.domain.model.DependencyRow;
+import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
 import com.objwww.pr.publisher.domain.model.SubjectCursor;
 import com.objwww.pr.publisher.domain.port.ExecutionEventAppender;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
@@ -15,6 +16,7 @@ import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.FenceMode;
 import com.objwww.pr.shared.OperationId;
 import com.objwww.pr.shared.OutboxState;
+import com.objwww.pr.shared.PublicationResourceState;
 import com.objwww.pr.shared.PublicationResourceType;
 import com.objwww.pr.shared.RemoteIdentityType;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -423,6 +425,120 @@ public class PostgresPublicationStore implements PublicationStore {
         });
     }
 
+    // ---------- Drift 巡检（M1-T08 方案 §4.6；只 UPDATE 观测列——V3 列级授权，CT-20 顺带真实验证） ----------
+
+    @Override
+    public List<DriftCheckTarget> findDueForDriftCheck(int limit) {
+        // 公平：最久未查先查（ORDER BY next_check_at + LIMIT 即 API 预算，E2E-15）；
+        // MISSING 在扫描集内是为了低频复核（§4.6），重复扫描不重复发事件由 markMissing 守卫（ST-22）
+        return jdbc.sql("""
+                        SELECT r.id AS resource_id, r.resource_type, r.remote_id AS res_remote_id,
+                               r.remote_url AS res_remote_url, r.marker, r.state AS resource_state,
+                               r.check_error_count, o.*
+                          FROM publication_resource r
+                          JOIN outbox_command o ON r.created_by_operation_id = o.operation_id
+                         WHERE r.state IN ('PRESENT', 'MISSING') AND o.state = 'CONFIRMED'
+                           AND r.next_check_at <= now()
+                         ORDER BY r.next_check_at
+                         LIMIT :limit
+                        """)
+                .param("limit", limit)
+                .query((rs, n) -> new DriftCheckTarget(
+                        rs.getObject("resource_id", UUID.class),
+                        PublicationResourceType.valueOf(rs.getString("resource_type")),
+                        rs.getString("res_remote_id"),
+                        rs.getString("res_remote_url"),
+                        rs.getString("marker"),
+                        PublicationResourceState.valueOf(rs.getString("resource_state")),
+                        rs.getInt("check_error_count"),
+                        mapRow(rs, n)))
+                .list();
+    }
+
+    @Override
+    public void markCheckedPresent(UUID resourceId, Duration interval) {
+        jdbc.sql("""
+                        UPDATE publication_resource
+                           SET state = 'PRESENT', last_checked_at = now(),
+                               next_check_at = now() + make_interval(secs => :secs),
+                               check_error_count = 0, updated_at = now()
+                         WHERE id = :id AND state IN ('PRESENT', 'MISSING')
+                        """)
+                .param("id", resourceId)
+                .param("secs", interval.toSeconds())
+                .update();
+    }
+
+    @Override
+    public boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event) {
+        return Boolean.TRUE.equals(tx.execute(status -> {
+            // 行锁读旧态：事件恰好一次的守卫在 DB 侧（ST-22），不依赖调用方看到的快照
+            String oldState = jdbc.sql(
+                            "SELECT state FROM publication_resource WHERE id = :id FOR UPDATE")
+                    .param("id", resourceId)
+                    .query(String.class)
+                    .optional()
+                    .orElse(null);
+            if (oldState == null) {
+                return false;
+            }
+            int updated = jdbc.sql("""
+                            UPDATE publication_resource
+                               SET state = 'MISSING',
+                                   drift_detected_at = COALESCE(drift_detected_at, now()),
+                                   last_checked_at = now(),
+                                   next_check_at = now() + make_interval(secs => :secs),
+                                   check_error_count = 0, updated_at = now()
+                             WHERE id = :id AND state IN ('PRESENT', 'MISSING', 'UNKNOWN')
+                            """)
+                    .param("id", resourceId)
+                    .param("secs", recheckInterval.toSeconds())
+                    .update();
+            if (updated == 0) {
+                return false; // RETIRED/REPAIRED 不参与巡检（防御；扫描本不会选出）
+            }
+            if (!"MISSING".equals(oldState) && event != null) {
+                eventAppender.append(event);
+                return true;
+            }
+            return false; // 已 MISSING：低频复核只重排期，不重复发事件
+        }));
+    }
+
+    @Override
+    public void markUnknown(UUID resourceId, ExecutionEvent event) {
+        tx.executeWithoutResult(status -> {
+            int updated = jdbc.sql("""
+                            UPDATE publication_resource
+                               SET state = 'UNKNOWN', last_checked_at = now(), updated_at = now()
+                             WHERE id = :id AND state = 'PRESENT'
+                            """)
+                    .param("id", resourceId)
+                    .update();
+            if (updated > 0 && event != null) {
+                eventAppender.append(event); // 权限告警与状态翻转同事务（E2E-18）
+            }
+        });
+    }
+
+    @Override
+    public int markCheckError(UUID resourceId, Duration backoff) {
+        Integer count = tx.execute(status -> jdbc.sql("""
+                        UPDATE publication_resource
+                           SET check_error_count = check_error_count + 1,
+                               next_check_at = now() + make_interval(secs => :secs),
+                               updated_at = now()
+                         WHERE id = :id AND state IN ('PRESENT', 'MISSING')
+                         RETURNING check_error_count
+                        """)
+                .param("id", resourceId)
+                .param("secs", backoff.toSeconds())
+                .query(Integer.class)
+                .optional()
+                .orElse(null));
+        return count == null ? 0 : count;
+    }
+
     // ---------- 内部 ----------
 
     /** 级联 supersede：REQUIRE_* 依赖方在 PENDING/RETRY_WAIT 时同事务连锁（E3；OPTIONAL 不级联；IN_FLIGHT 不级联，I7） */
@@ -483,7 +599,7 @@ public class PostgresPublicationStore implements PublicationStore {
                             id, resource_type, created_by_operation_id, pr_subject_id,
                             remote_id, remote_url, marker, state, created_at, updated_at
                         ) VALUES (
-                            :id, :type, :opId, :subjectId, :rid, :rurl, :marker, 'ACTIVE', now(), now()
+                            :id, :type, :opId, :subjectId, :rid, :rurl, :marker, 'PRESENT', now(), now()
                         )
                         ON CONFLICT (resource_type, remote_id) DO NOTHING
                         """)

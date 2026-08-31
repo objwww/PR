@@ -209,4 +209,57 @@ class FindingMapperTest {
         assertThat(result.droppedCount()).isZero();
         assertThat(result.findings().get(0).filePath()).isEqualTo(nested);
     }
+
+    // ------------------------------------------------------------------ INC-29
+    @Test
+    void inc29_ambiguousExactSnippetIsDropped() {
+        // 片段在文件中精确出现两次 → 锚定歧义，丢弃并计数（不猜行号）
+        String content = """
+                int a = 1;
+                return a;
+                int b = 2;
+                return a;
+                """;
+        ModelFinding mf = new ModelFinding(FILE, 2, "return a;", "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, content), List.of(mf));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.droppedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void inc29_ambiguousTrimLevelSnippetIsDropped() {
+        // 行级 trim 层级同样要求唯一命中（两次出现仅缩进不同）
+        String content = """
+                if (x) {
+                    doThing();
+                }
+                while (y) {
+                        doThing();
+                }
+                """;
+        ModelFinding mf = new ModelFinding(FILE, 2, "doThing();", "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, content), List.of(mf));
+
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.droppedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void inc29_uniqueSnippetStillLocates() {
+        // 回归：唯一命中不受歧义判定影响（行级 trim 层级）
+        String content = """
+                int a = 1;
+                  return a;
+                int b = 2;
+                """;
+        ModelFinding mf = new ModelFinding(FILE, 9, "return a;", "rule", "MAJOR", "m");
+
+        FindingMapper.MappingResult result = mapper.map(HEAD, Map.of(FILE, content), List.of(mf));
+
+        assertThat(result.droppedCount()).isZero();
+        assertThat(result.findings().get(0).lineStart()).isEqualTo(2);
+    }
 }

@@ -48,7 +48,7 @@ class WorkItemWorkerTest {
                 PrSubjectState.OPEN, false, false,
                 headSha, "main", "basesha456", null,
                 Digest.sha256Of("diff-" + headSha), Digest.sha256Of("snap-" + headSha),
-                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", deliveryId));
+                "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", deliveryId, null));
         RunStep step = fx.steps.findByRunId(run.getId()).get(0);
         return fx.workItems.findByStepId(step.getId()).orElseThrow();
     }
@@ -127,9 +127,10 @@ class WorkItemWorkerTest {
                 "REVIEW", WorkItemState.READY, 99, now.plusSeconds(3600), null, null, 0, 0, 3, now, now);
         fx.workItems.save(highPriority);
         fx.workItems.save(futureAvailable);
+        fx.workItems.setClock(now); // 时间旅行：操纵 fake 时钟而非传应用侧 now（I17）
 
         // 高优先级先领；available_at 未到期的即使优先级更高也不领
-        var first = fx.workItems.claimNext("w", now, 600).orElseThrow();
+        var first = fx.workItems.claimNext("w", 600).orElseThrow();
         assertThat(first.getId()).isEqualTo(highPriority.getId());
         assertThat(first.getState()).isEqualTo(WorkItemState.LEASED);
         assertThat(first.getLeaseOwner()).isEqualTo("w");
@@ -137,7 +138,7 @@ class WorkItemWorkerTest {
         assertThat(first.getAttemptCount()).isEqualTo(1);
         assertThat(first.getLeaseUntil()).isAfter(now); // lease = min(step.timeout, 上限)
 
-        var second = fx.workItems.claimNext("w", now, 600).orElseThrow();
+        var second = fx.workItems.claimNext("w", 600).orElseThrow();
         assertThat(second.getId()).isEqualTo(low.getId()); // futureAvailable 跳过
     }
 
@@ -320,34 +321,34 @@ class WorkItemWorkerTest {
                     }
 
                     @Override
-                    public java.util.Optional<WorkItem> claimNext(String owner, Instant now, int maxLeaseSeconds) {
-                        return inner.claimNext(owner, now, maxLeaseSeconds);
+                    public java.util.Optional<WorkItem> claimNext(String owner, int maxLeaseSeconds) {
+                        return inner.claimNext(owner, maxLeaseSeconds);
                     }
 
                     @Override
-                    public boolean heartbeat(UUID id, String owner, long epoch, Instant until, Instant now) {
+                    public boolean heartbeat(UUID id, String owner, long epoch, int leaseSeconds) {
                         return false; // 模拟租约已易主
                     }
 
                     @Override
-                    public List<WorkItem> findExpiredLeases(Instant now, int limit) {
-                        return inner.findExpiredLeases(now, limit);
+                    public List<WorkItem> findExpiredLeases(int limit) {
+                        return inner.findExpiredLeases(limit);
                     }
 
                     @Override
-                    public boolean reclaimExpiredLease(UUID id, long epoch, Instant now, WorkItemState target) {
-                        return inner.reclaimExpiredLease(id, epoch, now, target);
+                    public boolean reclaimExpiredLease(UUID id, long epoch, WorkItemState target) {
+                        return inner.reclaimExpiredLease(id, epoch, target);
                     }
 
                     @Override
                     public boolean transitionIfLeaseCurrent(UUID id, String owner, long epoch,
-                                                            WorkItemState to, Instant availableAt, Instant now) {
-                        return inner.transitionIfLeaseCurrent(id, owner, epoch, to, availableAt, now);
+                                                            WorkItemState to, Instant availableAt) {
+                        return inner.transitionIfLeaseCurrent(id, owner, epoch, to, availableAt);
                     }
 
                     @Override
-                    public int cancelActiveByRunId(UUID reviewRunId, Instant now) {
-                        return inner.cancelActiveByRunId(reviewRunId, now);
+                    public int cancelActiveByRunId(UUID reviewRunId) {
+                        return inner.cancelActiveByRunId(reviewRunId);
                     }
                 };
         boolean[] executorStopped = {false};

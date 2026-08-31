@@ -130,7 +130,7 @@ public class ReviewOrchestrator {
                     PRSubject created = new PRSubject(UUID.randomUUID(),
                             cmd.installationId(), cmd.repositoryId(), cmd.repositoryFullName(),
                             cmd.prNumber(), cmd.prState(), cmd.draft(), cmd.merged(),
-                            null, cmd.policyVersion(), 0, 1, 0, 0, now, now);
+                            null, cmd.policyVersion(), 0, 1, 0, null, now, 0, 0, now, now);
                     subjectRepository.save(created);
                     return created;
                 });
@@ -160,7 +160,7 @@ public class ReviewOrchestrator {
             for (ReviewRun old : active) {
                 old.transitionTo(RunState.SUPERSEDED, now);
                 runRepository.save(old);
-                workItemRepository.cancelActiveByRunId(old.getId(), now);
+                workItemRepository.cancelActiveByRunId(old.getId());
                 supersededRuns.add(old);
             }
             // Control 不动 outbox：旧世代 PENDING 命令由 Publisher 兜底扫描级联（v2.1 修订三）
@@ -209,6 +209,10 @@ public class ReviewOrchestrator {
                         "trigger_key", cmd.triggerKey(),
                         "head_sha", cmd.headSha(),
                         "revision_fingerprint", fingerprint.value())));
+
+        // 7) LWW 水印推进（M1-T05，I10/CT-14）：GREATEST 条件更新防并发回退；
+        //    远端缺 updated_at 时不覆盖（EX-18）
+        advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
         return run;
     }
 
@@ -223,6 +227,165 @@ public class ReviewOrchestrator {
                         revisionService.runKey(revision.getId(), cmd.policyVersion(),
                                 cmd.promptVersion(), cmd.toolsetVersion(), cmd.triggerKey())));
     }
+
+    // ------------------------------------------------------------------ T06：draft 廉价预检 / T-close / T-draft
+
+    /**
+     * Draft 廉价预检（M1-T06，方案 §4.4 决策表第一行，I11/ST-12）：
+     * 远端确认 open+draft 且无需换届时——**只刷投影（state/draft/merged）+ 推进水印**，
+     * 不 T0、不建 Run、不插 Outbox、不调模型（每次 draft push 的成本 = 一次权威读 GET）。
+     *
+     * <p>诚实边界（账本事件缺口）：方案 §4.4 写"刷投影 + 事件"，但 V1 schema 的
+     * execution_event.review_run_id / pr_revision_id 为 NOT NULL + FK，draft 预检
+     * 恰恰没有 Run 可挂——落账本需要 schema 变更（V4 决策）。本版本以 inbox 行
+     * （PROCESSED）+ 投影字段充当审计（INC-16 已由 inbox 闭环），不改 V3。
+     */
+    @Transactional
+    public void applyDraftPrecheck(ProjectionSyncCommand cmd) {
+        Objects.requireNonNull(cmd, "cmd");
+        Instant now = Instant.now();
+        PRSubject subject = upsertSubjectProjection(cmd, now);
+        advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
+    }
+
+    /**
+     * T-close（M1-T06，方案 §4.4，修正 #5 / I15）：远端确认 closed/merged（或 404 经
+     * sanity 读确认 repo 可读）时，同事务内：投影 CLOSED(+merged) + publication_epoch+1
+     * + 在途 active Run → SUPERSEDED（取消其未完成 WorkItem）+ 账本事件。
+     *
+     * <p>epoch+1 是防"在已关闭 PR 上发出评论"的唯一闸门：Publisher 兜底扫描
+     * （sweepStaleEpoch）只废弃 epoch 落后的 PENDING/RETRY_WAIT 命令（ST-19）；
+     * IN_FLIGHT 不级联，继续走 M0 reconcile（v2.1 修订三，B-R5）。
+     *
+     * <p>幂等：投影已是目标态且无在途 Run（崩溃重放/重投）→ 不再 bump，只刷投影+水印。
+     */
+    @Transactional
+    public void closeGeneration(ProjectionSyncCommand cmd) {
+        Objects.requireNonNull(cmd, "cmd");
+        Instant now = Instant.now();
+        Optional<PRSubject> existing = subjectRepository.findByRepositoryAndPrNumber(
+                cmd.repositoryId(), cmd.prNumber());
+        if (existing.isPresent() && existing.get().getState() == PrSubjectState.CLOSED
+                && existing.get().isMerged() == cmd.merged()
+                && runRepository.findActiveByPrSubjectId(existing.get().getId()).isEmpty()) {
+            // 重放幂等：已 CLOSED 且无在途 Run → 不重复 bump epoch（否则重投会多次换届）
+            PRSubject subject = existing.get();
+            subject.refreshPrState(PrSubjectState.CLOSED, cmd.draft(), cmd.merged(), now);
+            subjectRepository.save(subject);
+            advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
+            return;
+        }
+        PRSubject subject = upsertSubjectProjection(cmd, now);
+        bumpEpochAndSupersedeActiveRuns(subject, cmd, now, "PR_CLOSED");
+    }
+
+    /**
+     * T-draft（M1-T06，方案 §4.4）：远端确认 draft=true 且需换届（converted_to_draft 事件，
+     * 或远端已 draft 但仍有在途 Run——webhook 丢失场景由 Reader 升级而来）时，
+     * 同事务内：投影 draft=true + publication_epoch+1 + 在途 Run SUPERSEDED + 账本事件。
+     * 幂等语义同 {@link #closeGeneration}。
+     */
+    @Transactional
+    public void convertToDraftGeneration(ProjectionSyncCommand cmd) {
+        Objects.requireNonNull(cmd, "cmd");
+        Instant now = Instant.now();
+        Optional<PRSubject> existing = subjectRepository.findByRepositoryAndPrNumber(
+                cmd.repositoryId(), cmd.prNumber());
+        if (existing.isPresent() && existing.get().isDraft()
+                && existing.get().getState() == PrSubjectState.OPEN
+                && runRepository.findActiveByPrSubjectId(existing.get().getId()).isEmpty()) {
+            PRSubject subject = existing.get();
+            subject.refreshPrState(PrSubjectState.OPEN, true, false, now);
+            subjectRepository.save(subject);
+            advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
+            return;
+        }
+        PRSubject subject = upsertSubjectProjection(cmd, now);
+        bumpEpochAndSupersedeActiveRuns(subject, cmd, now, "CONVERTED_TO_DRAFT");
+    }
+
+    /**
+     * T-reopen（INC-26，方案 §4.4/I15/ST-20）：reopened 是状态语义换届——同事务内
+     * 投影 OPEN + publication_epoch+1 + 在途 Run SUPERSEDED（防御：close 漏网的旧世代
+     * 在途 Run），随后由调用方走全量 T0/T1 建新 Run。
+     *
+     * <p>为什么 revision 未变也要 bump：Publisher 的 fence 只认 epoch；若 reopen 不换届，
+     * close 时代与 reopen 时代共享同一 epoch，close 前滞留的同 epoch 命令就可能在新世代
+     * 被当作合法命令发出（ST-20：旧世代命令 fence 拦截）。
+     *
+     * <p>幂等：投影已是 OPEN 非 draft（崩溃重放/重投/duplicate reopened）→ 不重复 bump，
+     * 只刷投影+水印；新 Run 的幂等由 T1 的收敛判定与 uq_review_run_active_gen 兜底。
+     */
+    @Transactional
+    public void reopenGeneration(ProjectionSyncCommand cmd) {
+        Objects.requireNonNull(cmd, "cmd");
+        Instant now = Instant.now();
+        Optional<PRSubject> existing = subjectRepository.findByRepositoryAndPrNumber(
+                cmd.repositoryId(), cmd.prNumber());
+        if (existing.isPresent() && existing.get().getState() == PrSubjectState.OPEN
+                && !existing.get().isDraft()) {
+            // 重放幂等：已 OPEN 非 draft → 不重复 bump epoch（否则重投会多次换届）
+            PRSubject subject = existing.get();
+            subject.refreshPrState(PrSubjectState.OPEN, false, false, now);
+            subjectRepository.save(subject);
+            advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
+            return;
+        }
+        PRSubject subject = upsertSubjectProjection(cmd, now);
+        bumpEpochAndSupersedeActiveRuns(subject, cmd, now, "PR_REOPENED");
+    }
+
+    /** 投影 upsert（T06 三路径共用）：存在则 refreshPrState，不存在则建最小投影行（无 revision/Run） */    private PRSubject upsertSubjectProjection(ProjectionSyncCommand cmd, Instant now) {
+        return subjectRepository.findByRepositoryAndPrNumber(cmd.repositoryId(), cmd.prNumber())
+                .map(s -> {
+                    s.refreshPrState(cmd.prState(), cmd.draft(), cmd.merged(), now);
+                    subjectRepository.save(s);
+                    return s;
+                })
+                .orElseGet(() -> {
+                    PRSubject created = new PRSubject(UUID.randomUUID(),
+                            cmd.installationId(), cmd.repositoryId(), cmd.repositoryFullName(),
+                            cmd.prNumber(), cmd.prState(), cmd.draft(), cmd.merged(),
+                            null, cmd.policyVersion(), 0, 1, 0, null, now, 0, 0, now, now);
+                    subjectRepository.save(created);
+                    return created;
+                });
+    }
+
+    /**
+     * T-close/T-draft 换届核心（照 T1 风格，同事务）：投影 + epoch+1（一句 UPDATE 原子，
+     * I15）→ 在途 Run 逐个 SUPERSEDED + 取消未完成 WorkItem → REVISION_INVALIDATED 落账
+     * （挂被作废旧 Run 自己的流，correlation 自指——T-close/T-draft 没有新 Run 可指；
+     * Projector 对非终态 Run fold 出 SUPERSEDED，投影一致性保持）。
+     * Control 不动 outbox：旧世代 PENDING 命令由 Publisher sweepStaleEpoch 级联（ST-19）。
+     */
+    private void bumpEpochAndSupersedeActiveRuns(PRSubject subject, ProjectionSyncCommand cmd,
+                                                 Instant now, String reason) {
+        subjectRepository.refreshStateAndBumpEpoch(subject.getId(),
+                cmd.prState(), cmd.draft(), cmd.merged(), now);
+        long newEpoch = subject.getPublicationEpoch() + 1;
+        List<ReviewRun> active = runRepository.findActiveByPrSubjectId(subject.getId());
+        for (ReviewRun old : active) {
+            old.transitionTo(RunState.SUPERSEDED, now);
+            runRepository.save(old);
+            workItemRepository.cancelActiveByRunId(old.getId());
+            ledger.append(ledger.newEvent(old.getId(), old.getPrRevisionId(), null, null,
+                    ExecutionEventType.REVISION_INVALIDATED, null, old.getId(), PRODUCER,
+                    Map.of("reason", reason,
+                            "publication_epoch", newEpoch,
+                            "pr_number", subject.getPrNumber())));
+        }
+        advanceWatermark(subject.getId(), cmd.eventUpdatedAt(), now);
+    }
+
+    /** 水印推进（I10/CT-14）：null 不覆盖（EX-18）；GREATEST 语义在仓储实现侧 */
+    private void advanceWatermark(UUID subjectId, Instant eventUpdatedAt, Instant now) {
+        if (eventUpdatedAt != null) {
+            subjectRepository.advanceWatermarkIfNewer(subjectId, eventUpdatedAt, now);
+        }
+    }
+
+
 
     // ------------------------------------------------------------------ T2
 
@@ -256,7 +419,7 @@ public class ReviewOrchestrator {
                 ? now.plusSeconds(RETRY_BACKOFF_BASE_SECONDS * Math.max(1, workItem.getAttemptCount()))
                 : null;
         boolean leaseCurrent = workItemRepository.transitionIfLeaseCurrent(completion.workItemId(),
-                completion.leaseOwner(), completion.leaseEpoch(), workItemTarget, retryAt, now);
+                completion.leaseOwner(), completion.leaseEpoch(), workItemTarget, retryAt);
         if (!leaseCurrent) {
             attempt.transitionTo(AttemptStatus.STALE, now);
             attemptRepository.save(attempt);
@@ -401,7 +564,7 @@ public class ReviewOrchestrator {
         }
         boolean exhausted = workItem.getAttemptCount() >= workItem.getMaxAttempts();
         boolean reclaimed = workItemRepository.reclaimExpiredLease(workItem.getId(),
-                workItem.getLeaseEpoch(), now, exhausted ? WorkItemState.DEAD : WorkItemState.READY);
+                workItem.getLeaseEpoch(), exhausted ? WorkItemState.DEAD : WorkItemState.READY);
         if (!reclaimed || !exhausted) {
             return reclaimed;
         }
@@ -479,6 +642,7 @@ public class ReviewOrchestrator {
                                      ReviewRun run, com.objwww.pr.control.domain.review.ReviewOutcome outcome) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operation_id", operationId.toString()); // external_id 幂等探针（§6.3）
+        payload.put("installation_id", subject.getGithubInstallationId()); // publisher 写前预检（SEC 加固）
         payload.put("repo", subject.getRepositoryFullName());
         payload.put("head_sha", revision.getHeadSha());
         payload.put("name", "ai-code-review");
@@ -492,6 +656,7 @@ public class ReviewOrchestrator {
                                       ReviewRun run, com.objwww.pr.control.domain.review.ReviewOutcome outcome) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operation_id", operationId.toString());
+        payload.put("installation_id", subject.getGithubInstallationId()); // publisher 写前预检（SEC 加固）
         payload.put("repo", subject.getRepositoryFullName());
         payload.put("pr_number", subject.getPrNumber());
         payload.put("commit_id", revision.getHeadSha()); // Reviews API 绑 commit_id（B-1 缓解）

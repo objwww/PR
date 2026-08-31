@@ -1,6 +1,7 @@
 package com.objwww.pr.publisher.domain.port;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
+import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
 import com.objwww.pr.publisher.domain.service.T3AContext;
 import com.objwww.pr.publisher.domain.service.T3ADecision;
 import com.objwww.pr.shared.ExecutionEvent;
@@ -90,4 +91,38 @@ public interface PublicationStore {
 
     /** 同事务 →SUPERSEDED + 级联（OPTIONAL 不级联）+ 游标推进；事务内复核 epoch 仍落后才生效 */
     void supersedeStaleEpoch(UUID operationId);
+
+    // ---------- Drift 巡检（DriftReconciler，M1-T08 方案 §4.6；只写观测列，CT-20 列级授权边界内） ----------
+
+    /**
+     * 公平巡检扫描：JOIN outbox_command，取 {@code state IN ('PRESENT','MISSING')}
+     * 且命令 CONFIRMED 且 {@code next_check_at <= now()} 的资源，按 next_check_at 升序
+     * LIMIT（最久未查先查，不饿死尾部，E2E-15）。MISSING 在列是为了低频复核（§4.6）。
+     */
+    List<DriftCheckTarget> findDueForDriftCheck(int limit);
+
+    /** 探针命中：→PRESENT + last_checked_at=now() + next_check_at=now()+interval + error_count=0（MISSING 复核找回也走这里） */
+    void markCheckedPresent(UUID resourceId, Duration interval);
+
+    /**
+     * 404 且 sanity 通过：→MISSING + drift_detected_at（首次才置）+ 低频复核排期。
+     * event 仅在本调用把资源从非 MISSING 翻成 MISSING 时同事务落账（PUBLICATION_DRIFT_DETECTED
+     * 恰好一次，ST-22 的状态守卫）；已 MISSING 的复核只重排期、忽略 event。
+     *
+     * @return true = 本轮新转入 MISSING（事件已落）；false = 已是 MISSING 或状态守卫未命中
+     */
+    boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event);
+
+    /**
+     * sanity 失败（E2E-18/F-3：权限异常绝不冒充"不存在"）：PRESENT→UNKNOWN +
+     * 权限告警事件同事务落账。UNKNOWN 不在巡检扫描集内，等待人工/后续代际处理。
+     */
+    void markUnknown(UUID resourceId, ExecutionEvent event);
+
+    /**
+     * 探测失败（5xx/超时/429）：状态不动，check_error_count+1 + 退避排期。
+     *
+     * @return 新计数（>= 阈值时调用方落 ReconcilerDegraded，措辞修正 #3/EX-14）
+     */
+    int markCheckError(UUID resourceId, Duration backoff);
 }

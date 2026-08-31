@@ -45,7 +45,7 @@ class OutboxWriterTest {
         Instant now = Instant.now();
         subjects.save(new PRSubject(SUBJECT_ID, 11L, 12345L, "org/repo", 7,
                 PrSubjectState.OPEN, false, false, null, "policy-v1",
-                0, 1, 0, 0, now, now));
+                0, 1, 0, null, now, 0, 0, now, now));
         outbox = new InMemoryStores.OutboxCommands();
         cas = new InMemoryStores.Cas();
         artifacts = new InMemoryStores.Artifacts();
