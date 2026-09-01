@@ -20,8 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -147,6 +149,102 @@ class FencedPublicationExecutorTest {
         assertEquals(PublishOutcome.FAILED_TERMINAL, executor.execute(cmd));
         assertTrue(store.events.stream().anyMatch(
                 e -> e.eventType() == ExecutionEventType.SAFETY_REJECTED));
+    }
+
+    @Test
+    void rateLimited403RetriesButOrdinary403RemainsAuthFailure() {
+        // EX-19 调用点①（写路径）：Retry-After=120 注入 → 调度不早于 now+120s；
+        // EX-25 写路径侧：普通 403 → FAILED_TERMINAL 权限路径（SAFETY_REJECTED），不退避
+        ClaimedCommand limited = pendingCheck();
+        Instant before = Instant.now();
+        github.respondWrite(TypedResponse.ofStatus(403)
+                .withRateLimitHeaders(120L, 0L, null));
+
+        assertEquals(PublishOutcome.RETRY_WAIT, executor.execute(limited));
+        assertTrue(store.retryAt.get(limited.operationId().value())
+                .isAfter(before.plusSeconds(119)));
+
+        ClaimedCommand ordinary = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.PENDING, 0, 3);
+        store.put(ordinary);
+        payloadReader.put(ordinary.payloadHash(), TestFixtures.checkPayload(ordinary));
+        github.respondWrite(TypedResponse.ofStatus(403));
+
+        assertEquals(PublishOutcome.FAILED_TERMINAL, executor.execute(ordinary));
+    }
+
+    @Test
+    void repairProbeFoundConfirmsWithoutWrite() {
+        UUID oldResource = UUID.randomUUID();
+        ClaimedCommand origin = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.CONFIRMED, 0, 3);
+        ClaimedCommand repair = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.PENDING, 0, 3);
+        store.put(repair);
+        store.resourceStates.put(oldResource, com.objwww.pr.shared.PublicationResourceState.MISSING);
+        store.repairOrigins.put(oldResource, origin);
+        payloadReader.put(origin.payloadHash(), TestFixtures.checkPayload(origin));
+        Map<String, Object> repairPayload = TestFixtures.checkPayload(repair);
+        repairPayload.put("repair_of_resource_id", oldResource.toString());
+        payloadReader.put(repair.payloadHash(), repairPayload);
+        github.respondRead(TypedResponse.ofObject(200, Map.of("check_runs", List.of(
+                Map.of("id", 77, "external_id", origin.operationId().toString())))));
+
+        assertEquals(PublishOutcome.CONFIRMED, executor.execute(repair));
+        assertTrue(github.writeRequests.isEmpty());
+        assertEquals(com.objwww.pr.shared.PublicationResourceState.PRESENT,
+                store.resourceStates.get(oldResource));
+    }
+
+    @Test
+    void repairProbeUnknownDoesNotShortCircuitNorRewrite() {
+        // EX-27/§4.3：repair 探针多对象歧义（双命中 external_id）→ UNKNOWN 处置：
+        // 不短路 CONFIRMED、不重发写，转 RECONCILING 退避
+        UUID oldResource = UUID.randomUUID();
+        ClaimedCommand origin = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.CONFIRMED, 0, 3);
+        ClaimedCommand repair = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.PENDING, 0, 3);
+        store.put(repair);
+        store.resourceStates.put(oldResource, com.objwww.pr.shared.PublicationResourceState.MISSING);
+        store.repairOrigins.put(oldResource, origin);
+        payloadReader.put(origin.payloadHash(), TestFixtures.checkPayload(origin));
+        Map<String, Object> repairPayload = TestFixtures.checkPayload(repair);
+        repairPayload.put("repair_of_resource_id", oldResource.toString());
+        payloadReader.put(repair.payloadHash(), repairPayload);
+        github.respondRead(TypedResponse.ofObject(200, Map.of("check_runs", List.of(
+                Map.of("id", 77, "external_id", origin.operationId().toString()),
+                Map.of("id", 78, "external_id", origin.operationId().toString())))));
+
+        assertEquals(PublishOutcome.RECONCILING, executor.execute(repair));
+        assertTrue(github.writeRequests.isEmpty()); // 零写：既不短路也不重发
+        assertEquals(OutboxState.RECONCILING, store.stateOf(repair).state());
+        assertTrue(store.events.stream().anyMatch(
+                e -> e.eventType() == ExecutionEventType.PUBLICATION_OUTCOME_UNKNOWN));
+    }
+
+    @Test
+    void repairProbeNotFoundWritesAndLinksReplacement() {
+        UUID oldResource = UUID.randomUUID();
+        ClaimedCommand origin = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.CONFIRMED, 0, 3);
+        ClaimedCommand repair = TestFixtures.command(CommandType.CREATE_CHECK, 1, 1,
+                OutboxState.PENDING, 0, 3);
+        store.put(repair);
+        store.resourceStates.put(oldResource, com.objwww.pr.shared.PublicationResourceState.MISSING);
+        store.repairOrigins.put(oldResource, origin);
+        payloadReader.put(origin.payloadHash(), TestFixtures.checkPayload(origin));
+        Map<String, Object> repairPayload = TestFixtures.checkPayload(repair);
+        repairPayload.put("repair_of_resource_id", oldResource.toString());
+        payloadReader.put(repair.payloadHash(), repairPayload);
+        github.respondRead(TypedResponse.ofObject(200, Map.of("check_runs", List.of())));
+        github.respondWrite(TypedResponse.ofObject(201, Map.of("id", 88)));
+
+        assertEquals(PublishOutcome.CONFIRMED, executor.execute(repair));
+        assertEquals(1, github.writeRequests.size());
+        assertEquals(oldResource, store.replacementLinks.get(repair.operationId().value()));
+        assertEquals(com.objwww.pr.shared.PublicationResourceState.REPAIRED,
+                store.resourceStates.get(oldResource));
     }
 
     @Test

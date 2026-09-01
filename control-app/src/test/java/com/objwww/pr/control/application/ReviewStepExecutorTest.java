@@ -12,6 +12,7 @@ import com.objwww.pr.control.domain.review.FindingMapper;
 import com.objwww.pr.control.domain.review.ModelOutputParseException;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
+import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.snapshot.SecurityRejectionException;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,18 +49,25 @@ class ReviewStepExecutorTest {
     void setUp() {
         fx = new OrchestratorFixture();
         modelClient = new MockModelClient();
-        executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
-                new SafeTarExtractor(),
-                new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
-                        new PolicyEngine(new ToolRegistry())),
-                ReviewBudget.DEFAULT, new ObjectMapper());
-
         ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
                 PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
                 DIFF_DIGEST, SNAPSHOT_DIGEST,
                 "m0-policy-v1", "m0-prompt-v1", "m0-toolset-v1", "d-1", null));
         step = fx.steps.findByRunId(run.getId()).get(0);
         item = fx.workItems.findByStepId(step.getId()).orElseThrow();
+        Instant now = Instant.now();
+        item.leaseTo("test-worker", now.plusSeconds(600), now);
+        executor = executorWith(new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
+                new PolicyEngine(new ToolRegistry())), "test/model/v1");
+    }
+
+    private ReviewStepExecutor executorWith(ReviewAgentLoop loop, String modelIdentity) {
+        ObjectMapper mapper = new ObjectMapper();
+        var resume = new CheckpointResumeService(fx.checkpoints, fx.artifacts, fx.cas, fx.ledger, mapper);
+        var writer = new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger);
+        return new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
+                new SafeTarExtractor(), loop, ReviewBudget.DEFAULT, mapper,
+                resume, writer, fx.ledger, modelIdentity);
     }
 
     private void stageInput() {
@@ -115,6 +124,60 @@ class ReviewStepExecutorTest {
     }
 
     @Test
+    void secondAttemptReusesCheckpointWithoutCallingModel() {
+        stageInput();
+        modelClient.enqueueContent("[]");
+
+        StepOutcome first = executor.execute(context(), () -> true);
+        int calls = modelClient.requests().size();
+        StepOutcome second = executor.execute(context(), () -> true);
+
+        assertThat(modelClient.requests()).hasSize(calls);
+        assertThat(((StepOutcome.Succeeded) second).outputArtifactDigest())
+                .isEqualTo(((StepOutcome.Succeeded) first).outputArtifactDigest());
+        assertThat(fx.events.all()).anySatisfy(e ->
+                assertThat(e.eventType()).isEqualTo(com.objwww.pr.shared.ExecutionEventType.CHECKPOINT_REUSED));
+    }
+
+    @Test
+    void contractChangeDiscardsAndCallsModelAgain() {
+        stageInput();
+        modelClient.enqueueContent("[]");
+        executor.execute(context(), () -> true);
+
+        modelClient.enqueueContent("[]");
+        ReviewStepExecutor changed = executorWith(new ReviewAgentLoop(modelClient,
+                new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry())),
+                "test/model/v2");
+        changed.execute(context(), () -> true);
+
+        assertThat(modelClient.requests()).hasSize(2);
+        assertThat(fx.events.all()).anySatisfy(e -> {
+            assertThat(e.eventType()).isEqualTo(
+                    com.objwww.pr.shared.ExecutionEventType.CHECKPOINT_DISCARDED);
+            assertThat(e.payload().get("reason")).isEqualTo("CONTRACT_CHANGED:model_identity");
+        });
+    }
+
+    @Test
+    void missingCheckpointBlobFailsClosedAndCallsModelAgain() {
+        stageInput();
+        modelClient.enqueueContent("[]");
+        StepOutcome first = executor.execute(context(), () -> true);
+        fx.cas.remove(((StepOutcome.Succeeded) first).outputArtifactDigest());
+
+        modelClient.enqueueContent("[]");
+        executor.execute(context(), () -> true);
+
+        assertThat(modelClient.requests()).hasSize(2);
+        assertThat(fx.events.all()).anySatisfy(e -> {
+            assertThat(e.eventType()).isEqualTo(
+                    com.objwww.pr.shared.ExecutionEventType.CHECKPOINT_DISCARDED);
+            assertThat(e.payload().get("reason")).isEqualTo("CAS_MISSING_FINDINGS");
+        });
+    }
+
+    @Test
     void missingSnapshotBlobFails() {
         fx.cas.putIfAbsent(DIFF_DIGEST, "d".getBytes(StandardCharsets.UTF_8));
 
@@ -156,12 +219,10 @@ class ReviewStepExecutorTest {
     @Test
     void modelTimeoutPropagates() {
         stageInput();
-        ReviewStepExecutor timeoutExecutor = new ReviewStepExecutor(fx.runs, fx.revisions,
-                fx.cas, fx.artifacts, new SafeTarExtractor(),
-                new ReviewAgentLoop(req -> {
+        ReviewStepExecutor timeoutExecutor = executorWith(new ReviewAgentLoop(req -> {
                     throw new ModelTimeoutException("模型超时", null);
                 }, new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry())),
-                ReviewBudget.DEFAULT, new ObjectMapper());
+                "test/model/v1");
 
         assertThatThrownBy(() -> timeoutExecutor.execute(context(), () -> true))
                 .isInstanceOf(ModelTimeoutException.class);

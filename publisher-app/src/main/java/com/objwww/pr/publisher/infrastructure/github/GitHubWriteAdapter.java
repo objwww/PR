@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.publisher.infrastructure.credential.CredentialBroker;
 import com.objwww.pr.publisher.infrastructure.credential.TokenScope;
 import com.objwww.pr.shared.GitHubOperation;
+import com.objwww.pr.shared.RetryAfterParser;
 import com.objwww.pr.shared.TypedReadRequest;
 import com.objwww.pr.shared.TypedResponse;
 import com.objwww.pr.shared.TypedWriteRequest;
@@ -15,6 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -121,7 +123,12 @@ public class GitHubWriteAdapter {
             }
             HttpResponse<String> response = httpClient.send(builder.build(),
                     HttpResponse.BodyHandlers.ofString());
-            return parse(response.statusCode(), response.body());
+            return parse(response.statusCode(), response.body())
+                    .withRateLimitHeaders(
+                            RetryAfterParser.parseSeconds(
+                                    response.headers().firstValue("Retry-After").orElse(null), Instant.now()),
+                            longHeader(response, "X-RateLimit-Remaining"),
+                            longHeader(response, "X-RateLimit-Reset"));
         } catch (IOException e) {
             throw new GitHubTransportException(method + " " + pathAndQuery + " 传输失败: " + e, e);
         } catch (InterruptedException e) {
@@ -146,6 +153,14 @@ public class GitHubWriteAdapter {
         } catch (IOException e) {
             // 非 JSON 响应（网关错误页等）：只保留状态码，归类由 Handler 按 status 处理
             return TypedResponse.ofStatus(status);
+        }
+    }
+
+    private static Long longHeader(HttpResponse<?> response, String name) {
+        try {
+            return response.headers().firstValue(name).map(String::trim).map(Long::valueOf).orElse(null);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 

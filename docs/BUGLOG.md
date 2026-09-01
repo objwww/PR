@@ -285,3 +285,180 @@
 - **解决方案**：work_item 家族六条 SQL 的比较与 `updated_at`/`lease_until` 写入全部改 DB `now()`/`make_interval`；port 六方法签名摘除应用时钟参数（heartbeat 改传租约秒数）；InMemoryStores fake 引入可设置时钟承接原时间旅行测试；调用方（WorkItemWorker×3、ReviewOrchestrator×4、publisher ItHarness×1）同步。新增 `PostgresWorkItemRepositorySqlGuardTest` 纯文本守卫（六条 SQL 禁 `:now`）。主会话全 reactor 亲验：98+249+107 全绿。
 - **预防措施**：新增不变量必须带"存量代码回溯审计"动作；SQL 文本守卫单测把 I17 变成编译期后仍有保障的红线；`PrStateReconciler:141/292` 内存节奏门裁定豁免留档（M7 多实例时需改 DB 后盾，已记 M2 方案 §8 观察项）；`PostgresPRSubjectRepository` 的 `:now` 属 updated_at 写入非比较，不在 I17 字面范围，留档观察。
 - **关联**：TB-07、E2E-21、I17；修复后待执行方全量回归确认。
+
+### INC-31 —— 已修复（M2-T09 测试矩阵反查，checkpoint 契约诊断缺口）
+
+- **现象**：checkpoint 仅持久化五分量合成 digest；契约变化时只能记录笼统 `CONTRACT_CHANGED`，无法满足 UT-18/EX-22 要求的精确变化分量。
+- **根因**：首次实现只把“复用安全性”落库，遗漏了“可诊断性”同样是冻结契约的一部分；单一不可逆 digest 无法事后判断是哪一分量变化。
+- **解决方案**：V4 `step_checkpoint` 同时持久化 prompt/schema/mapper/context/model identity 五个版本值；恢复时按固定优先级给出 `CONTRACT_CHANGED:prompt|schema|mapper|context|model_identity`，合成 digest 仍作为快速总校验。新增 6 组合参数化回归。
+- **预防措施**：凡方案要求“精确 reason”的摘要校验，都必须同时设计可解释元数据，不能只留不可逆总摘要。
+- **关联**：M2-T03/T04、I18、UT-18、EX-22。
+
+### INC-32 —— 已修复（M2-T07 收口审计，repair lineage/终态缺口）
+
+- **现象**：首版 RepairPlanner 创建的零 Step REPAIR Run 会永久停在 CREATED；同时 CHECK_RUN 最新命令若是 UPDATE_CHECK，直接改铸 CREATE_CHECK 会缺少原 CREATE 的 `head_sha/name`，无法按最新 completed 终态重建。
+- **根因**：实现只覆盖“发出修复命令”，没有沿 request 终态反向收口独立 Run；desired payload 误按“单条最新命令”理解，忽略 UPDATE 是增量而 CREATE 含远端身份基线。
+- **解决方案**：publisher 先投影 request 终态，control 再用行锁把 REPAIR Run 从 CREATED 直接收口为 COMPLETED/FAILED 并追加可重放 RUN_STATE_CHANGED；RepairCandidate 同时携带最早 CONFIRMED CREATE 基线与最新 CONFIRMED payload，Factory 先铺基线再覆盖最新终态并剥离旧远端身份。新增 Run 收口、Projector fold、Factory 合并和 ST-31 真栈用例。
+- **预防措施**：零 Step Run 必须显式设计终态来源；“最新期望状态”测试必须包含 CREATE→UPDATE→丢失，不能只测 CREATE→丢失。
+- **关联**：M2-T06/T07、I27、CT-28、ST-31。
+
+### INC-33 —— 已修复（M2-T08 边界用例补齐，marker 歧义）
+
+- **现象**：Review 探针在多个对象命中同一 marker、或单个正文重复 marker 时取第一个对象，可能对错误远端对象做“已存在”判定。
+- **根因**：探针只实现“找到一个”，未区分唯一命中与歧义命中，违背 I20 的 UNKNOWN fail-closed 规则。
+- **解决方案**：`PublishReviewHandler` 对多对象命中和正文重复 marker 一律返回 `ProbeResult.Unknown(ambiguous_review_marker)`；`ProbeResult.FoundWithContent` 构造期强制 digest 非空。新增 marker 剥除/重复/多对象及逐字节 digest 回归。
+- **预防措施**：所有幂等探针统一按未命中/唯一命中/歧义三态设计，歧义不得任选。
+- **关联**：M2-T08、I20、UT-24/25、EX-27。
+
+### INC-34 —— 已修复（M2 编码评审 RM2-02，授权矩阵方案级漏洞）
+
+- **现象**：V4 初稿给 publisher_app 的是 repair_request **整行 INSERT**——该角色可直插 `state='APPROVED'` 并自填审批三列（伪造人工批准），或直插 DISPATCHED 跳过 RepairPlanner 全链路；而领取口 APPROVED 无条件可领，链条闭合后 REVIEW 类资源（恒 MANUAL）可被 publisher 单点自动修复。
+- **前因后果**：M2 编码评审（四切片只读评审）发现；实现照方案 §4.1 字面执行，**洞在方案层**。威胁先例：V2 给 publisher 零 outbox INSERT 的理由正是"不能伪造写意图"——伪造审批意图与之同构。
+- **根因**：授权矩阵设计时只考虑了"铸单"正当需求（DriftReconciler 同事务 INSERT），未审 INSERT 面的伪造向量；列级授权只做了 UPDATE 侧，INSERT 侧漏了。
+- **解决方案**：列级 INSERT（排除 approved_*/repair_run_id/repair_operation_id）+ BEFORE INSERT trigger 强制初始 `state='PENDING'` 且审批三列恒空；方案 v1.2 授权矩阵文本同步修订。
+- **预防措施**：授权矩阵评审增加固定检查项——"该角色能否伪造意图/审批/身份"（INSERT 面与 UPDATE 面分别审）；CT-29/DP-15 真库断言越权 INSERT 被拒。
+- **关联**：RM2-02、I21、CT-29、DP-15、方案 v1.2。
+
+### INC-35 —— 已修复（M2 编码评审 RM2-04，M1 语义回归 + Fake/PG 分叉）
+
+- **现象**：REVIEW 类资源（带 contentDigest）MISSING 后若远端被人工恢复，巡检探测 FOUND 时只走 markContentDrift/clearContentDrift——两者 PG 端 `WHERE state='PRESENT'` 对 MISSING 行 0 更新：资源永不归 PRESENT、next_check_at 不重排，**每轮巡检都重复探测**，直到人工干预。
+- **前因后果**：M1 契约明确承诺"MISSING 复核找回归 PRESENT"（PublicationStore:130 注释、DriftReconciler:47 类注释）；M2 引入内容漂移分支时把 digest 非空资源的 FOUND 处理整段切走，归位语义被顺带丢掉。掩盖因素：`FakePublicationStore.clearContentDrift` 会顺带 flip 成 PRESENT 且不复刻 PG 守卫——Fake 与 PG 语义分叉，单测因此全绿。
+- **根因**：M2 改 FOUND 分支时只考虑"内容漂移 episode"新语义，没有回查 M1 的归位契约；Fake 的"与 PG 相同守卫语义"自称无机器校验背书。
+- **解决方案**：PG 端 markContentDrift/clearContentDrift 守卫放宽到 `state IN ('PRESENT','MISSING')` 且 SET 归位 PRESENT + 重排 next_check_at（digest 一致=纯归位+清 episode，不一致=归位+开 episode）；Fake 三处守卫对齐 PG；PublicationStore javadoc 补 MISSING 归位语义。新增 DriftReconcilerTest 两条回归（digest 一致归位零事件 / 不一致归位+episode 恰一次）。
+- **预防措施**：改共享分支（如 handleFound）时先列出该分支服务的全部既有契约逐条回归；Fake 与 PG 的守卫谓词必须逐字对齐，分叉视同测试失效。
+- **关联**：RM2-04、§4.4、I26、ST-36、DriftReconcilerTest::missingReviewFound*。
+
+### INC-36 —— 已修复（M2 编码评审 RM2-03，CreateCheckHandler 探针歧义漏网）
+
+- **现象**：CreateCheckHandler.interpretProbe 循环内首个 marker 命中即 return，无第二命中检测；M2 新增的 probe-first 短路把 FOUND 直接兑现为零写 CONFIRMED——歧义场景会认领首个命中对象（review 被引用回复时隐藏 marker 被复制，双命中现实可达）。方案 R-R5 声称"多 marker 命中已转 UNKNOWN 不任选"，实际只有 PublishReviewHandler 做到了（INC-33），CreateCheckHandler 漏网。
+- **根因**：INC-33 修复只覆盖了一家 Handler；同族逻辑（探针循环）没有全库清查的习惯动作。
+- **解决方案**：CreateCheckHandler 探针改收集全部命中——0→NotFound、恰好 1→Found、≥2→Unknown(ambiguous_check_marker)；UpdateCheckHandler 为单资源 GET 无枚举面，核查无需改。EX-27 补 IT 形态钉死。
+- **预防措施**：修一类缺陷时必须 grep 同族实现（"探针""迁移""守卫"按模式全库找）；方案 R-R* 诚实清单的"已转 X"类声明需逐代码核实后才能写入。
+- **关联**：RM2-03、INC-33、I20、EX-27、R-R5。
+
+### INC-37 —— 已修复（M2 编码评审波次 2 发现 + 用户裁定，attempt_count 终态不打满）
+
+- **现象**：RepairDispatchService.fail() 在"可重试且预算耗尽"时直接 markFailedTerminal **不递增 attempt_count**——终态单显示 4/5 而非 5/5；markRetryWait 的预算翻转分支从 Planner 链路不可达（死分支）。
+- **根因**：终态路径与重试路径的计数责任划分不清；无测试钉"耗尽时计数打满"语义。
+- **解决方案**（用户裁定修）：预算耗尽的 retryable 终态路径把 attempt_count 递增打满；非 retryable 坏 payload/CAS 缺失终态不递增（不烧预算语义保留，CT-27 已钉）。CT-27 断言同步 5/5。
+- **预防措施**：涉及"计数/预算"的终态必须单测钉住终态值；死分支要么删要么接通，不允许"看起来有防御实际不可达"。
+- **关联**：RM2 波次 2 发现、CT-27、方案 v1.2 裁定-2。
+
+### INC-38 —— 已修复（M2 编码评审波次 2 发现 + 用户裁定，EX14 stub 取证盲区，测试缺陷）
+
+- **现象**：M1 的 EX14DriftProbe5xxIT 的 review 探针 stub body 与生产 buildBody 逐字节不等（差换行/格式）——该测试运行期间 review 资源实际持续触发 CONTENT_DRIFTED 告警，但测试从未断言这一面，形成取证盲区（烟雾报警器在叫，没人看报警器）。
+- **根因**：测试数据手工拼写，未与生产产出对拍；测试目标（5xx 退避）与副产物（漂移告警）无隔离检查。
+- **解决方案**（用户裁定修假数据）：stub body 逐字节对齐生产 buildBody，漂移告警噪声消除；类 javadoc 留痕。EX-23 另补"期望端与探针端 digest 算法同源"对拍，防此类漂移再犯。
+- **预防措施**：stub 中的"业务内容型"数据（评论正文、check 输出）必须从生产 builder 导出或对拍，禁止手拼。
+- **关联**：EX14、EX-23、方案 v1.2 裁定-3。
+
+### INC-39 —— 已修复（M2 测试首轮回流 TB-10，换届扫描面未排除 REPAIR Run，产品缺陷）
+
+- **现象**：EX-24（Ex24RepairSupersedeRaceIT）首跑 FAIL——repair 命令铸出后 revision 换届，control 侧第二轮 RepairPlanner `runOnce()` 处理 0 行（期望 1），零 Step REPAIR Run 无人收口 FAILED。
+- **根因**：`findActiveByPrSubjectId`（M1 写的换届/幂等守卫/账本挂载共用查询）对 run_mode 无甄别，把 V4 新增的 REPAIR Run 也当"在途评审 Run"——换届扫描把它扫成 SUPERSEDED 后，repair 收口查询 `findTerminalRunOutcomes`（要求 `r.state='CREATED'`）永远匹配不上，M2 方案 I27 设计的"EXPIRED→FAILED 收口"成为不可达死路径。M2 编码期未清查该共用查询的全部调用点语义；IT 首跑才暴露（本机无 docker 盲区）。
+- **解决方案**：`findActiveByPrSubjectId` 收敛为"活跃**评审** Run"语义（PG SQL 加 `run_mode='NORMAL'`，InMemoryStores fake 同步），REPAIR Run 的终态由 repair 收口链独占；接口 javadoc 明示排除理由。顺带消掉两个潜伏次生害：close/draft 重投幂等守卫（isEmpty 判定）与 ReconcilerDegraded 挂载点不再被滞留在途 REPAIR Run 干扰。
+- **预防措施**：新增 Run 类别（run_mode）时必须全库清查"按状态扫描 Run"的共用查询；方案里"A 状态机由 B 组件收口"的收口路径必须有 IT 实证（本例正是 IT 首跑抓到）。
+- **关联**：TB-10、EX-24（回归测试）、I27、ST-32。
+
+### INC-40 —— 已修复（M2 测试首轮回流 TB-08，IT 装备 final 类 CGLIB 不可代理，测试缺陷）
+
+- **现象**：ST-26（St26CrashBeforeCheckpointTxIT）初始化即 `AopConfigException: Cannot subclass final class StCheckpointCrashCheckpointWriter`，0.04s 秒杀。
+- **根因**：测试替身类声明了 `final`，而线束 `transactionalProxy` 走 CGLIB 类代理（与生产 docker profile 语义一致）——作者写了 javadoc 说明代理意图，却加了 final，本机无 docker 从未真跑，首跑即炸。
+- **解决方案**：去掉 `final`，类 javadoc 留痕"不得声明 final（CGLIB 需要子类化，TB-08）"。
+- **预防措施**：需要被 CGLIB 代理的测试替身类，在类名/注释上标注代理需求；IT 首跑警告机制已覆盖此类（交接文档已声明首轮建基线）。
+- **关联**：TB-08、ST-26。
+
+### INC-41 —— 已修复（M2 测试首轮回流 TB-09，ST-30 等价性断言不可满足，测试设计缺陷）
+
+- **现象**：ST-30（St30CheckpointPathEquivalenceIT）断言"续跑路径与冷路径 Step 产出 digest 相同"失败——两 digest 均为合法 sha256 但不等。
+- **根因**：测试编排让 Run X（head-st30-x）与 Run Y（head-st30-y）头不同，而 `finding_fingerprint = SHA256(head_sha|…)`（FindingMapper 明示契约）——digest 不等是**设计内必然**，断言本身就不可满足；测试自己在 outbox payload 对比处已把 head_sha 列为易变键剔除，唯独漏了 Step 产出与 review_finding 两处含 fingerprint 的对比面。
+- **解决方案**：Step 产出改为"CAS 回读 + 剔除 findings[].fingerprint 后 JSON 树逐字段比较"；review_finding 逐字段对比剔除 fingerprint 列；javadoc 同步更正。等价性强度不稀释（其余字段仍逐字段全等）。
+- **预防措施**：写"全等/等价"断言前先列出产物里所有"身份衍生字段"（fingerprint/digest/时间戳/UUID），逐个裁定剔除或保留；本例若先列清单即可避免。
+- **关联**：TB-09、ST-30、FindingMapper fingerprint 契约。
+- **续（第二轮复验）**：修复不完整——outbox payload 对比面 `normalizedPayloads` 漏剔嵌套 findings[].fingerprint（执行方二轮回流精确指出），补递归 `stripFingerprints` 供 payload 与 Step 产出两处共用。教训追加：剔除字段裁定必须覆盖**全部对比面**（本例三处：Step 产出、review_finding、outbox payload），首轮只覆盖两处。
+
+### INC-42 —— 待修复（随 M3 I34 关闭；开源调研发现的在役设计缺陷：Spring AI 默认 10 次隐藏重试一直在生效）
+
+- **现象**：M0~M2 在役代码从未设置 `spring.ai.retry.max-attempts`，Spring AI 1.0.0 默认 10 次重试
+  （退避 initial 2s、multiplier 5、上限 3min）一直在适配器层生效——模型端点瞬时故障会被静默重试，
+  一次逻辑调用最坏 10 次真实 HTTP、拖 20+ 分钟；外层 120s 硬超时（Future.get）实际是唯一的闸。
+- **发现路径**：M3 开源实证调研（F-10，Spring AI 1.0 官方文档 Retry Properties）。
+- **根因**：M0 引入 Spring AI 时未核对其默认重试面；`ModelClient` 契约假定"一次调用一次 HTTP"，
+  但适配器层对此无任何保证。
+- **解决方案**：M3 I34/T00 关闭（`spring.ai.retry.max-attempts=1` + WireMock journal 验证恰好 1 条 +
+  升级检查单固化底层 SDK `maxRetries(0)`）。M0~M2 期间影响无法追溯（无账本——正是 M3 要补的缺口）；
+  真实联调未现异常，但"看起来稳"可能部分来自隐藏重试吞掉瞬时故障，属不可证伪区间，如实留档。
+- **预防措施**：引入任何带内置重试/超时语义的框架，其默认值必须显式核对并落配置；
+  T00 式"可行性验证先行"已写入 M3 任务拆解（M3-T00 绝对先行）。
+- **关联**：F-10、I34、M3-T00、M3 方案 §4.10。
+
+### INC-43 —— 已修复待回归（M2 第三轮回流 TB-11，DP-15/DP-19 授权断言函数与 V4 列级授权形态不匹配，测试脚本缺陷）
+
+- **现象**：DP-15 三条 + DP-19 一条 FAIL——`has_table_privilege('publisher_app','repair_request','INSERT'/'UPDATE')` 实测 f、脚本期望 t；另 DP-15 行为面一条把 psql 多语句输出与 `PENDING|<null>|<null>` 逐字全等比对，必然失败（多语句 `-c` 回显 BEGIN/INSERT 0 1/ROLLBACK 命令标签）。
+- **根因**：V4 对 publisher 授的是**列级** INSERT/UPDATE（RM2-02 修复的落点），PG 语义下列级授权不提升表级 ACL，`has_table_privilege` 恒 f——断言函数选型与授权形态不匹配；同段 10 条 `has_column_privilege` 列级断言全 PASS，反证授权面本身正确。写断言时把"有权限"直觉映射到了表级函数。
+- **解决方案**：表级断言改断"f"（列级授权不提升表级 ACL 恰是设计意图，f 才是正确形态）；逐字比对改 `grep -qx` 全行匹配结果行；DP-19 同步改列级断言（`has_column_privilege(...,'state','INSERT')`）。
+- **预防措施**：断言 PG 权限前先确认授权形态（表级/列级）再选函数——`has_table_privilege` 与 `has_column_privilege` 不互换；psql 多语句输出的断言一律 grep 关键行，不做整串全等。
+- **关联**：TB-11、RM2-02（V4 列级授权设计）、DP-15/DP-19。
+
+### INC-44 —— 已修复待回归（M2 第三轮回流 TB-12，stub 固定创建 id 撞 uq_pub_resource 致资源登记被静默吸收——stub 保真度结构性缺陷）
+
+- **现象**：DP-18 九条连锁 FAIL——基线闭环 CONFIRMED=2 正常，但按 `created_by_operation_id` 查不到 check 资源行：stub 静态映射对任意 POST /check-runs 恒回 id=7000001，与库内 M1 遗留行 `CHECK_RUN|7000001|MISSING` 撞 `uq_pub_resource(resource_type,remote_id)` 唯一索引，登记走 `ON CONFLICT DO NOTHING` 被静默吸收。修复闭环（E2E-28 门禁化目标）实际从未被验证到，repair_request 累计 0 行。
+- **根因**：stub 固定创建 id × 唯一索引幂等吸收——**不是一次性脏数据**：即使清掉遗留行，每轮基线创建仍撞上一轮自己的残留行，结构性复发。M1 期 TB-04 已裁定同族现象为 stub 保真度伪影，但当时未除根。
+- **解决方案**（三件套，产品代码零改动——ON CONFLICT 幂等吸收是 I26 设计内行为）：① 一次性删除两行遗留资源行（DELETE 2，repair_request 零引用，主会话在 195 执行）；② stub 静态创建映射改 response-template 随机唯一 id（check 7200000-7499999 / review 8100000-8999999；compose 加 `--local-response-templating`，仅声明 transformer 的映射启用）——基线登记从此不撞库，195 实证连续两次 POST 返回互异 id；③ 脚本去硬编码：DP-18 旧行 remote_id 断言改基线捕获值；E2E-29/30A/32B 探针预注册 id 与延迟响应 id 同源唯一（7150000-7199999 号段）；`m2_post_check_delay_on` 缺省 id 改随机；号段纪律写入 m2-lib.sh 文件头。
+- **预防措施**：stub 替身凡是"创建对象"的响应，id 必须随机/唯一——固定 id × 唯一约束 × 幂等吸收 = 静默伪绿温床；测试栈引入新"创建类"映射时按 m2-lib.sh 号段表取号。
+- **关联**：TB-12、TB-04（同族前轮）、I26、DP-18/E2E-28。
+
+### INC-45 —— 已修复待回归（M2 第四轮回流 TB-13，INC-44 次生面：stub 探针无状态致 drift-repair 无限重建风暴，测试桩保真度结构性缺陷）
+
+- **现象**：阶段 C 7 败（E2E-32A×1 + E2E-33×6）；`repair_request` 128→553、`publication_resource` REPAIRED 552 持续增长（~15s 周期）；E2E-33 显式 id override 映射被风暴重建行抢占撞 `uq_pub_resource` 静默吸收 → 链断。
+- **根因**：INC-44 把 stub 创建响应改随机 id 后，脚本无法再预注册探针可见映射（id 不可预知）；stub 是无状态替身，**重建成功的对象对探针恒不可见** → 下轮巡检必判 MISSING → AUTO 修复 → 重建 POST → 仍不可见 → 无限循环。真实 GitHub 无此病态（重建即可见）——stub 缺"创建即可见"的最小状态性。产品逻辑在"探针恒空"世界里行为自洽，判非产品缺陷。
+- **解决方案**（probe-sync 机制，全部落在 `deploy/m2-lib.sh` + 三个脚本挂接，产品代码零改动）：① 后台守护（`m2_probe_sync_start`）轮询 stub journal 的 `POST /check-runs`、`POST /pulls/{n}/reviews`，按 external_id/marker 回查 DB 取 remote_id，即时登记探针可见映射（priority 1，`metadata.m2ProbeSync` 标记）；② 探针映射状态从进程内数组迁到状态文件（`${M2_EVIDENCE}/.probe-sync/`，flock 互斥），`m2_check_present_add/remove`、`m2_review_present_set/clear` 签名不变、内部改走状态文件——调用点零改动；③ 换装一律 `PUT /__admin/mappings/{id}` 原地更新（WireMock 3.13 实证支持）——TB-18 的 del/add 空档竞态同除；④ 守护只登记"新 POST"、不复活被脚本摘除的对象，"远端删除"模拟语义保持成立；⑤ compose down/up 后 `m2_probe_sync_republish_all` 按状态文件恢复（E2E-30 三形态已挂接）；⑥ 守护启动按 metadata 清扫上轮残留映射；⑦ journal 无响应体/无条目 id 的实情（195 实证）→ 去重键用 `loggedDate:external_id`，remote_id 一律回查 DB（产品自记的事实源）。
+- **环境处置**：195 停 publisher 断环路 → TRUNCATE 全部 15 张业务表（保留 `flyway_schema_history`，证据已在 smoke-evidence 归档）→ 重建镜像起栈，90s 观察 `repair_request=0` 无复燃。
+- **预防措施**：stub 替身"创建类"端点必须与探针端点状态联动（创建即可见），否则 drift/repair 类产品逻辑在 stub 世界必然失真；远端 id 号段纪律仍有效（显式 override 场景）。
+- **压力点留档**（当期不改产品，G2/M4 评估）：修复链无全局节流——真实现网若出现"探针持续不见"的病态（权限半开/平台异常），AUTO 修复链会按巡检周期持续重建。建议 M4 评估"单资源修复频控 + 全局修复预算"。
+- **关联**：TB-13、INC-44（前轮根）、E2E-32A/E2E-33、I26。
+
+### INC-46 —— 已修复待回归（M2 第四轮回流 TB-14，崩溃恢复认领路径无 PUBLICATION_OUTCOME_UNKNOWN 留痕，产品小缺口）
+
+- **现象**：E2E-29 FAIL——写达远端、CONFIRM 前 SIGKILL → 恢复扫描 IN_FLIGHT→RECONCILING 正确认领（探针认领/远端恰一/零重复创建全过），但 `PUBLICATION_OUTCOME_UNKNOWN` 事件 0（期望 1）。
+- **根因**：`PublicationStore.java:76` javadoc 早已承诺"→RECONCILING（响应丢失，EX-03）+ PUBLICATION_OUTCOME_UNKNOWN 事件"，但扫描器路径（`OutboxRecoveryScanner.sweepExpiredInFlight` → `toReconciling`）从未落事件——活写路径（`FencedPublicationExecutor.markReconciling`）有、崩溃恢复路径没有，审计语义不对称。崩溃恢复与响应丢失同属"结果未知"（EX-03），javadoc 承诺未在扫描器落地。
+- **解决方案**：`toReconciling` 增加 `ExecutionEvent` 参数（接口 + PG + Fake + Crashy 四处），转换命中时同事务落事件（`detail=inflight_lease_expired`）；`OutboxRecoveryScannerTest` 路径①补事件断言。
+- **关联**：TB-14、E2E-29、EX-03。
+
+### INC-47 —— 已修复待回归（M2 第四轮回流 TB-15，恢复扫描 UNKNOWN 退避的 Retry-After 被 120s 缺省底线无条件压制，产品缺陷）
+
+- **现象**：E2E-32-B FAIL——探针吃 429+Retry-After=30 后 `reconcile_after - 观察时刻 = 118s`（期望 ≤+70s）；同参数写路径 34s PASS，互证缺陷只在恢复扫描路径。
+- **根因**：`settleReconcile` UNKNOWN 分支**无条件** `max(exponential, now+120s)`——`RetryBackoff` 本身尊重 HonorRetryAfter（:31-32），被外层 max 抹平。I23 口径 = "显式头听头的（clamp 15min），缺省底线只兜无头指令"。
+- **解决方案**：floor 条件化——verdict 携 `HonorRetryAfter` 时直接用 exponential，否则才 max 兜底；`OutboxRecoveryScannerTest` 新增两案钉死（Retry-After=30 不被压制 / 无头 429 仍受 120s 兜底），本机 10/10 绿。
+- **关联**：TB-15、E2E-32-B、I23、EX-19。
+
+### INC-48 —— 已修复待回归（M2 第四轮回流 TB-16/17/18，测试注入面三处修正，非产品缺陷）
+
+- **TB-16（E2E-34 注入形态错误）**：原注入 list-check 端点级 404 撞上 M1 既定裁决——LIST 探针 404 归瞬时 UNKNOWN 退避（sha 消失/瞬断/权限皆可能，方向安全零误修），不进 sanity/权限告警路径；所谓"自动复归"实为资源从未离开 PRESENT。修正：改注"对象摘除（探针 200 空列表 → 窗口穷尽 NOT_FOUND）+ sanity 读 404"——权限告警路径（F-3）的正确触发形态；恢复段补探针对象回填后再做人工复位断言。产品 LIST 404 语义复验正确，不动。"LIST 404 是否也接 sanity 消歧"记压力点留 G2。
+- **TB-17（E2E-31 注入竞态）**：原时序"3s 轮询等铸单 → pause"存在数秒窗口，repair 命令在 pause 生效前被 claim 并 POST（fence 断言本身全过，产品无缺陷证据）。修正：0.5s 密轮询等铸单、命中即冻结 publisher、显式检测命令是否抢跑，抢跑则换 PR 重试（≤3 轮）——竞态是概率事件，检测+重试比放宽断言诚实。
+- **TB-18（BT-M2-03 换装竞态）**：`m2_review_present_set` 的 del/add 空档让探针撞静态空响应 → 伪 NOT_FOUND → 伪 MISSING + 游离 MANUAL 单（episode 主语义全过，产品无缺陷证据）。由 probe-sync 的 PUT 原地换装一并根除（INC-45③）。"episode 活跃期是否不重复判 MISSING"的产品防御性评估记压力点留 G2。
+- **关联**：TB-16/17/18、E2E-31/E2E-34、BT-M2-03、F-3、EX-28。
+
+### INC-49 —— 已修复（流程踩坑：主会话 tar 同步误带 M3 测试文件污染 195 构建；暴露"M2 产品代码从未提交 git"）
+
+- **现象**：主会话同步 TB-14/15 修复到 195 时 tar 了整个 `publisher-app/src`——把本地工作区的 M3 适配测试文件（ItModelClient/ItHarness/EX06/EX07 引用 control 侧 M3 新类 `ModelGatewayPort`/`ModelRoute`/`ModelCallContext`）一并带入；195 上 control-app 是 M2-era，publisher testCompile 炸 20+ 处 cannot find symbol。
+- **根因**：**M2 产品代码全部未提交 git**（HEAD=08035c2 为 M1-era），"195 的 M2-era 状态"只是工作区快照、无 VCS 锚点；主会话按"publisher 与 M3 无关"的直觉整目录同步，未料到 M3 工作碰过 4 个 publisher IT 文件。
+- **解决方案**：195 重建改 `-Dmaven.test.skip=true`（部署栈只需 main jar，测试源码不编译；测试代码正确性由本机 `mvn clean verify` 全量把关——已 BUILD SUCCESS）。jar 内新代码实证（class 含 TB-14 新字符串 `inflight_lease_expired`）。
+- **预防措施**：**M2 代码应尽快提交 git**（待用户指示）——无 VCS 锚点的跨机同步永远有此类风险；向 195 同步部署源码时若本地工作区混入未发布里程碑改动，必须按文件清单精确同步或先提交。
+- **关联**：TB-14/15 部署、M3 工序 3 收尾中（本机未提交）。
+
+### INC-50 —— 已修复待回归（M2 第五轮回流 TB-19，INC-49 次生面收尾：4 个 publisher IT 文件 M3 引用手工回退 M2-era）
+
+- **现象**：第五轮阶段 A，195 上 reactor `clean verify` 的 publisher testCompile 炸——`ItModelClient/ItHarness/EX06ModelFailureIT/EX07T2RollbackReplayIT` 引用 control 侧 M3 新类（`ModelCallContext/ModelGatewayPort/ModelRoute/ModelRouteIdentity/RoutedModelResult`），195 的 control-app 是 M2-era 只有 7 个 `domain/ai` 类；publisher 139 单测+70 IT 无法编译（shared 101、control 301+52 全绿不受影响）。
+- **根因**：INC-49 已记——主会话 tar 整目录同步把本地 M3-era 测试适配带入 195；M2 产品代码从未提交 git（HEAD=b4266bc 为 M1-era），M2-era 的这 4 个文件无 VCS 锚点，只能手工回退。
+- **解决方案**：在临时目录（本地 M3-era 工作区不动）把 4 个文件回退到 M2-era API——ItModelClient 退回实现 `ModelClient`（取 git HEAD 版本，ModelClient/ModelRequest/ModelResult 在 M2 未变）；ItHarness 恢复 `ReviewAgentLoop(modelClient, new ModelBudgetGuard(), …)` 4 参 + `ReviewStepExecutor` 末参回 `String modelIdentity="it/mock-model/v1"`；EX06 回 `ModelTimeoutException("模型超时", null)`；EX07 的 `ReviewOutcome` 去掉 M3 第 9 参（195 M2-era 为 8 参，末位 `modelResponse`）。按精确文件清单 scp 到 195；195 上 `mvn test-compile -pl publisher-app -am` **EXIT=0 编译通过**（2026-09-01）。部署镜像无需重建（测试源码不进 jar，195 构建本就走 `-Dmaven.test.skip=true`）。
+- **预防措施**：同 INC-49——M2 代码尽快提交 git（待用户指示）；跨机同步一律精确文件清单。
+- **关联**：TB-19、INC-49。
+
+### INC-51 —— 已修复待回归（M2 第五轮回流 TB-20，E2E-31 测试装备缺陷：docker pause 冻死 T14 token 口致换届迟到 4 分钟；fence 无缺陷）
+
+- **现象**：E2E-31（repair 执行中 push 新 commit → epoch fence + EXPIRED）——INC-48 冻结修复后无抢跑（命令铸于换届前、publisher 即冻），但 unpause 后 repair 命令未被 fence 拦截反而 CONFIRMED（POST 写旧 head_sha），`stub 零写 实际=[1]`、`REPAIR_EXPIRED 事件=[0]`。
+- **主会话取证裁定**（回码 + 195 DB 取证，**翻转执行方"游标序 fence"定性**）：① `PublicationGate:68-69` 第三参 `cursor.publicationEpoch()` 是 `pr_subject` 行 `FOR UPDATE` 现值（`PostgresPublicationStore:120-127`），不是"已解决游标处世代"——fence 比对的就是 subject 现世代，语义与 v2.2 §3/I22 一致；② 真实时间线：sync webhook `e31-sync` 10:34:48 入 inbox，处理连败 3 次（`last_error={"kind":"dispatch_failed","message":"UncheckedIOException: 只读 token 窄接口调用失败"}`），10:38:49 才 PROCESSED → epoch bump（新命令 seq 4/5 铸于 10:38:51）比 repair CONFIRMED（10:37:49）**晚 62 秒**——fence 判定时 subject 现世代确为 1，ALLOW 合法，产品零缺陷；③ 根因=**T14 架构事实**：控制面处理换届必须先经 publisher 的 CredentialBroker 只读 token 窄接口取 token，而 `docker pause` 把该口一起冻结 → 换届只能 RETRY_WAIT 到 unpause 之后；④ 脚本换届等待行的 `|| true` 吞掉 180s 超时，是假绿通道。
+- **解决方案**（`deploy/e2e-m2.sh` E2E-31 重写，**行锁代 pause**）：pause 仅覆盖"铸单→行锁落地"短窗口（保证命令 PENDING 无竞态）→ 后台 psql 持 repair 命令行 `FOR UPDATE`（publisher claim 走 `SKIP LOCKED` 必跳过、T3-A `lockCommand` 必阻塞、sweep `FOR UPDATE OF o` 必阻塞——三条路径全被封死且 publisher 进程保持存活）→ unpause 恢复 T14 token 口 → 发 synchronize webhook，换届等待改**硬失败**（超时=用例无效，不再吞）→ 换届落定后 `pg_terminate_backend` 精确放锁 → fence（T3-A）或 sweep（兜底路径③）确定性 SUPERSEDED → projector 收敛 EXPIRED。全程无概率竞态（原"检测+换 PR 重试"降级为 pause 窗口的防御性兜底）。已同步 195，`bash -n` 通过。
+- **设计观察留档**（不改产品）：T14 单连接点意味着 publisher 停机期间控制面无法完成换届（inbox 退避自愈，本次实证 62s 窗口）；单人系统可接受，若未来多实例/高可用诉求出现再评估控制面 token 短缓存。
+- **关联**：TB-20、TB-17（INC-48 前轮）、E2E-31、I22、T14（评审修正 #6）。

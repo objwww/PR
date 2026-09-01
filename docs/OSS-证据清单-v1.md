@@ -316,6 +316,267 @@
   （outbox 写路径 / recovery 扫描 / drift 巡检）有头不早于 now+retryAfter，无头 429
   下限 60s。
 
+### F-9 Resilience4j 熔断器语义实证【M3 手写熔断的设计依据与坑清单】
+
+- HALF_OPEN permit 为**原子预扣**而非事后统计：`CircuitBreakerStateMachine.HalfOpenState.tryAcquirePermission()`
+  用 AtomicInteger 预扣额度，领完即拒 CallNotPermittedException
+  （github.com/resilience4j/resilience4j 源码 + resilience4j.readme.io/docs/circuitbreaker，
+  2026-08-31 核对）→ 佐证 M3 `BreakerPermit` 设计。
+- `maxWaitDurationInHalfOpenState` 默认 **0 = 无限等待**：探针挂死即 permit 泄漏、状态机永久卡
+  HALF_OPEN（官方配置表）→ M3 必补探针独立超时 + 超时/取消强制归还 permit。
+- `recordFailurePredicate` 默认一切异常算失败；`recordExceptions` 白名单 / `ignoreExceptions`
+  不计数（官方文档 + 源码 handleThrowable）→ 佐证异常分类白名单；坑：ignore 类异常路径若不归还
+  permit 会死锁；谓词/回调自身抛异常也泄漏 permit（源码专门打补丁）→ **permit 归还必须放 finally**。
+- 官方默认装饰器顺序 Retry 在最外层（Retry(CircuitBreaker(...))），issue #2383 指出此默认导致
+  每次重试都被熔断计为独立失败 → M3 明示条款：每次物理触网失败计入熔断（保守方向，重试次数
+  已被预算封顶）。
+- 状态纯进程内存态（Registry 基于 ConcurrentHashMap）；集群/持久化特性请求 issue #419 至今未实现
+  → 佐证 R-M3 内存态裁定，多实例不一致是官方也未解决的已知局限。
+
+### F-10 Spring AI 1.0.0 隐藏重试实证【I34 的事实基础；INC-42 来源】
+
+- 官方 1.0 参考文档 Retry Properties（docs.spring.io/spring-ai/reference/1.0/api/chat/openai-chat.html，
+  2026-08-31 核对）：`spring.ai.retry.max-attempts` 默认 **10**；backoff initial 2s、multiplier 5、
+  max-interval 3min；`on-client-errors` 默认 false（4xx 不重试）。一次逻辑调用最坏 **10 次真实
+  HTTP、拖 20+ 分钟**。
+- 关闭方式：`spring.ai.retry.max-attempts=1`（无 enabled 键）；retry 为 ChatModel 级配置，
+  不支持 per-request 覆盖（issue #3858）。
+- 版本事实：1.0.x 底层为自家 RestClient 封装的 OpenAiApi；openai-java SDK 集成是 1.1 可选模块
+  （OpenAiSdkChatModel），2.0.0-M5 起才全面改写（docs.spring.io/spring-ai/reference/upgrade-notes.html
+  + Spring 官方博客 2026-04-27）。openai-java 默认 maxRetries=2（github.com/openai/openai-java README）
+  → 升级检查单须固化 `maxRetries(0)`。
+- Spring AI 1.0 无 per-request timeout/cancellation 官方 API；只能走底层 HTTP client 的
+  connect/read 超时配置。
+- **在役影响**：本项目 M0~M2 从未设置该项，Spring AI 默认 10 次隐藏重试一直在生效（INC-42）。
+
+### F-11 百炼限流与错误码官方文档实证【§4.2 二维分类的依据】
+
+- 官方三篇核心文档（help.aliyun.com/zh/model-studio/error-code、/rate-limit、
+  /rate-limiting-best-practices，2026-08-31 核对）**均未提及 Retry-After 响应头**；官方最佳实践
+  示例为客户端自算指数退避+随机抖动（min 1s / max 60s，5~6 次），并述"限流通常 1 分钟内自动恢复"。
+- 429 族：`Throttling.RateQuota`（RPM/RPS 请求频率）、`Throttling.AllocationQuota`（TPM/TPS token
+  用量）、`Throttling.BurstRate`（流量增速）、通用 `Throttling`。
+- **非 429 族**：`AllocationQuota.FreeTierOnly`（免费额度耗尽）是 **403**；`Model.AccessDenied` 是 403；
+  `Arrearage`（欠费）是 **400**；"未开通服务"也是 400。
+- 同码不同状态：`Throttling.AllocationQuota` 还存在 400 版本（音色/热词等资源配额）→ 分类器必须
+  status × code 二维联合判定，不能只看 code。
+- BurstRate 官方首选解法：请求头 `X-DashScope-Wait-Timeout: 3~120` 做服务端排队（仅对增速限流
+  有效，对 RPM/TPM 无效）。
+- 官方明示限流按**秒级** RPS/TPS 执行：分钟级总量未超限也会被拒。
+- 错误 body 双结构：OpenAI 兼容模式 `{"error":{"code","message","param","type"}}`；DashScope 原生
+  模式顶层 `{"code","message","request_id"}` → 分类器两种都要能解析。
+- 官方建议 429 时才降级备选模型（仅限流错误才降级）→ 佐证 D7"ClientError 族不 fallback"。
+
+### F-12 Stripe 幂等键与不确定态【两段记账的同构先例】
+
+- Idempotent Requests（docs.stripe.com/api/idempotent_requests，2026-08-31 核对）：连接错误后用同
+  key 安全重放，服务端保存首个请求的完整结果（含 500）并原样返回；key 24h 过期；参数校验失败/
+  并发冲突不保存结果可直接重试（"前置拒绝"与"执行中失败"官方即作区分 → 佐证 M3 决策事件与
+  物理调用分账 D14）。
+- PaymentIntent 生命周期（docs.stripe.com/payments/paymentintents/lifecycle）：无 UNKNOWN 终态，
+  但 `processing` 是诚实中间态（异步支付可达数天），终态靠 webhook 事后补推 → 不确定态不可省略，
+  且必须有对账/reconciler 收口（M3 Recovery 同构）。
+- 关键差异：模型 API（百炼/OpenAI 兼容）**无幂等键**——重试不是重放而是真实第二次计费调用，
+  故每物理调用独立账本行（驳回"重试共享一行"建议）。
+
+### F-13 Temporal 活动超时分类【总 deadline 分层的依据】
+
+- 官方文档（docs.temporal.io/encyclopedia/detecting-activity-failures，2026-08-31 核对）：
+  ScheduleToClose = 跨全部重试的总时长；StartToClose = 单次尝试上限；Heartbeat 检测 worker 存活。
+- "Temporal Server 不检测 worker 失联，靠 StartToClose 超时强制重试"——**超时是唯一可信的崩溃
+  检测器** → M3 Recovery 按时间扫描 STARTED 标 UNKNOWN 的依据。
+- M3 映射：gateway-total-deadline ≈ StartToClose（单次编排）；attempt 预算+Defer ≈ ScheduleToClose
+  （跨重试总量）。
+
+### F-14 gRPC deadline 传播与重试节流【deadline 下传与 R-M7 的依据】
+
+- 官方指南（grpc.io/docs/guides/deadlines/，2026-08-31 核对）：deadline 跨层自动传播，以**剩余
+  timeout** 传递（免疫时钟偏移）→ M3 总 deadline 换算剩余毫秒逐层下传，各层不自设绝对值。
+- 同文档：客户端 DEADLINE_EXCEEDED 后"server application is responsible for stopping any activity
+  it has spawned"——服务端**可能继续执行** → R-M7（超时后供应商可能继续计费）的官方实证。
+- A6 proposal（github.com/grpc/proposal/blob/master/A6-client-retries.md）：retryPolicy maxAttempts
+  客户端硬上限 5——官方理由是防 DNS 下发恶意配置的安全缓解，**不是容量最优值**（引用勿误传）；
+  retry throttling 令牌桶（token ≤ maxTokens/2 时全禁重试）；deadline 横跨全部 attempts。
+
+### F-15 Envoy 重试预算与故障域处置【总预算 + 同域禁 fallback 的依据】
+
+- retry_budget（circuit_breaker.proto，2026-08-31 核对）：活跃重试并发 ≤(active+pending)×budget_percent
+  （默认 20%、min_retry_concurrency=3——**低流量时比例预算失真才需要这个兜底**）；设置后覆盖
+  max_retries 熔断器。issue #30205：backoff 中的重试计入分子。
+- retry_host_predicate `PreviousHostsPredicate` 拒绝已试主机；outlier detection 把连续 5xx 主机
+  逐出 LB 集合（官方 intro 文档）→ **端点级故障的设计哲学是"换实例 + 逐出坏实例"，同端点原地
+  重试被认为无效**——I36 同域禁 fallback 的强佐证。
+- `rate_limited_retry_back_off`：收到 Retry-After/X-RateLimit-Reset 时改用服务端给定退避——
+  域内精确退避先例。
+- 官方重试语义明文：所有重试包含在整体请求超时内（deadline 横跨 attempts，同 F-14）。
+
+### F-16 Google SRE 重试风暴定量【预算语义与故障冒泡的依据】
+
+- 《Addressing Cascading Failures》（sre.google/sre-book，2026-08-31 核对）：100 QPS 失败重试
+  →200→300 正反馈直至崩溃；多层各 4 attempts 则放大 4³=64 次。
+- 《Handling Overload》（同书）：每请求预算 ≤3 attempts；**每客户端重试占比预算 10%**——无比例
+  预算最坏流量 ~3x，有则 ~1.1x；"大面积过载时错误应直接冒泡不重试"；"只在紧邻失败层的上一层重试"。
+- 对 M3：max-physical-calls-per-step=6 偏上限可接受（gRPC 硬上限 5、Envoy 默认并发 3、SRE 3）；
+  比例预算在低流量失真（F-15 min_retry_concurrency 同族坑）→ 单实例低并发本版用总额度，
+  比例语义记 M3-P11 观察项。
+
+### F-17 Spring AI 1.0.0 的 429 误分类与 usage 元数据坑【ProviderErrorClassifier 输入约束的依据】
+
+- 官方源码（raw.githubusercontent.com/spring-projects/spring-ai/v1.0.0/.../RetryUtils.java，
+  2026-08-31 核对）：`DEFAULT_RESPONSE_ERROR_HANDLER` 对**所有 4xx 一律抛
+  `NonTransientAiException`**——429 限流与"参数错误、该停"混为一谈；官方 issue #3857
+  自承粒度不足。默认 RetryTemplate 只 retryOn TransientAiException。
+- 结论：M3 的 `ProviderErrorClassifier` **不得以 Spring AI 异常类型（Transient/NonTransient）
+  为分类输入**，必须解析原始 HTTP status/headers/body——否则全部 429 会被误判为不可重试，
+  §4.2 的限流细分整体失效。
+- usage 元数据坑：Advisor 覆盖 usage（issue #1309）；流式 usage 恒 0（issue #4785，1.1 未修）。
+  本项目同步单发不走 Advisor/流式，主要残余风险是 usage 为 null 被静默记 0（M0~M2 的
+  `SpringAiModelClient.map()` 正是此行为）→ M3 `usage_missing` 显式标记条款（§4.8）的依据。
+
+### F-18 JDK HttpClient 中断不释放在途请求【超时兜底条款的依据】
+
+- JDK-8245462（bugs.openjdk.org，2026-08-31 核对）：线程中断时 `send()` 抛
+  InterruptedException，但 **HTTP 请求在后台继续执行，同步调用方无任何句柄取消它**；
+  JDK 21 上行为依旧。Apache HttpClient 亦有中断/超时泄连接的案（HTTPCLIENT-2416）。
+- 结论：`SpringAiModelClient.callWithTimeout()` 的 `executor.shutdownNow()` 只是"放手"——
+  模型端继续计费生成、socket 挂到服务端超时。唯一可靠兜底是 request factory 级
+  connect/read timeout（§4.10）；R-M7 的"不可见费用"由此从"可能"升级为"确定存在窗口"。
+
+### F-19 LangGraph checkpointer 实证【checkpoint 设计的对照组】
+
+- Postgres checkpointer（docs.langchain.com/oss/python/langgraph/checkpointers，2026-08-31
+  核对）：super-step 边界全量 StateSnapshot + 节点级 pending writes；thread_id/checkpoint_ns
+  两级命名空间；durability 三档 sync/async/exit（exit 模式 interrupt 不可用）。
+- 官方自承认的坑：checkpoint 无内建保留策略（需自写 cron）；序列化膨胀实证 85% 开销
+  （issue #7714）；写放大生产事故（12 节点×500 线程=6000 次写）；schema 初始化与连接语义
+  耦合脆弱（#7630/#5327）；跨版本破坏性变更史（#3557）。
+- interrupt/resume：恢复时**整个节点从头重跑**，interrupt 前副作用必须幂等（官方警告
+  while True+interrupt 指数级重放）——"恢复即重放"把幂等性留作隐式约定。
+- 对照结论：本项目"digest 契约五分量显式拒绝 + CAS 大对象分离 + 租约栅栏"在幂等保证上
+  强于 LangGraph 的隐式约定；durability 分档思想可作"按丢失后果选持久化时机"的论证框架；
+  interrupt/全量快照/ns 命名空间对单 Step 架构为投机性泛化，拒绝引入（且无 Java 实现）。
+
+### F-20 OpenHands / SWE-agent harness 设计实证【错误分级与预算分层的同构验证】
+
+- OpenHands 事件系统（docs.openhands.dev/sdk/arch/events + 源码）：事件流 append-only 为
+  唯一事实源；`Event.source` 与 LLM `role` 刻意分离；错误分两级——AgentErrorEvent（工具级，
+  喂回模型自愈）vs ConversationErrorEvent（会话级，不喂模型直接终态）。429 重试参数：
+  4 次、5~30s 指数退避、乘数 2。
+- SWE-agent（swe-agent.com 文档 + 源码）：三级预算 per_instance/total/per_instance_call_limit
+  + 1.1 倍超额保险丝；解析失败 requery 上限 3；fallbacks 走 litellm 列表；每步
+  save_trajectory 但无运行时断点续跑（崩溃=attempt 报废）。
+- 已知坑：OpenHands #12344 密钥序列化不对称致恢复失败——"存得下≠恢复得了"，恢复路径必须
+  专项测；#6857 max_iterations 曾失效。
+- 对照结论：错误两级分类与我们"调用级故障走 §4.2、输出级失败走 Step FAILED"同构互证；
+  预算分层与 §4.4 四预算同构；requery/死循环检测/RetryAgent 为多轮循环特效药，拒绝
+  （记 M3-P12 触发式评估 requery）。重试参数档位（4 次/5~30s）佐证我方默认值同量级合理。
+
+### F-21 Agent 工程方法论三文献【架构定位的权威背书】
+
+- Anthropic《Building effective agents》（anthropic.com/engineering/building-effective-agents，
+  2026-08-31 核对）：workflow（预定义路径）vs agent（自主决策）划分；"对多数应用，优化单次
+  LLM 调用已足够"；警惕框架抽象遮蔽原始 prompt/response；工具设计 poka-yoke。
+- HumanLayer《12-Factor Agents》（github.com/humanlayer/12-factor-agents）：F8 own your
+  control flow（自写控制流才能中断/限流/恢复）；F9 compact errors（错误入上下文自愈 +
+  errorCounter 阈值接管——我们无"下一次调用"，转用为熔断/重试分类依据）；F12 stateless
+  reducer；F5 状态统一作者自承非强制。
+- OpenAI Agents SDK（openai.github.io/openai-agents-python）：guardrails tripwire 模式
+  （input 拦在贵模型前 / output 校验产出）；sessions 多轮记忆九种后端。
+- 适配结论：本项目是 workflow 不是 agent，获直接背书；确定性输出校验（FindingMapper
+  契约）已实现等于 output guardrail 的确定性部分；LLM 型 guardrail/sessions/预分类路由
+  与"单次调用"定位冲突，拒绝。raw 请求不入 CAS 的裁定：prompt 可由 input digest +
+  contract 五分量**确定性重建**，无需存储（响应不可重建故必须存——INC-19）。
+
+### F-22 Kleppmann fencing token 文献对照【lease_epoch 的边界确认】
+
+- martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html（2016，通用结论）：
+  fencing token 必须由**资源持有方**主动检查拒绝回退写。
+- 对照：本项目 (owner, epoch) 比较放进 UPDATE WHERE 由 Postgres 原子裁决——教科书式正确，
+  强于 Redlock。
+- **边界**：fencing 只覆盖存储写；对 GitHub API/模型调用这类不可 fencing 的外部副作用，
+  epoch 挡不住重复执行——租约在模型在途时过期，reclaimer 会发起第二次调用，epoch 只挡
+  落库不挡花钱。M3 必须保证 lease 时长 > gateway-total-deadline + 余量（启动校验，
+  §4.9）+ heartbeat 续租（M0 既有）。
+
+### F-23 GitHub Checks API 实证坑【漂移源清单输入】
+
+- 官方文档（docs.github.com/en/rest/checks/runs，2026-08-31 核对）：传 conclusion 自动置
+  status=completed（隐式跃迁）；`stale` 只能 GitHub 设；**rerequest 会清空 conclusion、
+  重置 suite 为 queued，但不改 check run**——App 须收 `check_run.rerequested` webhook 自行
+  决策；同名 check run 超 1000 自动删旧；无 ETag/条件更新（last-write-wins）。
+- 对本项目：check run 终态可被 GitHub 单方面清空 = 新漂移源；好在 DriftReconciler 以远端
+  为准已覆盖检测面；rerequested 策略（重新评审 or 重置 Run）涉及 revision/epoch 语义，
+  留 M4/M5（M3-P13）。
+
+### F-24 WireMock 故障注入保真度边界【E2E 诚实清单依据】
+
+- 官方文档（wiremock.org/docs/simulating-faults/，3.x）：支持固定/对数正态延迟、chunked
+  dribble、四种 Fault；**`CONNECTION_RESET_BY_PEER` 在 Windows 上表现为挂起而非 reset**——
+  本机（Windows）跑 reset 类用例会误报，必须在 195 Linux 跑。
+- 模拟不了：TLS/DNS 层失败、SSE 流中途 RST、限流配额窗口滑动、GitHub 写后读旧值最终一致性、
+  rerequest 清 conclusion 这类**有状态服务端行为**（stub 无服务端状态，scenario 只能脚本化
+  不能对弈）。
+- 结论：M3 E2E 的重试/熔断/超时/截断在能力内；状态机对弈类标注"近似注入"，上线前需
+  真实环境回归一次（既有 e2e 真实通道）。
+
+### F-25 Outbox / SKIP LOCKED 参考实现对照【自研等价性确认】
+
+- microservices.io transactional-outbox（2026-08-31 核对）：两个固有坑——relay 可能重复
+  发布（消费者必须幂等）、开发者可能漏写；Debezium CDC 免轮询但引入 Kafka Connect 全家桶，
+  同样 at-least-once。
+- 对照：本项目 INSERT-only（DB 角色无 UPDATE 权）比参考实现更严；单 claimer 串行天然保序；
+  RECONCILING 探测先于重发正是重复发布坑的正解。**真实缺口**：relay 崩溃=静默停摆，
+  参考实现均未覆盖 relay 存活监控 → M3-P14（outbox 最老 PENDING 年龄自检）。
+- SKIP LOCKED：crunchydata 博客两坑（高周转表膨胀、处理期持事务阻塞 vacuum）；pgmq 用
+  visibility timeout 替代长事务锁。本项目 claim 已是"SKIP LOCKED + 短事务租约立即提交"
+  等价模型，两坑已避；pgmq 扩展=新外部组件，ADR-020 不过，拒绝。
+
+### F-26 Uber 软件工厂成本治理实证【M3 成本账本口径的参照系】
+
+- 《Running a Software Factory Efficiently at Uber Scale》（uber.com/us/en/blog/efficient-software-factory/，
+  2026-08-27，2026-08-31 核对；正文抓取有截断，缺口经 cellcog/CSDN 转述交叉核对）：
+  >70% PR 有 agent 参与（人工 review 仍在环）；3,600+ 员工自建 skills 日均 30K+ 次执行；
+  2 月至 8 月周活 7x、请求 9.4x 而总花费自 4 月持平；固定模型口径每千请求成本降 34%。
+- 核心方法：agentic 成本拆六因子方程（用户数×会话×轮次×请求×token×单价）逐项独立度量；
+  **按产出计价**（cost per merged PR / per review），不按 token 计价；benchmark 驱动选型
+  （统一 harness 接任意模型选 Pareto 最优，模型几周一换）；subagent 默认降级便宜模型；
+  prompt cache TTL 按真实空闲间隔调；MCP 工具 schema 不进上下文（省 50~70K token/会话）。
+- 对本项目：成本账本聚合口径补"每 PR/每 finding"产出计价（§4.8 runbook 已含 Run 级聚合，
+  产出计价列记 runbook 增量）；subagent 降级/cache TTL/压缩对当前单 Step 形态无对象，不引入。
+
+### F-27 Uber agent 身份危机与参与者链【多 agent 演进的安全输入；当前不采用】
+
+- 《Solving the Identity Crisis for AI Agents》（uber.com/us/en/blog/solving-the-agent-identity-crisis/，
+  2026-05-21，2026-08-31 核对）：agent 不是人也不是传统服务；多跳链路 provenance 丢失、
+  审计断链。方案 = Agent Registry + SPIRE 工作负载身份 + STS 每跳短 TTL JWT（P99<40ms）+
+  MCP Gateway 策略执行点 + AI Gateway 出站防护（AI Guard）；核心概念 Participant Chain
+  （令牌携带发起用户→各 agent→当前调用者全链）。
+- 关键教训：外挂代理解决不了 provenance，**必须集成进 agent SDK 应用层端到端传播**——
+  与本项目"能在应用层解决就不引中间件"的冻结纪律同构。
+- 适配裁定：SPIRE/STS/Mesh 全套是平台团队级基础设施，单人维护不可行、ADR-020 过不了，
+  **不采用**；Participant Chain 思想可简化为事件表加 provenance 字段（M4 多 Step 编排时再评）。
+
+### F-28 uReview 同领域实证【Uber 的 GenAI 代码评审系统；M5 评测域的最重要参照】
+
+- 《uReview: Scalable, Trustworthy GenAI for Code Review at Uber》（uber.com/us/en/blog/ureview/，
+  2025-08-12，2026-08-31 核对）：prompt-chaining 四段流水线——生成（可插拔 assistant）
+  → 二次 prompt 打分+置信度过滤（阈值细到 assistant×语言×类别）→ 语义相似去重合并 →
+  类别分类器整体抑制低价值类别（readability:naming 砍掉，correctness:null-check 保留）。
+- **幻觉防护核心结论：单发 prompt 必然高误报；"Guardrails 和 prompt 同等重要"，pipeline/
+  后处理比 prompt 设计更关键**——与本项目 harness 哲学（把模型装进工程流水线消除
+  不确定性）完全同构。
+- 评估闭环：逐条 Useful/Not Useful 反馈；自动 addressed 判定 = **对最终 commit 重跑 5 次**
+  消除随机漏检；golden comments 人工标注 benchmark 算 P/R/F1；最优组合 Claude-4-Sonnet 生成
+  + o4-mini-high 打分（生成模型≠评分模型）。
+- 数据：周覆盖 65,000 diffs 的 90%+；usefulness ≥75%；65% 评论被 address（人类 51%）；
+  CI 中位 4 分钟；成本比第三方低一个数量级。
+- 教训：精确度>数量；开发者讨厌 readability/style 类评论；**linter 能查的别用 LLM**；
+  缺 PR 历史/schema/文档上下文所以评不了系统设计；灰度逐 team/assistant 放量 + A/B +
+  go/hold 仪表板。
+- 适配裁定：后处理链（打分/过滤/去重/类别抑制）与反馈闭环全部可用纯 Java+Postgres 实现，
+  零新组件——但属**质量评测域（M5）**，不进 M3 范围（M3 只管调用可靠性与成本，不管
+  输出质量分级）；finding 类别标签/置信度字段是否前置进 prompt 契约，记 M3-P17 由用户裁定。
+
 ---
 
 *证据清单完。任何 v2.2 条文被质疑时，回查本文对应索引；新引入设计决策时，先补本清单再入冻结文档。*

@@ -9,6 +9,8 @@ import com.objwww.pr.shared.TypedOutcome;
 import com.objwww.pr.shared.TypedReadRequest;
 import com.objwww.pr.shared.TypedResponse;
 import com.objwww.pr.shared.TypedWriteRequest;
+import com.objwww.pr.shared.Digest;
+import com.objwww.pr.shared.Digests;
 
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,7 @@ public final class PublishReviewHandler implements PublicationHandler {
     }
 
     /** body = 人读摘要 + 行尾隐藏 marker（marker 是 reconcile 唯一可靠探针，不可省） */
-    private String buildBody(ClaimedCommand command, Map<String, Object> payload) {
+    String buildBody(ClaimedCommand command, Map<String, Object> payload) {
         StringBuilder body = new StringBuilder("AI Code Review\n");
         Object findings = payload.get("findings");
         if (findings instanceof List<?> list) {
@@ -119,18 +121,33 @@ public final class PublishReviewHandler implements PublicationHandler {
     }
 
     @Override
-    public ReconcileVerdict interpretProbe(TypedResponse response, ClaimedCommand command) {
+    public ProbeResult interpretProbe(TypedResponse response, ClaimedCommand command) {
         if (response.status() != 200 || response.arrayBody() == null) {
-            return ReconcileVerdict.unknown();
+            return new ProbeResult.Unknown("http_" + response.status());
         }
         String marker = markerOf(command.operationId());
+        Map<String, Object> matched = null;
         for (Map<String, Object> review : response.arrayBody()) {
             Object body = review.get("body");
             if (body != null && body.toString().contains(marker)) {
-                return ReconcileVerdict.found(String.valueOf(review.get("id")),
-                        Objects.toString(review.get("html_url"), null));
+                String text = body.toString();
+                if (text.indexOf(marker) != text.lastIndexOf(marker) || matched != null) {
+                    return new ProbeResult.Unknown("ambiguous_review_marker");
+                }
+                matched = review;
             }
         }
-        return ReconcileVerdict.notFound(); // 本页未命中；窗口穷尽由执行器裁决
+        if (matched != null) {
+            String text = matched.get("body").toString();
+            return new ProbeResult.FoundWithContent(String.valueOf(matched.get("id")),
+                    Objects.toString(matched.get("html_url"), null),
+                    new Digest(Digests.sha256Hex(text)));
+        }
+        return new ProbeResult.NotFound();
+    }
+
+    @Override
+    public Digest expectedContentDigest(ClaimedCommand command, Map<String, Object> payload) {
+        return new Digest(Digests.sha256Hex(buildBody(command, payload)));
     }
 }

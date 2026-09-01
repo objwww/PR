@@ -11,7 +11,10 @@ import java.util.Map;
 public record TypedResponse(
         int status,
         Map<String, Object> objectBody,
-        List<Map<String, Object>> arrayBody) {
+        List<Map<String, Object>> arrayBody,
+        Long retryAfterSeconds,
+        Long rateLimitRemaining,
+        Long rateLimitResetEpochSec) {
 
     public TypedResponse {
         if (objectBody != null && arrayBody != null) {
@@ -23,19 +26,32 @@ public record TypedResponse(
         if (arrayBody != null) {
             arrayBody = List.copyOf(arrayBody);
         }
+        if (retryAfterSeconds != null && retryAfterSeconds <= 0) {
+            retryAfterSeconds = null;
+        }
+    }
+
+    /** M0/M1 调用兼容构造；无响应头元数据。 */
+    public TypedResponse(int status, Map<String, Object> objectBody,
+                         List<Map<String, Object>> arrayBody) {
+        this(status, objectBody, arrayBody, null, null, null);
     }
 
     /** 无响应体（如 404/422 只关心状态与少量错误字段时也可用 ofObject 带上 error body） */
     public static TypedResponse ofStatus(int status) {
-        return new TypedResponse(status, null, null);
+        return new TypedResponse(status, null, null, null, null, null);
     }
 
     public static TypedResponse ofObject(int status, Map<String, Object> body) {
-        return new TypedResponse(status, body, null);
+        return new TypedResponse(status, body, null, null, null, null);
     }
 
     public static TypedResponse ofArray(int status, List<Map<String, Object>> body) {
-        return new TypedResponse(status, null, body);
+        return new TypedResponse(status, null, body, null, null, null);
+    }
+
+    public TypedResponse withRateLimitHeaders(Long retryAfter, Long remaining, Long resetEpochSec) {
+        return new TypedResponse(status, objectBody, arrayBody, retryAfter, remaining, resetEpochSec);
     }
 
     public boolean isServerError() {

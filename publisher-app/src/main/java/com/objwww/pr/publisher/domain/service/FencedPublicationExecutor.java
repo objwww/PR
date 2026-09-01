@@ -2,6 +2,7 @@ package com.objwww.pr.publisher.domain.service;
 
 import com.objwww.pr.publisher.domain.handler.PublicationHandler;
 import com.objwww.pr.publisher.domain.handler.ReconcileVerdict;
+import com.objwww.pr.publisher.domain.handler.ProbeResult;
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.publisher.domain.port.PayloadReader;
 import com.objwww.pr.publisher.domain.port.PayloadUnavailableException;
@@ -13,6 +14,7 @@ import com.objwww.pr.shared.CommandType;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.ExecutionEventType;
 import com.objwww.pr.shared.GitHubOperation;
+import com.objwww.pr.shared.RetryDirective;
 import com.objwww.pr.shared.TypedOutcome;
 import com.objwww.pr.shared.TypedReadRequest;
 import com.objwww.pr.shared.TypedResponse;
@@ -129,35 +131,88 @@ public class FencedPublicationExecutor {
             return PublishOutcome.FAILED_TERMINAL;
         }
 
+        UUID repairResourceId;
+        try {
+            repairResourceId = repairResourceId(resolvedPayload);
+        } catch (IllegalArgumentException e) {
+            store.markFailedTerminal(claimed.operationId().value(), claimed.leaseEpoch(),
+                    "INVALID_REPAIR_RESOURCE", event(claimed, ExecutionEventType.SAFETY_REJECTED,
+                            Map.of("operation_id", claimed.operationId().toString(),
+                                    "reason", "invalid_repair_resource")));
+            return PublishOutcome.FAILED_TERMINAL;
+        }
+
+        // repair probe-first：使用旧资源原命令的幂等身份；FOUND 零写，UNKNOWN 禁重发。
+        if (repairResourceId != null) {
+            var origin = store.findRepairOrigin(repairResourceId);
+            if (origin.isEmpty()) {
+                store.markFailedTerminal(claimed.operationId().value(), claimed.leaseEpoch(),
+                        "REPAIR_ORIGIN_MISSING", null);
+                return PublishOutcome.FAILED_TERMINAL;
+            }
+            ReconcileVerdict verdict = reconcile(origin.get());
+            if (verdict.kind() == ReconcileVerdict.Kind.FOUND) {
+                store.confirmRepairNoop(claimed.operationId().value(), claimed.leaseEpoch(),
+                        repairResourceId, verdict.remoteId(), verdict.remoteUrl(),
+                        event(claimed, ExecutionEventType.REPAIR_REPAIRED, Map.of(
+                                "repair_operation_id", claimed.operationId().toString(),
+                                "resource_id", repairResourceId.toString(), "via", "probe_first")));
+                return PublishOutcome.CONFIRMED;
+            }
+            if (verdict.kind() == ReconcileVerdict.Kind.UNKNOWN
+                    || verdict.kind() == ReconcileVerdict.Kind.PERMISSION_DENIED) {
+                store.markReconciling(claimed.operationId().value(), claimed.leaseEpoch(),
+                        Instant.now().plus(reconcileRetryDelay),
+                        event(claimed, ExecutionEventType.PUBLICATION_OUTCOME_UNKNOWN, Map.of(
+                                "operation_id", claimed.operationId().toString(),
+                                "detail", "repair_probe_unknown")));
+                return PublishOutcome.RECONCILING;
+            }
+        }
+
         // ⑥ 事务外触网（Handler 只翻译，不触网）
         PublicationHandler handler = handlers.get(claimed.commandType());
         TypedWriteRequest request = handler.buildRequest(claimed, resolvedPayload);
         TypedOutcome outcome;
+        RetryDirective retryDirective = new RetryDirective.NotRateLimited();
         try {
-            outcome = handler.interpret(github.execute(request));
+            TypedResponse response = github.execute(request);
+            retryDirective = RetryDirective.from(response, Instant.now());
+            outcome = retryDirective.isRateLimited()
+                    ? TypedOutcome.serverRetryable("github_rate_limited_status=" + response.status())
+                    : handler.interpret(response);
         } catch (GitHubTransportException e) {
             // 超时/连接断 = 响应丢失：不确定是状态不是异常（§4.3），禁盲目重发
             outcome = TypedOutcome.outcomeUnknown(e.getMessage());
         }
 
         // ⑦ T3-B 短事务落结果
-        return settle(claimed, handler, outcome);
+        return settle(claimed, handler, outcome, retryDirective, repairResourceId);
     }
 
-    private PublishOutcome settle(ClaimedCommand command, PublicationHandler handler, TypedOutcome outcome) {
+    private PublishOutcome settle(ClaimedCommand command, PublicationHandler handler, TypedOutcome outcome,
+                                  RetryDirective retryDirective, UUID repairResourceId) {
         Instant now = Instant.now();
         UUID id = command.operationId().value();
         long lease = command.leaseEpoch();
         try {
             switch (outcome.kind()) {
                 case CONFIRMED -> {
-                    store.confirm(id, lease, outcome.remoteId(), outcome.remoteUrl(),
-                            handler.resourceType(), handler.resourceMarker(command),
-                            event(command, ExecutionEventType.PUBLICATION_CONFIRMED, Map.of(
-                                    "operation_id", command.operationId().toString(),
+                    ExecutionEvent confirmed = event(command,
+                            repairResourceId == null ? ExecutionEventType.PUBLICATION_CONFIRMED
+                                    : ExecutionEventType.REPAIR_REPAIRED,
+                            Map.of("operation_id", command.operationId().toString(),
                                     "command_type", command.commandType().name(),
                                     "aggregate_sequence", command.aggregateSequence(),
-                                    "remote_id", outcome.remoteId())));
+                                    "remote_id", outcome.remoteId()));
+                    if (repairResourceId == null) {
+                        store.confirm(id, lease, outcome.remoteId(), outcome.remoteUrl(),
+                                handler.resourceType(), handler.resourceMarker(command), confirmed);
+                    } else {
+                        store.confirmRepairReplacement(id, lease, repairResourceId,
+                                outcome.remoteId(), outcome.remoteUrl(), handler.resourceType(),
+                                handler.resourceMarker(command), confirmed);
+                    }
                     return PublishOutcome.CONFIRMED;
                 }
                 case OUTCOME_UNKNOWN -> {
@@ -174,7 +229,8 @@ public class FencedPublicationExecutor {
                         store.markManual(id, lease, "RETRY_BUDGET_EXHAUSTED");
                         return PublishOutcome.MANUAL;
                     }
-                    store.markRetryWait(id, lease, backoff.nextAttemptAt(failedAttempts, now),
+                    store.markRetryWait(id, lease,
+                            backoff.nextAttemptAt(failedAttempts, now, retryDirective),
                             outcome.errorCode());
                     return PublishOutcome.RETRY_WAIT;
                 }
@@ -220,7 +276,8 @@ public class FencedPublicationExecutor {
         if (probe.operation() == GitHubOperation.GET_CHECK_RUN) {
             // 单资源探针：无翻页
             try {
-                return handler.interpretProbe(github.executeRead(probe), command);
+                TypedResponse response = github.executeRead(probe);
+                return classifyProbeResponse(handler.interpretProbe(response, command), response, command);
             } catch (GitHubTransportException e) {
                 return ReconcileVerdict.unknown();
             }
@@ -234,7 +291,8 @@ public class FencedPublicationExecutor {
             } catch (GitHubTransportException e) {
                 return ReconcileVerdict.unknown();
             }
-            ReconcileVerdict verdict = handler.interpretProbe(response, command);
+            ReconcileVerdict verdict = classifyProbeResponse(
+                    handler.interpretProbe(response, command), response, command);
             if (verdict.kind() != ReconcileVerdict.Kind.NOT_FOUND) {
                 return verdict; // FOUND / MANUAL_POLICY / UNKNOWN（响应形态异常不硬翻）
             }
@@ -243,6 +301,26 @@ public class FencedPublicationExecutor {
             }
         }
         return ReconcileVerdict.unknown(); // 超窗口未命中：查不到也不能确认
+    }
+
+    private ReconcileVerdict classifyProbeResponse(ProbeResult result, TypedResponse response,
+                                                    ClaimedCommand command) {
+        RetryDirective directive = RetryDirective.from(response, Instant.now());
+        if (response.status() == 403 && directive instanceof RetryDirective.NotRateLimited) {
+            return ReconcileVerdict.permissionDenied();
+        }
+        if (result instanceof ProbeResult.FoundNoContent found) {
+            return ReconcileVerdict.found(found.remoteId(), found.remoteUrl());
+        }
+        if (result instanceof ProbeResult.FoundWithContent found) {
+            return ReconcileVerdict.foundWithContent(
+                    found.remoteId(), found.remoteUrl(), found.contentDigest());
+        }
+        if (result instanceof ProbeResult.NotFound) {
+            return command.commandType() == CommandType.UPDATE_CHECK
+                    ? ReconcileVerdict.manualPolicy() : ReconcileVerdict.notFound();
+        }
+        return ReconcileVerdict.unknown(directive);
     }
 
     /**
@@ -275,6 +353,16 @@ public class FencedPublicationExecutor {
     private boolean installationIdMatches(Map<String, Object> payload) {
         Object value = payload.get("installation_id");
         return value instanceof Number n && n.longValue() == expectedInstallationId;
+    }
+
+    private static UUID repairResourceId(Map<String, Object> payload) {
+        Object value = payload.get("repair_of_resource_id");
+        if (value == null) return null;
+        try {
+            return UUID.fromString(value.toString());
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("repair_of_resource_id 非 UUID", e);
+        }
     }
 
     private ExecutionEvent event(ClaimedCommand command, ExecutionEventType type, Map<String, Object> payload) {

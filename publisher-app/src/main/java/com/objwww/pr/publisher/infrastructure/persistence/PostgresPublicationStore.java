@@ -3,6 +3,8 @@ package com.objwww.pr.publisher.infrastructure.persistence;
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.publisher.domain.model.DependencyRow;
 import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
+import com.objwww.pr.publisher.domain.model.RepairRequestDraft;
+import com.objwww.pr.publisher.domain.model.RepairOutcomeTarget;
 import com.objwww.pr.publisher.domain.model.SubjectCursor;
 import com.objwww.pr.publisher.domain.port.ExecutionEventAppender;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
@@ -189,6 +191,149 @@ public class PostgresPublicationStore implements PublicationStore {
     }
 
     @Override
+    public void confirmRepairReplacement(UUID operationId, long leaseEpoch, UUID oldResourceId,
+                                         String remoteId, String remoteUrl,
+                                         PublicationResourceType resourceType, String marker,
+                                         ExecutionEvent event) {
+        tx.executeWithoutResult(status -> {
+            guardedUpdate("""
+                    UPDATE outbox_command SET state='CONFIRMED',remote_id=:rid,remote_url=:rurl,
+                        confirmed_at=now(),updated_at=now()
+                     WHERE operation_id=:id AND lease_epoch=:le AND state='IN_FLIGHT'
+                    """, operationId, leaseEpoch, nullableParams("rid", remoteId, "rurl", remoteUrl));
+            ClaimedCommand command = lockCommand(operationId);
+            advanceCursor(command.prSubjectId(), command.aggregateSequence());
+            jdbc.sql("""
+                    INSERT INTO publication_resource (
+                        id,resource_type,created_by_operation_id,pr_subject_id,
+                        remote_id,remote_url,marker,state,replaces_resource_id,created_at,updated_at
+                    ) VALUES (:newId,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:oldId,now(),now())
+                    ON CONFLICT (resource_type,remote_id) DO NOTHING
+                    """).param("newId", UUID.randomUUID()).param("type", resourceType.name())
+                    .param("op", operationId).param("subject", command.prSubjectId())
+                    .param("rid", remoteId).param("url", remoteUrl).param("marker", marker)
+                    .param("oldId", oldResourceId).update();
+            jdbc.sql("""
+                    UPDATE publication_resource SET state='REPAIRED',repaired_by_operation_id=:op,
+                        updated_at=now() WHERE id=:oldId AND state IN ('MISSING','UNKNOWN')
+                    """).param("op", operationId).param("oldId", oldResourceId).update();
+            finishRepairRequest(operationId, "REPAIRED", null);
+            eventAppender.append(event);
+        });
+    }
+
+    @Override
+    public void confirmRepairNoop(UUID operationId, long leaseEpoch, UUID oldResourceId,
+                                  String remoteId, String remoteUrl, ExecutionEvent event) {
+        tx.executeWithoutResult(status -> {
+            guardedUpdate("""
+                    UPDATE outbox_command SET state='CONFIRMED',remote_id=:rid,remote_url=:rurl,
+                        confirmed_at=now(),updated_at=now()
+                     WHERE operation_id=:id AND lease_epoch=:le AND state='IN_FLIGHT'
+                    """, operationId, leaseEpoch, nullableParams("rid", remoteId, "rurl", remoteUrl));
+            ClaimedCommand command = lockCommand(operationId);
+            advanceCursor(command.prSubjectId(), command.aggregateSequence());
+            jdbc.sql("""
+                    UPDATE publication_resource SET state='PRESENT',repaired_by_operation_id=:op,
+                        drift_detected_at=NULL,updated_at=now() WHERE id=:oldId
+                    """).param("op", operationId).param("oldId", oldResourceId).update();
+            finishRepairRequest(operationId, "REPAIRED", null);
+            eventAppender.append(event);
+        });
+    }
+
+    @Override
+    public java.util.Optional<ClaimedCommand> findRepairOrigin(UUID oldResourceId) {
+        return jdbc.sql("""
+                        SELECT o.* FROM publication_resource r
+                        JOIN outbox_command o ON o.operation_id=r.created_by_operation_id
+                        WHERE r.id=:id
+                """).param("id", oldResourceId).query(this::mapRow).optional();
+    }
+
+    @Override
+    public java.util.Optional<UUID> findRepairResourceByOperation(UUID operationId) {
+        return jdbc.sql("SELECT publication_resource_id FROM repair_request WHERE repair_operation_id=:op")
+                .param("op", operationId).query(UUID.class).optional();
+    }
+
+    @Override
+    public void reconcileConfirmRepairReplacement(UUID operationId, UUID oldResourceId,
+                                                   String remoteId, String remoteUrl,
+                                                   PublicationResourceType resourceType, String marker,
+                                                   ExecutionEvent event) {
+        tx.executeWithoutResult(status -> {
+            int updated = jdbc.sql("""
+                            UPDATE outbox_command SET state='CONFIRMED',remote_id=:rid,remote_url=:rurl,
+                                confirmed_at=now(),updated_at=now()
+                             WHERE operation_id=:id AND state='RECONCILING'
+                            """)
+                    .param("id", operationId)
+                    .param("rid", remoteId)
+                    .param("rurl", remoteUrl)
+                    .update();
+            if (updated == 0) {
+                throw new StaleLeaseException("reconcileConfirmRepairReplacement 状态守卫失效: " + operationId);
+            }
+            ClaimedCommand command = lockCommand(operationId);
+            advanceCursor(command.prSubjectId(), command.aggregateSequence());
+            jdbc.sql("""
+                    INSERT INTO publication_resource (
+                        id,resource_type,created_by_operation_id,pr_subject_id,remote_id,remote_url,
+                        marker,state,replaces_resource_id,created_at,updated_at)
+                    VALUES (:id,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:old,now(),now())
+                    ON CONFLICT (resource_type,remote_id) DO NOTHING
+                    """).param("id", UUID.randomUUID()).param("type", resourceType.name())
+                    .param("op", operationId).param("subject", command.prSubjectId())
+                    .param("rid", remoteId).param("url", remoteUrl).param("marker", marker)
+                    .param("old", oldResourceId).update();
+            jdbc.sql("UPDATE publication_resource SET state='REPAIRED',repaired_by_operation_id=:op,updated_at=now() WHERE id=:id")
+                    .param("op", operationId).param("id", oldResourceId).update();
+            finishRepairRequest(operationId, "REPAIRED", null);
+            eventAppender.append(event);
+        });
+    }
+
+    @Override
+    public List<RepairOutcomeTarget> findRepairOutcomes(int limit) {
+        return jdbc.sql("""
+                SELECT rr.id,rr.repair_operation_id,rr.repair_run_id,o.state,o.pr_revision_id,
+                       rr.publication_resource_id
+                  FROM repair_request rr JOIN outbox_command o ON o.operation_id=rr.repair_operation_id
+                 WHERE rr.state='DISPATCHED'
+                   AND o.state IN ('CONFIRMED','FAILED_TERMINAL','SUPERSEDED','MANUAL')
+                 ORDER BY rr.created_at LIMIT :limit
+                """).param("limit", limit).query((rs,n) -> new RepairOutcomeTarget(
+                        rs.getObject("id", UUID.class), rs.getObject("repair_operation_id", UUID.class),
+                        OutboxState.valueOf(rs.getString("state")),
+                        rs.getObject("repair_run_id", UUID.class),
+                        rs.getObject("pr_revision_id", UUID.class),
+                        rs.getObject("publication_resource_id", UUID.class))).list();
+    }
+
+    @Override
+    public boolean projectRepairOutcome(UUID requestId, String targetState, String error,
+                                        ExecutionEvent event) {
+        return Boolean.TRUE.equals(tx.execute(status -> {
+            int n = jdbc.sql("""
+                    UPDATE repair_request SET state=:state,last_error=:error,updated_at=now()
+                     WHERE id=:id AND state='DISPATCHED'
+                    """).param("state", targetState).param("error", error, java.sql.Types.VARCHAR)
+                    .param("id", requestId).update();
+            if (n == 1 && event != null) eventAppender.append(event);
+            return n == 1;
+        }));
+    }
+
+    private void finishRepairRequest(UUID operationId, String state, String error) {
+        jdbc.sql("""
+                UPDATE repair_request SET state=:state,last_error=:error,updated_at=now()
+                 WHERE repair_operation_id=:op AND state='DISPATCHED'
+                """).param("state", state).param("error", error, java.sql.Types.VARCHAR)
+                .param("op", operationId).update();
+    }
+
+    @Override
     public void markReconciling(UUID operationId, long leaseEpoch, Instant reconcileAfter,
                                 ExecutionEvent event) {
         tx.executeWithoutResult(status -> {
@@ -267,17 +412,24 @@ public class PostgresPublicationStore implements PublicationStore {
     }
 
     @Override
-    public boolean toReconciling(UUID operationId, Instant now, Instant reconcileAfter) {
-        return tx.execute(status -> jdbc.sql("""
-                        UPDATE outbox_command
-                           SET state = 'RECONCILING', reconcile_after = :after,
-                               lease_owner = NULL, lease_until = NULL, updated_at = now()
-                         WHERE operation_id = :id AND state = 'IN_FLIGHT' AND lease_until < :now
-                        """)
-                .param("id", operationId)
-                .param("after", Timestamp.from(reconcileAfter))
-                .param("now", Timestamp.from(now))
-                .update()) > 0;
+    public boolean toReconciling(UUID operationId, Instant now, Instant reconcileAfter,
+                                 ExecutionEvent event) {
+        return tx.execute(status -> {
+            int updated = jdbc.sql("""
+                            UPDATE outbox_command
+                               SET state = 'RECONCILING', reconcile_after = :after,
+                                   lease_owner = NULL, lease_until = NULL, updated_at = now()
+                             WHERE operation_id = :id AND state = 'IN_FLIGHT' AND lease_until < :now
+                            """)
+                    .param("id", operationId)
+                    .param("after", Timestamp.from(reconcileAfter))
+                    .param("now", Timestamp.from(now))
+                    .update();
+            if (updated > 0) {
+                eventAppender.append(event);
+            }
+            return updated > 0;
+        });
     }
 
     @Override
@@ -470,6 +622,37 @@ public class PostgresPublicationStore implements PublicationStore {
     }
 
     @Override
+    public boolean markContentDrift(UUID resourceId, Digest observedDigest,
+                                    Duration interval, ExecutionEvent event) {
+        return Boolean.TRUE.equals(tx.execute(status -> {
+            String old = jdbc.sql("SELECT content_drift_digest FROM publication_resource WHERE id=:id FOR UPDATE")
+                    .param("id", resourceId).query(String.class).optional().orElse(null);
+            int updated = jdbc.sql("""
+                    UPDATE publication_resource SET state='PRESENT',content_drift_detected_at=now(),
+                        content_drift_digest=:digest,last_checked_at=now(),
+                        next_check_at=now()+make_interval(secs=>:secs),
+                        check_error_count=0,updated_at=now()
+                     WHERE id=:id AND state IN ('PRESENT','MISSING')
+                    """).param("id", resourceId).param("digest", observedDigest.value())
+                    .param("secs", interval.toSeconds()).update();
+            boolean episode = updated == 1 && !observedDigest.value().equals(old == null ? null : old.trim());
+            if (episode && event != null) eventAppender.append(event);
+            return episode;
+        }));
+    }
+
+    @Override
+    public void clearContentDrift(UUID resourceId, Duration interval) {
+        jdbc.sql("""
+                UPDATE publication_resource SET state='PRESENT',content_drift_detected_at=NULL,
+                    content_drift_digest=NULL,
+                    last_checked_at=now(),next_check_at=now()+make_interval(secs=>:secs),
+                    check_error_count=0,updated_at=now()
+                 WHERE id=:id AND state IN ('PRESENT','MISSING')
+                """).param("id", resourceId).param("secs", interval.toSeconds()).update();
+    }
+
+    @Override
     public boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event) {
         return Boolean.TRUE.equals(tx.execute(status -> {
             // 行锁读旧态：事件恰好一次的守卫在 DB 侧（ST-22），不依赖调用方看到的快照
@@ -502,6 +685,46 @@ public class PostgresPublicationStore implements PublicationStore {
                 return true;
             }
             return false; // 已 MISSING：低频复核只重排期，不重复发事件
+        }));
+    }
+
+    @Override
+    public boolean markMissingWithRepair(UUID resourceId, Duration recheckInterval,
+                                         ExecutionEvent driftEvent, RepairRequestDraft repair,
+                                         ExecutionEvent repairEvent) {
+        return Boolean.TRUE.equals(tx.execute(status -> {
+            String oldState = jdbc.sql(
+                            "SELECT state FROM publication_resource WHERE id = :id FOR UPDATE")
+                    .param("id", resourceId).query(String.class).optional().orElse(null);
+            if (oldState == null) return false;
+            int updated = jdbc.sql("""
+                            UPDATE publication_resource
+                               SET state = 'MISSING',
+                                   drift_detected_at = COALESCE(drift_detected_at, now()),
+                                   last_checked_at = now(),
+                                   next_check_at = now() + make_interval(secs => :secs),
+                                   check_error_count = 0, updated_at = now()
+                             WHERE id = :id AND state IN ('PRESENT', 'MISSING', 'UNKNOWN')
+                            """)
+                    .param("id", resourceId).param("secs", recheckInterval.toSeconds()).update();
+            if (updated == 0 || "MISSING".equals(oldState)) return false;
+            eventAppender.append(driftEvent);
+            int inserted = jdbc.sql("""
+                            INSERT INTO repair_request (
+                                id, publication_resource_id, resource_type, policy_tier, state,
+                                attempt_count, max_attempts, created_at, updated_at
+                            ) VALUES (:id, :resourceId, :type, :tier, 'PENDING',
+                                      0, :maxAttempts, :createdAt, :createdAt)
+                            ON CONFLICT (publication_resource_id)
+                                WHERE state IN ('PENDING','APPROVED','DISPATCHED','RETRY_WAIT')
+                            DO NOTHING
+                            """)
+                    .param("id", repair.id()).param("resourceId", repair.publicationResourceId())
+                    .param("type", repair.resourceType().name()).param("tier", repair.policyTier().name())
+                    .param("maxAttempts", repair.maxAttempts())
+                    .param("createdAt", Timestamp.from(repair.createdAt())).update();
+            if (inserted == 1 && repairEvent != null) eventAppender.append(repairEvent);
+            return true;
         }));
     }
 

@@ -1,5 +1,6 @@
 package com.objwww.pr.publisher.domain.service;
 
+import com.objwww.pr.shared.RetryDirective;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -25,5 +26,15 @@ class RetryBackoffTest {
     @Test
     void invalidAttemptRejected() {
         assertThrows(IllegalArgumentException.class, () -> backoff.nextAttemptAt(0, now));
+    }
+
+    @Test
+    void honorsRateLimitFloorsAndClampsRetryAfter() {
+        assertEquals(now.plusSeconds(60), backoff.nextAttemptAt(1, now,
+                new RetryDirective.SecondaryLimitBackoff()));
+        assertEquals(now.plusSeconds(120), backoff.nextAttemptAt(1, now,
+                new RetryDirective.HonorRetryAfter(120)));
+        assertEquals(now.plusSeconds(900), backoff.nextAttemptAt(1, now,
+                new RetryDirective.HonorRetryAfter(3600)));
     }
 }

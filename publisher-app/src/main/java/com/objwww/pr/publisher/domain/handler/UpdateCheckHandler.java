@@ -77,14 +77,14 @@ public final class UpdateCheckHandler implements PublicationHandler {
     }
 
     @Override
-    public ReconcileVerdict interpretProbe(TypedResponse response, ClaimedCommand command) {
+    public ProbeResult interpretProbe(TypedResponse response, ClaimedCommand command) {
         if (response.status() == 200 && response.objectBody() != null) {
-            return ReconcileVerdict.found(String.valueOf(response.objectBody().get("id")),
+            return new ProbeResult.FoundNoContent(String.valueOf(response.objectBody().get("id")),
                     (String) response.objectBody().get("html_url"));
         }
         if (response.status() == 404) {
-            return ReconcileVerdict.manualPolicy(); // M0：不自动重建（§6.3）
+            return new ProbeResult.NotFound();
         }
-        return ReconcileVerdict.unknown();
+        return new ProbeResult.Unknown("http_" + response.status());
     }
 }

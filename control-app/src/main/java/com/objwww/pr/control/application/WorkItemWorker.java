@@ -137,7 +137,7 @@ public class WorkItemWorker {
         } else {
             HeartbeatRunner heartbeat = new HeartbeatRunner(item);
             try {
-                outcome = executor.execute(new StepExecutionContext(item, step), heartbeat);
+                outcome = executor.execute(new StepExecutionContext(item, step, attempt.getId()), heartbeat);
             } catch (Exception e) {
                 outcome = classify(e);
             } finally {

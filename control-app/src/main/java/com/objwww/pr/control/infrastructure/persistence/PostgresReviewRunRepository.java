@@ -110,11 +110,16 @@ public class PostgresReviewRunRepository implements ReviewRunRepository {
 
     @Override
     public List<ReviewRun> findActiveByPrSubjectId(UUID prSubjectId) {
-        // r.* 避免与 pr_revision 同名列歧义；映射读的是 review_run 列名
+        // r.* 避免与 pr_revision 同名列歧义；映射读的是 review_run 列名。
+        // run_mode='NORMAL'（TB-10/INC-39）：REPAIR Run 的终态由 repair 链路自己的
+        // 投影器收口（EXPIRED→FAILED/REPAIRED→COMPLETED），换届扫描/幂等守卫/账本挂载
+        // 都不得把在途 REPAIR Run 当"在途评审 Run"——否则换届会把它扫成 SUPERSEDED，
+        // repair 收口查询（findTerminalRunOutcomes 要求 CREATED）永远匹配不上。
         return jdbc.sql("SELECT r.*" + """
                         \sFROM review_run r
                         JOIN pr_revision rev ON rev.id = r.pr_revision_id
                         WHERE rev.pr_subject_id = :prSubjectId
+                          AND r.run_mode = 'NORMAL'
                           AND r.state IN\s""" + ACTIVE_STATES + """
                         ORDER BY r.created_at
                         """)

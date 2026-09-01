@@ -10,13 +10,21 @@ import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
 import com.objwww.pr.control.domain.repository.PRRevisionRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
+import com.objwww.pr.control.domain.review.FindingMapper;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
+import com.objwww.pr.control.domain.review.ReviewContractVersions;
 import com.objwww.pr.control.domain.review.ReviewFindingDraft;
 import com.objwww.pr.control.domain.review.ReviewOutcome;
 import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.snapshot.SnapshotTree;
+import com.objwww.pr.control.domain.service.CheckpointContract;
+import com.objwww.pr.control.domain.service.CheckpointResumeService;
+import com.objwww.pr.control.domain.service.ExecutionLedger;
 import com.objwww.pr.shared.Digest;
+import com.objwww.pr.shared.ExecutionEventType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -25,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * REVIEW Step 执行器（M0 唯一 Step 类型，§3.1/§6.6）：从 CAS 装 input
@@ -38,6 +47,9 @@ import java.util.Objects;
  */
 public class ReviewStepExecutor implements StepExecutor {
 
+    private static final Logger log = LoggerFactory.getLogger(ReviewStepExecutor.class);
+    private static final String PRODUCER = "control-app";
+
     private final ReviewRunRepository runRepository;
     private final PRRevisionRepository revisionRepository;
     private final ArtifactStore artifactStore;
@@ -46,12 +58,19 @@ public class ReviewStepExecutor implements StepExecutor {
     private final ReviewAgentLoop agentLoop;
     private final ReviewBudget budget;
     private final ObjectMapper objectMapper;
+    private final CheckpointResumeService resumeService;
+    private final CheckpointWriter checkpointWriter;
+    private final ExecutionLedger ledger;
+    private final String modelIdentity;
 
     public ReviewStepExecutor(ReviewRunRepository runRepository,
                               PRRevisionRepository revisionRepository,
                               ArtifactStore artifactStore, ArtifactRepository artifactRepository,
                               SafeTarExtractor extractor, ReviewAgentLoop agentLoop,
-                              ReviewBudget budget, ObjectMapper objectMapper) {
+                              ReviewBudget budget, ObjectMapper objectMapper,
+                              CheckpointResumeService resumeService,
+                              CheckpointWriter checkpointWriter,
+                              ExecutionLedger ledger, String modelIdentity) {
         this.runRepository = Objects.requireNonNull(runRepository);
         this.revisionRepository = Objects.requireNonNull(revisionRepository);
         this.artifactStore = Objects.requireNonNull(artifactStore);
@@ -60,6 +79,10 @@ public class ReviewStepExecutor implements StepExecutor {
         this.agentLoop = Objects.requireNonNull(agentLoop);
         this.budget = Objects.requireNonNull(budget);
         this.objectMapper = Objects.requireNonNull(objectMapper);
+        this.resumeService = Objects.requireNonNull(resumeService);
+        this.checkpointWriter = Objects.requireNonNull(checkpointWriter);
+        this.ledger = Objects.requireNonNull(ledger);
+        this.modelIdentity = Objects.requireNonNull(modelIdentity);
     }
 
     @Override
@@ -75,6 +98,17 @@ public class ReviewStepExecutor implements StepExecutor {
                 .orElseThrow(() -> new IllegalStateException("review_run 不存在: " + step.getReviewRunId()));
         PRRevision revision = revisionRepository.findById(run.getPrRevisionId())
                 .orElseThrow(() -> new IllegalStateException("pr_revision 不存在: " + run.getPrRevisionId()));
+
+        CheckpointContract contract = new CheckpointContract(
+                run.getPromptVersion() + "/" + ReviewAgentLoop.PROMPT_TEMPLATE_VERSION,
+                ReviewContractVersions.FINDING_SCHEMA_VERSION,
+                FindingMapper.CONTRACT_VERSION,
+                ReviewAgentLoop.CONTEXT_BUILDER_VERSION,
+                modelIdentity);
+        var resumed = resumeService.resume(run, step, context.attemptId(), contract);
+        if (resumed.isPresent()) {
+            return new StepOutcome.Succeeded(resumed.get().outputDigest(), resumed.get().outcome());
+        }
 
         // 1) 装 input：CAS 按 digest 读回（缺失 = 不可变输入被破坏，上抛归类）
         byte[] tarball = artifactStore.get(revision.getSourceSnapshotDigest())
@@ -95,16 +129,41 @@ public class ReviewStepExecutor implements StepExecutor {
         byte[] body = toJson(outcome).getBytes(StandardCharsets.UTF_8);
         Digest outputDigest = Digest.sha256Of(new String(body, StandardCharsets.UTF_8));
         String path = artifactStore.putIfAbsent(outputDigest, body);
-        artifactRepository.register(new ArtifactRecord(outputDigest, ArtifactType.FINDING_BODY,
-                body.length, path, Instant.now()));
+        Instant storedAt = Instant.now();
+        ArtifactRecord outputRecord = new ArtifactRecord(outputDigest, ArtifactType.FINDING_BODY,
+                body.length, path, storedAt);
 
         // 4) 模型原始响应全文落 CAS（INC-19：模型真实输出的唯一事实源，排查 dropped 必查；
         //    表/事件只记 digest，§5.5 大对象纪律）
         byte[] modelBody = outcome.modelResponse().getBytes(StandardCharsets.UTF_8);
         Digest modelDigest = Digest.sha256Of(new String(modelBody, StandardCharsets.UTF_8));
         String modelPath = artifactStore.putIfAbsent(modelDigest, modelBody);
-        artifactRepository.register(new ArtifactRecord(modelDigest, ArtifactType.MODEL_RESPONSE,
-                modelBody.length, modelPath, Instant.now()));
+        ArtifactRecord modelRecord = new ArtifactRecord(modelDigest, ArtifactType.MODEL_RESPONSE,
+                modelBody.length, modelPath, storedAt);
+
+        var checkpoint = new com.objwww.pr.control.domain.model.StepCheckpoint(
+                UUID.randomUUID(), step.getId(),
+                com.objwww.pr.control.domain.model.StepCheckpoint.REVIEW_OUTCOME,
+                outputDigest, modelDigest, contract.digest(),
+                contract.promptTemplateVersion(), contract.findingSchemaVersion(),
+                contract.mapperContractVersion(), contract.contextBuilderVersion(),
+                contract.modelIdentity(), context.workItem().getLeaseEpoch(),
+                context.workItem().getAttemptCount(), storedAt);
+        var event = ledger.newEvent(run.getId(), run.getPrRevisionId(), step.getId(), context.attemptId(),
+                ExecutionEventType.CHECKPOINT_STORED, null, run.getId(), PRODUCER, Map.of(
+                        "checkpoint_id", checkpoint.id().toString(),
+                        "output_artifact_digest", outputDigest.value(),
+                        "model_response_digest", modelDigest.value(),
+                        "contract_digest", contract.digest().value(),
+                        "attempt_no", checkpoint.attemptNo(),
+                        "lease_epoch", checkpoint.leaseEpoch()));
+        String leaseOwner = context.workItem().getLeaseOwner();
+        boolean stored = leaseOwner != null && checkpointWriter.store(outputRecord, modelRecord,
+                checkpoint, context.workItem().getId(), leaseOwner, event);
+        if (!stored) {
+            log.warn("checkpoint 晚到写被租约栅栏拒绝 step={} leaseEpoch={}",
+                    step.getId(), context.workItem().getLeaseEpoch());
+        }
 
         return new StepOutcome.Succeeded(outputDigest, outcome);
     }
@@ -135,8 +194,13 @@ public class ReviewStepExecutor implements StepExecutor {
                 "findings", outcome.findings().size(),
                 "dropped", outcome.droppedFindings(),
                 "malformed", outcome.malformedFindings(),
+                "candidate_files", outcome.candidateFiles(),
                 "selected_files", outcome.selectedFiles(),
                 "truncated_files", outcome.truncatedFiles()));
+        body.put("token_usage", Map.of(
+                "prompt_tokens", outcome.tokenUsage().promptTokens(),
+                "completion_tokens", outcome.tokenUsage().completionTokens(),
+                "total_tokens", outcome.tokenUsage().totalTokens()));
         try {
             return objectMapper.writeValueAsString(body);
         } catch (Exception e) {

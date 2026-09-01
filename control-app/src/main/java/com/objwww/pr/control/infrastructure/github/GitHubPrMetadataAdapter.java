@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.domain.port.CredentialTokenPort;
 import com.objwww.pr.control.domain.port.GitHubPrMetadataPort;
+import com.objwww.pr.shared.RetryAfterParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,7 +77,8 @@ public class GitHubPrMetadataAdapter implements GitHubPrMetadataPort {
             case 200 -> parseFound(response.body());
             case 404, 410 -> new FetchResult.NotFound();
             case 403 -> new FetchResult.Forbidden();
-            case 429 -> new FetchResult.RateLimited(parseRetryAfterSeconds(response.retryAfter()));
+            case 429 -> new FetchResult.RateLimited(durationOrNull(
+                    RetryAfterParser.parseSeconds(response.retryAfter(), Instant.now())));
             default -> response.status() >= 500
                     ? new FetchResult.Unavailable("http_" + response.status())
                     // 其余 4xx（如 422）：非预期客户端错误，按不可用退避而非静默
@@ -124,17 +126,13 @@ public class GitHubPrMetadataAdapter implements GitHubPrMetadataPort {
         }
     }
 
-    /** Retry-After 秒数头 → Duration；缺头/非法/非正值 → null（EX-16：有则尊重，无则由调用方退避） */
+    /** 兼容既有测试入口；实际解析统一委托 shared RetryAfterParser。 */
     static Duration parseRetryAfterSeconds(String headerValue) {
-        if (headerValue == null) {
-            return null;
-        }
-        try {
-            long seconds = Long.parseLong(headerValue.trim());
-            return seconds > 0 ? Duration.ofSeconds(seconds) : null;
-        } catch (NumberFormatException e) {
-            return null; // HTTP-date 形式暂不解析，退避由调用方兜底
-        }
+        return durationOrNull(RetryAfterParser.parseSeconds(headerValue, Instant.now()));
+    }
+
+    private static Duration durationOrNull(Long seconds) {
+        return seconds == null ? null : Duration.ofSeconds(seconds);
     }
 
     private HttpRequest.Builder authed(long installationId, String url) {

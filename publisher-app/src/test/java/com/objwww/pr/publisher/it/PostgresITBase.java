@@ -40,11 +40,11 @@ public abstract class PostgresITBase {
     protected static final String CONTROL_PASSWORD = "it-control-pass";
     protected static final String PUBLISHER_PASSWORD = "it-publisher-pass";
 
-    /** V1 的 12 张 + V3 的 webhook_inbox（随 control-app test 依赖进 classpath；CASCADE 兜底） */
+    /** V1 的 12 张 + V3/V4 新表（随 control-app test 依赖进 classpath；CASCADE 兜底） */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
-            "review_finding", "artifact", "webhook_inbox");
+            "review_finding", "artifact", "webhook_inbox", "step_checkpoint", "repair_request");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

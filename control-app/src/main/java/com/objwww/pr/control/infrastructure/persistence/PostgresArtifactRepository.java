@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.sql.Timestamp;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * ArtifactRepository 的 Postgres 实现：digest 主键，ON CONFLICT DO NOTHING 保证登记幂等。
@@ -37,5 +38,20 @@ public class PostgresArtifactRepository implements ArtifactRepository {
                 .param("path", record.storagePath())
                 .param("createdAt", Timestamp.from(record.createdAt()))
                 .update();
+    }
+
+    @Override
+    public Optional<ArtifactRecord> findByDigest(com.objwww.pr.shared.Digest digest) {
+        return jdbc.sql("""
+                        SELECT digest, artifact_type, size_bytes, storage_path, created_at
+                          FROM artifact WHERE digest = :digest
+                        """)
+                .param("digest", Objects.requireNonNull(digest).value())
+                .query((rs, rowNum) -> new ArtifactRecord(
+                        new com.objwww.pr.shared.Digest(rs.getString("digest").trim()),
+                        com.objwww.pr.control.domain.model.ArtifactType.valueOf(rs.getString("artifact_type")),
+                        rs.getLong("size_bytes"), rs.getString("storage_path"),
+                        rs.getTimestamp("created_at").toInstant()))
+                .optional();
     }
 }

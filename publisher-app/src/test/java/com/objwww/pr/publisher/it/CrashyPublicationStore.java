@@ -2,16 +2,20 @@ package com.objwww.pr.publisher.it;
 
 import com.objwww.pr.publisher.domain.model.ClaimedCommand;
 import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
+import com.objwww.pr.publisher.domain.model.RepairRequestDraft;
+import com.objwww.pr.publisher.domain.model.RepairOutcomeTarget;
 import com.objwww.pr.publisher.domain.port.ExecutionEventAppender;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
 import com.objwww.pr.publisher.domain.service.T3AContext;
 import com.objwww.pr.publisher.domain.service.T3ADecision;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.PublicationResourceType;
+import com.objwww.pr.shared.Digest;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -78,6 +82,43 @@ final class CrashyPublicationStore implements PublicationStore {
         delegate.confirm(operationId, leaseEpoch, remoteId, remoteUrl, resourceType, marker, event);
     }
 
+    @Override
+    public void confirmRepairReplacement(UUID operationId, long leaseEpoch, UUID oldResourceId,
+                                         String remoteId, String remoteUrl,
+                                         PublicationResourceType resourceType, String marker,
+                                         ExecutionEvent event) {
+        delegate.confirmRepairReplacement(operationId, leaseEpoch, oldResourceId,
+                remoteId, remoteUrl, resourceType, marker, event);
+    }
+
+    @Override
+    public void confirmRepairNoop(UUID operationId, long leaseEpoch, UUID oldResourceId,
+                                  String remoteId, String remoteUrl, ExecutionEvent event) {
+        delegate.confirmRepairNoop(operationId, leaseEpoch, oldResourceId, remoteId, remoteUrl, event);
+    }
+
+    @Override
+    public Optional<ClaimedCommand> findRepairOrigin(UUID oldResourceId) {
+        return delegate.findRepairOrigin(oldResourceId);
+    }
+
+    @Override public Optional<UUID> findRepairResourceByOperation(UUID operationId) {
+        return delegate.findRepairResourceByOperation(operationId);
+    }
+    @Override public void reconcileConfirmRepairReplacement(UUID operationId, UUID oldResourceId,
+            String remoteId, String remoteUrl, PublicationResourceType resourceType,
+            String marker, ExecutionEvent event) {
+        delegate.reconcileConfirmRepairReplacement(operationId, oldResourceId,
+                remoteId, remoteUrl, resourceType, marker, event);
+    }
+    @Override public List<RepairOutcomeTarget> findRepairOutcomes(int limit) {
+        return delegate.findRepairOutcomes(limit);
+    }
+    @Override public boolean projectRepairOutcome(UUID requestId, String targetState,
+            String error, ExecutionEvent event) {
+        return delegate.projectRepairOutcome(requestId, targetState, error, event);
+    }
+
     // ---- 以下纯委托
 
     @Override
@@ -114,8 +155,9 @@ final class CrashyPublicationStore implements PublicationStore {
     }
 
     @Override
-    public boolean toReconciling(UUID operationId, Instant now, Instant reconcileAfter) {
-        return delegate.toReconciling(operationId, now, reconcileAfter);
+    public boolean toReconciling(UUID operationId, Instant now, Instant reconcileAfter,
+                                 ExecutionEvent event) {
+        return delegate.toReconciling(operationId, now, reconcileAfter, event);
     }
 
     @Override
@@ -168,8 +210,27 @@ final class CrashyPublicationStore implements PublicationStore {
     }
 
     @Override
+    public boolean markContentDrift(UUID resourceId, Digest observedDigest,
+                                    Duration interval, ExecutionEvent event) {
+        return delegate.markContentDrift(resourceId, observedDigest, interval, event);
+    }
+
+    @Override
+    public void clearContentDrift(UUID resourceId, Duration interval) {
+        delegate.clearContentDrift(resourceId, interval);
+    }
+
+    @Override
     public boolean markMissing(UUID resourceId, Duration recheckInterval, ExecutionEvent event) {
         return delegate.markMissing(resourceId, recheckInterval, event);
+    }
+
+    @Override
+    public boolean markMissingWithRepair(UUID resourceId, Duration recheckInterval,
+                                         ExecutionEvent driftEvent, RepairRequestDraft repair,
+                                         ExecutionEvent repairEvent) {
+        return delegate.markMissingWithRepair(resourceId, recheckInterval,
+                driftEvent, repair, repairEvent);
     }
 
     @Override

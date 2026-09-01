@@ -16,6 +16,8 @@ import com.objwww.pr.shared.OutboxState;
 import com.objwww.pr.shared.PublicationResourceState;
 import com.objwww.pr.shared.PublicationResourceType;
 import com.objwww.pr.shared.TypedReadRequest;
+import com.objwww.pr.shared.Digest;
+import com.objwww.pr.shared.RetryDirective;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -73,7 +75,8 @@ class DriftReconcilerTest {
         appendedEvents = new ArrayList<>();
         ExecutionEventAppender appender = appendedEvents::add;
         reconciler = new DriftReconciler(store, executor, payloadReader, appender,
-                List.of(new com.objwww.pr.publisher.domain.handler.CreateCheckHandler()),
+                List.of(new com.objwww.pr.publisher.domain.handler.CreateCheckHandler(),
+                        new com.objwww.pr.publisher.domain.handler.PublishReviewHandler()),
                 50, Duration.ofMinutes(60), 8, DriftReconciler.DEFAULT_DEGRADED_THRESHOLD, 0, 0);
     }
 
@@ -91,6 +94,24 @@ class DriftReconcilerTest {
                 command.operationId().toString(), state, errorCount, command);
         store.resourceStates.put(target.resourceId(), state);
         store.checkErrorCounts.put(target.resourceId(), errorCount);
+        store.dueDriftChecks.add(target);
+        return target;
+    }
+
+    private DriftCheckTarget reviewTarget() {
+        return reviewTarget(PublicationResourceState.PRESENT);
+    }
+
+    private DriftCheckTarget reviewTarget(PublicationResourceState state) {
+        ClaimedCommand command = TestFixtures.command(CommandType.PUBLISH_REVIEW, 1, 1,
+                OutboxState.CONFIRMED, 0, 3);
+        payloadReader.put(command.payloadHash(), TestFixtures.reviewPayload(command));
+        DriftCheckTarget target = new DriftCheckTarget(UUID.randomUUID(),
+                PublicationResourceType.REVIEW, "777", "http://x/r777",
+                com.objwww.pr.publisher.domain.handler.PublishReviewHandler.markerOf(command.operationId()),
+                state, 0, command);
+        store.resourceStates.put(target.resourceId(), state);
+        store.checkErrorCounts.put(target.resourceId(), 0);
         store.dueDriftChecks.add(target);
         return target;
     }
@@ -122,6 +143,9 @@ class DriftReconcilerTest {
                 .isEqualTo(PublicationResourceState.MISSING);
         assertThat(executor.sanityCalls).isEqualTo(1);
         assertThat(store.events).filteredOn(e -> e.eventType() == ExecutionEventType.PUBLICATION_DRIFT_DETECTED)
+                .hasSize(1);
+        assertThat(store.repairRequests.get(target.resourceId()).policyTier().name()).isEqualTo("AUTO");
+        assertThat(store.events).filteredOn(e -> e.eventType() == ExecutionEventType.REPAIR_REQUESTED)
                 .hasSize(1);
     }
 
@@ -175,6 +199,55 @@ class DriftReconcilerTest {
     }
 
     @Test
+    void rateLimitHonorsRetryAfterAndOrdinary403UsesPermissionPath() {
+        // EX-19 调用点③（drift）：HonorRetryAfter(300) 注入 → 退避不早于 now+300s；
+        // EX-25 drift 侧：普通 403 → UNKNOWN + 权限告警，不退避（error_count 不动）、不铸修复单
+        DriftCheckTarget limited = presentTarget();
+        executor.verdict = ReconcileVerdict.unknown(new RetryDirective.HonorRetryAfter(300));
+
+        reconciler.runOnce();
+        assertThat(store.checkBackoffs.get(limited.resourceId()).toSeconds()).isGreaterThanOrEqualTo(300);
+
+        DriftCheckTarget denied = presentTarget();
+        executor.verdict = ReconcileVerdict.permissionDenied();
+        reconciler.runOnce();
+        assertThat(store.resourceStates.get(denied.resourceId()))
+                .isEqualTo(PublicationResourceState.UNKNOWN);
+        assertThat(store.checkErrorCounts.get(denied.resourceId())).isZero();
+        assertThat(store.repairRequests).doesNotContainKey(denied.resourceId()); // 不铸单
+        assertThat(store.events).filteredOn(
+                e -> e.eventType() == ExecutionEventType.PUBLICATION_DRIFT_PERMISSION_ALERT)
+                .hasSize(1);
+    }
+
+    @Test
+    void reviewContentDriftUsesEpisodeDigestAndRecoveryClosesEpisode() {
+        DriftCheckTarget target = reviewTarget();
+        Digest edited = Digest.sha256Of("human edited body");
+        executor.verdict = ReconcileVerdict.foundWithContent("777", "http://x/r777", edited);
+
+        reconciler.runOnce();
+        assertThat(store.contentDriftDigests.get(target.resourceId())).isEqualTo(edited);
+        assertThat(store.events).filteredOn(
+                e -> e.eventType() == ExecutionEventType.PUBLICATION_CONTENT_DRIFTED).hasSize(1);
+
+        // 同 digest episode 不重复告警。
+        store.dueDriftChecks.add(target);
+        reconciler.runOnce();
+        assertThat(store.events).filteredOn(
+                e -> e.eventType() == ExecutionEventType.PUBLICATION_CONTENT_DRIFTED).hasSize(1);
+
+        // 恢复原文关闭 episode。
+        var handler = new com.objwww.pr.publisher.domain.handler.PublishReviewHandler();
+        Digest expected = handler.expectedContentDigest(target.command(),
+                TestFixtures.reviewPayload(target.command()));
+        executor.verdict = ReconcileVerdict.foundWithContent("777", "http://x/r777", expected);
+        store.dueDriftChecks.add(target);
+        reconciler.runOnce();
+        assertThat(store.contentDriftDigests).doesNotContainKey(target.resourceId());
+    }
+
+    @Test
     void degradedAlertAtThreshold() {
         // 措辞修正 #3/EX-14：连续失败 >= 3 必须 ReconcilerDegraded
         DriftCheckTarget target = target(PublicationResourceState.PRESENT, 2);
@@ -216,6 +289,45 @@ class DriftReconcilerTest {
         assertThat(store.resourceStates.get(target.resourceId()))
                 .isEqualTo(PublicationResourceState.PRESENT);
         assertThat(store.events).isEmpty();
+    }
+
+    @Test
+    void missingReviewFoundWithExpectedDigestReturnsToPresent() {
+        // RM2-04：MISSING 的 REVIEW 复核找回且 digest 一致 → 归 PRESENT + next_check_at 重排，
+        // 无 episode 事件（纯归位）
+        DriftCheckTarget target = reviewTarget(PublicationResourceState.MISSING);
+        var handler = new com.objwww.pr.publisher.domain.handler.PublishReviewHandler();
+        Digest expected = handler.expectedContentDigest(target.command(),
+                TestFixtures.reviewPayload(target.command()));
+        executor.verdict = ReconcileVerdict.foundWithContent("777", "http://x/r777", expected);
+
+        reconciler.runOnce();
+
+        assertThat(store.resourceStates.get(target.resourceId()))
+                .isEqualTo(PublicationResourceState.PRESENT);
+        assertThat(store.checkedPresentIntervals.get(target.resourceId()))
+                .isEqualTo(Duration.ofMinutes(60)); // next_check_at 重排，下轮不再到期
+        assertThat(store.contentDriftDigests).doesNotContainKey(target.resourceId());
+        assertThat(store.events).isEmpty();
+        assertThat(appendedEvents).isEmpty();
+    }
+
+    @Test
+    void missingReviewFoundWithDifferentDigestReturnsToPresentWithEpisode() {
+        // RM2-04：MISSING 的 REVIEW 复核找回但 digest 不符 → 归 PRESENT + CONTENT_DRIFTED episode
+        DriftCheckTarget target = reviewTarget(PublicationResourceState.MISSING);
+        Digest edited = Digest.sha256Of("human edited while missing");
+        executor.verdict = ReconcileVerdict.foundWithContent("777", "http://x/r777", edited);
+
+        reconciler.runOnce();
+
+        assertThat(store.resourceStates.get(target.resourceId()))
+                .isEqualTo(PublicationResourceState.PRESENT);
+        assertThat(store.checkedPresentIntervals.get(target.resourceId()))
+                .isEqualTo(Duration.ofMinutes(60));
+        assertThat(store.contentDriftDigests.get(target.resourceId())).isEqualTo(edited);
+        assertThat(store.events).filteredOn(
+                e -> e.eventType() == ExecutionEventType.PUBLICATION_CONTENT_DRIFTED).hasSize(1);
     }
 
     @Test

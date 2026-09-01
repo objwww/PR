@@ -40,7 +40,13 @@ public final class Projector {
                 case RUN_STATE_CHANGED -> {
                     requireRunCreated(runState, event);
                     RunState target = RunState.valueOf(required(event, KEY_RUN_STATE));
-                    runState = RunStateMachine.transition(runState, target);
+                    if (runState == RunState.CREATED
+                            && "REPAIR".equals(event.payload().get("run_mode"))
+                            && (target == RunState.COMPLETED || target == RunState.FAILED)) {
+                        runState = target;
+                    } else {
+                        runState = RunStateMachine.transition(runState, target);
+                    }
                 }
                 case REVISION_INVALIDATED -> {
                     requireRunCreated(runState, event);

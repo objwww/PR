@@ -5,8 +5,17 @@
 #   DP-11 V3 权限矩阵实库断言；DP-12 三 worker 心跳+重启自愈；
 #   DP-14 杀 control 半截处理→重放恰好一次。DP-13（真实仓库 draft 闭环）
 #   需真实模式单独执行，见 deploy/dp13-real-draft.sh。
+# DP-15~19 部署门（M2，docs/M2-技术方案.md §11 部署门表）：
+#   DP-15 V4 权限矩阵栈级断言；DP-16 双自检+401+M0/M1 回归门（回归=本脚本
+#   前半段 DP-01~05/11~14 的全量执行结果）；DP-17 SIGKILL 后续跑模型计数恰 1；
+#   DP-18 drift 修复闭环栈级门禁；DP-19 带 V3 种子数据原地升 V4（临时库）。
 # DP-05/DP-14 依赖 stub 模式（GITHUB_API_BASE 指 github-stub）与
 # wiremock 固定 PR 元数据映射（head/base SHA 与本脚本负载一致）。
+# M2 起新增：CONFIRMED 后立即经 m2_register_pr_resources 注入"探针可见"运行时
+# 映射——静态 stub 探针恒回空列表，不注入会被 DriftReconciler 当 MISSING 铸
+# repair 单，污染本批次断言（见 m2-lib.sh 文件头"关键设计"）。
+# DP-17 需 stub 模型模式（OPENAI_COMPAT_BASE_URL 指 github-stub）才能经 stub
+# journal 数模型调用；真实模型模式下该节记 [SKIP] 不计成败（见 README M2 节）。
 # 在 195 服务器 compose 项目目录 /opt/build/pr/deploy 执行：bash smoke-test.sh
 # （持久态 .env/keys 在 /opt/projects/pr_agent，经符号链接接入本目录，见 README）
 # （DP-02/03 为破坏性注入用例，脚本内自动恢复；全量顺序 DP-01 → DP-05）
@@ -73,6 +82,12 @@ docker image inspect pr-agent/control-app:0.0.1-SNAPSHOT >/dev/null 2>&1 \
 docker image inspect pr-agent/publisher-app:0.0.1-SNAPSHOT >/dev/null 2>&1 \
     || { echo "缺镜像 pr-agent/publisher-app（README 步骤 2/3：先 package 再 docker build）"; exit 1; }
 echo "  .env / 私钥(mode=$KEY_PERM) / 迁移 SQL / stub 夹具 / 两镜像 齐备" | tee -a "$SUMMARY"
+
+# M2 共享库（DP-15~19 用；m2_ 前缀函数，见 m2-lib.sh 文件头）
+M2_EVIDENCE="$EVIDENCE"
+. ./m2-lib.sh
+trap m2_cleanup EXIT
+m2_probe_sync_start   # TB-13：stub 探针联动守护
 
 # ---------------------------------------------------------------- DP-01
 echo "== DP-01 一键起栈 + 启动自检 ==" | tee -a "$SUMMARY"
@@ -236,6 +251,9 @@ assert_eq "webhook pull_request.opened 受理" "$HTTP" "202"
 cat "$EVIDENCE/dp05-response.json"; echo
 
 wait_for "outbox 本批次两条全 CONFIRMED" 180 dp05_confirmed || true
+# M2：CONFIRMED 后立即注入"探针可见"映射，防 DriftReconciler 把静态 stub 的
+# 空探针当 MISSING 铸 repair 单污染后续断言（m2-lib.sh 文件头）
+m2_register_pr_resources "$PR05_NUM" || true
 psql "select oc.operation_id, oc.command_type, oc.state, oc.aggregate_sequence from outbox_command oc join review_run rr on rr.id=oc.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='stuborg/stubrepo' and s.pr_number=$PR05_NUM order by oc.aggregate_sequence" \
     | tee "$EVIDENCE/dp05-outbox.txt"
 CONFIRMED=$(psql "select count(*) from outbox_command oc join review_run rr on rr.id=oc.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='stuborg/stubrepo' and s.pr_number=$PR05_NUM and oc.state='CONFIRMED'" | tr -d '[:space:]')
@@ -364,6 +382,8 @@ assert_eq "该 delivery 恰好 1 行（无重复登记）" "$(psql "select count
 # outbox 断言前必须等收敛（INC-23 同批教训：无等待的即时断言是假性 FAIL）
 dp14_confirmed() { [ "$(psql "select count(*) from outbox_command oc join review_run rr on rr.id=oc.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='stuborg/stubrepo' and s.pr_number=$PR14_NUM and oc.state='CONFIRMED'" | tr -d '[:space:]')" = "2" ]; }
 wait_for "PR#$PR14_NUM outbox 两条 CONFIRMED" 300 dp14_confirmed || true
+# M2：同 DP-05，CONFIRMED 后注入探针可见映射防 drift 搅局
+m2_register_pr_resources "$PR14_NUM" || true
 RUNS14=$(psql "select count(*) from review_run rr join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='stuborg/stubrepo' and s.pr_number=$PR14_NUM" | tr -d '[:space:]')
 assert_eq "PR#$PR14_NUM 恰好 1 个 ReviewRun（重放不建重复 Run）" "$RUNS14" "1"
 CONF14=$(psql "select count(*) from outbox_command oc join review_run rr on rr.id=oc.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='stuborg/stubrepo' and s.pr_number=$PR14_NUM and oc.state='CONFIRMED'" | tr -d '[:space:]')
@@ -374,6 +394,253 @@ curl -s -X POST "$STUB/__admin/requests/find" -H 'Content-Type: application/json
     -d "{\"method\":\"POST\",\"url\":\"/repos/stuborg/stubrepo/pulls/$PR14_NUM/reviews\"}" > "$EVIDENCE/dp14-stub-reviews.json"
 assert_eq "stub 收到 check-runs POST 恰好 1 次（崩溃重放不双发）" "$(jq '.requests | length' "$EVIDENCE/dp14-stub-checks.json")" "1"
 assert_eq "stub 收到 PR#$PR14_NUM reviews POST 恰好 1 次" "$(jq '.requests | length' "$EVIDENCE/dp14-stub-reviews.json")" "1"
+
+REGRESSION_FAILS=$FAIL   # DP-01~05/11~14 的 FAIL 计数 = M0/M1 回归结果（DP-16 门禁依据）
+
+# ---------------------------------------------------------------- DP-15
+# V4 权限矩阵栈级断言（波次1主代码事实的部署面复验：publisher 对 repair_request
+# 只有 SELECT + 列级 INSERT/UPDATE；trigger 强制初始 PENDING+审批三列空；
+# publisher 零 outbox INSERT；step_checkpoint 表 control 专属）
+echo "== DP-15 V4 权限矩阵栈级断言 ==" | tee -a "$SUMMARY"
+# -- 权限位面（与 DP-11 同风格；tp/cp_ 助手在 DP-11 节定义）
+assert_eq "publisher 对 repair_request SELECT"   "$(tp publisher_app repair_request SELECT)" "t"
+assert_eq "publisher 对 repair_request 表级 INSERT 无（V4 为列级授权，不提升表级 ACL——TB-11 裁定：设计意图即列级，表级恒 f 才是正确形态）" "$(tp publisher_app repair_request INSERT)" "f"
+assert_eq "publisher 对 repair_request 表级 UPDATE 无（同上）" "$(tp publisher_app repair_request UPDATE)" "f"
+assert_eq "publisher 对 repair_request DELETE 无" "$(tp publisher_app repair_request DELETE)" "f"
+assert_eq "control 对 repair_request SELECT"  "$(tp control_app repair_request SELECT)" "t"
+assert_eq "control 对 repair_request UPDATE（含审批列）"  "$(tp control_app repair_request UPDATE)" "t"
+assert_eq "control 对 repair_request INSERT 无（铸单只在 publisher）" "$(tp control_app repair_request INSERT)" "f"
+assert_eq "publisher 对 step_checkpoint SELECT 无（AFT-18）" "$(tp publisher_app step_checkpoint SELECT)" "f"
+for p in SELECT INSERT UPDATE DELETE; do
+    assert_eq "control 对 step_checkpoint $p（control 专属）" "$(tp control_app step_checkpoint $p)" "t"
+done
+assert_eq "publisher 对 outbox_command INSERT 无（V4 重申，回归）" "$(tp publisher_app outbox_command INSERT)" "f"
+# -- 列级授权面
+assert_eq "publisher 可 INSERT 列 id"            "$(cp_ publisher_app repair_request id INSERT)" "t"
+assert_eq "publisher 可 INSERT 列 policy_tier"   "$(cp_ publisher_app repair_request policy_tier INSERT)" "t"
+assert_eq "publisher 不可 INSERT 列 approved_by"    "$(cp_ publisher_app repair_request approved_by INSERT)" "f"
+assert_eq "publisher 不可 INSERT 列 repair_run_id"  "$(cp_ publisher_app repair_request repair_run_id INSERT)" "f"
+assert_eq "publisher 可 UPDATE 列 state"               "$(cp_ publisher_app repair_request state UPDATE)" "t"
+assert_eq "publisher 可 UPDATE 列 repair_operation_id" "$(cp_ publisher_app repair_request repair_operation_id UPDATE)" "t"
+assert_eq "publisher 不可 UPDATE 列 policy_tier（I21）"        "$(cp_ publisher_app repair_request policy_tier UPDATE)" "f"
+assert_eq "publisher 不可 UPDATE 列 approved_by"              "$(cp_ publisher_app repair_request approved_by UPDATE)" "f"
+assert_eq "publisher 不可 UPDATE 列 publication_resource_id"  "$(cp_ publisher_app repair_request publication_resource_id UPDATE)" "f"
+# -- 行为面（SET ROLE publisher_app 实库尝试；事务内验证后 rollback，零残留）
+RID15=$(psql "select id from publication_resource order by created_at desc limit 1" | tr -d '[:space:]')
+if [ -z "$RID15" ]; then
+    bad "DP-15 需要库内已有 publication_resource 行作 FK（正常由 DP-05/DP-14 产生；请全脚本顺序执行）"
+else
+    U15=$(psql "select gen_random_uuid()" | tr -d '[:space:]')
+    # 1) 整行 INSERT（夹带未授权列 approved_by）→ 应被 ACL 拒
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; insert into repair_request (id, publication_resource_id, resource_type, policy_tier, state, approved_by) values ('$U15','$RID15','CHECK_RUN','AUTO','PENDING','hacker')" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher 整行 INSERT repair_request 被拒（permission denied）" \
+        || bad "publisher 整行 INSERT 未被拒：$out"
+    # 2) 列级 INSERT 合法列 → 应过且 state=PENDING、审批三列空（trigger 钉死）
+    #    TB-11：多语句 -c 必然回显 BEGIN/SET/INSERT 0 1/ROLLBACK 命令标签，
+    #    断言改全行匹配结果行（grep -qx），不与命令标签逐字全等
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "begin; set local role publisher_app; insert into repair_request (id, publication_resource_id, resource_type, policy_tier, state) values ('$U15','$RID15','CHECK_RUN','AUTO','PENDING'); select state||'|'||coalesce(approved_by,'<null>')||'|'||coalesce(approved_at::text,'<null>') from repair_request where id='$U15'; rollback" 2>&1)
+    echo "$out" | grep -qx "PENDING|<null>|<null>" \
+        && ok "publisher 列级 INSERT 合法列通过，state=PENDING 且审批三列空" \
+        || bad "publisher 列级 INSERT 异常：$out"
+    # 3) 合法列但 state=DISPATCHED → trigger 拒（只能以 PENDING 铸造）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; insert into repair_request (id, publication_resource_id, resource_type, policy_tier, state) values ('$U15','$RID15','CHECK_RUN','AUTO','DISPATCHED')" 2>&1)
+    echo "$out" | grep -q "只能以 PENDING" \
+        && ok "非 PENDING 铸造被 trigger 拒（trg_repair_insert_pending）" \
+        || bad "非 PENDING 铸造未被 trigger 拒：$out"
+    # 3b) 超级用户 INSERT 夹带审批列 → 同 trigger 拒（隔离 ACL 面，纯验证 trigger）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "insert into repair_request (id, publication_resource_id, resource_type, policy_tier, state, approved_by, approved_at, approval_reason) values ('$U15','$RID15','CHECK_RUN','AUTO','PENDING','x',now(),'y')" 2>&1)
+    echo "$out" | grep -q "只能以 PENDING" \
+        && ok "审批三列非空铸造被 trigger 拒（超级用户同拒）" \
+        || bad "审批三列铸造未被 trigger 拒：$out"
+    # 4) publisher UPDATE 审批列 → ACL 拒
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; update repair_request set approved_by='x' where id='$U15'" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher 写 approved_by 被拒（列级 ACL）" \
+        || bad "publisher 写 approved_by 未被拒：$out"
+    # 4b) publisher UPDATE policy_tier → ACL 拒（I21 档级不可改）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; update repair_request set policy_tier='MANUAL' where id='$U15'" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher 改 policy_tier 被拒（列级 ACL）" \
+        || bad "publisher 改 policy_tier 未被拒：$out"
+    # 4c) policy_tier 不可变 trigger（超级用户也被拒；同事务 insert+update，出错整体回滚零残留）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "insert into repair_request (id, publication_resource_id, resource_type, policy_tier, state) values ('$U15','$RID15','CHECK_RUN','AUTO','PENDING'); update repair_request set policy_tier='MANUAL' where id='$U15'" 2>&1)
+    echo "$out" | grep -q "policy_tier is immutable" \
+        && ok "policy_tier 不可变 trigger 生效（trg_repair_tier_immutable）" \
+        || bad "policy_tier 不可变 trigger 未生效：$out"
+    # 5) publisher INSERT outbox_command → 拒（AFT-14 栈级复验）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; insert into outbox_command (operation_id) values (gen_random_uuid())" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher INSERT outbox_command 被拒（零 outbox INSERT）" \
+        || bad "publisher INSERT outbox_command 未被拒：$out"
+    # 6) publisher 读/写 step_checkpoint → 均拒（checkpoint 表 control 专属）
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; select count(*) from step_checkpoint" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher SELECT step_checkpoint 被拒" \
+        || bad "publisher SELECT step_checkpoint 未被拒：$out"
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc \
+        "set role publisher_app; insert into step_checkpoint (id) values (gen_random_uuid())" 2>&1)
+    echo "$out" | grep -q "permission denied" \
+        && ok "publisher INSERT step_checkpoint 被拒" \
+        || bad "publisher INSERT step_checkpoint 未被拒：$out"
+fi
+
+# ---------------------------------------------------------------- DP-16
+# 双应用自检 + 401 探针守门 + M0/M1 DP-01~05/11~14 全回归门。
+# 回归的"编排调用既有检查"= 本脚本前半段已全量执行的 DP-01~05/11~14
+#（它们的 FAIL 计数即回归结果；DoD 要求"回归不是抽样是全量"）。
+echo "== DP-16 双应用自检 + 401 守门 + M0/M1 全回归门 ==" | tee -a "$SUMMARY"
+assert_eq "control 未签名 POST → 401（守门）" "$(m2_control_http_code)" "401"
+docker compose logs --no-color control-app   > "$EVIDENCE/dp16-control.log" 2>&1
+docker compose logs --no-color publisher-app > "$EVIDENCE/dp16-publisher.log" 2>&1
+assert_contains "control 日志含『启动自检通过』"   "$EVIDENCE/dp16-control.log" "启动自检通过"
+assert_contains "publisher 日志含『启动自检通过』" "$EVIDENCE/dp16-publisher.log" "启动自检通过"
+docker compose ps --format '{{.Service}}\t{{.Status}}' | tee "$EVIDENCE/dp16-ps.txt"
+for svc in postgres control-app publisher-app github-stub; do
+    st=$(docker compose ps --format '{{.Status}}' "$svc")
+    case "$st" in *running*|*Up*) ok "$svc 存活（$st）";; *) bad "$svc 未存活：$st";; esac
+done
+if [ "$REGRESSION_FAILS" -eq 0 ]; then
+    ok "M0/M1 DP-01~05/11~14 全回归 PASS（本 run 前半段全量执行，FAIL=0）"
+else
+    bad "M0/M1 回归存在 FAIL（${REGRESSION_FAILS} 条）——M2 门禁不放行"
+fi
+
+# ---------------------------------------------------------------- DP-17
+# SIGKILL 真实容器后续跑完成，stub journal 模型计数恰 1（I19 checkpoint 门禁化）。
+# 崩溃窗口说明（诚实清单）：checkpoint 提交与 T2 之间是进程内毫秒级窗口，栈外
+# 无法精确命中；本门轮询 checkpoint 落库后立即 SIGKILL，实际落点为
+# "checkpoint 后 / T2 后"两者之一——两窗口期望同为模型计数恰 1，门禁语义等价；
+# 精确的"T2 未完"窗口由 ST-27 IT 钉死。
+echo "== DP-17 SIGKILL 续跑：模型计数恰 1（checkpoint 门禁化） ==" | tee -a "$SUMMARY"
+if ! m2_stub_github_mode || ! m2_stub_model_mode; then
+    echo "  [SKIP] DP-17 需全 stub 模式（GITHUB_API_BASE 与 OPENAI_COMPAT_BASE_URL 均指 github-stub）；当前 OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-未设}" | tee -a "$SUMMARY"
+else
+    m2_journal_reset
+    m2_model_delay_on 45000   # 模型延迟 45s：放大窗口，保证脚本来得及观察中间态
+    PR17_NUM=$((9000 + RANDOM % 500))
+    HTTP17=$(m2_send_pr_webhook "$PR17_NUM" opened "$M2_HEAD_SHA" "$M2_BASE_SHA" dp17)
+    assert_eq "DP-17 webhook 受理" "$HTTP17" "202"
+    m2_wait_sql "PR#$PR17_NUM checkpoint 落库" 300 "1" \
+        "select count(*) from step_checkpoint sc join run_step rs on rs.id=sc.step_id join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.pr_number=$PR17_NUM" || true
+    ST17=$(m2_kill_app control-app)
+    [ "$ST17" != "running" ] && ok "control 已 SIGKILL（State=$ST17）" || bad "control 仍在运行（$ST17）"
+    m2_model_delay_off
+    docker compose up -d control-app > /dev/null 2>&1
+    wait_for "control 复活后 401" 180 control_alive || true
+    # 续跑需等租约过期回收（app.worker.max-lease-seconds 默认 600s；可在 .env 设
+    # APP_WORKER_MAXLEASESECONDS=60 加速，见 README M2 节——默认配置下本节约 10 分钟）
+    m2_wait_sql "PR#$PR17_NUM outbox 两条 CONFIRMED（续跑收敛）" 900 "2" \
+        "select count(*) $(m2_pr_sql_where "$PR17_NUM") and oc.state='CONFIRMED'" || true
+    M17=$(m2_model_calls "$EVIDENCE/dp17-model-calls.json")
+    assert_eq "stub journal 模型调用计数恰 1（checkpoint 续跑零重调）" "$M17" "1"
+    assert_eq "PR#$PR17_NUM checkpoint 恰 1 行（无重复登记）" "$(m2_pr_checkpoint_count "$PR17_NUM")" "1"
+    assert_eq "PR#$PR17_NUM 恰好 1 个 ReviewRun（续跑不建重复 Run）" "$(m2_pr_run_count "$PR17_NUM")" "1"
+    m2_register_pr_resources "$PR17_NUM" || true
+fi
+
+# ---------------------------------------------------------------- DP-18
+# drift 修复闭环栈级门禁（E2E-28 的门禁化；I26 新行模型 + I27 REPAIR Run）
+echo "== DP-18 stub 删 check-run → 巡检自动修复闭环 ==" | tee -a "$SUMMARY"
+if ! m2_stub_github_mode; then
+    echo "  [SKIP] DP-18 需 stub GitHub 模式（GITHUB_API_BASE 指 github-stub）" | tee -a "$SUMMARY"
+else
+    m2_journal_reset
+    PR18_NUM=$((9500 + RANDOM % 400))
+    if m2_run_pr_e2e "$PR18_NUM" dp18 600; then
+        ok "DP-18 基线 PR#$PR18_NUM 闭环 CONFIRMED=2"
+    else
+        bad "DP-18 基线闭环未收敛（后续断言可能连带失败）"
+    fi
+    CK18=$(m2_pr_op "$PR18_NUM" CREATE_CHECK CONFIRMED)
+    RID18=$(m2_resource_of_op "$CK18")
+    [ -n "$RID18" ] || bad "DP-18 找不到 check 资源行（op=$CK18）"
+    # TB-12：stub 创建已改随机 id（7200000-7499999），旧行 remote_id 从基线行捕获而非硬编码
+    OLD_REMOTE18=$(m2_resource_field "$RID18" remote_id)
+    [ -n "$OLD_REMOTE18" ] || bad "DP-18 基线资源行 remote_id 为空（RID18=$RID18）"
+    NEWID18=$((7100000 + RANDOM % 50000))
+    # 注入：stub 侧删 check-run 对象（摘除探针可见映射，回落静态空列表）；
+    # 修复重建将获新远端 id（避让 uq_pub_resource(resource_type,remote_id)，I26
+    # 旧行保留原 remote_id 不覆盖，重建若还回旧 id 会 ON CONFLICT DO NOTHING）
+    m2_check_present_remove "$CK18"
+    m2_post_check_override_on "$NEWID18"
+    m2_wait_sql "资源转 MISSING（巡检发现删除）" 240 "MISSING" \
+        "select state from publication_resource where id='$RID18'" || true
+    m2_wait_sql "repair_request 铸造（一资源一活跃单）" 120 "1" \
+        "select count(*) from repair_request where publication_resource_id='$RID18'" || true
+    REQ18=$(m2_request_of_resource "$RID18")
+    assert_eq "修复单档级 AUTO（CHECK_RUN 状态型）" "$(m2_request_field "$REQ18" policy_tier)" "AUTO"
+    m2_wait_sql "修复单 REPAIRED（MISSING→单→命令→新 PRESENT 全链收敛）" 300 "REPAIRED" \
+        "select state from repair_request where id='$REQ18'" || true
+    assert_eq "旧行 REPAIRED" "$(m2_resource_field "$RID18" state)" "REPAIRED"
+    ROP18=$(m2_request_field "$REQ18" repair_operation_id)
+    assert_eq "旧行 repaired_by=repair 命令" "$(m2_resource_field "$RID18" repaired_by_operation_id)" "$ROP18"
+    assert_eq "旧行原 remote_id 保留不覆盖（I26）" "$(m2_resource_field "$RID18" remote_id)" "$OLD_REMOTE18"
+    NEWRID18=$(m2_psql "select id from publication_resource where replaces_resource_id='$RID18' and state='PRESENT'" | tr -d '[:space:]')
+    [ -n "$NEWRID18" ] && ok "新 PRESENT 行存在（replaces_resource_id 链回旧行）" || bad "缺新 PRESENT 行"
+    assert_eq "新行 remote_id=重建的新远端对象" "$(m2_resource_field "$NEWRID18" remote_id)" "$NEWID18"
+    assert_eq "repair 命令 CONFIRMED" "$(m2_psql "select state from outbox_command where operation_id='$ROP18'" | tr -d '[:space:]')" "CONFIRMED"
+    assert_eq "REPAIR Run 独立铸造（I27，不挂终态评审 Run）" \
+        "$(m2_psql "select run_mode from review_run rr join repair_request q on q.repair_run_id=rr.id where q.id='$REQ18'" | tr -d '[:space:]')" "REPAIR"
+    m2_journal_find POST '"url":"/repos/stuborg/stubrepo/check-runs"' "$EVIDENCE/dp18-stub-checks.json"
+    assert_eq "stub check-runs POST 恰 2 次（原始创建+修复重建）" "$(m2_journal_count "$EVIDENCE/dp18-stub-checks.json")" "2"
+    # 复原：摘除 POST 覆盖映射；新对象注册探针可见（防新一轮 drift 污染后续门）
+    m2_post_check_override_off
+    [ -n "$ROP18" ] && m2_check_present_add "$ROP18" "$NEWID18"
+    echo "  复原：stub 运行时映射已复位（详见 trap m2_cleanup 兜底）" | tee -a "$SUMMARY"
+fi
+
+# ---------------------------------------------------------------- DP-19
+# 带 V3 历史数据原地升 V4（CT-22 的部署面；评审 #17）。
+# 方法：同库 postgres 内开临时库 dp19_upgrade → flyway -target=3 建到 V3 →
+# 灌 db/dp19-seed-v3.sql（V3 形态 Run/Outbox/PRESENT/MISSING/inbox/finding/账本）
+# → flyway migrate 升 V4 → 断言数据零丢失+旧记录可读+权限不放宽 → 删临时库。
+# 主栈本身即"已升 V4"形态，其全量 smoke 绿 = 升级后回归证据（本脚本 DP-01~18）。
+echo "== DP-19 带 V3 种子数据原地升 V4（临时库） ==" | tee -a "$SUMMARY"
+DP19_DB="dp19_upgrade"
+psql "drop database if exists $DP19_DB" > /dev/null 2>&1
+psql "create database $DP19_DB" > "$EVIDENCE/dp19.log" 2>&1
+docker compose run --rm -T --no-deps -e "FLYWAY_URL=jdbc:postgresql://postgres:5432/$DP19_DB" \
+    migrate -target=3 -connectRetries=30 migrate >> "$EVIDENCE/dp19.log" 2>&1
+assert_eq "临时库 flyway 停点 V3" "$(m2_psql_db "$DP19_DB" "select max(version::int) from flyway_schema_history where success" | tr -d '[:space:]')" "3"
+docker compose exec -T postgres psql -U postgres -d "$DP19_DB" -v ON_ERROR_STOP=1 -q -f - < db/dp19-seed-v3.sql >> "$EVIDENCE/dp19.log" 2>&1
+assert_eq "V3 种子灌入退出码" "$?" "0"
+DP19_COUNTS_SQL="select (select count(*) from review_run)||'/'||(select count(*) from outbox_command)||'/'||(select count(*) from publication_resource)||'/'||(select count(*) from webhook_inbox)||'/'||(select count(*) from review_finding)||'/'||(select count(*) from execution_event)||'/'||(select count(*) from run_step)||'/'||(select count(*) from work_item)||'/'||(select count(*) from step_attempt)"
+C_BEFORE=$(m2_psql_db "$DP19_DB" "$DP19_COUNTS_SQL" | tr -d '[:space:]')
+assert_eq "种子行数（run/outbox/resource/inbox/finding/event/step/work/attempt）" "$C_BEFORE" "1/2/2/1/1/1/1/1/1"
+docker compose run --rm -T --no-deps -e "FLYWAY_URL=jdbc:postgresql://postgres:5432/$DP19_DB" \
+    migrate -connectRetries=30 migrate >> "$EVIDENCE/dp19.log" 2>&1
+assert_eq "原地升级后 flyway 版本 == 迁移文件最大版本" \
+    "$(m2_psql_db "$DP19_DB" "select max(version::int) from flyway_schema_history where success" | tr -d '[:space:]')" "$EXPECT_V"
+C_AFTER=$(m2_psql_db "$DP19_DB" "$DP19_COUNTS_SQL" | tr -d '[:space:]')
+assert_eq "升级数据零丢失（九表行数不变）" "$C_AFTER" "$C_BEFORE"
+assert_eq "旧 Run 记录可读（trigger_key）" \
+    "$(m2_psql_db "$DP19_DB" "select trigger_key from review_run where id='00000000-0000-4000-8000-0000000d1903'" | tr -d '[:space:]')" "dp19-seed"
+assert_eq "旧 MISSING 资源行可读（V3 巡检列原样）" \
+    "$(m2_psql_db "$DP19_DB" "select state||'/'||check_error_count from publication_resource where id='00000000-0000-4000-8000-0000000d1921'" | tr -d '[:space:]')" "MISSING/0"
+assert_eq "V4 新列 replaces_resource_id 默认空、可读" \
+    "$(m2_psql_db "$DP19_DB" "select coalesce(replaces_resource_id::text,'<null>') from publication_resource where id='00000000-0000-4000-8000-0000000d1920'" | tr -d '[:space:]')" "<null>"
+assert_eq "V4 新表 step_checkpoint 已建（空表）" "$(m2_psql_db "$DP19_DB" "select count(*) from step_checkpoint" | tr -d '[:space:]')" "0"
+assert_eq "V4 新表 repair_request 已建（空表）" "$(m2_psql_db "$DP19_DB" "select count(*) from repair_request" | tr -d '[:space:]')" "0"
+assert_eq "升级后 publisher 对 outbox_command INSERT 仍无（权限不放宽）" \
+    "$(m2_psql_db "$DP19_DB" "select has_table_privilege('publisher_app','outbox_command','INSERT')" | tr -d '[:space:]')" "f"
+assert_eq "升级后 publisher 对 step_checkpoint SELECT 无" \
+    "$(m2_psql_db "$DP19_DB" "select has_table_privilege('publisher_app','step_checkpoint','SELECT')" | tr -d '[:space:]')" "f"
+assert_eq "升级后 publisher 对 repair_request 表级 INSERT 无（列级授权不提升表级 ACL，TB-11 裁定）" \
+    "$(m2_psql_db "$DP19_DB" "select has_table_privilege('publisher_app','repair_request','INSERT')" | tr -d '[:space:]')" "f"
+assert_eq "升级后 publisher 对 repair_request 列级 INSERT 有（state 列为代表列）" \
+    "$(m2_psql_db "$DP19_DB" "select has_column_privilege('publisher_app','repair_request','state','INSERT')" | tr -d '[:space:]')" "t"
+psql "drop database if exists $DP19_DB" > /dev/null 2>&1 \
+    && echo "  复原：临时库 $DP19_DB 已删除" | tee -a "$SUMMARY"
 
 # ---------------------------------------------------------------- 汇总
 echo "==================================================" | tee -a "$SUMMARY"

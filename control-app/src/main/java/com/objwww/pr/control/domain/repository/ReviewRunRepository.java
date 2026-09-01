@@ -20,7 +20,8 @@ public interface ReviewRunRepository {
     /** 对齐 uq_review_run_key；webhook 重投幂等兜底（B-3） */
     Optional<ReviewRun> findByRunKey(Digest runKey);
 
-    /** T1 换届用：该 PR 所有未完成（非终态）Run，经 pr_revision 关联到 pr_subject */
+    /** T1 换届用：该 PR 所有未完成（非终态）的**评审** Run（run_mode=NORMAL），经 pr_revision
+     *  关联到 pr_subject。REPAIR Run 刻意排除——其终态由 repair 收口投影器拥有（TB-10/INC-39） */
     List<ReviewRun> findActiveByPrSubjectId(UUID prSubjectId);
 
     /**

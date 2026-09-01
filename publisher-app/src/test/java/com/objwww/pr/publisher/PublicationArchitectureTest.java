@@ -57,7 +57,8 @@ class PublicationArchitectureTest {
 
     @Test
     void onlyExecutorReferencesGitHubWriteAdapter() {
-        // I4（AFT-04/AFT-07）：白名单精确到类——仅执行器本体与 config 装配点可引用写适配器；
+        // I4（AFT-04/AFT-07；AFT-14 的"GitHubWriteAdapter 唯一写出口回归"同由本规则兜底）：
+        // 白名单精确到类——仅执行器本体与 config 装配点可引用写适配器；
         // 不再整体豁免 infrastructure 包（那里出现新引用点同样要被抓）。
         // 适配器自身的合成内部类（GitHubWriteAdapter$1/$2，switch 表等）属实现细节，豁免。
         noClasses().that().resideInAPackage("..publisher..")
@@ -90,6 +91,73 @@ class PublicationArchitectureTest {
                 .orShould().dependOnClassesThat()
                 .haveFullyQualifiedName("com.objwww.pr.control.application.OutboxWriter")
                 .check(classes);
+    }
+
+    /** AFT-18：checkpoint 是 control 私产，publisher 生产代码不得引用其模型/服务/仓储。 */
+    @Test
+    void publisherHasNoCheckpointDependency() {
+        noClasses().that().resideInAPackage("..publisher..")
+                .should().dependOnClassesThat().haveSimpleNameContaining("Checkpoint")
+                .check(classes);
+    }
+
+    /**
+     * AFT-14（M2 方案 §11/L0，I20）：DriftReconciler 静态依赖面钉死——只能 INSERT
+     * repair_request：① 对 PublicationStore 的方法调用收敛于巡检读/观测列回写/repair 登记
+     * 白名单（outbox_command 的写方法一个都不许碰）；② 零 control 包依赖（outbox 插入路径
+     * 是 control 私产）；③ 不调 Handler 写侧方法（buildRequest/interpret 是 execute 独占）；
+     * ④ 对执行器只调 reconcile/sanityRead 探针，不调写入口 execute。
+     * "只能 INSERT repair_request" 的运行时语义由 CT-24/CT-29 真库钉，此条只钉静态依赖面。
+     */
+    @Test
+    void driftReconcilerOnlyInsertsRepairRequestNeverWritesOutbox() {
+        JavaClass reconciler = classes.get("com.objwww.pr.publisher.application.DriftReconciler");
+
+        // ① PublicationStore 调用白名单
+        java.util.Set<String> allowedStoreMethods = java.util.Set.of(
+                "findDueForDriftCheck", "markCheckedPresent", "markContentDrift", "clearContentDrift",
+                "markMissing", "markMissingWithRepair", "markUnknown", "markCheckError");
+        List<String> storeCalls = reconciler.getMethodCallsFromSelf().stream()
+                .filter(call -> call.getTargetOwner().isAssignableTo(
+                        "com.objwww.pr.publisher.domain.port.PublicationStore"))
+                .map(call -> call.getTarget().getName())
+                .distinct()
+                .toList();
+        org.assertj.core.api.Assertions.assertThat(storeCalls)
+                .as("DriftReconciler 对 PublicationStore 的调用必须收敛于巡检/repair 登记白名单")
+                .isNotEmpty()
+                .allMatch(allowedStoreMethods::contains);
+
+        // ② 零 control 包依赖（outbox 写 port 在 control 侧）
+        noClasses().that().haveFullyQualifiedName(
+                        "com.objwww.pr.publisher.application.DriftReconciler")
+                .should().dependOnClassesThat().resideInAPackage("..control..")
+                .check(classes);
+
+        // ③ 不调 Handler 写侧方法（commandType 是构造期建 Map 键的元数据读，合法）
+        List<String> handlerCalls = reconciler.getMethodCallsFromSelf().stream()
+                .filter(call -> call.getTargetOwner().isAssignableTo(
+                        "com.objwww.pr.publisher.domain.handler.PublicationHandler"))
+                .map(call -> call.getTarget().getName())
+                .distinct()
+                .toList();
+        org.assertj.core.api.Assertions.assertThat(handlerCalls)
+                .as("DriftReconciler 只允许调 Handler 探针/期望 digest/元数据方法，实际调用: %s", handlerCalls)
+                .isNotEmpty()
+                .allMatch(name -> java.util.Set.of(
+                        "expectedContentDigest", "buildSanityProbe", "commandType").contains(name));
+
+        // ④ 执行器只调探针，不调写入口
+        List<String> executorCalls = reconciler.getMethodCallsFromSelf().stream()
+                .filter(call -> call.getTargetOwner().isAssignableTo(
+                        "com.objwww.pr.publisher.domain.service.FencedPublicationExecutor"))
+                .map(call -> call.getTarget().getName())
+                .distinct()
+                .toList();
+        org.assertj.core.api.Assertions.assertThat(executorCalls)
+                .as("DriftReconciler 对执行器只许调 reconcile/sanityRead，实际调用: %s", executorCalls)
+                .isNotEmpty()
+                .allMatch(name -> java.util.Set.of("reconcile", "sanityRead").contains(name));
     }
 
     /** AFT-04 契约：类型化请求无 raw url/method 字段（HTTP 拼装只存在于 GitHubWriteAdapter 内） */

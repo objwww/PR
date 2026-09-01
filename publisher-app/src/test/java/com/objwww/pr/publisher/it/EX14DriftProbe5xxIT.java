@@ -17,6 +17,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * EX-14（M1 方案 §11/L4）DriftReconciler 探针 5xx：不标 MISSING + check_error_count 递增 +
  * 连 3 次 → ReconcilerDegraded 告警（措辞修正 #3：探测失败不冒充事实，但必须告警）。
+ *
+ * <p>review 探针 stub body 与生产 {@code PublishReviewHandler.buildBody} 零 finding 形态
+ * 逐字节对齐（EX14 取证盲区修复；经 ExRepairChain.zeroFindingsReviewBody 共享夹具书写）。
  */
 class EX14DriftProbe5xxIT extends PostgresITBase {
 
@@ -60,9 +63,8 @@ class EX14DriftProbe5xxIT extends PostgresITBase {
         wiremock.stubFor(get(urlEqualTo("/repos/" + REPO + "/pulls/" + PR + "/reviews"
                         + "?per_page=100&page=1"))
                 .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
-                        .withBody("[{\"id\":2002,\"html_url\":\"http://x/review/2002\","
-                                + "\"body\":\"AI Code Review\\n<!-- ai-review:" + reviewOp
-                                + " -->\"}]")));
+                        .withBody(ExRepairChain.reviewListJson(
+                                ExRepairChain.zeroFindingsReviewBody(reviewOp)))));
     }
 
     @AfterEach

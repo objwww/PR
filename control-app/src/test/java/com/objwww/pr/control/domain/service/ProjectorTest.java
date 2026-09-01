@@ -108,6 +108,16 @@ class ProjectorTest {
     }
 
     @Test
+    void repairRunCanFoldDirectlyFromCreatedToCompleted() {
+        RunProjection projection = projector.fold(List.of(
+                event(ExecutionEventType.RUN_CREATED, null, Map.of("run_mode", "REPAIR")),
+                event(ExecutionEventType.RUN_STATE_CHANGED, null,
+                        Map.of("run_state", "COMPLETED", "run_mode", "REPAIR"))));
+
+        assertEquals(RunState.COMPLETED, projection.runState());
+    }
+
+    @Test
     void foldRejectsStreamWithoutRunCreated() {
         assertThrows(IllegalStateException.class, () -> projector.fold(List.of(
                 event(ExecutionEventType.RUN_STATE_CHANGED, null, Map.of("run_state", "REVIEWING")))));

@@ -1,6 +1,32 @@
 package com.objwww.pr.control;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.application.CheckpointWriter;
+import com.objwww.pr.control.application.IntakeCommand;
+import com.objwww.pr.control.application.ReviewStepExecutor;
+import com.objwww.pr.control.application.StepExecutionContext;
+import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
+import com.objwww.pr.control.domain.model.PrSubjectState;
+import com.objwww.pr.control.domain.model.ReviewRun;
+import com.objwww.pr.control.domain.model.RunStep;
+import com.objwww.pr.control.domain.model.StepCheckpoint;
+import com.objwww.pr.control.domain.model.WorkItem;
 import com.objwww.pr.control.domain.review.ModelFinding;
+import com.objwww.pr.control.domain.review.FindingMapper;
+import com.objwww.pr.control.domain.review.ReviewAgentLoop;
+import com.objwww.pr.control.domain.review.ReviewContractVersions;
+import com.objwww.pr.control.domain.service.CheckpointContract;
+import com.objwww.pr.control.domain.service.CheckpointResumeService;
+import com.objwww.pr.control.domain.review.ReviewBudget;
+import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.control.domain.tool.PolicyEngine;
+import com.objwww.pr.control.domain.tool.ToolRegistry;
+import com.objwww.pr.control.support.OrchestratorFixture;
+import com.objwww.pr.control.support.TestTarballs;
+import com.objwww.pr.shared.Digest;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.BeforeAll;
@@ -68,6 +94,84 @@ class ControlArchitectureTest {
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "..publisher..", "..credential..", "..publication..", "..approval..")
                 .check(classes);
+    }
+
+    /** AFT-15：恢复/修复规划只编排端口；不得越过 OutboxWriter 或触碰 GitHub/凭证实现。 */
+    @Test
+    void checkpointAndRepairPlannerStayAwayFromExternalWriteInfrastructure() {
+        noClasses().that().haveSimpleName("RepairPlanner")
+                .or().haveSimpleName("CheckpointResumeService")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "..infrastructure.github..", "..credential..", "java.net.http..")
+                .orShould().dependOnClassesThat().haveSimpleName("OutboxWriter")
+                .check(classes);
+    }
+
+    /** AFT-17 存在向：checkpoint 五分量及其四个代码契约版本常量必须显式存在。 */
+    @Test
+    void checkpointContractKeepsAllFiveVersionedComponents() {
+        assertThat(java.util.Arrays.stream(CheckpointContract.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName).toList())
+                .containsExactly("promptTemplateVersion", "findingSchemaVersion",
+                        "mapperContractVersion", "contextBuilderVersion", "modelIdentity");
+        assertThat(ReviewAgentLoop.PROMPT_TEMPLATE_VERSION).isNotBlank();
+        assertThat(ReviewAgentLoop.CONTEXT_BUILDER_VERSION).isNotBlank();
+        assertThat(ReviewContractVersions.FINDING_SCHEMA_VERSION).isNotBlank();
+        assertThat(FindingMapper.CONTRACT_VERSION).isNotBlank();
+    }
+
+    /**
+     * AFT-17 接线向（回指 I18，防 bump 纪律落空）：四个版本常量必须被 CheckpointContract
+     * 唯一生产构造点 ReviewStepExecutor 实际接线，且 digest 列与五分量列一致（防半截接线）。
+     * 常量均为编译期 String 字面量，javac 内联后字节码中无字段引用，ArchUnit 静态规则
+     * 看不到接线关系——故本断言行为化：真跑一次 executor，对其写出的 step_checkpoint
+     * 逐列对拍常量期望值。红绿验证：把 ReviewStepExecutor 任一分量改成字面量即红。
+     */
+    @Test
+    void checkpointContractConstantsAreActuallyWired() {
+        Digest snapshotDigest = Digest.sha256Of("aft17-snap");
+        Digest diffDigest = Digest.sha256Of("aft17-diff");
+        OrchestratorFixture fx = new OrchestratorFixture();
+        MockModelClient modelClient = new MockModelClient();
+        ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
+                PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
+                diffDigest, snapshotDigest,
+                "aft17-policy-v1", "aft17-prompt-v1", "aft17-toolset-v1", "d-1", null));
+        RunStep step = fx.steps.findByRunId(run.getId()).get(0);
+        WorkItem item = fx.workItems.findByStepId(step.getId()).orElseThrow();
+        Instant now = Instant.now();
+        item.leaseTo("aft17-worker", now.plusSeconds(600), now);
+        ObjectMapper mapper = new ObjectMapper();
+        ReviewStepExecutor executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas,
+                fx.artifacts, new SafeTarExtractor(),
+                new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
+                        new PolicyEngine(new ToolRegistry())),
+                ReviewBudget.DEFAULT, mapper,
+                new CheckpointResumeService(fx.checkpoints, fx.artifacts, fx.cas, fx.ledger, mapper),
+                new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger),
+                fx.ledger, "aft17/model/v1");
+        fx.cas.putIfAbsent(snapshotDigest, TestTarballs.tarGz(out ->
+                TestTarballs.file(out, TestTarballs.GH_PREFIX + "a/Foo.java", "int x = 0/1;\n")));
+        fx.cas.putIfAbsent(diffDigest, "diff".getBytes(StandardCharsets.UTF_8));
+        modelClient.enqueueContent("[]");
+
+        executor.execute(new StepExecutionContext(item, step), () -> true);
+
+        StepCheckpoint checkpoint = fx.checkpoints.all().stream()
+                .filter(c -> c.checkpointKey().equals(StepCheckpoint.REVIEW_OUTCOME))
+                .findFirst().orElseThrow();
+        CheckpointContract expected = new CheckpointContract(
+                run.getPromptVersion() + "/" + ReviewAgentLoop.PROMPT_TEMPLATE_VERSION,
+                ReviewContractVersions.FINDING_SCHEMA_VERSION,
+                FindingMapper.CONTRACT_VERSION,
+                ReviewAgentLoop.CONTEXT_BUILDER_VERSION,
+                "aft17/model/v1");
+        assertThat(checkpoint.promptTemplateVersion()).isEqualTo(expected.promptTemplateVersion());
+        assertThat(checkpoint.findingSchemaVersion()).isEqualTo(expected.findingSchemaVersion());
+        assertThat(checkpoint.mapperContractVersion()).isEqualTo(expected.mapperContractVersion());
+        assertThat(checkpoint.contextBuilderVersion()).isEqualTo(expected.contextBuilderVersion());
+        assertThat(checkpoint.modelIdentity()).isEqualTo(expected.modelIdentity());
+        assertThat(checkpoint.checkpointContractDigest()).isEqualTo(expected.digest());
     }
 
     /** AFT-03 schema 向：模型输出 schema（解析目标 ModelFinding，含嵌套类型）无 token/url/permission 字段 */

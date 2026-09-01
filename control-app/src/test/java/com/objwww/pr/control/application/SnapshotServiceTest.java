@@ -68,6 +68,11 @@ class SnapshotServiceTest {
             records.removeIf(r -> r.digest().equals(record.digest()));
             records.add(record);
         }
+
+        @Override
+        public java.util.Optional<ArtifactRecord> findByDigest(Digest digest) {
+            return records.stream().filter(r -> r.digest().equals(digest)).findFirst();
+        }
     }
 
     private byte[] normalTarball() {

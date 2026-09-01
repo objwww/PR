@@ -5,6 +5,8 @@ import com.objwww.pr.control.domain.model.ArtifactType;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
+import com.objwww.pr.shared.Digest;
 
 /**
  * EX-07 用：T2 事务中途爆炸的 artifact 登记桩——第一次登记 REVIEW_PAYLOAD 时抛异常
@@ -26,5 +28,10 @@ final class FailOnceArtifactRepository implements ArtifactRepository {
             throw new IllegalStateException("模拟 Control 于 T2 提交前崩溃（EX-07）");
         }
         delegate.register(record);
+    }
+
+    @Override
+    public Optional<ArtifactRecord> findByDigest(Digest digest) {
+        return delegate.findByDigest(digest);
     }
 }

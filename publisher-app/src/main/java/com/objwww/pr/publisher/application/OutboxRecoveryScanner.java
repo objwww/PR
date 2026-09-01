@@ -9,6 +9,7 @@ import com.objwww.pr.publisher.domain.service.RetryBackoff;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.ExecutionEventType;
 import com.objwww.pr.shared.CommandType;
+import com.objwww.pr.shared.RetryDirective;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,8 +82,12 @@ public class OutboxRecoveryScanner {
     private int sweepExpiredInFlight(Instant now) {
         int done = 0;
         for (ClaimedCommand command : store.findExpiredInFlight(now, scanLimit)) {
-            // 立即到期：下一轮路径②即探测
-            if (store.toReconciling(command.operationId().value(), now, now)) {
+            // 立即到期：下一轮路径②即探测。崩溃恢复与响应丢失同属"结果未知"（EX-03），
+            // 与活写路径对称补 PUBLICATION_OUTCOME_UNKNOWN 留痕（TB-14）。
+            if (store.toReconciling(command.operationId().value(), now, now,
+                    event(command, ExecutionEventType.PUBLICATION_OUTCOME_UNKNOWN, Map.of(
+                            "operation_id", command.operationId().toString(),
+                            "detail", "inflight_lease_expired")))) {
                 log.info("过期 IN_FLIGHT 转 RECONCILING: {}", command.operationId());
                 done++;
             }
@@ -109,25 +114,43 @@ public class OutboxRecoveryScanner {
         switch (verdict.kind()) {
             case FOUND -> {
                 PublicationHandler handler = handlers.get(command.commandType());
-                store.reconcileConfirm(id, verdict.remoteId(), verdict.remoteUrl(),
-                        handler.resourceType(), handler.resourceMarker(command),
-                        event(command, ExecutionEventType.PUBLICATION_CONFIRMED, Map.of(
-                                "operation_id", command.operationId().toString(),
-                                "remote_id", verdict.remoteId(),
-                                "via", "reconcile")));
+                var repairResource = store.findRepairResourceByOperation(id);
+                ExecutionEvent confirmed = event(command,
+                        repairResource.isPresent() ? ExecutionEventType.REPAIR_REPAIRED
+                                : ExecutionEventType.PUBLICATION_CONFIRMED,
+                        Map.of("operation_id", command.operationId().toString(),
+                                "remote_id", verdict.remoteId(), "via", "reconcile"));
+                if (repairResource.isPresent()) {
+                    store.reconcileConfirmRepairReplacement(id, repairResource.get(),
+                            verdict.remoteId(), verdict.remoteUrl(), handler.resourceType(),
+                            handler.resourceMarker(command), confirmed);
+                } else {
+                    store.reconcileConfirm(id, verdict.remoteId(), verdict.remoteUrl(),
+                            handler.resourceType(), handler.resourceMarker(command), confirmed);
+                }
             }
             case NOT_FOUND ->
                 // 窗口内穷尽确认不存在：退避后安全重发（§4.3）
                     store.reconcileRetryWait(id,
                             backoff.nextAttemptAt(command.attemptCount() + 1, now));
             case UNKNOWN -> {
-                int notFound = store.reconcileUnknown(id, now.plus(unknownRetryDelay));
+                Instant exponential = backoff.nextAttemptAt(
+                        command.reconcileNotFoundCount() + 1, now, verdict.retryDirective());
+                // I23：显式 Retry-After 听头的（写路径同口径，TB-15）；
+                // unknownRetryDelay 缺省底线只兜无头指令。
+                Instant nextAttempt = exponential;
+                if (!(verdict.retryDirective() instanceof RetryDirective.HonorRetryAfter)) {
+                    Instant configuredFloor = now.plus(unknownRetryDelay);
+                    nextAttempt = exponential.isAfter(configuredFloor) ? exponential : configuredFloor;
+                }
+                int notFound = store.reconcileUnknown(id, nextAttempt);
                 if (notFound > maxReconcileNotFound) {
                     // EX-04：超对账预算熔断，不无限翻页
                     store.reconcileManual(id, "RECONCILE_BUDGET_EXCEEDED");
                     log.warn("reconcile 超预算熔断 MANUAL: {}", command.operationId());
                 }
             }
+            case PERMISSION_DENIED -> store.reconcileManual(id, "GITHUB_PERMISSION_DENIED");
             case MANUAL_POLICY -> store.reconcileManual(id, "REMOTE_NOT_FOUND");
         }
     }

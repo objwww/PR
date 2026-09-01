@@ -11,6 +11,9 @@ import com.objwww.pr.control.application.ReviewStepExecutor;
 import com.objwww.pr.control.application.SnapshotService;
 import com.objwww.pr.control.application.StepExecutor;
 import com.objwww.pr.control.application.WorkItemWorker;
+import com.objwww.pr.control.application.CheckpointWriter;
+import com.objwww.pr.control.application.RepairDispatchService;
+import com.objwww.pr.control.application.RepairPlanner;
 import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
 import com.objwww.pr.control.domain.ai.ModelClient;
 import com.objwww.pr.control.domain.port.ArtifactStore;
@@ -22,15 +25,19 @@ import com.objwww.pr.control.domain.repository.OutboxCommandRepository;
 import com.objwww.pr.control.domain.repository.PRRevisionRepository;
 import com.objwww.pr.control.domain.repository.PRSubjectRepository;
 import com.objwww.pr.control.domain.repository.ReviewFindingRepository;
+import com.objwww.pr.control.domain.repository.RepairRequestRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
 import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
+import com.objwww.pr.control.domain.repository.StepCheckpointRepository;
 import com.objwww.pr.control.domain.repository.WebhookInboxRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
 import com.objwww.pr.control.domain.service.RevisionService;
 import com.objwww.pr.control.domain.service.SequenceAllocator;
+import com.objwww.pr.control.domain.service.CheckpointResumeService;
+import com.objwww.pr.control.domain.service.RepairCommandFactory;
 import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.review.FindingMapper;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
@@ -149,15 +156,60 @@ public class ReviewFlowConfig {
     }
 
     @Bean
+    public CheckpointResumeService checkpointResumeService(StepCheckpointRepository checkpoints,
+                                                           ArtifactRepository artifacts,
+                                                           ArtifactStore artifactStore,
+                                                           ExecutionLedger ledger,
+                                                           ObjectMapper objectMapper) {
+        return new CheckpointResumeService(checkpoints, artifacts, artifactStore, ledger, objectMapper);
+    }
+
+    @Bean
+    public CheckpointWriter checkpointWriter(ArtifactRepository artifacts,
+                                             StepCheckpointRepository checkpoints,
+                                             ExecutionLedger ledger) {
+        return new CheckpointWriter(artifacts, checkpoints, ledger);
+    }
+
+    @Bean
+    public RepairCommandFactory repairCommandFactory(ObjectMapper objectMapper) {
+        return new RepairCommandFactory(objectMapper);
+    }
+
+    @Bean
+    public RepairDispatchService repairDispatchService(RepairRequestRepository requests,
+                                                       ReviewRunRepository runs,
+                                                       OutboxWriter outboxWriter,
+                                                       ExecutionLedger ledger) {
+        return new RepairDispatchService(requests, runs, outboxWriter, ledger);
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public RepairPlanner repairPlanner(RepairRequestRepository requests, ArtifactStore artifactStore,
+                                       RepairCommandFactory factory, RepairDispatchService dispatcher,
+                                       @Value("${app.repair.scan-limit:20}") int limit,
+                                       @Value("${app.repair.idle-sleep-ms:5000}") long idleSleepMs) {
+        return new RepairPlanner(requests, artifactStore, factory, dispatcher, limit, idleSleepMs);
+    }
+
+    @Bean
     public ReviewStepExecutor reviewStepExecutor(ReviewRunRepository runRepository,
                                                  PRRevisionRepository revisionRepository,
                                                  ArtifactStore artifactStore,
                                                  ArtifactRepository artifactRepository,
                                                  SafeTarExtractor extractor,
                                                  ReviewAgentLoop agentLoop,
-                                                 ObjectMapper objectMapper) {
+                                                 ObjectMapper objectMapper,
+                                                 CheckpointResumeService resumeService,
+                                                 CheckpointWriter checkpointWriter,
+                                                 ExecutionLedger ledger,
+                                                 @Value("${app.review.model-provider:openai-compatible}") String provider,
+                                                 @Value("${spring.ai.openai.chat.options.model}") String model,
+                                                 @Value("${app.review.model-version:configured}") String modelVersion) {
         return new ReviewStepExecutor(runRepository, revisionRepository, artifactStore,
-                artifactRepository, extractor, agentLoop, ReviewBudget.DEFAULT, objectMapper);
+                artifactRepository, extractor, agentLoop, ReviewBudget.DEFAULT, objectMapper,
+                resumeService, checkpointWriter, ledger,
+                provider + "/" + model + "/" + modelVersion);
     }
 
     /** WorkItem Worker（评审修正 #2）：虚拟线程循环，start/stop 由容器生命周期驱动 */

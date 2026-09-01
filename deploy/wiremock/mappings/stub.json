@@ -31,7 +31,9 @@
       "request": { "method": "POST", "urlPathPattern": "/repos/[^/]+/[^/]+/check-runs" },
       "response": {
         "status": 201,
-        "jsonBody": { "id": 7000001, "html_url": "http://stub.local/check-runs/7000001", "status": "completed" }
+        "transformers": ["response-template"],
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"id\": {{#assign 'cid'}}{{randomInt lower=7200000 upper=7499999}}{{/assign}}{{cid}}, \"html_url\": \"http://stub.local/check-runs/{{cid}}\", \"status\": \"completed\"}"
       }
     },
     {
@@ -47,7 +49,9 @@
       "request": { "method": "POST", "urlPathPattern": "/repos/[^/]+/[^/]+/pulls/\\d+/reviews" },
       "response": {
         "status": 200,
-        "jsonBody": { "id": 8000001, "html_url": "http://stub.local/reviews/8000001" }
+        "transformers": ["response-template"],
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"id\": {{#assign 'rid'}}{{randomInt lower=8100000 upper=8999999}}{{/assign}}{{rid}}, \"html_url\": \"http://stub.local/reviews/{{rid}}\"}"
       }
     },
     {

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * UpdateCheckHandler 翻译逻辑：remote_identity=CHECK_RUN_ID；404 策略 = MANUAL（§6.3）。
@@ -64,11 +65,11 @@ class UpdateCheckHandlerTest {
     @Test
     void interpretProbeBranches() {
         ClaimedCommand cmd = command();
-        assertEquals(ReconcileVerdict.Kind.FOUND, handler.interpretProbe(
-                TypedResponse.ofObject(200, Map.of("id", 1)), cmd).kind());
-        assertEquals(ReconcileVerdict.Kind.MANUAL_POLICY,
-                handler.interpretProbe(TypedResponse.ofStatus(404), cmd).kind());
-        assertEquals(ReconcileVerdict.Kind.UNKNOWN,
-                handler.interpretProbe(TypedResponse.ofStatus(500), cmd).kind());
+        assertTrue(handler.interpretProbe(TypedResponse.ofObject(200, Map.of("id", 1)), cmd)
+                instanceof ProbeResult.FoundNoContent);
+        assertTrue(handler.interpretProbe(TypedResponse.ofStatus(404), cmd)
+                instanceof ProbeResult.NotFound);
+        assertTrue(handler.interpretProbe(TypedResponse.ofStatus(500), cmd)
+                instanceof ProbeResult.Unknown);
     }
 }

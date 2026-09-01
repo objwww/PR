@@ -11,6 +11,7 @@ import com.objwww.pr.publisher.fakes.FakePublicationStore;
 import com.objwww.pr.publisher.fakes.StubGitHubWriteAdapter;
 import com.objwww.pr.publisher.fakes.TestFixtures;
 import com.objwww.pr.shared.CommandType;
+import com.objwww.pr.shared.ExecutionEventType;
 import com.objwww.pr.shared.OutboxState;
 import com.objwww.pr.shared.PublicationResourceType;
 import com.objwww.pr.shared.TypedResponse;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -68,6 +70,9 @@ class OutboxRecoveryScannerTest {
 
         assertEquals(OutboxState.RECONCILING, store.stateOf(cmd).state());
         assertTrue(github.writeRequests.isEmpty()); // 没有重发
+        // TB-14：崩溃恢复=响应丢失同类（EX-03），转换时补 UNKNOWN 留痕
+        assertEquals(1, store.events.stream()
+                .filter(e -> e.eventType() == ExecutionEventType.PUBLICATION_OUTCOME_UNKNOWN).count());
     }
 
     @Test
@@ -132,6 +137,64 @@ class OutboxRecoveryScannerTest {
 
         assertEquals(OutboxState.MANUAL, store.stateOf(cmd).state());
         assertEquals("REMOTE_NOT_FOUND", store.errorCodes.get(cmd.operationId().value()));
+    }
+
+    @Test
+    void path2RateLimitUsesHeaderButOrdinary403GoesPermissionManual() {
+        // EX-19 调用点②（recovery）：429+Retry-After=300 注入 → 重排不早于 now+300s；
+        // EX-25 recovery 侧：普通 403 → MANUAL(GITHUB_PERMISSION_DENIED) 权限路径，不退避
+        ClaimedCommand limited = reconcilingCheck();
+        store.dueReconciling.add(limited);
+        Instant before = Instant.now();
+        github.respondRead(TypedResponse.ofStatus(429)
+                .withRateLimitHeaders(300L, null, null));
+
+        scanner.runOnce();
+        assertTrue(store.reconcileAt.get(limited.operationId().value())
+                .isAfter(before.plusSeconds(299)));
+
+        ClaimedCommand denied = TestFixtures.command(CommandType.CREATE_CHECK, 2, 1,
+                OutboxState.RECONCILING, 0, 3);
+        store.put(denied);
+        payloadReader.put(denied.payloadHash(), TestFixtures.checkPayload(denied));
+        store.dueReconciling.clear();
+        store.dueReconciling.add(denied);
+        github.respondRead(TypedResponse.ofStatus(403));
+
+        scanner.runOnce();
+        assertEquals(OutboxState.MANUAL, store.stateOf(denied).state());
+        assertEquals("GITHUB_PERMISSION_DENIED", store.errorCodes.get(denied.operationId().value()));
+    }
+
+    @Test
+    void path2UnknownHonorsRetryAfterBelowConfiguredFloor() {
+        // TB-15/I23：显式 Retry-After=30 不被 120s 缺省底线压制（写路径 34s PASS 同口径）；
+        // floor 只兜无头指令
+        ClaimedCommand cmd = reconcilingCheck();
+        store.dueReconciling.add(cmd);
+        Instant before = Instant.now();
+        github.respondRead(TypedResponse.ofStatus(429)
+                .withRateLimitHeaders(30L, null, null));
+
+        scanner.runOnce();
+
+        Instant next = store.reconcileAt.get(cmd.operationId().value());
+        assertTrue(next.isAfter(before.plusSeconds(29)));
+        assertTrue(next.isBefore(before.plusSeconds(60))); // 旧实现会被压到 +120s
+    }
+
+    @Test
+    void path2UnknownWithoutHeaderKeepsConfiguredFloor() {
+        // TB-15 对照：无头 429（SecondaryLimitBackoff）仍受 unknownRetryDelay=120s 底线兜底
+        ClaimedCommand cmd = reconcilingCheck();
+        store.dueReconciling.add(cmd);
+        Instant before = Instant.now();
+        github.respondRead(TypedResponse.ofStatus(429)); // 无 Retry-After 头
+
+        scanner.runOnce();
+
+        assertTrue(store.reconcileAt.get(cmd.operationId().value())
+                .isAfter(before.plusSeconds(119)));
     }
 
     @Test

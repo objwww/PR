@@ -38,7 +38,13 @@ public interface PublicationHandler {
     TypedReadRequest buildProbe(ClaimedCommand command, Map<String, Object> payload);
 
     /** 探测响应 → reconcile 判定；列表型探针的 notFound 只代表本页未命中 */
-    ReconcileVerdict interpretProbe(TypedResponse response, ClaimedCommand command);
+    ProbeResult interpretProbe(TypedResponse response, ClaimedCommand command);
+
+    /** 内容型资源的当前期望正文 digest；状态型返回 null。 */
+    default com.objwww.pr.shared.Digest expectedContentDigest(
+            ClaimedCommand command, Map<String, Object> payload) {
+        return null;
+    }
 
     /**
      * DriftReconciler 的 repo 级 sanity 读探针（M1-T08，方案 §4.6/F-3）：资源探针 404 时

@@ -89,14 +89,25 @@ class CreateCheckHandlerTest {
         ClaimedCommand cmd = command();
         TypedResponse hit = TypedResponse.ofObject(200, Map.of("check_runs", List.of(
                 Map.of("id", 9, "external_id", cmd.operationId().toString()))));
-        assertEquals(ReconcileVerdict.Kind.FOUND, handler.interpretProbe(hit, cmd).kind());
+        assertTrue(handler.interpretProbe(hit, cmd) instanceof ProbeResult.FoundNoContent);
 
         TypedResponse miss = TypedResponse.ofObject(200, Map.of("check_runs",
                 List.of(Map.of("id", 9, "external_id", "someone-else"))));
-        assertEquals(ReconcileVerdict.Kind.NOT_FOUND, handler.interpretProbe(miss, cmd).kind());
+        assertTrue(handler.interpretProbe(miss, cmd) instanceof ProbeResult.NotFound);
 
-        assertEquals(ReconcileVerdict.Kind.UNKNOWN,
-                handler.interpretProbe(TypedResponse.ofStatus(500), cmd).kind());
+        assertTrue(handler.interpretProbe(TypedResponse.ofStatus(500), cmd)
+                instanceof ProbeResult.Unknown);
+    }
+
+    @Test
+    void interpretProbeAmbiguousExternalIdIsUnknown() {
+        // EX-27：同 SHA 下两个 check run 撞同一 external_id = 多对象歧义，
+        // 绝不认领首个命中，fail-closed 归 UNKNOWN
+        ClaimedCommand cmd = command();
+        TypedResponse ambiguous = TypedResponse.ofObject(200, Map.of("check_runs", List.of(
+                Map.of("id", 9, "external_id", cmd.operationId().toString()),
+                Map.of("id", 10, "external_id", cmd.operationId().toString()))));
+        assertTrue(handler.interpretProbe(ambiguous, cmd) instanceof ProbeResult.Unknown);
     }
 
     @Test

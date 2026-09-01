@@ -32,6 +32,9 @@ import java.util.Objects;
  */
 public final class ReviewAgentLoop {
 
+    public static final String PROMPT_TEMPLATE_VERSION = "review-prompt-template-v1";
+    public static final String CONTEXT_BUILDER_VERSION = "single-bundle-context-v1";
+
     private final ModelClient modelClient;
     private final ModelBudgetGuard budgetGuard;
     private final FindingMapper findingMapper;

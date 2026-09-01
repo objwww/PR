@@ -80,6 +80,44 @@ class PublicationGateTest {
         assertEquals(T3ADecision.Action.MARK_FAILED_TERMINAL, decision.action());
     }
 
+    @Test
+    void rawAddressOrSecretFieldsRejected() {
+        ClaimedCommand cmd = checkCommand();
+        Map<String, Object> payload = TestFixtures.checkPayload(cmd);
+        payload.put("url", "https://attacker.invalid/write");
+        payload.put("token", "should-never-be-carried");
+
+        T3ADecision decision = gate.evaluate(cmd, payload, List.of(), cursorOf(cmd));
+
+        assertEquals(T3ADecision.Action.MARK_FAILED_TERMINAL, decision.action());
+        assertTrue(decision.eventPayload().get("violations").toString().contains("禁止"));
+    }
+
+    @Test
+    void repairPayloadOverrideKeysRejected() {
+        // 评审 #23/AFT-16/EX-29：repair payload 拒绝 raw 寻址/凭证/installation 覆盖字段
+        ClaimedCommand cmd = checkCommand();
+        for (String key : List.of("api_url", "http_method", "base_url", "authorization",
+                "installation", "installation_token")) {
+            Map<String, Object> payload = TestFixtures.checkPayload(cmd);
+            payload.put(key, "injected-by-attacker");
+            assertEquals(T3ADecision.Action.MARK_FAILED_TERMINAL,
+                    gate.evaluate(cmd, payload, List.of(), cursorOf(cmd)).action(), "key=" + key);
+        }
+    }
+
+    @Test
+    void repairPayloadWithPrecheckInstallationIdProceeds() {
+        // installation_id 是合法预检声明（M1 SEC 加固，值由执行器与部署配置比对），不误杀；
+        // repair 元数据键（repair_of_resource_id / repair_request_id）同为白名单语义放行
+        ClaimedCommand cmd = checkCommand();
+        Map<String, Object> payload = TestFixtures.checkPayload(cmd);
+        payload.put("repair_of_resource_id", java.util.UUID.randomUUID().toString());
+        payload.put("repair_request_id", java.util.UUID.randomUUID().toString());
+        assertEquals(T3ADecision.Action.PROCEED,
+                gate.evaluate(cmd, payload, List.of(), cursorOf(cmd)).action());
+    }
+
     // ---------- ② 依赖终态（E3 归类表经 gate 的落点） ----------
 
     @Test

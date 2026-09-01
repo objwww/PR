@@ -3,6 +3,8 @@ package com.objwww.pr.control.support;
 import com.objwww.pr.control.domain.model.PRRevision;
 import com.objwww.pr.control.domain.model.PRSubject;
 import com.objwww.pr.control.domain.model.PrSubjectState;
+import com.objwww.pr.control.domain.model.RepairCandidate;
+import com.objwww.pr.control.domain.model.RepairRunOutcome;
 import com.objwww.pr.control.domain.model.ReviewFinding;
 import com.objwww.pr.control.domain.model.ReviewRun;
 import com.objwww.pr.control.domain.model.RunStep;
@@ -13,10 +15,12 @@ import com.objwww.pr.control.domain.repository.ArtifactRepository;
 import com.objwww.pr.control.domain.repository.OutboxCommandRepository;
 import com.objwww.pr.control.domain.repository.PRRevisionRepository;
 import com.objwww.pr.control.domain.repository.PRSubjectRepository;
+import com.objwww.pr.control.domain.repository.RepairRequestRepository;
 import com.objwww.pr.control.domain.repository.ReviewFindingRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
 import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
+import com.objwww.pr.control.domain.repository.StepCheckpointRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.model.ArtifactRecord;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
@@ -27,10 +31,13 @@ import com.objwww.pr.shared.Digest;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.OperationId;
 import com.objwww.pr.shared.OutboxCommand;
+import com.objwww.pr.shared.RepairPolicyTier;
+import com.objwww.pr.shared.RepairRequestState;
 import com.objwww.pr.shared.RevisionFingerprint;
 import com.objwww.pr.shared.WorkItemState;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -230,7 +237,10 @@ public final class InMemoryStores {
 
         @Override
         public List<ReviewRun> findActiveByPrSubjectId(UUID prSubjectId) {
+            // 与 PG 实现对齐（TB-10/INC-39）：只含 run_mode=NORMAL 的活跃评审 Run，
+            // REPAIR Run 由 repair 收口链自理
             return byId.values().stream()
+                    .filter(r -> r.getRunMode() == com.objwww.pr.control.domain.model.RunMode.NORMAL)
                     .filter(r -> revisions.findById(r.getPrRevisionId())
                             .map(rev -> rev.getPrSubjectId().equals(prSubjectId)).orElse(false))
                     .filter(r -> !com.objwww.pr.control.domain.statemachine.RunStateMachine
@@ -511,8 +521,51 @@ public final class InMemoryStores {
             }
         }
 
+        @Override
+        public Optional<ArtifactRecord> findByDigest(Digest digest) {
+            return all.stream().filter(a -> a.digest().equals(digest)).findFirst();
+        }
+
         public List<ArtifactRecord> all() {
             return List.copyOf(all);
+        }
+    }
+
+    public static final class Checkpoints implements StepCheckpointRepository {
+        private final Map<String, com.objwww.pr.control.domain.model.StepCheckpoint> byKey = new HashMap<>();
+        private final WorkItems workItems;
+
+        public Checkpoints(WorkItems workItems) {
+            this.workItems = workItems;
+        }
+
+        private static String key(UUID stepId, String checkpointKey) {
+            return stepId + ":" + checkpointKey;
+        }
+
+        @Override
+        public Optional<com.objwww.pr.control.domain.model.StepCheckpoint> find(
+                UUID stepId, String checkpointKey) {
+            return Optional.ofNullable(byKey.get(key(stepId, checkpointKey)));
+        }
+
+        @Override
+        public boolean upsertIfLeaseCurrent(com.objwww.pr.control.domain.model.StepCheckpoint checkpoint,
+                                            UUID workItemId, String leaseOwner) {
+            WorkItem item = workItems.findById(workItemId).orElse(null);
+            Instant now = Instant.now();
+            if (item == null || item.getState() != WorkItemState.LEASED
+                    || !Objects.equals(leaseOwner, item.getLeaseOwner())
+                    || checkpoint.leaseEpoch() != item.getLeaseEpoch()
+                    || item.getLeaseUntil() == null || now.isAfter(item.getLeaseUntil())) {
+                return false;
+            }
+            byKey.put(key(checkpoint.stepId(), checkpoint.checkpointKey()), checkpoint);
+            return true;
+        }
+
+        public List<com.objwww.pr.control.domain.model.StepCheckpoint> all() {
+            return List.copyOf(byKey.values());
         }
     }
 
@@ -533,6 +586,155 @@ public final class InMemoryStores {
         @Override
         public Optional<byte[]> get(Digest digest) {
             return Optional.ofNullable(blobs.get(digest));
+        }
+
+        public void remove(Digest digest) {
+            blobs.remove(digest);
+        }
+    }
+
+    /** repair_request 内存假实现：状态谓词与 PostgresRepairRequestRepository 的 SQL 对齐。 */
+    public static final class RepairRequests implements RepairRequestRepository {
+
+        private static final class Row {
+            final RepairCandidate candidate;
+            RepairRequestState state;
+            int attemptCount;
+            Instant nextAttemptAt;
+            String lastError;
+            UUID repairRunId;
+            UUID repairOperationId;
+
+            Row(RepairCandidate candidate) {
+                this.candidate = candidate;
+                this.state = candidate.state();
+                this.attemptCount = candidate.attemptCount();
+            }
+
+            RepairCandidate snapshot() {
+                return new RepairCandidate(candidate.requestId(), candidate.policyTier(), state,
+                        attemptCount, candidate.maxAttempts(), candidate.resourceId(),
+                        candidate.resourceType(), candidate.prSubjectId(), candidate.prRevisionId(),
+                        candidate.currentRevisionId(), candidate.originalRunId(),
+                        candidate.originalRootRunId(), candidate.originalOperationId(),
+                        candidate.commandType(), candidate.aggregateKey(), candidate.policyVersion(),
+                        candidate.payloadHash(), candidate.basePayloadHash());
+            }
+        }
+
+        private final Map<UUID, Row> byId = new LinkedHashMap<>();
+
+        public void add(RepairCandidate candidate) {
+            byId.put(candidate.requestId(), new Row(candidate));
+        }
+
+        /** 领取谓词（findReady/lockReady 同款）：PENDING+AUTO ∪ APPROVED ∪ 到点 RETRY_WAIT */
+        private boolean ready(Row row, Instant now) {
+            return (row.state == RepairRequestState.PENDING
+                    && row.candidate.policyTier() == RepairPolicyTier.AUTO)
+                    || row.state == RepairRequestState.APPROVED
+                    || (row.state == RepairRequestState.RETRY_WAIT && row.nextAttemptAt != null
+                            && !row.nextAttemptAt.isAfter(now));
+        }
+
+        @Override
+        public List<RepairCandidate> findReady(int limit) {
+            Instant now = Instant.now();
+            return byId.values().stream().filter(r -> ready(r, now))
+                    .limit(limit).map(Row::snapshot).toList();
+        }
+
+        @Override
+        public Optional<RepairCandidate> lockReady(UUID requestId) {
+            Row row = byId.get(requestId);
+            return row != null && ready(row, Instant.now())
+                    ? Optional.of(row.snapshot()) : Optional.empty();
+        }
+
+        @Override
+        public boolean markDispatched(UUID requestId, UUID runId, UUID operationId) {
+            Row row = byId.get(requestId);
+            if (row == null || !(row.state == RepairRequestState.PENDING
+                    || row.state == RepairRequestState.APPROVED
+                    || row.state == RepairRequestState.RETRY_WAIT)) {
+                return false;
+            }
+            row.state = RepairRequestState.DISPATCHED;
+            row.repairRunId = runId;
+            row.repairOperationId = operationId;
+            row.attemptCount++;
+            row.nextAttemptAt = null;
+            row.lastError = null;
+            return true;
+        }
+
+        @Override
+        public boolean markExpired(UUID id, String reason) {
+            return terminal(id, RepairRequestState.EXPIRED, reason);
+        }
+
+        @Override
+        public boolean markFailedTerminal(UUID id, String error) {
+            return terminal(id, RepairRequestState.FAILED_TERMINAL, error);
+        }
+
+        private boolean terminal(UUID id, RepairRequestState state, String error) {
+            Row row = byId.get(id);
+            if (row == null || !(row.state == RepairRequestState.PENDING
+                    || row.state == RepairRequestState.APPROVED
+                    || row.state == RepairRequestState.RETRY_WAIT
+                    || row.state == RepairRequestState.DISPATCHED)) {
+                return false;
+            }
+            row.state = state;
+            row.lastError = error;
+            return true;
+        }
+
+        @Override
+        public boolean markRetryWait(UUID id, Duration backoff, String error) {
+            Row row = byId.get(id);
+            if (row == null || !(row.state == RepairRequestState.PENDING
+                    || row.state == RepairRequestState.APPROVED
+                    || row.state == RepairRequestState.RETRY_WAIT)) {
+                return false;
+            }
+            row.attemptCount++;
+            if (row.attemptCount >= row.candidate.maxAttempts()) {
+                row.state = RepairRequestState.FAILED_TERMINAL; // 预算耗尽
+                row.nextAttemptAt = null;
+            } else {
+                row.state = RepairRequestState.RETRY_WAIT;
+                row.nextAttemptAt = Instant.now().plus(backoff);
+            }
+            row.lastError = error;
+            return true;
+        }
+
+        @Override
+        public List<RepairRunOutcome> findTerminalRunOutcomes(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<RepairRunOutcome> lockTerminalRunOutcome(UUID requestId) {
+            return Optional.empty();
+        }
+
+        public RepairRequestState stateOf(UUID id) {
+            return byId.get(id).state;
+        }
+
+        public int attemptCountOf(UUID id) {
+            return byId.get(id).attemptCount;
+        }
+
+        public String lastErrorOf(UUID id) {
+            return byId.get(id).lastError;
+        }
+
+        public UUID repairRunIdOf(UUID id) {
+            return byId.get(id).repairRunId;
         }
     }
 }

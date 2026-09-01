@@ -93,22 +93,30 @@ public final class CreateCheckHandler implements PublicationHandler {
     }
 
     @Override
-    public ReconcileVerdict interpretProbe(TypedResponse response, ClaimedCommand command) {
+    public ProbeResult interpretProbe(TypedResponse response, ClaimedCommand command) {
         if (response.status() != 200 || response.objectBody() == null) {
-            return ReconcileVerdict.unknown();
+            return new ProbeResult.Unknown("http_" + response.status());
         }
         Object checkRuns = response.objectBody().get("check_runs");
         if (!(checkRuns instanceof List<?> runs)) {
-            return ReconcileVerdict.unknown();
+            return new ProbeResult.Unknown("missing_check_runs");
         }
         String probe = command.operationId().toString();
+        Map<?, ?> matched = null;
         for (Object item : runs) {
             if (item instanceof Map<?, ?> run && probe.equals(run.get("external_id"))) {
-                return ReconcileVerdict.found(String.valueOf(run.get("id")),
-                        Objects.toString(run.get("html_url"), null));
+                if (matched != null) {
+                    // 多对象歧义（EX-27）：绝不认领首个命中，fail-closed 归 UNKNOWN
+                    return new ProbeResult.Unknown("ambiguous_check_marker");
+                }
+                matched = run;
             }
         }
-        return ReconcileVerdict.notFound(); // 本页未命中；窗口穷尽由执行器裁决
+        if (matched != null) {
+            return new ProbeResult.FoundNoContent(String.valueOf(matched.get("id")),
+                    Objects.toString(matched.get("html_url"), null));
+        }
+        return new ProbeResult.NotFound();
     }
 
     static String requiredText(Map<String, Object> payload, String field) {

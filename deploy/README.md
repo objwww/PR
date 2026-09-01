@@ -115,6 +115,57 @@ cd /opt/build/pr/deploy && bash smoke-test.sh
 - DP-05：HMAC 签名伪造 `pull_request.opened` → 202 → 轮询 DB 至本批次 outbox 全 CONFIRMED →
   断言 stub 恰好收到 1 个 check（external_id=operation_id）+ 1 个 review（含幂等 marker）。
 
+## M2 部署门与整栈测试（DP-15~19 / E2E-26~35 / BT-M2-01~03）
+
+依据 `docs/M2-技术方案.md` §11。共享机制在 `m2-lib.sh`（文件头有"关键设计"必读：
+静态 stub 探针恒回空列表 ⇒ 等价"远端对象已删"，所以每个测试 PR 在 CONFIRMED 后必须
+经 `m2_register_pr_resources` 注入"探针可见"运行时映射，否则 DriftReconciler 首轮巡检
+就会铸 repair 单污染断言；"删除/编辑对象"= 运行时映射注入，复原 = 摘除映射，
+脚本 `trap m2_cleanup EXIT` 兜底）。
+
+**前置**：
+- DP-15/16/19 任意模式可跑；DP-17、E2E-26/27/30、BT-M2-01 需**全 stub 模式**
+  （`GITHUB_API_BASE` 与 `OPENAI_COMPAT_BASE_URL` 均指 github-stub——模型调用计数经
+  stub journal 取证）；E2E-28/29/31~34、BT-02/03 需 stub GitHub 模式（模型端点不限，
+  但真实模型会真实计费）；E2E-35 需**真实模式**（见下）。
+- 加速旋钮（可选，写入 .env；compose 已透传，默认与代码默认一致）：
+  `APP_WORKER_MAXLEASESECONDS=60`（work_item 租约 600→60s，SIGKILL 后回收等待）、
+  `PUBLISHER_LEASESECONDS=30`（outbox 租约）、`PUBLISHER_DRIFT_IDLESLEEPMS=10000`
+  （drift 巡检循环间隔）。不配也能跑，含崩溃窗口的用例耗时显著更长（DP-17 约 10 分钟级）。
+
+**用法**：
+
+```bash
+bash smoke-test.sh                 # DP-01~05/11~14 回归 + DP-15~19 新增，一次全量
+bash e2e-m2.sh all                 # E2E-26~34（长；含 compose down/up 与租约等待）
+bash e2e-m2.sh E2E-26 W1           # 单窗口：W1 CAS 前 / W4 checkpoint 后 / W5 T2 后
+bash e2e-m2.sh E2E-31              # 单用例
+bash bt-m2.sh all                  # BT-M2-01~03（G2 演示）
+E2E35_REPO=owner/name E2E35_PR=1 bash e2e-35-real.sh   # 真实 GitHub 回归（真实模式栈）
+```
+
+- DP-15：SET ROLE publisher_app 实库尝试权限矩阵（整行 INSERT 拒 / 列级 INSERT 过且
+  trigger 钉 PENDING / 审批列写拒 / outbox INSERT 拒 / step_checkpoint 读写拒）。
+- DP-16：双自检 + 401 守门 + 回归门——"M0/M1 全回归"= 本脚本前半段 DP-01~05/11~14
+  的全量执行结果（FAIL=0 才放行）。
+- DP-17/18：checkpoint 续跑（模型计数恰 1）/ drift 修复闭环（新 PRESENT + 旧 REPAIRED
+  + 链）的栈级门禁化。DP-19：临时库 flyway `-target=3` → 灌 `db/dp19-seed-v3.sql` →
+  升 V4，断言九表零丢失 + 旧记录可读 + 权限不放宽，结束删临时库。
+- E2E-35：`e2e-35-real.sh` 只做编排与断言（gh-api.sh + 本地合成签名 webhook +
+  真实 API 复核 + drift 巡检观察），无任何破坏性远端操作；**E2E-26~34 的 stub
+  删除/编辑是合成故障演练，不等于生产平台等价验证**（方案评审末条声明）。
+
+**清理**：各脚本 trap 统一摘除注入的 wiremock 运行时映射、unpause 容器、删
+`e2e27-control2`；E2E-30 的 compose down/up 后 stub 运行时映射天然清空，用例内重建。
+DP-19 临时库用完即删。测试 PR 的 DB 行保留（审计链），互不影响（全部按 PR 号圈定）。
+
+**诚实清单（无法纯脚本自动化的环节）**：E2E-26 W2/W3（进程内微窗口，ST-25/26 IT
+覆盖）；W4 与 DP-17 的"checkpoint 后 T2 前"毫秒级窗口（实际落点或为"T2 后"，两窗口
+断言同为模型计数恰 1，ST-27 IT 钉精确窗口）；E2E-27 依赖租约过期时序（加速旋钮）；
+E2E-34 恢复段（UNKNOWN 不在 drift 扫描集，权限恢复后是否自动复归需观察记录，
+必要时登记 TB）。详见 `e2e-m2.sh` 头注。
+
+
 ## INC-09：seccomp 说明（195 内核 3.10）
 
 - postgres:16-alpine 在默认 seccomp profile 下 initdb 报 `pg_wal` EPERM，

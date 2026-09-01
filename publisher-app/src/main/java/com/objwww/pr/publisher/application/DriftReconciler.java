@@ -3,16 +3,19 @@ package com.objwww.pr.publisher.application;
 import com.objwww.pr.publisher.domain.handler.PublicationHandler;
 import com.objwww.pr.publisher.domain.handler.ReconcileVerdict;
 import com.objwww.pr.publisher.domain.model.DriftCheckTarget;
+import com.objwww.pr.publisher.domain.model.RepairRequestDraft;
 import com.objwww.pr.publisher.domain.port.ExecutionEventAppender;
 import com.objwww.pr.publisher.domain.port.PayloadReader;
 import com.objwww.pr.publisher.domain.port.PayloadUnavailableException;
 import com.objwww.pr.publisher.domain.port.PublicationStore;
 import com.objwww.pr.publisher.domain.service.FencedPublicationExecutor;
 import com.objwww.pr.publisher.domain.service.RetryBackoff;
+import com.objwww.pr.publisher.domain.service.RepairPolicy;
 import com.objwww.pr.shared.CommandType;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.ExecutionEventType;
 import com.objwww.pr.shared.PublicationResourceState;
+import com.objwww.pr.shared.RetryDirective;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,18 +52,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *           不通过 → markUnknown + 权限告警事件（E2E-18：权限异常绝不冒充"不存在"）；</li>
  *       <li>5xx/超时/429（UNKNOWN）→ 状态不动，markCheckError：error_count+1 + 指数退避；
  *           error_count &gt;= 阈值（默认 3）→ ReconcilerDegraded 告警（措辞修正 #3：探测失败
- *           不冒充事实，但必须告警，EX-14；429 按同一退避曲线处理不产生重试风暴，EX-16 同原则——
- *           精确的 retry-after 尊重受 TypedResponse 契约（不含响应头）所限，见交付报告偏差）；</li>
+ *           不冒充事实，但必须告警，EX-14；429/限流 403 按 UNKNOWN 携带的 RetryDirective
+ *           精确退避——TypedResponse 已带响应头通道（§4.6），HonorRetryAfter 尊重到头秒数、
+ *           无头走 SecondaryLimitBackoff 下限 60s，不产生重试风暴，EX-16/EX-19）；</li>
  *     </ul>
  *   </li>
  *   <li>MISSING 低频复核：markMissing 时 next_check_at = now() + interval×factor
  *       （factor 默认 8，可配）。</li>
  * </ol>
  *
- * <p><b>只检测，不修复</b>（v2.2 §1 + CT-20）：本类不改 outbox_command、不插新命令、不重发、
- * 不删远端对象；全部 DB 写只落 publication_resource 观测列（state/drift_detected_at/
- * last_checked_at/next_check_at/check_error_count——V3 列级授权边界内）与 execution_event
- * 只追加账本。一切时间比较走 DB now()（I17），应用时钟只驱动循环节奏。
+ * <p><b>M2 检测 + 铸修复意图（不再"只检测不修复"）</b>：sanity 确认 MISSING 时同事务
+ * 登记 repair_request，后续由 control RepairPlanner 独立铸 repair 命令完成修复；
+ * 本类自身仍不改/插 outbox_command、不调用写 Handler、不重发或删除远端对象。
+ * 其余写入限于 publication_resource 观测列/状态归位与 execution_event 只追加账本。
+ * 一切时间比较走 DB now()（I17），应用时钟只驱动循环节奏。
  *
  * <p>零 Spring 注解（同 OutboxRecoveryScanner 范式），唯一装配点在
  * infrastructure/config/PublisherWiringConfig（docker profile）。
@@ -78,6 +83,7 @@ public class DriftReconciler {
     private final ExecutionEventAppender eventAppender;
     private final Map<CommandType, PublicationHandler> handlers;
     private final RetryBackoff backoff = new RetryBackoff();
+    private final RepairPolicy repairPolicy = new RepairPolicy();
     private final int budgetPerRound;
     private final Duration checkInterval;
     private final Duration missingRecheckInterval;
@@ -137,11 +143,37 @@ public class DriftReconciler {
             return;
         }
         switch (verdict.kind()) {
-            case FOUND -> store.markCheckedPresent(target.resourceId(), checkInterval);
+            case FOUND -> handleFound(target, verdict);
             case NOT_FOUND, MANUAL_POLICY ->
                 // 404：单资源探针（GET_CHECK_RUN）直给；列表探针窗口内穷尽（执行器裁决）
                     handleNotFound(target);
-            case UNKNOWN -> handleCheckError(target, "probe_unknown"); // 5xx/超时/429/形态异常
+            case UNKNOWN -> handleCheckError(target, "probe_unknown", verdict.retryDirective());
+            case PERMISSION_DENIED -> handlePermissionDenied(target);
+        }
+    }
+
+    private void handleFound(DriftCheckTarget target, ReconcileVerdict verdict) {
+        if (verdict.contentDigest() == null) {
+            store.markCheckedPresent(target.resourceId(), checkInterval);
+            return;
+        }
+        try {
+            Map<String, Object> payload = payloadReader.read(target.command().payloadHash());
+            var handler = handlers.get(target.command().commandType());
+            var expected = handler.expectedContentDigest(target.command(), payload);
+            if (expected == null) {
+                handleCheckError(target, "content_contract_missing");
+            } else if (expected.equals(verdict.contentDigest())) {
+                store.clearContentDrift(target.resourceId(), checkInterval);
+            } else {
+                store.markContentDrift(target.resourceId(), verdict.contentDigest(), checkInterval,
+                        newEvent(target, ExecutionEventType.PUBLICATION_CONTENT_DRIFTED, Map.of(
+                                "resource_id", target.resourceId().toString(),
+                                "expected_digest", expected.value(),
+                                "observed_digest", verdict.contentDigest().value())));
+            }
+        } catch (PayloadUnavailableException e) {
+            handleCheckError(target, "payload_unavailable");
         }
     }
 
@@ -160,8 +192,12 @@ public class DriftReconciler {
         PublicationHandler handler = handlers.get(target.command().commandType());
         boolean sane = executor.sanityRead(handler.buildSanityProbe(repo));
         if (sane) {
-            boolean newly = store.markMissing(target.resourceId(), missingRecheckInterval,
-                    target.state() == PublicationResourceState.MISSING ? null : driftEvent(target));
+            Instant now = Instant.now();
+            RepairRequestDraft repair = new RepairRequestDraft(UUID.randomUUID(), target.resourceId(),
+                    target.resourceType(), repairPolicy.decide(target.resourceType()), 5, now);
+            boolean newly = store.markMissingWithRepair(target.resourceId(), missingRecheckInterval,
+                    target.state() == PublicationResourceState.MISSING ? null : driftEvent(target),
+                    repair, repairRequestedEvent(target, repair));
             if (newly) {
                 log.warn("资源漂移确认 MISSING resource={} type={} remoteId={} repo={}",
                         target.resourceId(), target.resourceType(), target.remoteId(), repo);
@@ -180,8 +216,13 @@ public class DriftReconciler {
 
     /** 探测失败统一落点：error_count+1 + 指数退避；达阈值 → ReconcilerDegraded（EX-14/措辞修正 #3） */
     private void handleCheckError(DriftCheckTarget target, String reason) {
-        Duration delay = Duration.between(Instant.now(),
-                backoff.nextAttemptAt(target.checkErrorCount() + 1, Instant.now()));
+        handleCheckError(target, reason, new RetryDirective.NotRateLimited());
+    }
+
+    private void handleCheckError(DriftCheckTarget target, String reason, RetryDirective directive) {
+        Instant now = Instant.now();
+        Duration delay = Duration.between(now,
+                backoff.nextAttemptAt(target.checkErrorCount() + 1, now, directive));
         int newCount = store.markCheckError(target.resourceId(), delay);
         if (newCount <= 0) {
             return; // 状态守卫未命中（并发下已被移出巡检集），本轮放弃
@@ -199,6 +240,19 @@ public class DriftReconciler {
             log.error("ReconcilerDegraded 已落账（drift）resource={} errorCount={} reason={}",
                     target.resourceId(), newCount, reason);
         }
+    }
+
+    /** 普通 403 是权限事实：不混入限流/5xx 退避计数，不铸修复单。 */
+    private void handlePermissionDenied(DriftCheckTarget target) {
+        String repo = Objects.toString(repoOf(target), "unknown");
+        if (target.state() == PublicationResourceState.MISSING) {
+            store.markMissing(target.resourceId(), missingRecheckInterval, null);
+            eventAppender.append(permissionAlertEvent(target, repo));
+        } else {
+            store.markUnknown(target.resourceId(), permissionAlertEvent(target, repo));
+        }
+        log.error("资源探针普通 403，按权限异常处置（非限流）resource={} repo={}",
+                target.resourceId(), repo);
     }
 
     /** sanity 读所需的 repo 取自创建命令的 payload（CAS；同 executor.reconcile 的数据源） */
@@ -226,6 +280,14 @@ public class DriftReconciler {
                 "remote_id", target.remoteId(),
                 "repo", repo,
                 "reason", "sanity_read_failed"));
+    }
+
+    private ExecutionEvent repairRequestedEvent(DriftCheckTarget target, RepairRequestDraft repair) {
+        return newEvent(target, ExecutionEventType.REPAIR_REQUESTED, Map.of(
+                "repair_request_id", repair.id().toString(),
+                "resource_id", target.resourceId().toString(),
+                "resource_type", target.resourceType().name(),
+                "policy_tier", repair.policyTier().name()));
     }
 
     /** 事件挂载：review_run_id/pr_revision_id 取创建命令的（execution_event 两列 NOT NULL + FK） */

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.publisher.application.DriftReconciler;
 import com.objwww.pr.publisher.application.OutboxClaimer;
 import com.objwww.pr.publisher.application.OutboxRecoveryScanner;
+import com.objwww.pr.publisher.application.RepairOutcomeProjector;
 import com.objwww.pr.publisher.domain.handler.CreateCheckHandler;
 import com.objwww.pr.publisher.domain.handler.PublicationHandler;
 import com.objwww.pr.publisher.domain.handler.PublishReviewHandler;
@@ -137,7 +138,7 @@ public class PublisherWiringConfig {
                 scanLimit, idleSleepMs, errorSleepMs);
     }
 
-    /** M1-T08 DriftReconciler（方案 §4.6）：资源漂移巡检，只检测不修复（CT-20） */
+    /** M1-T08 DriftReconciler（方案 §4.6）：资源漂移巡检——检测 + 登记 repair_request（修复经 control RepairPlanner 链路，本类不触网修复，CT-20） */
     @Bean(initMethod = "start", destroyMethod = "stop")
     public DriftReconciler driftReconciler(
             PublicationStore store, FencedPublicationExecutor executor, PayloadReader payloadReader,
@@ -151,5 +152,13 @@ public class PublisherWiringConfig {
         return new DriftReconciler(store, executor, payloadReader, eventAppender, handlers,
                 budgetPerRound, Duration.ofMinutes(checkIntervalMinutes), missingRecheckFactor,
                 degradedThreshold, idleSleepMs, errorSleepMs);
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public RepairOutcomeProjector repairOutcomeProjector(
+            PublicationStore store,
+            @Value("${publisher.repair-projector.scan-limit:50}") int limit,
+            @Value("${publisher.repair-projector.idle-sleep-ms:5000}") long idleSleepMs) {
+        return new RepairOutcomeProjector(store, limit, idleSleepMs);
     }
 }

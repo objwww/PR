@@ -22,6 +22,7 @@ public final class OrchestratorFixture {
     public final InMemoryStores.Events events = new InMemoryStores.Events();
     public final InMemoryStores.Artifacts artifacts = new InMemoryStores.Artifacts();
     public final InMemoryStores.Cas cas = new InMemoryStores.Cas();
+    public final InMemoryStores.Checkpoints checkpoints = new InMemoryStores.Checkpoints(workItems);
     public final InMemoryStores.Sequences sequences = new InMemoryStores.Sequences(subjects);
     public final RevisionService revisionService = new RevisionService();
     public final ExecutionLedger ledger = new ExecutionLedger(events);

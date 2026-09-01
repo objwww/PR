@@ -6,9 +6,11 @@ import com.objwww.pr.control.domain.repository.OutboxCommandRepository;
 import com.objwww.pr.control.domain.repository.PRRevisionRepository;
 import com.objwww.pr.control.domain.repository.PRSubjectRepository;
 import com.objwww.pr.control.domain.repository.ReviewFindingRepository;
+import com.objwww.pr.control.domain.repository.RepairRequestRepository;
 import com.objwww.pr.control.domain.repository.ReviewRunRepository;
 import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
+import com.objwww.pr.control.domain.repository.StepCheckpointRepository;
 import com.objwww.pr.control.domain.repository.WebhookInboxRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
@@ -19,10 +21,12 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresOutboxCommandRep
 import com.objwww.pr.control.infrastructure.persistence.PostgresPRRevisionRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresPRSubjectRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresReviewFindingRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresRepairRequestRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresReviewRunRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRunStepRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSequenceAllocator;
 import com.objwww.pr.control.infrastructure.persistence.PostgresStepAttemptRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresStepCheckpointRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWebhookInboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWorkItemRepository;
 import org.springframework.context.annotation.Bean;
@@ -90,8 +94,18 @@ public class PersistenceConfig {
     }
 
     @Bean
+    public StepCheckpointRepository stepCheckpointRepository(JdbcClient jdbc) {
+        return new PostgresStepCheckpointRepository(jdbc);
+    }
+
+    @Bean
     public ReviewFindingRepository reviewFindingRepository(JdbcClient jdbc) {
         return new PostgresReviewFindingRepository(jdbc);
+    }
+
+    @Bean
+    public RepairRequestRepository repairRequestRepository(JdbcClient jdbc) {
+        return new PostgresRepairRequestRepository(jdbc);
     }
 
     @Bean

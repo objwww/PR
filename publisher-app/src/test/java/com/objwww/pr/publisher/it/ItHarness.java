@@ -12,6 +12,9 @@ import com.objwww.pr.control.application.StepExecutor;
 import com.objwww.pr.control.application.StepOutcome;
 import com.objwww.pr.control.application.T2Outcome;
 import com.objwww.pr.control.application.WorkItemWorker;
+import com.objwww.pr.control.application.CheckpointWriter;
+import com.objwww.pr.control.application.RepairDispatchService;
+import com.objwww.pr.control.application.RepairPlanner;
 import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewRun;
@@ -31,6 +34,8 @@ import com.objwww.pr.control.domain.review.FindingMapper;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
+import com.objwww.pr.control.domain.service.CheckpointResumeService;
+import com.objwww.pr.control.domain.service.RepairCommandFactory;
 import com.objwww.pr.control.domain.service.Projector;
 import com.objwww.pr.control.domain.service.RevisionService;
 import com.objwww.pr.control.domain.service.RunProjection;
@@ -43,11 +48,13 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresExecutionEventRe
 import com.objwww.pr.control.infrastructure.persistence.PostgresOutboxCommandRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresPRRevisionRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresPRSubjectRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresRepairRequestRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresReviewFindingRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresReviewRunRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRunStepRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSequenceAllocator;
 import com.objwww.pr.control.infrastructure.persistence.PostgresStepAttemptRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresStepCheckpointRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWebhookInboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresWorkItemRepository;
 import com.objwww.pr.control.interfaces.webhook.PullRequestEvent;
@@ -230,8 +237,13 @@ final class ItHarness {
 
     /** 新建一个 worker（workerId 可变，模拟进程重启换身份） */
     WorkItemWorker newWorker(String workerId) {
+        var checkpointRepo = new PostgresStepCheckpointRepository(PostgresITBase.controlJdbc);
+        var checkpointWriter = new CheckpointWriter(artifactRepo, checkpointRepo, ledger);
+        var resumeService = new CheckpointResumeService(checkpointRepo, artifactRepo, casStore,
+                ledger, PostgresITBase.OM);
         StepExecutor reviewExecutor = new ReviewStepExecutor(runRepo, revisionRepo, casStore,
-                artifactRepo, extractor, agentLoop, budget, PostgresITBase.OM);
+                artifactRepo, extractor, agentLoop, budget, PostgresITBase.OM,
+                resumeService, checkpointWriter, ledger, "it/mock-model/v1");
         // 心跳间隔拉大：确定性测试不依赖心跳线程；租约时长 60s
         return new WorkItemWorker(workItemRepo, stepRepo, attemptRepo, List.of(reviewExecutor),
                 orchestratorProxy, workerId, 60, 60_000, 0, 0, 50);
@@ -285,6 +297,25 @@ final class ItHarness {
 
     com.objwww.pr.publisher.application.DriftReconciler newDriftReconciler() {
         return newDriftReconciler(50);
+    }
+
+    /** M2 RepairPlanner：control 真实角色 + @Transactional dispatch 代理，测试只驱 runOnce。 */
+    RepairPlanner newRepairPlanner() {
+        var requests = new PostgresRepairRequestRepository(PostgresITBase.controlJdbc);
+        var target = new RepairDispatchService(requests, runRepo, outboxWriter, ledger);
+        TransactionInterceptor interceptor = new TransactionInterceptor(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(
+                        PostgresITBase.controlDataSource()),
+                new AnnotationTransactionAttributeSource());
+        ProxyFactory factory = new ProxyFactory(target);
+        factory.addAdvisor(new DefaultPointcutAdvisor(Pointcut.TRUE, interceptor));
+        var dispatcher = (RepairDispatchService) factory.getProxy();
+        return new RepairPlanner(requests, casStore, new RepairCommandFactory(PostgresITBase.OM),
+                dispatcher, 50, 0);
+    }
+
+    com.objwww.pr.publisher.application.RepairOutcomeProjector newRepairOutcomeProjector() {
+        return new com.objwww.pr.publisher.application.RepairOutcomeProjector(store(), 50, 0);
     }
 
     /**

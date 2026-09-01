@@ -60,9 +60,10 @@ public class ReviewRun {
         this.initialModelRoute = initialModelRoute;
         this.state = Objects.requireNonNull(state);
         this.publisherDisabled = publisherDisabled;
-        if (runMode != RunMode.NORMAL && !publisherDisabled) {
-            // 对齐 V1 ck_replay_publisher_disabled：回放/重建类 Run 禁止发布
-            throw new IllegalArgumentException("非 NORMAL 模式必须 publisher_disabled=true");
+        if (runMode != RunMode.NORMAL && runMode != RunMode.REPAIR && !publisherDisabled) {
+            // 对齐 V4 ck_replay_publisher_disabled：回放/重建类 Run 禁止发布；
+            // REPAIR Run 例外——其存在意义即铸出并发布 repair 命令（RM2-10）
+            throw new IllegalArgumentException("回放/重建类 Run 必须 publisher_disabled=true");
         }
         this.tokenBudget = tokenBudget;
         this.costBudgetMicros = costBudgetMicros;
@@ -80,6 +81,18 @@ public class ReviewRun {
         if (RunStateMachine.isTerminal(to)) {
             this.completedAt = now;
         }
+    }
+
+    /** REPAIR Run 没有 Step，只允许从 CREATED 直接收口为 COMPLETED/FAILED。 */
+    public void finishRepair(RunState to, Instant now) {
+        if (runMode != RunMode.REPAIR || state != RunState.CREATED
+                || (to != RunState.COMPLETED && to != RunState.FAILED)) {
+            throw new IllegalStateException("非法 REPAIR Run 收口: mode=" + runMode
+                    + ", state=" + state + ", target=" + to);
+        }
+        this.state = to;
+        this.updatedAt = Objects.requireNonNull(now);
+        this.completedAt = now;
     }
 
     public UUID getId() { return id; }

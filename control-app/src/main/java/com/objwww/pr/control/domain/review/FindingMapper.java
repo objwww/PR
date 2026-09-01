@@ -31,6 +31,8 @@ import java.util.Objects;
  */
 public final class FindingMapper {
 
+    public static final String CONTRACT_VERSION = "finding-mapper-v2-unique-anchor";
+
     /** 映射结果：成功映射的 finding 草稿 + 丢弃计数（幻觉文件/片段失配/缺锚点） */
     public record MappingResult(List<ReviewFindingDraft> findings, int droppedCount) {
         public MappingResult {

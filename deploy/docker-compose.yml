@@ -104,6 +104,10 @@ services:
     # check-runs / reviews 全端点 + 模型 /chat/completions 兜底，见 wiremock/mappings/
     image: wiremock/wiremock:3.13.1
     restart: unless-stopped
+    # --local-response-templating：仅对声明 transformers:["response-template"] 的映射启用
+    # 模板渲染（TB-12：create-check-run/create-review 改为每次创建返回随机唯一 id，
+    # 杜绝固定 7000001/8000001 撞 uq_pub_resource 唯一索引被 ON CONFLICT 静默吸收）
+    command: ["--local-response-templating"]
     volumes:
       - ./wiremock/mappings:/home/wiremock/mappings:ro
       - ./wiremock/__files:/home/wiremock/__files:ro
@@ -149,6 +153,9 @@ services:
       # stub 模式指向 github-stub；真实环境改为 https://api.github.com
       GITHUB_API_BASE: ${GITHUB_API_BASE:-http://github-stub:8080}
       APP_CAS_DIR: /var/cas
+      # M2 测试加速旋钮（Spring relaxed binding → app.worker.max-lease-seconds）；
+      # 默认 600 与代码默认一致，仅 .env 显式覆盖时生效（E2E-26/27/30 租约回收等待）
+      APP_WORKER_MAXLEASESECONDS: ${APP_WORKER_MAXLEASESECONDS:-600}
     ports:
       # 默认仅绑 loopback（安全底线）；真实联调需 GitHub 公网投递时在 .env 设
       # CONTROL_BIND=0.0.0.0（HMAC 验签 fail-closed 兜底，M0 已实测）
@@ -197,6 +204,10 @@ services:
       GITHUB_API_BASE: ${GITHUB_API_BASE:-http://github-stub:8080}
       APP_CAS_DIR: /var/cas
       PUBLISHER_INSTANCE_ID: publisher-1
+      # M2 测试加速旋钮（relaxed binding → publisher.lease-seconds /
+      # publisher.drift.idle-sleep-ms）；默认值与代码默认一致，仅 .env 覆盖时生效
+      PUBLISHER_LEASESECONDS: ${PUBLISHER_LEASESECONDS:-60}
+      PUBLISHER_DRIFT_IDLESLEEPMS: ${PUBLISHER_DRIFT_IDLESLEEPMS:-60000}
       # 刻意不注入 AGENT_MODEL_API_KEY：publisher 启动自检断言其不存在（F1 隔离）
     # 端口不发布：窄接口仅 internal 网络内 control 可达（B16 / 评审修正 #6）
     volumes:
