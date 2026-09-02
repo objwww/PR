@@ -570,3 +570,27 @@
 - **解决方案**：① `e2e_51`/`e2e_60` 开头重启 control 归零熔断器（同 E2E-48 既有口径），隔离前案内存态；② E2E-60 断言改"step_attempt 恰 1 行 + 账本恰 6 行"，等待文案同步修正；③ 复跑双绿（各 12/0）。
 - **预防措施**：① 凡断言依赖熔断器初始态的用例，开头必须重启归零或显式等待冷却——进程内存态是跨案隐藏耦合面；② 写断言前先对方案语义条目（§4.4 预算共享/耗尽语义），"预期行为"不得凭直觉写。
 - **关联**：M3 方案 §4.4（I35 预算 Step 级共享）、§4.10（熔断器内存态）、e2e-m3.sh `e2e_51`/`e2e_60`。
+
+### INC-65 —— 已关闭（M3 首轮回流 TB-27，stub 探针映射双层基建缺陷：①双副本并存 ②忽略分页致探针永 UNKNOWN；测试基建修复零产品码。回归：执行方 v2.1 第二轮阶段 B 219/0 全绿复验通过）
+
+- **现象**：M3 首轮阶段 B 两轮稳定 211/8：DP-18 脚本摘除探针映射后资源 240s 不转 MISSING（恒 PRESENT，next_check_at 被排 +60min），连带修复闭环 7 断言连败；DP-18/E2E-28/33 等 drift 族用例结果不可信。修复①后复跑 DP-18 同签名再败（probe_unknown，errorCount 递增）——暴露第②层。
+- **根因（两层叠加，均 stub 状态性失真）**：**① 双副本**——`m2_ps_publish` 的 PUT 换装失败（含超时 rc=000）时 fallback POST 一个全新随机 id 映射，旧副本不删；`m2_probe_sync_republish_all` 先 `rm -f *.mapid` 再发布，因 mapid 已空而跳过 PUT 直接 POST 新映射——凡"POST 新建不删旧"的路径都制造永久双副本。195 实测 67 个 URL 恰好双副本（175 份映射）。双副本同 prio 并存时 WireMock 匹配不确定，被摘对象残留在旧副本 → 探针首探命中判 PRESENT（TB-27 卡面取证层）。**② 分页盲**——探针按 per_page=100 翻页、以"短页"判穷尽（`FencedPublicationExecutor.isShortPage`，翻页预算 3 页封顶后归 UNKNOWN，产品行为正确 fail-closed）；而 probe-sync 映射忽略 query 参数、每页都返回全量列表。状态文件跨轮累积（cap 200 实测 113+）超过 100 项后，探针 3 页永不穷尽 → **probe_unknown** → 资源永不 MISSING、ReconcilerDegraded 批量落账（TB-27 卡面未覆盖的第二层，主会话复跑诊断实证：journal 页页满载 page=1/2/3、publisher 日志 probe_unknown 风暴）。
+- **解决方案**：① 映射 id 由 urlPath 确定性派生（sha1→UUID `m2_ps_mapid_for`），任何发布方 PUT 同一 id（PUT 即替换，结构上单副本）+ 发布前 `m2_ps_dedup` 清扫同 URL 异 id 副本（只动带 metadata 的映射）；② **分页忠实双映射**——page 缺省/=1 兜底映射（priority 2，切片 [0:100]）+ page≥2 抢先映射（priority 1，query 正则匹配，切片 [100:200]，可为空=穷尽）；状态文件 cap 150（<100×2）保证 page≥2 恒为短页，探针必然可终止。195 实证：每 URL 恰 2 份映射（page1+page2），page=1→100 项、page=2→13/42 项短页、两页零重叠；修复后 DP-18 全链 13 断言全 PASS（MISSING→repair→REPAIRED→新 PRESENT 行→POST 恰 2 次）。修复引发一次性历史消化（probe 恢复后积压 MISSING 批量修复 374 单，TB-21 族有界消化，非风暴）。
+- **预防措施**：① 任何"更新外部系统对象"的 fallback 新建必须先答"旧的那份去哪了"——确定性身份而非运行时随机 id；② **替身的每个接口面都要按真实系统的语义保真，包括分页**——"列表接口"不是"返回全量"而是"按 query 分页返回"，保真度缺口会在流量放大后（列表超页）才引爆；③ 状态文件只是缓存，事实源应是可推导的确定性 id；④ 跨轮累积型状态目录必须设上限并验证上限内语义正确。
+- **关联**：TB-27（测试BUG清单）；deploy/m2-lib.sh `m2_ps_mapid_for`/`m2_ps_dedup`/`m2_ps_publish`（分页双映射）；主会话预跑复验：smoke 第二轮 DP-18/DP-21 全绿（217/2，2 FAIL=一次性消化噪声撞 DP-14 窗口）、第三轮全量 **PASS=219 FAIL=0**（证据 195 smoke-evidence/20260902-212143）；待执行方第二轮正式复验。
+
+### INC-66 —— 已关闭（M3 首轮回流 TB-28，DP-21 lease 负例 env 组合不完备：INC-61 compose 硬编码 percall=120000 的次生面；装备修复零产品码。回归：执行方 v2.1 第二轮阶段 B 219/0 全绿复验通过）
+
+- **现象**：M3 首轮阶段 B 两轮稳定复现：DP-21 `lease` 负例拒启正确（exited/1）但日志点名串"app.worker.max-lease-seconds 必须大于…"不出现，实际炸的是"perCallTimeout 不得大于 gatewayTotalDeadline"。
+- **根因**：负例注入 lease=60 + deadline=55000 两键，但 compose 环境块自 INC-61 起硬编码 `APP_MODEL_PERCALLTIMEOUTMS=120000` 默认值，`compose run -e` 只覆盖注入键 → 120000 > 55000 先触发 per-call 校验（ModelGatewayParams 构造期），lease 不等式校验未及触达。两条产品校验行为均正确，负例装备组合不完备。
+- **解决方案**：负例补第三键 `-e APP_MODEL_PERCALLTIMEOUTMS=20000`（20000≤55000 合法），校验链走到 lease 不等式（60 ≤ 55+10 拒）→ 点名串命中。195 定向验证：exited/1 + 日志含目标点名串（实证通过）。
+- **预防措施**：① 负例注入必须对"校验链顺序"做全组合推演——只注入目标校验的违例键不够，链上更靠前的校验键也必须配平为合法值；② compose 环境块硬编码默认值后，所有 `compose run -e` 负例都要重审一遍组合合法性（INC-61 次生面教训）。
+- **关联**：TB-28（测试BUG清单）；deploy/smoke-test.sh DP-21 `lease` 负例；M3 首轮阶段 B 复跑复验。
+
+### INC-67 —— 已关闭（M3 第二轮回流 TB-29，E2E-48 两断言 FAIL：断言缺案起点时间界 + PR 号段跨执行碰撞死信；测试装备修复零产品码。回归：执行方 v2.1 第三轮 single 窗口 E2E-48 复跑 9/0 全绿，证据 smoke-evidence/e2e-20260903-001520）
+
+- **现象**：M3 v2.1 第二轮阶段 D 窗口1（single），E2E-48 两败：①「50 个 Run 全部 FAILED」实际 113；②「探针间隔」898ms<55s。其余 7 断言全过（OPEN 快败=337、首探针距开闸≥55s、触网=6、收尾 CLOSED），执行方定性装备/断言层缺陷。
+- **根因（两层，均断言/装备层，产品熔断行为全部正确有互证）**：**① 计数与时间锚缺案起点界**——PR 号段（48000+RANDOM%400）跨多次执行复用，断言 SQL 只按号段不按时间过滤：FAILED 计数混入历史批次（195 实证同号段 217 行分两批：09:xx 137 + 14:xx 80）；`TOPEN=min(OPEN_REJECT.occurred_at)` 被锚到 4.87h 前的上一批事件（"首探针距开闸 17526010ms"即因此虚高通过），探针窗口 `loggedDate >= TOPEN` 把本次烧闸的 3 次请求圈进探针集，898ms 实为烧闸请求互间隔——INC-62 同族（窗口锚定错误）复发于更大的时间尺度。**② PR 号段碰撞致重跑不可重入**（主会话修复①后复跑暴露）：前次执行收尾已把号段主体 CLOSED，撞号的 "opened" 入信直接 DEAD_LETTER（实测 30/50），Run 建不出来，600s 等待只能收到 20。
+- **解决方案**：e2e-m3.sh `e2e_48`：① 案起点 DB 时钟锚 `T0=$(m2_db_epoch)`，四条计数/锚定 SQL 全部加 `rr.created_at >= to_timestamp($T0)`（I17 纪律：DB 时钟）；② PR 号段改单调递增分配（`max(pr_number)+1`、下限 49000 避开历史段），每次执行独占一段、天然不撞，T0 继续兜底。195 复跑实证：**E2E-48 9/0 全绿**（50/50 FAILED、OPEN_REJECT=149=本案真实计数、探针=1、首探针 91s≥55s、触网=4），证据 smoke-evidence/e2e-20260903-000207。
+- **预防措施**：① 任何按"业务键范围"取数的测试断言必须同时按案起点时间过滤——范围键跨执行复用是常态；② 时间锚（min/max occurred_at）是全窗最敏感的断言输入，锚错则窗口内一切断言失真（INC-62/67 两连）；③ 注入用实体号段必须单调分配或一次性——"随机取段"在多轮执行下必撞；④ 入信 DEAD_LETTER 是重跑碰撞的早期信号，webhook 计数 202≠Run 建成，断言链要覆盖"受理→建 Run"的转化。
+- **关联**：TB-29（测试BUG清单）；deploy/e2e-m3.sh `e2e_48`；INC-62（同族窗口锚定）；M3 第二轮执行方复验单条 E2E-48（single 窗口）。

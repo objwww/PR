@@ -169,6 +169,10 @@ m2_map_del() { # <mapping id>
 #     时自动回退 POST 重建；守护每轮探测已知 mapid 存活，stub 重启即全量重发布。
 #   * compose down/up 后 stub 运行时映射全失 → 用例亦可调 m2_probe_sync_republish_all
 #     按状态文件即时恢复（E2E-30 三形态已挂接；守护下一轮也会自动补）。
+#   * 映射 id 确定性（urlPath sha1→UUID，TB-27）：任何发布方 PUT 同一 id，结构上单副本。
+#   * 分页保真（probe_unknown 根因）：发布为 page1 兜底（priority 2，切片 [0:100]）+
+#     page≥2 抢先（priority 1，切片 [100:200]）双映射；探针以"短页"判穷尽，状态文件
+#     cap 150 保证 page≥2 恒短页——列表超 100 项时探针仍可终止（否则永 UNKNOWN）。
 M2_PS_DIR=""
 
 m2_ps_init() {
@@ -179,32 +183,86 @@ m2_ps_init() {
     mkdir -p "$M2_PS_DIR"
 }
 
+# m2_ps_mapid_for <urlPath>：确定性 mapping id（urlPath 的 sha1 派生 UUID，TB-27）。
+# 同一 urlPath 全局唯一 id，PUT 即替换——守护与脚本任何发布方都作用于同一 mapping，
+# 从结构上杜绝"PUT 失败 fallback POST 新 id、旧副本残留"的双副本（TB-27 根因）。
+m2_ps_mapid_for() {
+    local h
+    h=$(printf '%s' "$1" | sha1sum | cut -c1-32)
+    printf '%s-%s-5%s-a%s-%s\n' "${h:0:8}" "${h:8:4}" "${h:13:3}" "${h:17:3}" "${h:20:12}"
+}
+
+# m2_ps_dedup <urlPath> [keep-id...]：删除同 URL 的其他 m2ProbeSync 映射副本
+#（TB-27 历史双副本与 PUT 超时残留的清扫；只动 metadata.m2ProbeSync=true 的映射，
+#  不碰脚本经 m2_map_add 注入的无 metadata 探针预注册映射；keep 为零个=全清）。
+m2_ps_dedup() {
+    local url="$1"; shift || true
+    local keep_json
+    keep_json=$(printf '%s\n' "$@" | jq -R . | jq -cs .)
+    curl -s --max-time 10 "$(m2_stub_admin)/__admin/mappings" \
+        | jq -r --arg url "$url" --argjson keep "$keep_json" \
+            '.mappings[] | select(.metadata.m2ProbeSync == true)
+             | select((.request.urlPath // "") == $url)
+             | select(.id as $i | ($keep | index($i)) == null) | .id' 2>/dev/null \
+        | while read -r dmid; do [ -n "$dmid" ] && m2_map_del "$dmid"; done
+    return 0
+}
+
+# m2_ps_put_mapping <id> <json>：PUT 替换；失败（含超时 rc=000）回退带确定性 id 新建
+m2_ps_put_mapping() { # 返回 0=成功
+    local id="$1" json="$2" rc nid
+    rc=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X PUT "$(m2_stub_admin)/__admin/mappings/$id" \
+        -H 'Content-Type: application/json' -d "$json")
+    [ "$rc" = "200" ] && return 0
+    # 映射尚不存在（PUT 404/超时）→ 带确定性 id 新建（id 在 body 中，幂等可重入）
+    nid=$(m2_map_add "$json")
+    [ -n "$nid" ]
+}
+
 # m2_ps_publish <state-file> <mapid-file> <urlPath> <wrap-key或空串>：按状态文件重写映射
+# TB-27：映射 id 由 urlPath 确定性派生（PUT 即替换，结构上单副本）+ 发布前去重清扫。
+# 分页保真（probe_unknown 根因，2026-09-02 复跑诊断）：探针按 per_page=100 翻页、
+# 以"短页"判穷尽（FencedPublicationExecutor.isShortPage），忽略 query 的单映射在
+# 列表 >100 项时每页都返回全量 → 探针 3 页未穷尽=UNKNOWN（永判不成 MISSING）。
+# 故发布为分页忠实的两份映射：
+#   did  = page 缺省/=1 兜底（priority 2，无 query 条件）→ 切片 [0:100]
+#   did2 = page≥2（priority 1 抢先，query page 正则匹配）→ 切片 [100:200]（可为空=穷尽）
+# 状态文件 cap 150（< 100×2）保证 page≥2 恒为短页，探针必然可终止。
 m2_ps_publish() {
-    local f="$1" mf="$2" url="$3" wrap="$4" mid="" body json rc
-    [ -f "$mf" ] && mid=$(cat "$mf")
+    local f="$1" mf="$2" url="$3" wrap="$4" body did did2 arr1 arr2 json1 json2
+    did=$(m2_ps_mapid_for "$url")
+    did2=$(m2_ps_mapid_for "$url#page2plus")
     body=$(cat "$f" 2>/dev/null || echo '[]')
     if [ -z "$body" ] || [ "$body" = "[]" ]; then
-        [ -n "$mid" ] && m2_map_del "$mid"
+        m2_ps_dedup "$url"          # 空态 = 该 URL 不应存在任何探针映射：副本全清
+        m2_map_del "$did"; m2_map_del "$did2"
         rm -f "$mf"
         return 0
     fi
+    arr1=$(jq -c '.[0:100]' <<<"$body")
+    arr2=$(jq -c '.[100:200]' <<<"$body")
     if [ -n "$wrap" ]; then
-        json=$(jq -n --arg url "$url" --arg wrap "$wrap" --argjson arr "$body" \
-            '{priority:1, request:{method:"GET", urlPath:$url},
+        json1=$(jq -n --arg id "$did" --arg url "$url" --arg wrap "$wrap" --argjson arr "$arr1" \
+            '{id:$id, priority:2, request:{method:"GET", urlPath:$url},
+              response:{status:200, jsonBody:{($wrap):$arr}}, metadata:{m2ProbeSync:true}}')
+        json2=$(jq -n --arg id "$did2" --arg url "$url" --arg wrap "$wrap" --argjson arr "$arr2" \
+            '{id:$id, priority:1,
+              request:{method:"GET", urlPath:$url, queryParameters:{page:{matches:"^[2-9][0-9]*$"}}},
               response:{status:200, jsonBody:{($wrap):$arr}}, metadata:{m2ProbeSync:true}}')
     else
-        json=$(jq -n --arg url "$url" --argjson arr "$body" \
-            '{priority:1, request:{method:"GET", urlPath:$url},
+        json1=$(jq -n --arg id "$did" --arg url "$url" --argjson arr "$arr1" \
+            '{id:$id, priority:2, request:{method:"GET", urlPath:$url},
+              response:{status:200, jsonBody:$arr}, metadata:{m2ProbeSync:true}}')
+        json2=$(jq -n --arg id "$did2" --arg url "$url" --argjson arr "$arr2" \
+            '{id:$id, priority:1,
+              request:{method:"GET", urlPath:$url, queryParameters:{page:{matches:"^[2-9][0-9]*$"}}},
               response:{status:200, jsonBody:$arr}, metadata:{m2ProbeSync:true}}')
     fi
-    if [ -n "$mid" ]; then
-        rc=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X PUT "$(m2_stub_admin)/__admin/mappings/$mid" \
-            -H 'Content-Type: application/json' -d "$json")
-        [ "$rc" = "200" ] && return 0   # 原子换装成功
-    fi
-    mid=$(m2_map_add "$json")           # 无映射或已失效 → 新建
-    if [ -n "$mid" ]; then echo "$mid" > "$mf"; else rm -f "$mf"; fi
+    m2_ps_dedup "$url" "$did" "$did2"        # 同 URL 异 id 副本清扫（含旧随机 id 遗留）
+    m2_ps_put_mapping "$did" "$json1" || { rm -f "$mf"; return 1; }
+    m2_ps_put_mapping "$did2" "$json2" || { rm -f "$mf"; return 1; }
+    echo "$did" > "$mf"
+    return 0
 }
 
 # m2_ps_ck_upsert <sha> <external_id> <remote_id>：登记/覆盖一个可见 check-run（幂等）
@@ -217,7 +275,7 @@ m2_ps_ck_upsert() {
         [ -f "$f" ] || echo '[]' > "$f"
         jq --arg e "$eid" '[.[] | select(.external_id != $e)]' "$f" > "$tmp" && mv "$tmp" "$f"
         jq --arg e "$eid" --arg id "$rid" \
-            '(. + [{id:($id|tonumber), external_id:$e, html_url:("http://stub.local/check-runs/"+$id)}]) | .[-200:]' \
+            '(. + [{id:($id|tonumber), external_id:$e, html_url:("http://stub.local/check-runs/"+$id)}]) | .[-150:]' \
             "$f" > "$tmp" && mv "$tmp" "$f"
         m2_ps_publish "$f" "${M2_PS_DIR}/ck_${sha}.mapid" \
             "/repos/${M2_REPO}/commits/${sha}/check-runs" check_runs
@@ -253,7 +311,7 @@ m2_ps_rv_upsert() {
             jq --arg m "$opid" '[.[] | select((.body | contains($m)) | not)]' "$f" > "$tmp" && mv "$tmp" "$f"
         fi
         jq --arg id "$rid" --arg b "$body" \
-            '. + [{id:($id|tonumber), html_url:("http://stub.local/reviews/"+$id), body:$b}]' \
+            '(. + [{id:($id|tonumber), html_url:("http://stub.local/reviews/"+$id), body:$b}]) | .[-150:]' \
             "$f" > "$tmp" && mv "$tmp" "$f"
         m2_ps_publish "$f" "${M2_PS_DIR}/rv_${pr}.mapid" \
             "/repos/${M2_REPO}/pulls/${pr}/reviews" ""

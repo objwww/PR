@@ -712,8 +712,12 @@ dp_boot_refuse recovery "app.model.ledger.recovery-after-seconds 必须 >= 2 × 
 # lease 负例必须自带非法组合：stub 演练窗 .env 合法三元组 lease=60/deadline=30000
 # 使单注 lease=60 反而合法（INC-61）；显式注入 deadline=55000 → 60 ≤ 55+10 必拒，
 # 混合窗（deadline 默认 300000）同被覆写同拒——两种模式语义一致
+# TB-28：compose 环境块硬编码 percall=120000（INC-61 透传默认），120000>55000 会先炸
+# per-call 校验（拒启正确但点名不中）；补第三键 percall=20000（20000≤55000 合法），
+# 校验链才能走到 lease 不等式
 dp_boot_refuse lease    "app.worker.max-lease-seconds 必须大于 app.model.gateway.total-deadline-ms" \
-    -e APP_WORKER_MAXLEASESECONDS=60 -e APP_MODEL_GATEWAY_TOTALDEADLINEMS=55000
+    -e APP_WORKER_MAXLEASESECONDS=60 -e APP_MODEL_GATEWAY_TOTALDEADLINEMS=55000 \
+    -e APP_MODEL_PERCALLTIMEOUTMS=20000
 
 # ---------------------------------------------------------------- DP-22
 # 账本冒烟（I29 两段记账）：stub 模型固定 usage（100/50/150）下 DP-05 的评审

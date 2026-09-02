@@ -895,6 +895,124 @@
   up 后断言改为"含 ROPC 的新增 POST=0"（零重复写）；或 (b) 断言改为"新行 remote_id=
   NEWIDC 且修复单 attempt_count=1"（两项已各自 PASS）。
 
+### TB-27 DP-18"资源转 MISSING"等待超时（两轮稳定复现）：stub 列表映射双副本并存——脚本 remove 的 PUT 新建映射而非替换守护副本，被摘对象在守护副本中残留 → 巡检首探判 PRESENT → +60min 排程
+- 状态：**已修复待回归（主会话 2026-09-02 裁定=执行方定性成立：测试基建缺陷，非 M3 产品缺陷；修复=INC-65。根因实为两层叠加：①映射双副本（卡面取证层——195 实测 67 URL 双副本共 175 份，修复=确定性 mapping id + 发布前 m2_ps_dedup 去重）；②映射忽略分页（主会话修复①后复跑诊断出的第二层——映射每页返回全量列表，状态累积 >100 项后探针 3 页永不穷尽归 probe_unknown，修复=分页忠实双映射 page1 兜底切片 [0:100] + page≥2 抢先切片 [100:200] + 状态 cap 150）。195 实证：page=1→100 项、page=2→短页、两页零重叠；复跑 DP-18 全链 13 断言全 PASS、DP-21 lease 全 PASS（PASS=217，2 FAIL 为修复引发的一次性历史消化噪声 374 单批量修复撞 DP-14 窗口，非缺陷）；待执行方第二轮复验）** ｜ 发现时间：2026-09-02
+  11:13 UTC（M3 首轮阶段 B 第 1 轮）｜ 触发用例：DP-18（M2 回归门）｜ 影响面：M3 首轮
+  阶段 B FAIL=8 中 7 条（DP-18 连败）；阶段 D 因此按门禁 BLOCKED
+- ① 现象：期望脚本摘除探针映射后资源在巡检中转 MISSING；实际两轮（PR#9729/PR#9570）
+  均 240s 超时、资源恒 PRESENT、next_check_at 被排到首探后 +60min。
+- ② 复现步骤：混合模式 `cd /opt/build/pr/deploy && bash smoke-test.sh`（两轮连续复现，
+  第 2 轮日志 /tmp/m3-r10-phaseB2-20260902-112620.log、证据 smoke-evidence/20260902-192620）。
+- ③ 输出原文（两轮一致，8 FAIL 中 DP-18 占 7）：
+  ```text
+  [超时] 资源转 MISSING（巡检发现删除）（>240s，最后=[PRESENT]）
+  [超时] repair_request 铸造（一资源一活跃单）（>120s，最后=[0]）
+  [FAIL] 修复单档级 AUTO（CHECK_RUN 状态型）：实际=[] 期望=[AUTO]
+  [FAIL] 旧行 REPAIRED：实际=[PRESENT] 期望=[REPAIRED]
+  [FAIL] 缺新 PRESENT 行 / 新行 remote_id / repair 命令 CONFIRMED / REPAIR Run 独立铸造
+  [FAIL] stub check-runs POST 恰 2 次：实际=[1] 期望=[2]
+  结果：PASS=211 FAIL=8（第 1 轮 PASS=211 FAIL=8 同）
+  ```
+- ④ 环境快照（关键取证链）：
+  ```text
+  stub __admin/mappings：/repos/stuborg/stubrepo/commits/deadbeef…/check-runs
+    存在【两条 prio=1 列表映射副本】（eeee 同款）——脚本 remove 的 PUT 与
+    probe-sync 守护的 PUT 各持一份 mapping id，叠加而非替换；
+  手工 GET（无 query）→ 200 空列表（命中"空"副本）；
+  手工 GET ?per_page=100&page=1|2|3 → 200 非空（命中"非空"副本，含 7381496 等 8 id，
+    不含被摘的 8812679/7213518——副本内容为 remove 前某时刻快照）；
+  产品探针（journal 142 次 GET 证实）= 分页列表 ?per_page=100&page=1~3，全 200——
+    首探时刻活映射为守护副本（含被摘对象）→ 判 PRESENT → next=+60min；
+  probe-sync-state/ck json：不含被摘 id（remove 状态面生效）；守护健康 pid=2894
+    （09:19 常驻），第一轮 ck json mtime 11:07:43=remove 后守护仍写过一次；
+  PR#9570 资源：521d7103 CHECK（被摘，next 11:46:15≈CONFIRM+60s 首探后 +60min）/
+    ff1e2af6 REVIEW（未摘，next 12:30:45 正常 +60min）——两行同签名互证。
+  ```
+- ⑤ 时间线：段首 journal_reset → 基线闭环（POST check → 守护 ≤1s 登记映射）→ 脚本
+  remove（PUT 新 mapping id 的空列表，守护那份未删）→ 首探（CONFIRM+~60s）命中守护
+  副本（含被摘对象）→ PRESENT → +60min 排程 → 脚本等 MISSING 240s 超时 → 后续 6 断言
+  连败。M2 第八/九轮 DP-18 通过、M3 工序 4 双窗 smoke 全绿——本缺陷为 M3 部署批次
+  （2026-09-02 13:39/14:02 镜像 + 11:09 m2-lib 同步）后新出现的稳定行为。
+- ⑥ 初步猜想（标注：猜想）：**stub 列表映射替换语义破裂**——remove/守护两侧 PUT 的
+  mapping id 不同源（INC-52 常驻化改造后守护自有 id 体系？），同优先级双副本并存使
+  WireMock 匹配不确定（无 query 与带 query 命中不同副本）。修法候选（主会话裁定）：
+  (a) remove/守护统一用固定 mapping id（PUT 即替换）；(b) remove 改"先 DELETE 守护
+  mapping id 再 PUT"；(c) 排障脚本列出同 URL 全部映射去重。**在修复前，一切依赖
+  "摘除探针可见性"的用例（DP-18/E2E-28/33 等 drift 族）结果不可信**。
+
+### TB-28 DP-21 lease 负例"日志点名"断言失败（两轮稳定复现）：负例 env 组合不完备——compose 硬编码 percall=120000 未随注入 deadline=55000 覆盖 → 先触发 per-call>deadline 校验（拒启本身正确）→ lease 不等式点名串不出现
+- 状态：**已修复待回归（主会话 2026-09-02 裁定=执行方定性成立：测试装备缺陷，产品两条校验均正确；
+  修复=INC-66，按卡⑥建议：负例补第三键 `-e APP_MODEL_PERCALLTIMEOUTMS=20000`；
+  195 定向验证 exited/1 + 日志含 lease 不等式点名串，实证通过；待阶段 B 复跑复验）** ｜ 发现时间：2026-09-02 11:2x UTC（M3 首轮阶段 B）｜
+  触发用例：DP-21 `lease` 负例 ｜ 影响面：M3 首轮阶段 B 8 FAIL 中第 8 条
+- ① 现象：期望负例日志含"app.worker.max-lease-seconds 必须大于 app.model.gateway.
+  total-deadline-ms"；实际触发的是"perCallTimeout 不得大于 gatewayTotalDeadline"。
+- ② 复现步骤：混合模式 `bash smoke-test.sh`（两轮复现；单看证据
+  smoke-evidence/20260902-192620/dp21-lease.log）。
+- ③ 输出原文：
+  ```text
+  [PASS] lease 被拒启（exited/1）
+  [FAIL] lease 日志点名校验规则：…dp21-lease.log 不含 [app.worker.max-lease-seconds 必须大于 app.model.gateway.total-deadline-ms]
+  dp21-lease.log 关键行：
+  Caused by: java.lang.IllegalArgumentException: perCallTimeout 不得大于 gatewayTotalDeadline
+      at …ModelGatewayParams.<init>(ModelGatewayParams.java:49)
+      at …M3ModelGatewayConfig.modelGateway(M3ModelGatewayConfig.java:127)
+  ```
+- ④ 环境快照：负例注入（smoke-test.sh:715）`-e APP_WORKER_MAXLEASESECONDS=60 -e
+  APP_MODEL_GATEWAY_TOTALDEADLINEMS=55000`；compose control 环境块（INC-61 透传）
+  硬编码默认 `APP_MODEL_PERCALLTIMEOUTMS=120000`（DP-28 实测渲染）——`compose run -e`
+  只覆盖注入的两键，percall 保持 120000 > 55000 → ModelGatewayParams 构造先炸 per-call
+  校验，lease 不等式校验未及触达。拒启行为正确（exited/1 过）。
+- ⑤ 时间线：工序 4 双窗 smoke 全绿时该负例通过（当时 compose 尚未硬编码 percall 默认
+  或负例 env 集不同）；INC-61 修复把 compose 环境块写实默认值后，负例组合变为非法
+  per-call 对——两轮稳定复现。
+- ⑥ 初步猜想（标注：猜想）：修法（主会话裁定）：lease 负例补第三键
+  `-e APP_MODEL_PERCALLTIMEOUTMS=20000`（合法三元组内 20000≤55000），校验链即可走到
+  lease 不等式（60 ≤ 55+10 拒）→ 点名串命中。产品零缺陷嫌疑。
+
+### TB-29 E2E-48 两断言 FAIL（M3 v2.1 第二轮阶段 D 窗口1）：①FAILED 终态计数 113≠50 疑历史污染；②探针间隔 898ms<55s 疑烧闸请求混入——执行方定性：测试装备/断言层缺陷，产品面有互证
+- 状态：**已关闭** ｜ 发现时间：2026-09-02 22:4x UTC+8（M3 v2.1 第二轮阶段 D）｜
+  **主会话裁定（09-03）**：执行方定性成立——断言/装备层双层缺陷，产品熔断行为零缺陷有互证；
+  修复=INC-67：①四条计数/锚定 SQL 加案起点 DB 时钟界 created_at >= T0（FAILED 113=历史批次混入实证：
+  同号段 217 行两批；TOPEN 曾被锚到 4.87h 前致探针窗口圈入烧闸请求，898ms=烧闸互间隔）②PR 号段改单调
+  递增分配（修复①后复跑暴露 30/50 入信 DEAD_LETTER=撞已 CLOSED 主体，Run 建不出）。
+  **第三轮复跑（2026-09-03）**：E2E-48 **9/0 全绿**（50/50 FAILED、OPEN_REJECT=149、探针=1、
+  首探针 91s、触网=4），证据 smoke-evidence/e2e-20260903-001520，TB-29 复验通过关闭。｜
+  触发用例：E2E-48（single 窗口，熔断器冷却期探针间隔验证）｜ 影响面：核心集 13 条中唯二 FAIL
+- ① 现象一（FAILED 计数）：期望 50 个 Run 全部 FAILED 终态；实际查询得到 113 条 FAILED。
+  其余断言通过：OPEN 零触网快败事件=337、HALF_OPEN 探针已行使（请求=6）、首探针距开闸 17526010ms≥55s、
+  触网=6、50 个演练 PR 主体已 CLOSED——**产品面熔断器行为有互证**。
+- ② 现象二（探针间隔）：期望探针间隔≥55s（冷却期 60s 减 5s 抖动容差）；实际探针间隔 898ms<55s
+  （"同一冷却周期内多发放行"）。但首个探针距开闸≥55s 断言通过，触网总数=6 符合预期（3 次开闸烧 + 探针）
+  ——**产品面冷却期首探针正确**。
+- ③ 复现步骤：single 窗口（.env.allstub-single）`bash e2e-m3.sh E2E-48`（单次执行）。
+- ④ 输出原文（smoke-evidence/e2e-20260902-222858/E2E-48/summary.txt）：
+  ```text
+  [FAIL] 50 个 Run 全部 FAILED 终态（无悬挂）：实际=[113] 期望=[50]
+  [PASS] OPEN 零触网快败事件=337（≥40：绝大多数 attempt 未触网）
+  [PASS] HALF_OPEN 探针已行使（OPEN 后请求=6）
+  [PASS] 首个探针距开闸 17526010ms≥55s（冷却 60s 期内零放行）
+  [FAIL] 探针间隔过密（898ms < 55s）——同一冷却周期内多发放行
+  [PASS] 触网总数=6（≥4：3 次开闸烧 + ≥1 探针）
+  [PASS] 收尾：50 个演练 PR 主体已 CLOSED（reconciler 重燃源掐断）
+  -- E2E-48 累计：PASS=7 FAIL=2
+  ```
+- ⑤ 环境快照：single 窗口（全 stub）；50 并发 webhook 注入；500 故障映射已注入 github-stub；
+  四容器 Up；M3 v2.1 代码（INC-65/66 落盘）。证据目录 smoke-evidence/e2e-20260902-222858/E2E-48/
+  含 webhook 载荷、模型调用 journal、summary.txt。
+- ⑥ 时间线：M3 v2.1 第二轮阶段 D 窗口1 执行，E2E-48 为 9 条 single 窗口用例之一；前 8 条全绿，
+  仅此条两断言 FAIL。窗口2（dual-distinct）E2E-42/51/60 37/0 全绿；窗口3（dual-inherit）E2E-46 8/0 全绿。
+- ⑦ 初步猜想（标注：猜想）：
+  - **FAILED 计数 113≠50**：数据库残留历史 Run（前序测试未清理或 reconciler 生成），
+    断言未按 PR 号段/时间窗口过滤，而是全表计数——**测试断言层缺陷嫌疑**。
+  - **探针间隔 898ms**：取证 SQL 混入了烧闸阶段的请求（OPEN 前或 OPEN 期内），非纯 HALF_OPEN 探针
+    ——**测试 SQL 过滤条件不严或时序理解偏差**。产品面：首探针≥55s 通过、触网=6 符合、OPEN 快败=337
+    符合，**熔断器冷却期行为正确有互证**。
+  - 建议主会话：核验 e2e-m3.sh E2E-48 断言 SQL（FAILED 计数是否按 PR 号段过滤、探针间隔取证是否
+    纯 HALF_OPEN），或裁定产品缺陷需修复。两 FAIL 均有互证断言 PASS，**产品面零缺陷证据链完整**。
+
+
+
 
 ## 用例触发 BUG（格式模板，按 TB-NN 递增追加）
 

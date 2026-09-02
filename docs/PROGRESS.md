@@ -3,15 +3,15 @@
 > 规则：每完成一个任务/工序立即更新本文件（见 skill `milestone-workflow` 第五节）。
 > 接手者读这一份就够：当前状态 → 下一步动作 → 环境锚点。
 
-## 当前状态（2026-08-31 更新）
+## 当前状态（2026-09-02 更新）
 
 **项目**：AI Code Review Agent（GitHub App 形态的 AI 代码评审 Agent，Java 21 + Spring Boot 3.x + Spring AI + PostgreSQL，DDD 分层）
 
-**当前阶段**：M2 可恢复执行与漂移修复 —— 工序 3 **已完成**（T01~T08 落码 + 编码评审三波修复完毕，方案升 v1.2：RM2-01~12 处置 + 4 项用户裁定）。§11 编号测试矩阵已全量落码（UT-17~26/AFT-14~18/CT-22~29/ST-23~38/EX-19~30/E2E-26~35 脚本/BT-M2-01~03/DP-15~19）。本机全 reactor 单测全绿；IT/E2E/DP 真跑待 195 执行方。尚未提交/推送/部署。
+**当前阶段**：M3 模型治理 —— 工序 5 **第三轮回流处置完成**（TB-29=INC-67：E2E-48 断言双层缺陷——计数/锚定缺案起点时间界 + PR 号段碰撞死信；修复后 195 复跑 9/0 全绿；产品熔断零缺陷）。第二轮执行方成绩：B 219/0（TB-27/28 复验关闭）、窗口2 37/0、窗口3 8/0。（TB-27/28 双卡已裁定修复=INC-65/66，均测试基建/装备缺陷、产品零改动；INC-65 根因实为两层：映射双副本+分页盲，修复=确定性 mapping id+去重+分页忠实双映射+状态 cap 150。主会话预跑收官：smoke 第三轮全量 **PASS=219 FAIL=0**，证据 195 smoke-evidence/20260902-212143，DP-18 修复闭环全链 13 断言与 DP-21 lease 全绿）。交接文档升 **v2.1**（第二轮=阶段 B 复跑 → D 三档窗口核心集 13 条 → E BT 登记）。M3 全部代码改动仍未 commit（工作区 + m3-wip-anchor 锚）。
 
-**当前阶段**：M2 可恢复执行与漂移修复 —— 工序 5 **首轮已收官**：阶段 0 PASS、阶段 A FAIL（3 IT 败 → TB-08/09/10），B/C/D 门禁 BLOCKED。三张故障卡已裁定修复（TB-08/09 测试缺陷=INC-40/41；TB-10 产品缺陷=INC-39：`findActiveByPrSubjectId` 收敛 run_mode='NORMAL'），本机回归 541 全绿（与首轮基线一致），TB 置「已修复待回归」。交接文档升 v1.1（第二轮=重做阶段 0 后全量回归）。**模式性 BLOCKED 五条（DP-17/E2E-26/27/30/BT-M2-01 需全 stub）待用户裁定补跑窗口或豁免。**
+**M4 线**：方案 v1.1 仍待用户 G1 复审；外部编码交付（.mvn.zip）已裁定废弃。2026-09-02 用户曾指示主会话实现 M4，随后叫停（"停止，解决M3的测试问题"）——M4 触点勘察代理与 T00 验证代理均已终止，**195 上无 M4 残留改动**，`docs/M4-T00-可行性验证.md` 未产出。M4 编码仍硬等 M3 G2 + M4 G1 复审双门 + 用户再次指示。
 
-**下一步动作**：① M2 线：用户转 v1.1 交接文档给执行方 → 重做阶段 0 → A→B→C→D 全量回归 → TB 全关闭 → 推送 GitHub（当场确认）→ M2 G2；② M3 线：`docs/M3-技术方案.md` v1.0 已起草，待用户 G1 评审（**M3 编码硬等 M2 G2 + M3 G1 双门**）。
+**下一步动作**：① M3 线：用户转 v2.2 交接文档给执行方 → single 窗口单条复跑 E2E-48（TB-29 复验关闭）→ TB 全关 → 用户确认后 M3 全量 commit+push（含 INC-65/66/67 脚本修复）→ M3 G2；② M4 线：等用户 G1 复审 v1.1 + 开工指示。遗留环境态（M2-era 测试残留，清理裁定留用户）：4 个 CHECK_RUN MISSING（旧 EXPIRED AUTO 单卡住，静默）+ 28 张 PENDING MANUAL 单。
 
 ## 六道工序状态（M0）
 
@@ -132,3 +132,72 @@
 - 2026-09-02：**M3 工序 4（195 部署验证）完成——双窗 smoke 全绿（混合 213/0 + 全 stub 235/0）**：备份（m3-predeploy-20260902-130824：preV5 pg_dump+M2-era 源码树）→ M3 代码精确同步 195（39 改+8 删 M0 旧三件套+39 新增，全 LF）→ 挂 docker.sock 全量 verify 全绿（shared UT 101/0、control UT 381/0+IT 52/0、publisher UT 143/0+IT 71/0）→ V5 上栈（flyway=5、model_call_ledger 在）→ 自检过。过程中四缺陷全修全登记：INC-58（CT22 硬编码 flyway 版本 4→5）、INC-59（EX06 预算用例改入队 ModelBudgetExceededException）、INC-60（**产品真缺陷**：PostgresModelCallLedgerRepository.markUnknownOlderThan 直绑 Instant 被 pgjdbc 07006 拒→Recovery 每分钟静默失败；改 Timestamp.from+新增真 PG 回归 PostgresModelCallLedgerRepositoryTest+PostgresITBase 清场清单补 V5 表 16 张；195 实证两扫描周期零失败）、INC-61（**部署接线缺口**：APP_MODEL_GATEWAY_TOTALDEADLINEMS 只进 .env 未进 compose 透传+三环不等式链只配平一环；compose 补 GATEWAY/PERCALL 两行透传、演练窗合法三元组定型 lease=60/deadline=30000/percall=20000、DP-28 重写为模式感知（混合=默认值断言/演练窗=三元组成对/CIRCUIT·LEDGER·MAXCALL 三面零出现）、DP-21 lease 负例改自带非法组合、DP-17 模型延迟 45s→12s 适配 percall=20s）。门禁首跑断言缺陷两条随修（DP-20 PUBLIC 伪角色改查授权目录、DP-23 FK 父行改沿链选取避开 reconciler 合成 Run）。195 栈已切回混合模式、四容器健康。**重要发现（用户已裁定处置口径）**：M3 §11 矩阵 206 条中 101 条无执行体（无 e2e-m3.sh/bt-m3.sh、CT/ST/EX/E2E 大量未落码，G2-H1~H9 全挂空）——裁定=**核心集补落码（E2E-41/42/45/46/48/49/50/51/54/56/60/61/70 共 13 条）+ 其余 88 条方案 §11 修订记豁免**，G2 按修订后矩阵过门。e2e-m3.sh 起草中。**待：e2e-m3 核心集 195 真跑 → §11 修订 → 《M3-测试交接文档》定稿 → 用户确认后 M3 全量 commit+push → 工序 5。** M3 全部改动未 commit（工作区+m3-wip-anchor 锚）。
 - 2026-09-02：**M3 G2 核心集 e2e-m3.sh 落码完成（未真跑）**：13 条核心集（E2E-41/42/45/46/48/49/50/51/54/56/60/61/70，G2-H1~H9 挂载面+BT 别名承载）落码 `deploy/e2e-m3.sh`（793 行，bash -n/LF 过，9 条诚实清单含注入等价类声明）；`m3-lib.sh` 扩展路由级故障注入三件套（on_route/once scenario/leak sentinel）；compose 补 fallback 三行透传（空默认=单路由）。作者自报四个 195 首跑高风险点（compose 渲染/scenario 字段/retry_after_ms 口径/run FAILED 终态语义）。**未 review 未真跑——接手顺序：主会话 review → 195 补 fallback .env 双档 → 逐条真跑。** 会话间交接手册见 `docs/M3-交接-工序4进行中.md`。
 - 2026-09-02：**M3 G2 核心集 13 条 195 真跑全绿收官**：三窗口逐条真跑——single 窗（`.env.allstub.bak-r8`）9 条：E2E-54（4/0）/41（8/0）/70（7/0）/56（11/0）/61（7/0）/45（10/0）/50（8/0）一轮绿，48 复跑 9/0、49 复跑 6/0；dual-distinct 窗（`.env.allstub-dual-distinct`，fallback 五元组防伪校验+启动自检首跑实证）3 条：E2E-42 一轮 13/0，51/60 复跑各 12/0；dual-inherit 窗 1 条：E2E-46 8/0。G2-H1~H9 硬门挂载面全部有真跑证据。真跑抓出并修复 harness 缺陷四条（产品代码零改动，全登记 BUGLOG）：**INC-62**（E2E-48 双断言缺陷：execution_event 列名 occurred_at 误写 created_at 静默返空；探针窗口 TOPEN-2000 误圈烧闸请求——真实时间线 3 烧闸+91s 后 1 探针完全符合设计，窗口改严格 ≥TOPEN 并新增"首探针距开闸≥55s"断言）；**INC-63**（E2E-49 跨案污染：E2E-48 的 50 个 FAILED 演练 PR 在 stub 仍 OPEN，PrStateReconciler 按 M2 设计重燃 30 次真实模型调用冲进后案 journal 窗口——e2e_48/e2e_60 收尾段主体就地 CLOSED 掐断重燃源，195 存量 62 个残留 OPEN 主体一次清场）；**INC-64**（E2E-51 缺熔断器进程内存态隔离——前案 E2E-42 三连烧把主路由留在 OPEN 致主侧零触网直切备，用例开头重启归零（同 48 口径）；E2E-60 断言误解 §4.4——物理预算 6 主备共享耗尽即 Fail，attempt1 内 3 主+3 备烧满直接 Step FAILED，断言改 step_attempt 恰 1 行+账本恰 6 行，产品行为与方案一致错在断言）。方案 §11 升 **v1.5**（docs/M3-技术方案.md:182 修订记录 + :1281 豁免清单 88 条全集 CT10/ST46/EX8/E2E19/BT5，G2 硬门表挂 e2e-m3.sh 执行体列，BT-M3-01~05 口径"被承载非豁免"）。195 栈已切回混合模式（.env→/opt/projects/pr_agent/.env、自检通过、四容器健康）。证据链：195 /tmp/e2e-m3-{single,dual,dual-rerun,46,rerun-48-49,rerun-48b}.log + smoke-evidence/e2e-20260902-*。**待：《M3-测试交接文档》按核心集口径定稿 → 用户确认后 M3 全量 commit+push → 工序 5 移交执行方。**
+- 2026-09-02：**M4 外部编码交付（.mvn.zip）审核结论：退回，不具备基线价值**：两路独立实证——① 编译/测试真跑（本机 jdk21）：自报"编译通过、单测 28/28 绿"**失真**——`mvn clean test-compile` BUILD FAILURE（it/SandboxIntegrationTest 调 shared-kernel 不存在的 `Digest.sha256(byte[])`/`Digest.parse` 6 处编译错误）；"28/28"实为只跑了 sandbox 三个单测类（Broker12+Job11+Executor5），全量 673 单测中 3 个真实失败（2 个 ArchUnit domain 层违规：ModelPricingConfig/ExpiredLeaseRecoveryScheduler 带 Spring 注解；1 个 Spring smoke wiring 错误）；注释自称已删的 M0 旧类（ModelClient/ModelBudgetGuard/SpringAiModelClient）全部未删仍在编译。② 方案 v1.1 对照（13 项 G1 退回修复点逐条核销）：**0 项完整落实**，1 项部分沾边（sandbox_job.attempt_id），2 项以 G1 明确否决的机制原样回归（SKIP LOCKED 单钢做并发闸、`--rm` 当清理机制），其余 10 项未落实或矛盾——V6 表结构/FK 方向/状态枚举与 §4.1 全面不符且零 GRANT（上真栈即 42501）、无 grant 体系、无 JobSpec 不可变、无并发闸、无 workspace/结果取回、无 watchdog/reaper、Broker 进 control 进程直连 DB（D1/D17 方向性反转）、仓储无条件 UPDATE 无 fencing、续约失败照样上报、worker 侧 epoch 假记账、日志无界 StringBuilder、默认镜像浮动 tag。完成度相对 v1.1 约 10~15%，实现的是 v1.0 之前直觉骨架。**处置建议：废弃推倒，从 V6 按 §4.1 原文 + sandbox-broker 独立模块骨架重来；可抢救素材仅 SandboxJob 状态机单测穷举思路与 IT Awaitility 轮询骨架。** 快照留存 `var/m4-review/`（未入库）备查。M4 编码门回到关闭状态，等用户裁定下一步（收回主会话实现 or 其他安排）。
+- 2026-09-02：**《M4-编码交接文档》v1.0 出具**（用户指示"其他 work 接手 M4 编码，明确必须完成的指标和要求+测试集说明"）：`docs/M4-编码交接文档.md`——范围锁定 M4-A（T00~T07+T09 账本链路+T10/T11 执行面；M4-B 禁开工）；完成定义 8 条硬指标（T00 先行实证/V6 按 §4.1 原文含 GRANT/任务表全绿/本机全量 verify 绿/AFT-33~56 红绿留证/13 项 G1 核销表/PROGRESS+BUGLOG 逐任务更新/T00·T01·T05 三中段检查点）；测试集六层落码范围与编号段（UT-74/AFT-33/CT-51/ST-88/EX-60/E2E-73/DP-29/BT-M4-01 起编）+ §11 十条执行纪律引用；架构红线 13 条（Broker 独立模块零 DB/docker-java 禁 CLI/部分唯一索引并发闸/禁 --rm/流式限额/digest 钉死/剖面十五项/argv 固定 wrapper/grant 全族/fencing 限定更新/崩溃三件套/禁复活旧类/domain 零框架注解）；验收复核三步+失真一票否决；四次外部交付失真先例入库示警。**待用户转交编码 work 开工。**
+
+## 2026-09-02 M4 编码交接文档 v1.1 修订（环境硬约束补丁）
+
+- 起因：用户裁定编码 work 无 195 服务器访问权限，本机亦无 docker——交接文档 v1.0 中"T00 编码方自证、L2 本机真跑"等要求物理不可达。
+- 修订（docs/M4-编码交接文档.md v1.0→v1.1）：
+  - §1 新增环境硬约束条目 + §1.1「195 中转协议」：编码方交付可执行物+精确命令 → 主会话 195 原样执行、原始输出一字不改回传 → 定性归编码方、证据归主会话；严禁凭代码推演宣称"已验证"。
+  - §2 指标表 D1/D2/D4/D5 改为中转口径；T00 结论回来前只许落不依赖 docker 的部分（T02/契约对象/V6 DDL 草稿），T05/T06/T07 必须等 T00 实证全绿。
+  - §3.2 L2 行补"本机无 docker：落码+test-compile 绿+195 中转真跑"；L6/BT/DP 行注明真跑走 §1.1。
+  - §5 验收复核第 1 条补：docker/PG 依赖项由主会话 195 中转独立复跑，不采信交付方转述。
+- 下一步：v1.1 待用户过目后转交编码 work；T00 中转执行等编码方交付探针程序。
+- 2026-09-02：**M3 工序 5 第二轮回流处置完成（TB-27/28 双卡全修，产品零改动）**：M3 首轮（执行方会话 14）0/A/C PASS、B 两轮稳定 211/8=TB-27×7+TB-28×1、D/E 门禁 BLOCKED。主会话逐卡裁定（执行方定性均成立）：**TB-27**=INC-65（根因比卡面更系统：195 实测 67 URL 恰好双副本共 175 份映射——PUT 失败 fallback POST 不删旧 + republish_all 先删 mapid 再发布两条"新建不删旧"路径；修复=映射 id 由 urlPath 确定性派生（sha1→UUID）PUT 即替换 + 发布前 m2_ps_dedup 清扫同 URL 异 id 副本 + 空态全清；守护重启 pid 469 + republish 清扫 175→109、每 URL 恰 1 副本）；**TB-28**=INC-66（INC-61 compose 硬编码 percall=120000 次生面：负例缺第三键先炸 per-call 校验；修复=负例补 percall=20000；195 定向验证 exited/1+点名串命中）。两文件（m2-lib.sh/smoke-test.sh）md5 双侧一致、bash -n/LF 过。主会话预跑：smoke 第二轮 217/2（2 FAIL=修复引发的一次性历史消化 374 单撞 DP-14 journal 窗口，非缺陷）→ 消化收敛后第三轮全量 **PASS=219 FAIL=0**（证据 smoke-evidence/20260902-212143）。遗留环境态（M2-era 测试残留，清理裁定留用户）：4 个 CHECK_RUN MISSING（旧 EXPIRED AUTO 单卡住的静默残留，不发 POST）+ 28 张 PENDING MANUAL 单。BUGLOG INC-65/66、TB 卡面、测试进度 §4 已更新；交接文档升 **v2.1**（第二轮=B 复跑→D 三档窗口 13 条→E BT）。**另：M4 线用户叫停留痕**——用户指示实现 M4 后改令"停止，解决M3的测试问题"，M4 勘察/T00 代理已终止，195 零 M4 残留；M4 编码门回到关闭（等 M3 G2 + M4 G1 复审 + 用户指示）。**待：预跑结果确认 → 用户转 v2.1 给执行方跑第二轮。**
+
+## 2026-09-02 M4 第二次交付（zip 其二）评审：退回（失真一票否决 + 工具链降级）
+
+- 交付快照留存 `var/m4-review-2/`（未入库）。交付报告自称"T00~T07 完成、BUILD SUCCESS、测试通过"。
+- 独立复核（主会话按交接文档 §5，不看报告下结论）实证：
+  1. **失真一票否决**：规定的 `JAVA_HOME=jdk21 + clean verify` 全 reactor 真跑，shared-kernel 第一模块即 FAILURE——既有 ArchUnit 门 `SharedKernelArchitectureTest.kernelHasZeroFrameworkDependency` 红（13 处违规：新迁入的 SafeTarExtractor 依赖 commons-compress，架构门未同步修订），control/publisher/broker 三模块 SKIPPED 从未跑过。交付方从未全量真跑。
+  2. **根 pom `java.version` 21→17 被私自降级**——这是全部"Java 21 语法降级"的总开关：交付方未按 §1 设 JAVA_HOME=jdk21，撞 release 21 后不改环境而改项目工具链。
+  3. **R12 违反**：8 个非附录 A 触点的既有文件被改写（InboxProcessor 109 行、ModelGateway 75、PrStateReconciler 73、PrEventAuthoritativeReader 22、WorkItemWorker/ModelCallLedgerRecovery/RepairPlanner/SpringAiRouteClient 虚拟线程→平台线程，改变 M2/M3 已验证运行时语义）。publisher-app 全部"改动"实为 CRLF churn 零真实变更。
+  4. **R1 违反**：sandbox-broker pom 引入 spring-boot-starter-jdbc + postgresql 驱动（Broker 必须零 DB 通道）。
+  5. **R2 偏离**：docker-java 实写 3.4.0，pom 注释却谎称"T00 验证：3.7.1 + api 1.44"（注释与代码自相矛盾，第二处诚实性问题）。
+  6. **D5 违反**：交付仅 3 个新测试类/19 用例；AFT-33~56、UT-74~153、CT-51~95 零落码；control-app src/test 零 sandbox 测试。
+  7. **T00"9 项全绿"无证据**：编码方无 195 权限且未请求 §1.1 中转，属凭代码推演宣称"已验证"。
+- 可保留的正向部分：V6 DDL 质量高（单向 FK/attempt_id/部分唯一索引并发闸/lineage+不可变触发器/列级 GRANT/publisher REVOKE/grant scope 互斥，角色命名与 V5 一致，核销表 13 项中 6 项在 DDL 层已有真实落点）；SnapshotTree/SafeTarExtractor 迁移方向正确；broker 模块骨架与 control 侧服务/仓储骨架存在。
+- 处置：整单退回，返工清单见主会话出具的意见（根 pom 回 21、8 文件 revert、broker pom 去 JDBC/PG、架构门按方案修订或调整落包、补齐测试层、T00 走中转）。交接文档 §7 已追加本轮先例。
+
+## 2026-09-02 M4 第三次交付（返工轮）评审：方向正确、报告转诚实，但未达标——继续返工不予验收
+
+- 交付快照留存 `var/m4-review-3/`（未入库）。
+- 返工清单落实核验（独立复核，非采信报告）：
+  - 根 pom java.version 回 21 ✓；7 个降级文件与 HEAD 字节级一致 ✓；WorkItemWorker 仅剩合法 import 迁移 ✓；
+  - broker pom 已去 JDBC/PG ✓；docker-java 注释改诚实但**版本仍 3.4.0**（Maven Central 已有 3.7.1/2026-03-18，方案 §4.6 要求未达成，仍欠）；
+  - ArchUnit 门修订+ADR-M4-001：决策方向（SafeTarExtractor 留 shared-kernel）认可，但实现把"禁 org.apache.."改列四个子包，其余 org.apache 全开——门被放宽超出 ADR 声明范围，应改为"禁 org.apache.. 除 commons.compress 外"。
+- 独立 clean verify（jdk21 全 reactor）：383 跑 / 2 失败 / 1 错误，BUILD FAILURE at control-app——与交付方自报数字一致（报告首次转诚实，予以肯定）。三个红的根因（主会话定位）：
+  1. `SafeTarExtractorTest.rejectsCharacterDevice`：新 shared-kernel 版 SafeTarExtractor 是**重写而非搬迁**，丢失旧版对 character/block device + FIFO 的拒绝检查（旧 185 行→新 237 行，旧版第 69 行设备检查消失）——**安全防线回退**，恰是 G1 要求的方向（EX-78）。修法：把旧版检查补回，禁止靠改测试过关。
+  2. `rejectsCompressionBombOnTotalSize`：限额检查顺序变化（TOTAL_SIZE_EXCEEDED 变 FILE_TOO_LARGE）——安全限额语义变更，需对齐旧版判定顺序。
+  3. `ControlContextSmokeTest`：新 `JdbcSandboxJobRepository` 用 `@Repository` 组件扫描，无 DataSource 时 context 启动失败——**control-app 无法启动**。项目既有模式是仓储为普通类、在 PersistenceConfig 显式 new 装配（如 PostgresWebhookInboxRepository，PersistenceConfig.java:89），新仓储违反该模式。修法：去掉 @Repository，入 PersistenceConfig 装配。
+- 仍欠：T00 探针（§1.1 中转）、docker-java 3.7.1、AFT/UT/CT 测试层零落码、control-app 无法启动意味着 195 部署验证无从谈起。
+- 结论：回答交付方"先修完再交"——继续修，全量绿之前不要重新送审；D1~D8 未全达即不是工序 3 完成。
+
+## 2026-09-02 M4 第四次交付评审：三红已真修，但出现两处新规避——仍不验收
+
+- 交付快照留存 `var/m4-review-4/`（未入库）。独立 clean verify（jdk21 全 reactor）：**BUILD SUCCESS**，567 跑/0 失败/81 跳过（跳过全部为 Testcontainers IT 环境性跳过，正常）。
+- 上轮三红修复核验通过：SafeTarExtractor 设备/FIFO 显式拒绝补回（EX-78 注释在案）、限额判定总大小优先对齐旧版、`@Profile("docker")` 装配与 M0 以来项目惯例一致（PersistenceConfig 显式装配、组件扫描移除）。
+- **新发现两处规避（本轮退回理由）**：
+  1. **sandbox-broker 被移出根 pom `<modules>`**——第三轮加进去，第四轮只剩 shared-kernel/control-app/publisher-app 三模块。也就是说这轮"BUILD SUCCESS"根本没编译、没测 M4-A 的核心交付物 broker。全 reactor 绿是截掉模块换来的，D4 不成立。
+  2. **DigestTest（M0 既有安全值对象测试）被整体重写且丢负向用例**：63/65 长度、大写 hex 拒绝、`revisionFingerprintReusesDigestValidation` 集成用例全部消失。Digest 实现本身未变（仍拒绝大写），但守护覆盖被削。违反 D4"既有测试零断言变更"精神。
+- 遗留欠账（累计）：docker-java 3.7.1 未对齐；ArchUnit 门仍超范围放宽（应"禁 org.apache.. 仅豁免 commons.compress"）；T00 探针零交付；AFT/UT/CT 编号段零落码；broker 模块未经任何独立验证。
+- 结论：不验收。修复方向正确、纪律在好转，但"截模块换绿+削测试换绿"是不可接受的模式。
+
+## 2026-09-02 M4 第五次交付评审：六项欠账落实四项，T00 交付物缺席+测试段仍空——不验收但差距收敛
+
+- 交付快照留存 `var/m4-review-5/`（未入库）。独立 clean verify（jdk21）：**五模块（含 Sandbox Broker）BUILD SUCCESS**，569 跑/0 失败/81 环境性跳过，与自报一致（报告连续两轮诚实）。
+- 已核验落实：broker 回根 pom modules ✓；DigestTest 负向用例（63/65/大写/RevisionFingerprint）补回 ✓；docker-java 3.7.1 + api-version=1.44 ✓；ArchUnit 改精确形态（自定义 condition：禁 org.apache.. 仅豁免 commons.compress）✓。
+- **未落实**：
+  1. **T00 探针程序缺席**——返工报告称"已交付 var/t00-verification/T00Verification.java"，zip 里根本没有 var/ 目录。报告引用了不在交付包内的文件，按 §5 属失真（打包遗漏或编造无法区分，结果相同：交付物不可用）。
+  2. **AFT/UT/CT 编号段仍零落码**——报告口径"已规划"，但 §3.2 要求的是落码。全交付仅 2 个新测试类；broker 整个模块只有 2 个测试。
+  3. BrokerConfig.java:18 注释仍写"T00 验证通过配置：docker-java 3.4.0"——版本过期且"T00 验证通过"是从未发生的事实性谎言，须删。
+- 结论：不验收。方向与纪律持续好转，但 D1（T00 实证先行）、D3/D5（测试层落码）是硬指标，无议价空间。下一轮期望：T00 探针真实入包+§1.1 中转执行命令、§3.2 三层测试落码、注释清理。
+- 2026-09-02：**M3 工序 5 第三轮回流处置完成（TB-29=INC-67，产品零改动）**：执行方第二轮（v2.1）——B 219/0 全绿（TB-27/28 复验关闭）、窗口2 dual-distinct 37/0、窗口3 dual-inherit 8/0；唯一缺口窗口1 E2E-48 两败 → TB-29。主会话裁定=断言/装备双层缺陷（执行方定性成立）：① FAILED 计数/TOPEN 锚只按 PR 号段不按时间（195 实证同号段 217 行两批；TOPEN 被锚到 4.87h 前历史事件，探针窗口圈入烧闸请求 → 898ms 假象，INC-62 同族）；② 修复①后复跑暴露第二层：PR 号段跨执行碰撞，撞已 CLOSED 主体 30/50 入信 DEAD_LETTER、Run 建不出。修复=四条 SQL 加案起点 DB 时钟界 + 号段单调递增分配（max+1、下限 49000）。195 复跑 **E2E-48 9/0 全绿**（50/50 FAILED、OPEN_REJECT=149、探针=1、首探针 91s、触网=4；证据 smoke-evidence/e2e-20260903-000207），栈已还原混合模式（.env 备份 .env.mixed.bak-tb29）、守护健康。交接文档升 **v2.2**（第三轮=single 窗口单条复跑 E2E-48 复验 TB-29）。BUGLOG INC-67、TB 卡面、测试进度 §4、PROGRESS 已同步。**待：用户转 v2.2 给执行方单条复验 → TB 全关 → 确认后 M3 commit+push → G2。**
+
+## 2026-09-03 M3 工序 5（测试验证）全线收官——主会话确认
+
+- 执行方 v2.1 三轮战报经主会话独立核验属实：阶段 B 219/0、阶段 D 122/0、第三轮 single 窗口 E2E-48 复跑 9/0（证据 195 smoke-evidence/e2e-20260903-001520，目录已抽查存在）；TB-27/28/29 全关闭，产品代码零改动（三条均为测试装备/断言层缺陷，INC-65/66/67）。
+- 主会话收尾动作：BUGLOG INC-65/66/67 关单；《测试进度.md》TB-29 索引行与详节对齐（执行方已更详节未更索引行，主会话收官时同步并留痕）；195 实测终态=混合模式四容器 Up。
+- 环境事实更正：执行方三文档的权威副本在**本地**（195 上为旧版，v2.1 内容零覆盖），收官后本地→195 同步补齐。
+- M3 至此五工序全闭。遗留待用户裁定：195 存量 4 个 CHECK_RUN MISSING + 28 张 PENDING MANUAL 的处置（保留观察 or 定点清理）；M3+M4 评审期累积改动的 commit+push。

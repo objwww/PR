@@ -421,19 +421,29 @@ e2e_48() {
         bad "500 故障映射注入失败——用例无效"; end_case E2E-48; return
     fi
     m2_journal_reset
-    local BASE=$((48000 + RANDOM % 400)) ACC=0 i
+    # TB-29：案起点 DB 时钟锚——本用例所有按 PR 号段的计数/锚定查询必须同时按
+    # created_at >= T0 过滤：PR 号段（48000+RANDOM%400）跨多次执行复用，本案历史
+    # Run/事件会把计数抬超 50、把 TOPEN 锚到上上次执行的 OPEN_REJECT（实测锚到
+    # 4.87h 前，"探针间隔 898ms"实为本次烧闸请求互间隔被圈进探针窗口）。
+    local T0; T0=$(m2_db_epoch)
+    # TB-29 第二层：PR 号段单调递增分配（不再 48000+RANDOM）——前次执行的收尾已把
+    # 号段主体 CLOSED，重跑撞号时"opened"入信死信（实测 30/50 DEAD_LETTER）、
+    # Run 根本建不出来。取库内最大已用号 +1（下限 49000，避开 48000~48399 历史段），
+    # 每次执行独占一段，天然不撞；T0 时间界继续兜底计数口径。
+    local BASE ACC=0 i
+    BASE=$(m2_psql "select coalesce(max(pr_number)+1, 49000) from pr_subject where repository_full_name='$M2_REPO' and pr_number >= 49000" | tr -d '[:space:]')
     for i in $(seq 0 49); do
         [ "$(m2_send_pr_webhook $((BASE + i)) opened "$M2_HEAD_SHA" "$M2_BASE_SHA" e48)" = "202" ] && ACC=$((ACC + 1))
     done
     assert_eq "50 个 webhook 全部 202" "$ACC" "50"
     # 全部 50 个 step 终态 FAILED（attempt 预算 3 次耗尽；约 3min，见诚实清单 6）
     m2_wait_sql "50 个 step 全部终态 FAILED（attempts 耗尽）" 600 "50" \
-        "select count(*) from run_step rs join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and rs.state='FAILED'" || true
+        "select count(*) from run_step rs join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and rs.state='FAILED' and rr.created_at >= to_timestamp($T0)" || true
     assert_eq "50 个 Run 全部 FAILED 终态（无悬挂）" \
-        "$(m2_psql "select count(*) from review_run rr join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and rr.state='FAILED'" | tr -d '[:space:]')" "50"
+        "$(m2_psql "select count(*) from review_run rr join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and rr.state='FAILED' and rr.created_at >= to_timestamp($T0)" | tr -d '[:space:]')" "50"
     local REJ TOPEN
-    REJ=$(m2_psql "select count(*) from execution_event ee join review_run rr on rr.id=ee.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and ee.event_type='MODEL_CIRCUIT_OPEN_REJECT'" | tr -d '[:space:]')
-    TOPEN=$(m2_psql "select (extract(epoch from min(ee.occurred_at))*1000)::bigint from execution_event ee join review_run rr on rr.id=ee.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and ee.event_type='MODEL_CIRCUIT_OPEN_REJECT'" | tr -d '[:space:]')
+    REJ=$(m2_psql "select count(*) from execution_event ee join review_run rr on rr.id=ee.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and ee.event_type='MODEL_CIRCUIT_OPEN_REJECT' and rr.created_at >= to_timestamp($T0)" | tr -d '[:space:]')
+    TOPEN=$(m2_psql "select (extract(epoch from min(ee.occurred_at))*1000)::bigint from execution_event ee join review_run rr on rr.id=ee.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.repository_full_name='$M2_REPO' and s.pr_number between $BASE and $((BASE + 49)) and ee.event_type='MODEL_CIRCUIT_OPEN_REJECT' and rr.created_at >= to_timestamp($T0)" | tr -d '[:space:]')
     if [ -n "$REJ" ] && [ "$REJ" -ge 40 ]; then
         ok "OPEN 零触网快败事件=$REJ（≥40：绝大多数 attempt 未触网）"
     else
