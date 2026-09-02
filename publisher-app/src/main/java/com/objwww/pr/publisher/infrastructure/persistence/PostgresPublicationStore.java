@@ -56,6 +56,7 @@ public class PostgresPublicationStore implements PublicationStore {
                   FROM outbox_command
                  WHERE state IN ('PENDING', 'RETRY_WAIT')
                    AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+                   AND (lease_until IS NULL OR lease_until < now())
                  ORDER BY aggregate_key, aggregate_sequence
                  LIMIT :limit
                  FOR UPDATE SKIP LOCKED
@@ -74,12 +75,16 @@ public class PostgresPublicationStore implements PublicationStore {
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
     private final ExecutionEventAppender eventAppender;
+    /** 新 CONFIRMED 资源的首查宽限（TB-25）：insertResource 时 next_check_at = now()+宽限 */
+    private final Duration firstCheckGrace;
 
     public PostgresPublicationStore(JdbcClient jdbc, TransactionTemplate tx,
-                                    ExecutionEventAppender eventAppender) {
+                                    ExecutionEventAppender eventAppender,
+                                    Duration firstCheckGrace) {
         this.jdbc = Objects.requireNonNull(jdbc);
         this.tx = Objects.requireNonNull(tx);
         this.eventAppender = Objects.requireNonNull(eventAppender);
+        this.firstCheckGrace = Objects.requireNonNull(firstCheckGrace);
     }
 
     // ---------- T-claim ----------
@@ -206,13 +211,16 @@ public class PostgresPublicationStore implements PublicationStore {
             jdbc.sql("""
                     INSERT INTO publication_resource (
                         id,resource_type,created_by_operation_id,pr_subject_id,
-                        remote_id,remote_url,marker,state,replaces_resource_id,created_at,updated_at
-                    ) VALUES (:newId,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:oldId,now(),now())
+                        remote_id,remote_url,marker,state,replaces_resource_id,
+                        next_check_at,created_at,updated_at
+                    ) VALUES (:newId,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:oldId,
+                        now() + make_interval(secs => :graceSecs),now(),now())
                     ON CONFLICT (resource_type,remote_id) DO NOTHING
                     """).param("newId", UUID.randomUUID()).param("type", resourceType.name())
                     .param("op", operationId).param("subject", command.prSubjectId())
                     .param("rid", remoteId).param("url", remoteUrl).param("marker", marker)
-                    .param("oldId", oldResourceId).update();
+                    .param("oldId", oldResourceId)
+                    .param("graceSecs", firstCheckGrace.toSeconds()).update();
             jdbc.sql("""
                     UPDATE publication_resource SET state='REPAIRED',repaired_by_operation_id=:op,
                         updated_at=now() WHERE id=:oldId AND state IN ('MISSING','UNKNOWN')
@@ -280,13 +288,15 @@ public class PostgresPublicationStore implements PublicationStore {
             jdbc.sql("""
                     INSERT INTO publication_resource (
                         id,resource_type,created_by_operation_id,pr_subject_id,remote_id,remote_url,
-                        marker,state,replaces_resource_id,created_at,updated_at)
-                    VALUES (:id,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:old,now(),now())
+                        marker,state,replaces_resource_id,next_check_at,created_at,updated_at)
+                    VALUES (:id,:type,:op,:subject,:rid,:url,:marker,'PRESENT',:old,
+                        now() + make_interval(secs => :graceSecs),now(),now())
                     ON CONFLICT (resource_type,remote_id) DO NOTHING
                     """).param("id", UUID.randomUUID()).param("type", resourceType.name())
                     .param("op", operationId).param("subject", command.prSubjectId())
                     .param("rid", remoteId).param("url", remoteUrl).param("marker", marker)
-                    .param("old", oldResourceId).update();
+                    .param("old", oldResourceId)
+                    .param("graceSecs", firstCheckGrace.toSeconds()).update();
             jdbc.sql("UPDATE publication_resource SET state='REPAIRED',repaired_by_operation_id=:op,updated_at=now() WHERE id=:id")
                     .param("op", operationId).param("id", oldResourceId).update();
             finishRepairRequest(operationId, "REPAIRED", null);
@@ -817,12 +827,15 @@ public class PostgresPublicationStore implements PublicationStore {
 
     private void insertResource(ClaimedCommand command, PublicationResourceType resourceType,
                                 String remoteId, String remoteUrl, String marker) {
+        // TB-25：next_check_at 显式赋 now()+首查宽限，不再吃列默认值 now()
+        // （刚确认创建成功的对象不应立即重探；宽限内不进 Drift 扫描集）
         jdbc.sql("""
                         INSERT INTO publication_resource (
                             id, resource_type, created_by_operation_id, pr_subject_id,
-                            remote_id, remote_url, marker, state, created_at, updated_at
+                            remote_id, remote_url, marker, state, next_check_at, created_at, updated_at
                         ) VALUES (
-                            :id, :type, :opId, :subjectId, :rid, :rurl, :marker, 'PRESENT', now(), now()
+                            :id, :type, :opId, :subjectId, :rid, :rurl, :marker, 'PRESENT',
+                            now() + make_interval(secs => :graceSecs), now(), now()
                         )
                         ON CONFLICT (resource_type, remote_id) DO NOTHING
                         """)
@@ -833,6 +846,7 @@ public class PostgresPublicationStore implements PublicationStore {
                 .param("rid", remoteId)
                 .param("rurl", remoteUrl)
                 .param("marker", marker)
+                .param("graceSecs", firstCheckGrace.toSeconds())
                 .update();
     }
 

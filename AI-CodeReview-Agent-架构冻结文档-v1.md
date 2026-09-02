@@ -980,6 +980,41 @@ CI 只证明"构建那一刻配置对"，防不住生产环境配置漂移（有
 
 *—— 文档 v2 结束。冻结基线 = B1–B27（B19 号位说明见 §17.5/§20）。下一阶段：Publisher App L3 组件图 + Outbox 八态崩溃恢复时序图，再 Control App L3。*
 
+---
+
+## 21. M4 G1 裁定增量（2026-09-01；随 M4 技术方案 v1.1 生效，G1 复审过门后转正式）
+
+> 本节是 M4 G1 评审（退回修改）后用户两项裁定与随之产生的冻结偏差/增补的最小留痕。
+> 细节以 `docs/M4-技术方案.md` v1.1 为准；依据回指 `docs/OSS-证据清单-v1.md` F-37/F-38/F-39。
+
+**21.1 部署形态裁定（决策点一 = A）**：同机（195 单机）形态仅作 **M4a 降级验证模式**——
+只跑合成仓库、内部可信测试仓库、故障注入；**不得宣称 F1-C 物理边界已兑现**，DoD 只准写
+"容器级降级边界已验证"。部署报告必须显示 `isolation_mode=DEGRADED_SAME_HOST`（DP-43）。
+**真实外部不可信 PR 执行开关默认关闭**，仅双机（4c8g+2c4g）+ mTLS 形态（M4b）允许开启
+（DP-44 / G2-H16）。mTLS（M0 P8）随双机形态一起收，同机期用 docker internal 网络 + 节点
+共享密钥替代。冻结 §4/§15 双机物理分离目标不变，本条为过渡形态的显式挂账。
+
+**21.2 只读工具落点裁定（决策点二）**：只读探索工具（list/search/read）留在 control 的
+SnapshotTree（偏离 §2.3 BC3"文件搜索也进沙箱"的纵深防御字面，本条即同步修订留痕）；
+build/test/command 必须进沙箱。四条硬边界（违反即设计违规）：
+① 只允许字节级 list/read/字面 search，禁任意正则并配 CPU/输出预算，不启用语言服务器/
+编译器/模板引擎/宏展开/仓库自带解析器；② 不跟随 symlink/hardlink；③ 路径 Unicode
+规范化后拒绝绝对路径/反斜杠/NUL/`..`/编码 traversal；④ 文件内容永远按不可信文本处理，
+不参与 SQL/shell/镜像名/命令模板拼装。
+
+**21.3 冻结偏差留痕（M4 方案落地层裁定）**：
+① §15"job 写进 work_item"→ 同构新表 `sandbox_job`（work_item 的 `UNIQUE(step_id)` 与
+六态机不同构，回码实证；claim/lease/heartbeat 模式原样复用）；
+② 全局并发 1 由**数据库部分唯一索引**（`uq_sandbox_job_inflight`）物理保证——SKIP LOCKED
+不构成全局闸（F-38），Broker 单轮询者仅为第二道保险；
+③ 结果落库为 **CAS putIfAbsent 先行 → PG 单事务登记推进**的两阶段模型（孤儿 CAS 允许、
+DB 悬空引用禁止），任何"CAS+PG 原子提交"表述作废；
+④ docker.sock 立场：Broker 持 sock = 控制面授权（OpenHands 先例 + 信任域声明，F-39⑦），
+**透传给 Job 容器绝不可**（GitLab 明令）；B16"不挂载 docker socket"纪律的显式例外仅限
+Broker 一容器；
+⑤ Recovery 重领前必须确认旧容器已清除（labels + orphan reaper + PID 1 watchdog），
+无法确认 = RECOVERY_BLOCKED，不得直接重复执行。
+
 
 
 

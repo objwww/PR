@@ -107,7 +107,12 @@ services:
     # --local-response-templating：仅对声明 transformers:["response-template"] 的映射启用
     # 模板渲染（TB-12：create-check-run/create-review 改为每次创建返回随机唯一 id，
     # 杜绝固定 7000001/8000001 撞 uq_pub_resource 唯一索引被 ON CONFLICT 静默吸收）
-    command: ["--local-response-templating"]
+    # --disable-http2-plain：TB-24——M2 模型客户端（JDK HttpClient 默认 HTTP/2 优先）
+    # 对明文 http:// 发 h2c 升级（Connection: Upgrade, HTTP2-Settings + chunked body），
+    # Jetty 的 h2c 升级与请求体存在竞态 → RST_STREAM/EOF，模型调用全灭；关掉明文 HTTP/2
+    # 后 stub 忽略 Upgrade 头直回 HTTP/1.1，JDK 客户端优雅回落（探针实证）。
+    # 不影响 GitHub stub 面：publisher/control 的 GitHub 调用本就走 HTTP/1.1。
+    command: ["--local-response-templating", "--disable-http2-plain"]
     volumes:
       - ./wiremock/mappings:/home/wiremock/mappings:ro
       - ./wiremock/__files:/home/wiremock/__files:ro

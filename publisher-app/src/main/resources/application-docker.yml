@@ -33,5 +33,8 @@ publisher:
     missing-recheck-factor: ${DRIFT_MISSING_RECHECK_FACTOR:8}
     # ReconcilerDegraded 告警阈值：连续探测失败次数（措辞修正 #3，EX-14）
     degraded-threshold: ${DRIFT_DEGRADED_THRESHOLD:3}
+    # 新 CONFIRMED 资源首查宽限（秒）：insertResource 时 next_check_at = now()+宽限，
+    # 消除"刚确认创建成功即被首轮巡检重探"的浪费，并错开测试基建探针登记延迟竞态（TB-25）
+    first-check-grace-seconds: ${DRIFT_FIRST_CHECK_GRACE_SECONDS:10}
     idle-sleep-ms: ${DRIFT_IDLE_SLEEP_MS:60000}
     error-sleep-ms: ${DRIFT_ERROR_SLEEP_MS:60000}

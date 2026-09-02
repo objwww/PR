@@ -37,7 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <ol>
  *   <li>公平巡检：{@code PublicationStore.findDueForDriftCheck} —— PRESENT/MISSING 且命令
  *       CONFIRMED 且 next_check_at 到期的资源，按 next_check_at 升序 LIMIT（最久未查先查，
- *       LIMIT 即 API 预算，默认 50/轮，E2E-15 不饿死尾部）；</li>
+ *       LIMIT 即 API 预算，默认 50/轮，E2E-15 不饿死尾部）。新建资源的 next_check_at 初值
+ *       为创建时刻 + 首查宽限（publisher.drift.first-check-grace-seconds，默认 10s，TB-25），
+ *       宽限窗内不进扫描集——刚确认创建成功的对象不立即重探；</li>
  *   <li>探测：<b>零新增触网</b>——复用 {@link FencedPublicationExecutor#reconcile} 的既有
  *       PublicationHandler reconcile 探针（AFT-13：本类不引用 GitHubWriteAdapter、不引用
  *       任何写方法、不引用 Outbox 插入路径）；</li>

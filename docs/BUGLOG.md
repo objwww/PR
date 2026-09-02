@@ -462,3 +462,55 @@
 - **解决方案**（`deploy/e2e-m2.sh` E2E-31 重写，**行锁代 pause**）：pause 仅覆盖"铸单→行锁落地"短窗口（保证命令 PENDING 无竞态）→ 后台 psql 持 repair 命令行 `FOR UPDATE`（publisher claim 走 `SKIP LOCKED` 必跳过、T3-A `lockCommand` 必阻塞、sweep `FOR UPDATE OF o` 必阻塞——三条路径全被封死且 publisher 进程保持存活）→ unpause 恢复 T14 token 口 → 发 synchronize webhook，换届等待改**硬失败**（超时=用例无效，不再吞）→ 换届落定后 `pg_terminate_backend` 精确放锁 → fence（T3-A）或 sweep（兜底路径③）确定性 SUPERSEDED → projector 收敛 EXPIRED。全程无概率竞态（原"检测+换 PR 重试"降级为 pause 窗口的防御性兜底）。已同步 195，`bash -n` 通过。
 - **设计观察留档**（不改产品）：T14 单连接点意味着 publisher 停机期间控制面无法完成换届（inbox 退避自愈，本次实证 62s 窗口）；单人系统可接受，若未来多实例/高可用诉求出现再评估控制面 token 短缓存。
 - **关联**：TB-20、TB-17（INC-48 前轮）、E2E-31、I22、T14（评审修正 #6）。
+
+### INC-52 —— 已修复待回归（M2 第六轮回流 TB-21/TB-22，probe-sync 常驻化 + 全链路超时加固；测试基础设施，产品零改动）
+
+- **现象**：TB-21=栈在脚本防护窗外重启 → stub 运行时探针映射（admin 注册，内存态）全失 → ~690 历史资源逐个判 MISSING → drift-repair 长尾风暴（651→754 单）污染 C 阶段全局计数断言（E2E-28 铁证/E2E-33 高度一致）；TB-22=干净基线 C 复跑时 E2E-33 案内 check-run 无限重建循环自燃，probe-sync 案内"运行中"却未拦截。
+- **根因**（195 取证实锤两层）：① **脚本生命周期守护的结构性缺口**——probe-sync 由 m2 脚本 fork 的子进程充当，trap 退出即停，且 `m2_cleanup` 还主动摘除全部探针映射；脚本外任何栈运行窗口 stub 即回到"重建对象不可见"的纯无状态态。② **案内冻结**——守护最后一轮扫描写文件止于 12:45:35 UTC（.scan-ck.json mtime 实证），恰在 E2E-33 修复循环第一个 POST（12:45:44）前 9 秒；循环内所有 curl/psql 调用**无超时**，风暴负载尖峰上单轮卡死即永久失能（`|| true` 只兜命令失败，不兜阻塞）。TB-22 ⑥猜想(a)"journal 体量截断"被证伪：.scan-ck.json 完整可解析、仅含 journal 当时真实内容（1 条）。
+- **解决方案**（三方向裁定=**(a) 常驻化**；(b) stub 映射落盘单独不解决新建对象注册与案内冻结，(c) 产品感知 stub 违反架构纪律，均驳回）：
+  1. 新增 `deploy/probe-sync-daemon.sh`（start/stop/status/ensure/run）：nohup 常驻、生命周期独立于测试脚本；每轮写 `heartbeat`；每轮探测已知 mapid 存活，stub 重启（404）即按状态文件全量重发布；启动时清扫本机制历史运行时映射 + republish + rv 状态文件 7 天退役 + seen.txt 超 5000 行截尾（游标连续性保留，防守护重启复活已摘除对象）。
+  2. `m2-lib.sh`：状态目录稳定化为 `deploy/probe-sync-state/`（env `M2_PROBE_SYNC_DIR` 可覆盖；不再随 M2_EVIDENCE 一轮一清）；`m2_ps_init` 不再截断 seen.txt（游标归守护私有）；`m2_probe_sync_start` 改 ensure（心跳<15s+pid 活则复用，否则就地拉起）；`m2_probe_sync_stop` 改 no-op；`m2_cleanup` 不再摘探针映射（映射=stub 世界现状，与 DB 资源行同寿命）；**全外部调用加超时**（映射增删改/换装 curl `--max-time 10`，journal find `--max-time 15`，`m2_psql` 外层 `timeout 20`）；ck 可见数组封顶 200 条防跨轮累积。
+  3. `.gitignore` 加 `deploy/probe-sync-state/`；`deploy/README.md` 机制说明同步。
+- **预防措施**：常驻守护 + 心跳 + 全链路超时是测试替身边界机制的三件套，后续任何栈级守护一律照此；断言类教训见 INC-53。
+- **关联**：TB-21、TB-22、TB-13（INC-45 前轮）、TB-18（INC-48 前轮）、INC-44。
+
+### INC-53 —— 已修复待回归（M2 第六轮回流 TB-23，E2E-32-A 断言缺陷：全局 journal 计数不过滤本案命令 id；产品零缺陷）
+
+- **现象**：E2E-32-A「429+Retry-After 退避窗口内 POST 恰 1」实测 2（t+0 与 t+3013ms），且同窗 next_attempt_at=+34s 断言 PASS——调度面/网面看似背离，低频 1/3。
+- **主会话取证裁定**（证据目录 `e2e-20260901-202506` stub-checks.json + probe-sync seen.txt 铁证）：两条 POST 的 **external_id 不同源、head_sha 不同**（097c6e7a…/eeee… 与 0e6a6026…/deadbeef…），且在 seen.txt 中成对出现两次、间隔恰 30 秒（12:26:28.8/12:26:31.8 与 12:26:58.8/12:27:01.8）——第一条是**邻案 E2E-31 收尾的 synchronize（NEW_SHA=eeee…）换届评审管线**落入本案窗口的写，第二条才是本案 CREATE_CHECK；+30s 的第二对正是两条命令各自 429+RA:30 的**合法重试**。产品退避链全程正确（子代理代码推演亦证伪同一行早重发：CLAIM 尊重 next_attempt_at、prepare 双栅栏、无定时器旁路）。低频 1/3 = 邻案管线排空与本案断言窗口的相对时序。
+- **解决方案**（`deploy/e2e-m2.sh` E2E-32-A）：窗口计数断言改按本案 CREATE_CHECK 的 operation_id 过滤（`m2_pr_op` 取号 + jq `contains` 计数），与 32-B/32-C 既有按 id 过滤的写法对齐。`bash -n` 通过。
+- **预防措施**：stub journal 是全局命名空间——凡"POST 恰 N 次"类断言一律按本案 external_id/operation_id 过滤（TB-21 ⑦ E2E-28/33 同类教训：同合成 sha 下 head_sha 维度不可区分）；前后案管线异步排空的"迟到写"是用例编排固有噪声。
+- **关联**：TB-23、TB-21 ⑦（同族断言缺陷）、E2E-32-A、I23。
+
+### INC-54 —— 已修复待回归（TB-23 排查附带发现：CLAIM_SQL 缺租约条件——claim 家族唯一不完整栅栏；产品小改）
+
+- **现象**（代码审查发现，无线上事故）：`PostgresPublicationStore.CLAIM_SQL` 的 ready CTE 不含 `lease_until` 条件——claim 只挂租约不改 state（仍 PENDING），事务提交后行锁释放，SKIP LOCKED 不再遮挡；第二 claimer 线程/实例可把同一 PENDING 命令再次领走（lease_epoch+1）。
+- **根因**：claim SQL 的可用性条件漏了租约维度；当前 compose 单 publisher 实例 + claimer 单虚拟线程 + CAS 防重入，实际只造成 StaleLease 空转，但它是 claim 家族唯一的栅栏缺口，多实例即成双发通道。
+- **解决方案**：CLAIM_SQL ready CTE 补 `AND (lease_until IS NULL OR lease_until < now())`——过期租约仍可回收（崩溃恢复路径不变）；已核对全部 T3-A 决策分支（DEFER/RECORD_GAP 走 releaseLease、markRetryWait/终态清租约、PROCEED 转 IN_FLIGHT），不存在"PENDING+活租约需被立即重领"的合法路径。新增 IT 回归 `OutboxClaimLeaseFenceIT`（活租约挡第二认领者 → 拨过期后可回收；红绿语义=修复前第二认领断言必红）。本机 publisher surefire 143/0 绿（IT 本机无 docker 跳过，真跑归 195）。
+- **预防措施**：fake（FakePublicationStore）单线程语义不建模租约门——已留档，多实例诉求出现时须补 fake/PG 一致性（RM2-04 教训）；claim 家族 SQL 变更须过"租约/退避/状态"三维自查。
+- **关联**：TB-23（附带发现）、I6/I7/I8、CT-21。
+
+### INC-55 —— 已修复待回归（M2 第七轮回流 TB-25，新 CONFIRMED 资源首查零宽限：CONFIRM+0.38s 自然 tick × 探针登记 ~1s 延迟的竞态；产品小改）
+
+- **现象**：BT-M2-03 断言「内容漂移只告警、零 repair 单」实测 1 张（REVIEW 资源 MANUAL PENDING；另 CHECK_RUN 资源 AUTO 单已 probe-first 零写自愈 REPAIRED）。同日 4 次中招（PR#22206/23139/31119/31271）。
+- **主会话取证裁定**：与执行方判断一致——**测试基建竞态残余，非产品缺陷**（产品对探针空输入全链反应正确，effectively-once 未破坏）。根因：资源行创建时 `next_check_at` 吃列默认值 `now()`（V3 迁移），CONFIRMED 即立即可扫，首个自然 tick（CONFIRM 后 0.38s）早于 probe-sync 守护的 1s 轮询登记（TB-13/21/22 同族第五例）。修法三候选中 (a) 脚本确认/(b) 守护提速**都不能确定性压窗**（自然 tick 由产品调度，脚本/守护抢不过）；**(c) 产品侧首查宽限**是唯一能根除整族的修法，且生产语义同样成立（刚确认创建成功的对象 0.38s 后立即重探漂移纯属浪费）。
+- **解决方案**（publisher，代码侧——不改 V1~V4 既有迁移，V5 编号已被 M3 占用）：`PostgresPublicationStore` 三处 `INSERT INTO publication_resource`（insertResource 正常+对账找回共用 / confirmRepairReplacement / reconcileConfirmRepairReplacement）显式 `next_check_at = now() + make_interval(secs => :graceSecs)`；新旋钮 `publisher.drift.first-check-grace-seconds`（默认 10s，yml 占位 `DRIFT_FIRST_CHECK_GRACE_SECONDS`），装配点 `PublisherWiringConfig.publicationStore`。IT 线束 ItHarness 刻意 `Duration.ZERO` 保持既有"确认即可扫"用例语义（Ex27/28 等大量 IT 的隐性依赖），CT24 同步补参。新增回归 `FirstCheckGraceIT`（1h 宽限 sabotage store：宽限窗内 runOnce 零处理+last_checked_at 仍 NULL；next_check_at 拨过去后正常扫描重排——force tick 兼容性实证）。javadoc 同步（DriftReconciler/PublicationStore）。
+- **预防措施**：时间类初值语义必须显式落代码并配旋钮，不吃 DB 列默认值隐式语义；"基建提速压竞态窗"类修法先做确定性论证（能不能抢赢自然调度），抢不赢就修产品侧初值。195 侧测试文件须用 M2-era 基线打增量（ItHarness/CT24 工作区版本是 M3-era，直接盖会重蹈 INC-49/50）——本次已按 delta 移植。
+- **关联**：TB-25、TB-13/21/22（同族）、I23、EX-28、FirstCheckGraceIT。
+
+### INC-56 —— 已修复待回归（M2 TB-24，全 stub 模型模式双层基建缺陷：h2c 升级竞态 + 模型映射缺 Content-Type；基建侧修复零产品码）
+
+- **现象**：全 stub 模式下五条悬置用例（DP-17/E2E-26/27/30/BT-M2-01）首开全灭：control 模型调用 `POST http://github-stub:8080/v1/chat/completions` 全部 `IOException: RST_STREAM` → review_run FAILED → checkpoint 不落 → 断言级联烧毁。
+- **根因（两层）**：① **h2c 传输竞态**——M2-era 模型客户端 SpringAiModelClient → Spring AI 1.0.0 RestClient → JDK HttpClient 默认 HTTP/2 优先，对明文 stub 发 h2c 升级（journal 实证 UA `Java-http-client/21.0.12` + `Upgrade: h2c` + **chunked body**）；Jetty 不支持带请求体的 h2c 升级（上游 jetty.project#11588，wiremock#2461），chunked 形态踩进升级竞态回 RST_STREAM/EOF。带 Content-Length 的 GitHub stub 调用六轮一直绿正因为升级被拒后优雅回落 1.1。195 修前探针实证：chunked 探针 3 次中 2 次 EOF。② **模型映射缺 Content-Type**（原卡未记录的第二层）——WireMock 3.13.1 `jsonBody` 不自动补 `Content-Type: application/json`，传输修通后 Spring AI 报 no suitable HttpMessageConverter（application/octet-stream）。该模式六轮从未真跑，故第二层从未暴露。
+- **解决方案**（全基建侧）：`deploy/docker-compose.yml` stub 启动命令加 `--disable-http2-plain`（关闭明文 HTTP/2，客户端优雅回落 1.1——没有任何客户端真需要与 stub 讲 HTTP/2）；`deploy/wiremock/mappings/stub.json` 模型映射 + `deploy/m2-lib.sh` `m2_model_delay_on` jq 负载两处补 `Content-Type: application/json`（grep 全 deploy/ 确认无第三条模型映射路径）。不选产品侧强制 HTTP/1.1（M3 已重写该客户端=死代码）；不选反代/独立实例（新组件违反 ADR-020 且无必要）。
+- **验证**：195 探针修后 5/5 `HTTP_1_1 200`，h2c prior-knowledge 被拒、升级优雅回落；BT-M2-01 全 stub 模式单条实证 5/0（证据 `smoke-evidence/bt-20260902-111033`）；control 日志 rerun 窗口零 RST_STREAM。195 停在全 stub 模式备剩余四条续跑（回混合：恢复 `.env.mixed.bak-tb24` + force-recreate control-app）。
+- **预防措施**："从未真跑过的模式"必须假设还有第二层缺陷（HX-01 先探针再整体跑）；stub 响应映射一律显式声明 Content-Type；journal 取证要看全请求头形态（Content-Length vs chunked 决定 h2c 升级命运）。
+- **关联**：TB-24、DP-17/E2E-26/27/30/BT-M2-01、F-24（WireMock 保真度边界）。
+
+### INC-57 —— 已关闭（M2 第八轮 TB-26，E2E-30-C 断言时序缺陷：在自己 down/up 之后查内存态 journal；产品零缺陷。第九轮执行方复验 E2E-30 12/0 全绿，两窗断言 =1/=0 双过）
+
+- **现象**：E2E-30-C 断言「repair 远端写恰 1 次（恢复不重复写）」实测 0——断言在第 387 行查 stub journal，而第 377 行 `docker compose down` 已把 stub 内存态 journal 清空，崩溃前那次 POST 的 journal 记录不复存在。
+- **根因**：断言设计时序缺陷——证据采集点在证据销毁点之后。产品恢复语义全对（零重复写、probe-first 认领、attempt=1、新 PRESENT 行链回、remote_id 正确，DB 侧证据链完整）。
+- **解决方案**（`deploy/e2e-m2.sh` E2E-30-C）：拆栈前先取证——`m2_journal_find` 快照崩溃前 journal 到 `stub-checks-pre.json`；断言拆成两条确定性断言：「崩溃前 repair 远端写恰 1 次」（pre=1）+「恢复后 repair 远端零重复写」（post=0）。恰好一次的总量由 pre+post 两窗闭合证明，不再依赖单一日志面存活。
+- **预防措施**：凡用例自编排含 `down/up`/重启栈的动作，journal/内存态证据一律**先取证后拆栈**；跨重启的"恰好一次"断言改用"重启前快照 + 重启后增量"两段闭合，或改断 DB/事件面（持久证据）。
+- **关联**：TB-26、E2E-30-C、TB-13（stub 内存态同族教训：凡依赖 stub 内存态的断言都要先问它活多久）。

@@ -192,7 +192,10 @@ final class ItHarness {
 
         // ---- Publisher 装配（手工等价 PublisherWiringConfig）
         ExecutionEventAppender appender = new PostgresExecutionEventAppender(publisher, PostgresITBase.OM);
-        postgresStore = new PostgresPublicationStore(publisher, PostgresITBase.publisherTx, appender);
+        // TB-25：IT 线束刻意用零宽限（Duration.ZERO），保持"确认即可扫"的既有用例语义；
+        // 首查宽限行为由 FirstCheckGraceIT 用非零宽限的 store 专测
+        postgresStore = new PostgresPublicationStore(publisher, PostgresITBase.publisherTx, appender,
+                Duration.ZERO);
         payloadReader = new CasPayloadReader(casDir, PostgresITBase.OM);
     }
 

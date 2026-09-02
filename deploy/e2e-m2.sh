@@ -374,6 +374,10 @@ e2e_30() {
     ROPC=$(m2_request_field "$REQC" repair_operation_id)
     m2_wait_journal_body "C：repair 写已达 stub（IN_FLIGHT 窗口）" 300 POST \
         "/repos/stuborg/stubrepo/check-runs" "$ROPC" 1 || true
+    # TB-26：stub journal 是内存态，down/up 即清空——必须先取证崩溃前写，再拆栈
+    m2_journal_find POST '"url":"/repos/stuborg/stubrepo/check-runs"' "$CASE_DIR/stub-checks-pre.json"
+    local WRITEC_PRE
+    WRITEC_PRE=$(jq --arg s "$ROPC" '[.requests[].body | select(contains($s))] | length' "$CASE_DIR/stub-checks-pre.json" 2>/dev/null || echo 0)
     docker compose down > "$CASE_DIR/down.log" 2>&1
     docker compose up -d > "$CASE_DIR/up.log" 2>&1
     m2_stack_ready || true
@@ -387,7 +391,8 @@ e2e_30() {
     m2_journal_find POST '"url":"/repos/stuborg/stubrepo/check-runs"' "$CASE_DIR/stub-checks.json"
     local WRITEC
     WRITEC=$(jq --arg s "$ROPC" '[.requests[].body | select(contains($s))] | length' "$CASE_DIR/stub-checks.json" 2>/dev/null || echo 0)
-    assert_eq "C：repair 远端写恰 1 次（恢复不重复写）" "$WRITEC" "1"
+    assert_eq "C：崩溃前 repair 远端写恰 1 次" "$WRITEC_PRE" "1"
+    assert_eq "C：恢复后 repair 远端零重复写" "$WRITEC" "0"
     local NEWRIDC
     NEWRIDC=$(m2_psql "select id from publication_resource where replaces_resource_id='$RIDC' and state='PRESENT'" | tr -d '[:space:]')
     [ -n "$NEWRIDC" ] && ok "C：新 PRESENT 行链回" || bad "C：缺新 PRESENT 行"
@@ -527,8 +532,12 @@ e2e_32() {
     [ -n "$NA" ] && [ "$NA" -ge $((T0 + 25)) ] \
         && ok "写路径退避尊重 Retry-After=30（next_attempt_at-T0=$((NA - T0))s）" \
         || bad "写路径退避未尊重 Retry-After：next_attempt_at=$NA T0=$T0"
+    # TB-23：全局计数会被邻案迟到写污染（E2E-31 的 synchronize 换届评审管线可在本案
+    # 窗口内完成并 POST /check-runs——sha=eeee…、external_id 不同源）；断言只数本案命令
+    local CKA; CKA=$(m2_pr_op "$PRA" CREATE_CHECK)
     m2_journal_find POST '"url":"/repos/stuborg/stubrepo/check-runs"' "$CASE_DIR/stub-checks.json"
-    assert_eq "退避窗口内无重试风暴（POST 恰 1 次）" "$(m2_journal_count "$CASE_DIR/stub-checks.json")" "1"
+    assert_eq "退避窗口内无重试风暴（本案 POST 恰 1 次）" \
+        "$(jq --arg s "$CKA" '[.requests[].body | select(contains($s))] | length' "$CASE_DIR/stub-checks.json" 2>/dev/null || echo 0)" "1"
     m2_fault_off post-check
     m2_wait_sql "A：窗口后自愈 CONFIRMED=2" 300 "2" \
         "select count(*) $(m2_pr_sql_where "$PRA") and oc.state='CONFIRMED'" || true

@@ -118,10 +118,15 @@ cd /opt/build/pr/deploy && bash smoke-test.sh
 ## M2 部署门与整栈测试（DP-15~19 / E2E-26~35 / BT-M2-01~03）
 
 依据 `docs/M2-技术方案.md` §11。共享机制在 `m2-lib.sh`（文件头有"关键设计"必读：
-静态 stub 探针恒回空列表 ⇒ 等价"远端对象已删"，所以每个测试 PR 在 CONFIRMED 后必须
-经 `m2_register_pr_resources` 注入"探针可见"运行时映射，否则 DriftReconciler 首轮巡检
-就会铸 repair 单污染断言；"删除/编辑对象"= 运行时映射注入，复原 = 摘除映射，
-脚本 `trap m2_cleanup EXIT` 兜底）。
+静态 stub 探针恒回空列表 ⇒ 等价"远端对象已删"；**probe-sync 常驻守护**（TB-21/TB-22 起
+由 `probe-sync-daemon.sh` 以 nohup 常驻、生命周期独立于测试脚本，脚本侧
+`m2_probe_sync_start`=ensure 自愈拉起）轮询 stub journal 的新 POST 并回查 DB 取
+remote_id，即时登记"探针可见"运行时映射（稳定状态目录 `probe-sync-state/` + flock +
+PUT 原地换装 + 每轮心跳/stub 重启自动全量重发布，TB-13/TB-18/TB-21/TB-22）——
+已 CONFIRMED 的资源默认自动可见，`m2_register_pr_resources` 仍作兜底调用；
+"删除/编辑对象"= 状态文件摘除/改写（守护不复活被摘除对象），复原 = 脚本
+`trap m2_cleanup EXIT` 兜底（仅清理脚本自建故障映射，探针映射随守护存续）；
+compose down/up 后守护下一轮自动重发布，用例亦可调 `m2_probe_sync_republish_all` 即时恢复）。
 
 **前置**：
 - DP-15/16/19 任意模式可跑；DP-17、E2E-26/27/30、BT-M2-01 需**全 stub 模式**

@@ -620,8 +620,8 @@
 
 ### TB-20 第五轮 E2E-31 残余：epoch fence 比对"游标世代"而非 subject 现世代——按序处理下换届前铸造的 repair 命令合法完成（与 I22 用例期望冲突；TB-17 抢跑已修复）
 
-- **状态**：**已修复待回归（第六轮阶段 C 复验）**——主会话裁定**翻转执行方定性**：非语义判定
-  冲突，**fence 无缺陷且从未被绕过，I22/E2E-31 期望不变，产品零改动**。主会话回码 + 195
+- **状态**：**已关闭（第六轮阶段 C 复验通过，2026-09-01 12:06 UTC）**——主会话裁定**翻转执行方定性**：
+  非语义判定冲突，**fence 无缺陷且从未被绕过，I22/E2E-31 期望不变，产品零改动**。主会话回码 + 195
   取证：① `PublicationGate:68-69` 传入的第三参是 `pr_subject` 行 `FOR UPDATE` 现值
   （`PostgresPublicationStore:120-127`），执行方"游标处世代=1"的机制诊断为**误读**；
   ② 真实时间线（195 DB 取证）：sync webhook `e31-sync` 10:34:48 收到，但处理连败 3 次
@@ -634,7 +634,11 @@
   （claim 走 SKIP LOCKED 必跳过、T3-A lockCommand 必阻塞、sweep `FOR UPDATE OF o` 必阻塞）
   → unpause 恢复 T14 token 口 → webhook 换届（等待改硬失败，超时=用例无效）→
   `pg_terminate_backend` 放锁 → fence/sweep 确定性 SUPERSEDED，全程无概率竞态。
-  已同步 195 并 `bash -n` 通过
+  已同步 195 并 `bash -n` 通过。
+  **第六轮复验（2026-09-01 12:06 UTC）**：E2E-31 增量 6 PASS/0 FAIL——行锁持有+token 口恢复后
+  换届，SUPERSEDED/EXPIRED 两门通过、stub 零写（=0）、REPAIR_EXPIRED 事件（=1），复原完整。
+  **TB-20 关闭。执行方第五轮④机制诊断被证伪一事留档为鉴**（journal+DB 侧写不足以判定
+  fence 比对面的加载语义，应回码核对而非从行为反推）。
   ｜ **发现时间**：2026-09-01 10:37 UTC（第五轮阶段 C）｜ **触发用例**：E2E-31（本轮唯二 FAIL）
   ｜ **影响面**：阶段 C 2 条。
 - ① **现象**：INC-48 冻结修复生效（无换届前抢跑：命令 10:34:47 铸、publisher 即冻、epoch
@@ -659,9 +663,9 @@
   全程有效。
 
 ### TB-21 TB-13 修复边界缺口：脚本防护窗外栈重启 → 全量历史资源 MISSING 一次性消化风暴
-- 状态：**待裁定** ｜ 发现时间：2026-09-01 11:57 UTC（第六轮阶段 0 基线观测）｜ 触发：非用例注入，
-  环境自然观测（主会话 11:0x UTC 重启容器后的窗口）｜ 影响面：阶段 0 基线污染（起栈即 651→694+
-  张遗留单）；C 阶段存在背景噪声风险（观察中）；**不阻塞阶段 A**（构建面独立）
+- 状态：**已关闭（第七轮复验关闭（C 46/0：E2E-28/33 复验面无风暴无循环；守护全程健康）；原修复记录：主会话 INC-52：方向裁定=(a) probe-sync 常驻化——probe-sync-daemon.sh nohup 常驻+心跳+stub 重启自动全量重发布+全链路超时；m2_cleanup 不再随脚本退出摘探针映射。方向(b) 单独不解决新建注册与案内冻结、方向(c) 产品感知 stub 违反架构纪律，均驳回）*）* ｜ 发现时间：2026-09-01 11:57 UTC（第六轮阶段 0 基线观测）｜ 触发：非用例注入，
+  环境自然观测（主会话 11:0x UTC 重启容器后的窗口）｜ 影响面：阶段 0 基线污染（起栈即 651→754
+  张遗留单）；**阶段 C 坐实 2 败**（E2E-28 铁证、E2E-33 高度一致，见⑥）；不阻塞阶段 A（构建面独立）
 - ① 现象：期望第五轮终态 29 单收敛保持到第六轮起栈；实际起栈后 repair_request=651（EXPIRED 1/
   FAILED_TERMINAL 7/PENDING 17/REPAIRED 626，11:57 UTC 快照）且**仍在活跃铸单**，数分钟后 694
   （AUTO REPAIRED 670/RETRY_WAIT 3/FAILED_TERMINAL 7/EXPIRED 1 + MANUAL PENDING 13）；publication_resource
@@ -676,17 +680,221 @@
 - ④ 环境快照：四容器 Up（stub healthy）；`docker inspect deploy-github-stub-1` 挂载仅
   `wiremock/mappings` 与 `wiremock/__files` 两目录卷——**admin API 运行时注册的探针映射为内存态，
   随容器重建丢失**；probe-sync 状态文件存在但守护仅由 m2 脚本启动（脚本外无进程）；
-  单资源铸单数 TOP 榜全部 =1（非同资源无限循环，是**逐资源一次性长尾**）。
+  单资源**行**铸单数 TOP=1（每行一单）。
 - ⑤ 时间线：第五轮收官 11:0x UTC（29 单收敛、probe-sync 随脚本 trap 退出）→ 主会话重启容器
-  （stub 内存映射清空）→ 11:08:57 首张单 → drift 扫描 10s/个逐个判 MISSING → AUTO 修复=POST 重建
-  （新随机 remote_id，探针**仍不可见**，但资源行转 REPAIRED 出扫描集 = "无效重建一次性出队"）→
-  ~690 历史资源长尾消化中 → 执行方 11:54 force-recreate 不清库继续观测（铁律：业务表 TRUNCATE
-  归主会话）。
+  （stub 内存映射清空）→ 11:08:57 首张单 → drift 扫描 10s/个逐个判 MISSING → **机制更正（原表述
+  "逐资源一次性长尾"有误，见⑧）**：AUTO 修复=旧行转 REPAIRED 出扫描集 + **铸新行 PRESENT 入扫描集**，
+  新行新 remote_id 仍无映射 → 下一轮再 MISSING → **每个受影响 subject 的 check-run 链无限循环**
+  （每 subject 每 10s 一轮重建；多 subject 并行→聚合 ~19 单/min）→ 执行方 11:54 force-recreate
+  不清库继续观测（铁律：业务表 TRUNCATE 归主会话）。
+  **用户授权处置（2026-09-01 12:33 UTC）**：清库 15 张业务表 → C 复跑验证（见⑧）。
 - ⑥ 初步猜想（标注：猜想）：INC-45 probe-sync 是**脚本生命周期守护**，栈独立运行期（尤其重启后
   窗口）无任何防线；修复重建对象自身不注册探针映射 → 修复"自证成功"但对象依旧不可见。处置方向
   归主会话：(a) probe-sync 常驻化（systemd/sidecar 守护）；(b) stub 映射持久化落盘；(c) 产品侧
   修复闭环自带注册（修复 POST 成功即回写探针可见映射）。**附带观察**：7 张 AUTO FAILED_TERMINAL
   的 last_error 全为 `PLANNER_TRANSIENT`（修复链 planner 瞬态达上限终态，量小，随卡附带记录）。
+- **⑦ 第六轮 C 阶段污染坐实（2026-09-01 12:0x UTC）**：
+  - **E2E-28 [FAIL] POST 恰 2 实际 7——铁证**：journal 两簇 3 连发（12:02:23.382/.394/.410 与
+    12:02:33.475/.489/.501，簇内 12~26ms）与 DB 两批背景 AUTO 单铸造时刻（12:02:20.398/.406/.430
+    与 12:02:30.450/.458/.476）一一对齐（铸单→派发→POST ≈3s 恒定滞后）；且所有 e2e 用例共用
+    脚本合成 head_sha `deadbeefcccc`，背景历史资源同 sha——**head_sha 维度完全不可区分本案/背景**，
+    全局 POST 计数断言在风暴期必污染。
+  - **E2E-33 [FAIL] POST 恰 3 实际 4——高度一致（非铁证）**：第 4 条与本案 R2 重建仅隔 15ms（同 sha
+    不同 external_id）；窗口（12:05:55~12:06:05）无新铸单，但同窗两张背景 RETRY_WAIT 卡 att=5 走
+    FAILED_TERMINAL（12:05:42.791/12:06:02.805），其修复尝试 POST 亦留痕 journal；wiremock
+    journal 无响应码字段，卡片级归因不可达，如实标注。
+  - 处置前任何 stub 全局计数断言在非干净基线下持续暴露（同 TB-13 第四轮教训）；C 复跑前需
+    主会话清库或风暴消化完毕（当前赛后仍 ~6 单/min 长尾）。
+- **⑧ 清库 C 复跑验证（用户授权，2026-09-01 12:33~12:51 UTC）**：TRUNCATE 15 张业务表后干净基线
+  （repair_request=0）复跑 `e2e-m2.sh all`——**E2E-28 "POST 恰 2" 转绿（8/0），⑥之污染定性获终锤**；
+  60s 静默观察无复燃（空扫描集=无循环燃料，符合⑤修正后的机制）。**新发现**：干净基线下 E2E-33
+  案内自燃同族无限循环（登记 TB-22）、E2E-32-A 出现 3s 早重派疑点（登记 TB-23）；且脚本结束后
+  stub journal 12:51 分钟桶仍有 5 条循环 POST（TB-22 循环不随脚本 trap 终止——再次印证常驻防线
+  缺失）。**常驻化修复（三方向选一）仍归主会话**。
+
+### TB-22 干净基线 C 复跑 E2E-33：案内 check-run 无限重建循环自燃 + R1/R2 断言链崩溃（probe-sync 案内未拦截）
+- 状态：**已关闭（第七轮复验关闭（C 46/0：E2E-33 全链通过，零自燃循环）；原修复记录：主会话 INC-52：根因=守护冻结——最后一轮扫描写文件止于 12:45:35 UTC（.scan-ck.json mtime 实证），恰在循环首 POST 前 9s；循环内 curl/psql 全无超时，负载尖峰单轮卡死即永久失能；⑥猜想(a) journal 截断被证伪（.scan-ck.json 完整、内容即 journal 当时实况）。修复=常驻化+全链路超时+心跳，见 INC-52）*）* ｜ 发现时间：2026-09-01 12:50 UTC（第六轮 C 复跑，用户授权清库后）｜ 触发用例：
+  E2E-33（本轮 6 FAIL）｜ 影响面：E2E-33 六败；循环**不随脚本结束终止**（12:51 仍有 5 条 POST），
+  污染后续一切 stub 计数
+- ① 现象：期望（第五轮与第六轮首跑同用例 R1/R2 链全过）：删→MISSING→重建→新 PRESENT 行→
+  再删→R2→三行链+POST 恰 3。实际：R1 轮询 240s 未见 MISSING（最后=[REPAIRED]）→"缺新 PRESENT
+  行"→**空 uuid SQL 连锁 6 处**→R2 全链超时→POST 恰 3 实际 4。
+- ② 复现步骤：TRUNCATE 15 张业务表（干净基线）→ `bash e2e-m2.sh all` → E2E-33。
+- ③ 输出原文（/tmp/e2e-r6c2.log 78~118 行区间）：
+  ```text
+  [超时] [R1] 资源 MISSING（>240s，最后=[REPAIRED]）
+  [FAIL] [R1] 缺新 PRESENT 行
+  ERROR: invalid input syntax for type uuid: ""   ← 共 6 处（id 变量为空直拼 SQL）
+  [超时] R2：新行转 MISSING（>240s）/ 第二张 repair 单（>120s）/ 修复单 REPAIRED（>300s）
+  [FAIL] R2：行2 REPAIRED：实际=[] / 缺第三轮 PRESENT 行 / 行3 remote_id：实际=[]
+  [FAIL] stub check-runs POST 恰 3 次：实际=[4]
+  ```
+- ④ 环境快照（DB/journal 三面取证）：
+  - 本案 subject 资源分布 `CHECK_RUN|PRESENT|1 + CHECK_RUN|REPAIRED|30 + REVIEW|PRESENT|1`——
+    **循环对象是 check-run（非 review）**；
+  - 连环行 12:45:44→12:50:34 **每整 10s 一行**（30 行）+30 张 AUTO REPAIRED 单（每行恰一单，
+    行级无重复、链级无限）；
+  - stub journal 现存 check-runs POST 38 条分钟直方图：`12:43|1、12:45|2、12:46~12:50|6/min、
+    12:51|5`——循环真实触网且延续到脚本结束之后；
+  - probe-sync（INC-45）案内运行中（1s/轮；m2_ps_scan_once 覆盖 check-runs+reviews 两类 POST）
+    **却未拦住循环**。
+- ⑤ 时间线：12:43:51 案例两对象创建 → 案注入删 check-run → 12:45:44 起每 10s 一轮
+  "新行 PRESENT→探针 404→MISSING→AUTO 修复→旧行 REPAIRED+铸新行"→R1/R2 断言取数落空 →
+  脚本 ~12:50 trap 收 probe-sync →循环仍续（12:51 桶 5 条）。
+- ⑥ 初步猜想（标注：猜想）：同 TB-21 根族（探针可见性依赖注册）+三个新面：(a) **probe-sync
+  案内失效条件**——本轮 stub 容器自 11:54 起未重启，journal 已累积 50 分钟风暴（~600 POST+海量
+  GET）+C 首跑全量请求，`__admin/requests/find` 全量查询可能截断/滞后致新 POST 漏登记（第五轮
+  与第六轮首跑均 stub 新起/journal 近空 → probe-sync 有效，本轮失效——**journal 体量差异是两轮
+  结果分岔的最显差异**）；(b) R1 轮询错过 MISSING 态（MISSING→REPAIRED 间隔与轮询节奏）；
+  (c) 脚本 id 变量为空直拼 SQL 无防护（装备健壮性）。判归与修复归主会话。
+
+### TB-23 E2E-32-A 退避窗内 3s 第二次 POST（疑似早重派竞态，低频 1/3）
+- 状态：**已关闭（第七轮复验关闭（E2E-32-A 过滤版断言首跑通过，INC-53 生效）；原修复记录：主会话裁定翻转=测试断言缺陷，产品零缺陷——铁证：stub-checks.json 两条 POST external_id 不同源、head_sha 不同（eeee…/deadbeef…），seen.txt 中成对出现两次间隔恰 30s；第一条=邻案 E2E-31 收尾 synchronize 换届评审管线的迟到写落入本案窗口，第二对=两命令各自 429+RA:30 合法重试。修复=INC-53：窗口断言改按本案 operation_id 过滤。附带发现 CLAIM_SQL 租约洞=INC-54 已修）*）* ｜ 发现时间：2026-09-01 12:3x UTC（第六轮 C 复跑）｜ 触发用例：
+  E2E-32-A（1 FAIL）｜ 影响面：32-A 一条断言
+- ① 现象：期望 429+Retry-After:30 后窗口内 check-runs POST 恰 1（退避生效）；实际 2 条
+  （**t+0 与 t+3013ms**）——且同窗"next_attempt_at-T0=34s"断言 PASS：**调度面声明 +34s，
+  网面 3s 已重发**。
+- ② 复现步骤：TRUNCATE → `bash e2e-m2.sh all` → E2E-32-A（历史 3 跑 2 过 1 败，低频竞态形态）。
+- ③ 输出原文：`[FAIL] 退避窗口内无重试风暴（POST 恰 1 次）：实际=[2] 期望=[1]`；
+  stub-checks.json：t+0/t+3013ms 两条同 URL（/repos/stuborg/stubrepo/check-runs）POST。
+- ④ 环境快照：32-A 时段（~12:37）无背景循环（journal 分钟直方图该时段无外案条目；同跑
+  E2E-28/32-C 全绿）→ **第二条为本案自身**；CREATE_REVIEW 走 /reviews 不进 check-runs 计数，
+  排除第二命令混入。第六轮首跑 E2E-33 曾见 +15ms 双发（当时归 TB-21 污染，现存疑同族）。
+- ⑤ 时间线：webhook → CREATE_CHECK POST t+0（429+RA:30）→ RETRY_WAIT，next_attempt=+34s
+  （断言过）→ t+3013ms 第二条 POST（发起路径不明）→ 窗口计数断言败。
+- ⑥ 初步猜想（标注：猜想）：候选路径——恢复扫描器/sweep 未按 next_attempt_at 的早重投、
+  租约双认领、或 claim 竞态双派发。产品面疑点、频次低（1/3），判归主会话；建议取证方向：
+  journal 响应码（第二条是否也 429）+ 该命令 attempt_count/lease_epoch 时间线后复跑观察。
+
+### TB-24 全 stub 模型模式不可用：stub 模型端点对 M2 Spring AI 客户端 HTTP/2 升级回 RST_STREAM（五条悬置用例首开全灭的根因）
+- 状态：**已修复待回归（主会话 09-02 INC-56。诊断为双层缺陷：① h2c 传输竞态——JDK HttpClient 默认 HTTP/2 优先 + Spring 流式 chunked body 触发 Jetty h2c 升级 bug（jetty.project#11588 上游机理；带 Content-Length 的 GitHub stub 调用六轮一直绿正因优雅回落 1.1，只有 chunked 模型调用踩进竞态），修复=compose stub 启动加 `--disable-http2-plain`（基建侧零产品码）；② 映射缺 Content-Type——WireMock jsonBody 不自动补 CT，模型映射从未声明，传输修通后 Spring AI 报 no suitable HttpMessageConverter（原卡未记录的第二层，stub.json + m2-lib.sh 的 m2_model_delay_on jq 负载两处补齐）。195 实证：修前 chunked 探针 3 次中 2 次 EOF 复现竞态，修后 5/5 HTTP_1_1 200；BT-M2-01 全 stub 模式 5/0 绿。195 当前停在全 stub 模式备剩余四条续跑；回混合模式=恢复 deploy/.env.mixed.bak-tb24 + force-recreate control-app）** ｜ 发现时间：2026-09-01 13:0x UTC（全 stub 窗口首开，
+  用户授权）｜ 触发用例：DP-17 / E2E-26 / E2E-27 / E2E-30 / BT-M2-01（悬置五条全部）｜ 影响面：
+  五条用例在窗口内**全部 FAIL**，同根级联
+- ① 现象：期望全 stub 模式下五条用例可执行；实际 control 的模型调用
+  `POST http://github-stub:8080/v1/chat/completions` 全部以 `IOException: Received RST_STREAM:
+  Stream cancelled` 失败（Java HttpClient 发 h2c 升级请求 "Connection: Upgrade, HTTP2-Settings"，
+  wiremock 取消升级流）→ SpringAiRetry 重试耗尽 → review_run 全军 FAILED（3/3）→
+  checkpoint 永不落库 → 一切依赖评审推进的断言级联烧毁。
+- ② 复现步骤：由混合 .env 派生全 stub（仅改 `OPENAI_COMPAT_BASE_URL=http://github-stub:8080`
+  + 占位 key，README:51-53 权威值）→ `up -d --force-recreate control-app publisher-app` →
+  `bash smoke-test.sh` / `bash e2e-m2.sh E2E-26 all|E2E-27|E2E-30` / `bash bt-m2.sh BT-M2-01`。
+- ③ 输出原文（control 日志，13:07 起反复）：
+  ```text
+  WARN ... SpringAiRetryAutoConfiguration : Retry error. Retry count: 1,
+  Exception: I/O error on POST request for "http://github-stub:8080/v1/chat/completions":
+  Received RST_STREAM: Stream cancelled
+  ```
+  窗口五段结果：smoke **118/22**（DP-17：模型计数 3≠1、checkpoint 0≠1）；E2E-26 **6/9**
+  （W1/W4/W5 各 2/3）；E2E-27 **1/4**（work_item LEASED 超时、租约接管 900s 超时）；
+  E2E-30 **2/9**（outbox 铸出 900s 超时）；**BT-M2-01 2/3**（评审/自愈段同根超时；证据
+  bt-20260902-014049）。
+- ④ 环境快照：stub mappings 12 条含 `.*/chat/completions`（模型映射**存在**，非缺映射——
+  journal 见请求抵达）→ 断点在传输层；`.env.stub.bak` 系 M1 时代文件，其
+  OPENAI_COMPAT_BASE_URL 实为 aliyuncs 真端点（"stub bak"当年只指 GitHub=stub）——
+  **模型走 github-stub 的配置从未被真实执行过**，此模式六轮以来仅存在于 README 文档意图。
+- ⑤ 时间线：M2 首轮用户裁定保持混合 → 五条用例六轮行政性 SKIP（无可用性探针——**执行方
+  失误，教训已留档，用户颁布硬约束 HX-01**）→ 2026-09-01 用户授权窗口 → 首试 .env.stub.bak
+  失败（M1 键缺失+模型端点为真端点）→ 二试派生 .env 自检过 → 模型链路 RST_STREAM 全灭。
+- ⑥ 初步猜想（标注：猜想）：修法候选——(a) wiremock 侧禁用/正确应答 h2c 升级（版本或
+  HTTP 方言配置）；(b) SpringAiModelClient 的 HttpClient 强制 HTTP/1.1（产品侧小改，如
+  `.version(HTTP_1_1)`，需主会话裁定）；(c) 模型 stub 换独立 HTTP/1.1 监听。修复合规后
+  五条用例须整体重跑（HX-01：重跑前先做最小探针）。
+
+### TB-25 BT-M2-03 断言"零 repair 单"失败：新发布资源首个巡检 tick 与 probe-sync 守护登记延迟的竞态（误 MISSING 铸单，probe-first 零写自愈）
+- 状态：**已修复待回归（主会话 09-02 裁定：测试基建竞态残余定性成立、非产品缺陷；但 (a) 脚本确认/(b) 守护提速均无法确定性压窗——自然 tick 由产品调度，脚本/守护抢不过；取 (c) 产品侧首查宽限，INC-55：`next_check_at` 初值 = 创建时刻 + `publisher.drift.first-check-grace-seconds`（默认 10s，代码侧显式赋值，不动 V1~V4 迁移）；IT 线束刻意零宽限保持既有语义；新增 FirstCheckGraceIT（195 真跑 2/2 绿）；4 张 PENDING MANUAL 残余单已按 id 定点 DELETE 清理）**
+  ｜ 发现时间：2026-09-02 02:01 UTC（第七轮阶段 D）｜ 触发用例：BT-M2-03（12/1 唯一败点；
+  BT-M2-02 同窗口同签名中招但断言面未覆盖）｜ 影响面：第七轮阶段 D FAIL=1；A/B/C 不受影响
+- ① 现象：期望 BT-M2-03 内容漂移只告警（REVIEW 资源零 repair 单）；实际本案 REVIEW 资源挂
+  1 张 MANUAL PENDING 单（另 CHECK_RUN 资源 1 张 AUTO 单已 REPAIRED——probe-first 零写自愈）。
+- ② 复现步骤：`cd /opt/build/pr/deploy && bash bt-m2.sh BT-M2-03`（概率性：竞态窗 =
+  资源 CONFIRM 后 ~1s 内首个 drift tick；本日实测 4 次中招——阶段 0 窗口 PR#22206、
+  C 阶段 PR#23139（静默）、BT02 PR#31119、BT03 PR#31271）。
+- ③ 输出原文（`smoke-evidence/bt-20260902-095645/BT-M2-03/summary.txt` 尾部）：
+  ```text
+  [PASS] review 零自动重发（POST 仍恰 1 次）（=1）
+  [PASS] review 零自动改写（PATCH 0 次）（=0）
+  [FAIL] 零 repair 单（内容漂移只告警）：实际=[1] 期望=[0]
+  [PASS] 恢复原文后 episode 关闭
+  -- BT-M2-03 累计：PASS=12 FAIL=1
+  ```
+  断言源码 `bt-m2.sh:167-168`：`select count(*) from repair_request where
+  publication_resource_id='$RVID'`（按本案 REVIEW 资源行计数，非全局）。
+- ④ 环境快照（2026-09-02 02:0x UTC，混合模式四容器 Up）：
+  ```text
+  repair_request（窗口内 4 行，前 2 行=BT-M2-02 基线同签名）：
+  01:56:49  CHECK_RUN AUTO    REPAIRED  remote 7354981（PR#31119）
+  01:56:49  REVIEW     MANUAL PENDING   remote 8187457（PR#31119）
+  02:00:59  CHECK_RUN AUTO    REPAIRED  remote 7440685（PR#31271）
+  02:00:59  REVIEW     MANUAL PENDING   remote 8869377（PR#31271）
+
+  execution_event 关键序（PR#31271）：
+  02:00:59.321  PUBLICATION_CONFIRMED ×2（check+review 双资源落库）
+  02:00:59.697  PUBLICATION_DRIFT_DETECTED + REPAIR_REQUESTED（CHECK_RUN）← CONFIRM 后 0.38s
+  02:00:59.707  PUBLICATION_DRIFT_DETECTED + REPAIR_REQUESTED（REVIEW/MANUAL）
+  02:01:02.990  REPAIR_DISPATCHED
+  02:01:03.333  REPAIR_REPAIRED（probe-first 零写：无新 resource 行、remote_id 不变、
+                journal check/review POST 各恰 1）
+  02:01:09.714  PUBLICATION_CONTENT_DRIFTED（真正的被测事件——语义全对：资源仍 PRESENT/
+                digest=篡改后 sha256/零重发/零改写/复原后 episode 关闭，全 PASS）
+  ```
+  `probe-sync-daemon.sh:87 sleep 1`（守护 1s 轮询登记延迟）；`m2-lib.sh:569
+  m2_force_drift_due` 仅把 next_check_at 拉到 now()——本案 02:00:59.697 tick **早于**
+  脚本注入（编辑+force 在其后），属自然 tick：新 CONFIRMED 资源 next_check_at≈now()
+  立即可扫。stub journal 证据：bt-20260902-095645/BT-M2-03/{reviews-after,reviews-patch}.json。
+- ⑤ 时间线：见 ④ 事件序；BT-M2-02 基线（PR#31119，01:56:49，CONFIRM 后 ~1s 内）同签名
+  中招，其断言面不查活跃单故 5/0 PASS；C 阶段 PR#23139（01:51:02）静默中招未触发任何断言。
+- ⑥ 初步猜想（标注：猜想）：**非产品缺陷**——产品对"探针空"输入的全链反应正确
+  （MISSING→AUTO/MANUAL 分档铸单、probe-first 防重复写、effectively-once 未破坏）。
+  根因 = INC-52 守护 1s 轮询登记延迟 × 新资源立即可扫的亚秒窗口残余（TB-13/21/22 同族
+  第五例；INC-52 已把窗从分钟级缩到亚秒级，未归零）。修法候选（主会话裁定）：
+  (a) 脚本 `m2_run_pr_e2e` 基线收敛后先确认探针映射已登记（查 stub mappings）再继续；
+  (b) daemon 订阅/扫描 PUBLICATION_CONFIRMED 事件即时登记，压窗到毫秒级；
+  (c) 产品侧新资源首个巡检周期宽限（next_check_at 初值 +宽限）——动产品语义需谨慎。
+  附注：PENDING MANUAL 累计 4 张（上列 4 个 PR 各一），REVIEW 档设计内挂起（等人工批准，
+  测试资源无人批），是否清理留主会话裁定。
+
+### TB-26 E2E-30-C 断言"repair 远端写恰 1 次"失败=0：断言在自己 down/up 之后查询内存态 journal，崩溃前 POST 记录已被栈重启清空（断言缺陷，产品恢复语义全对）
+- 状态：**已关闭（主会话 09-02 裁定：执行方定性成立=断言时序缺陷，产品零缺陷——DB 侧恰好一次证据链完整（CONFIRMED/attempt=1/新 PRESENT 行链回/probe-first 零重复写）。INC-57：E2E-30-C 改"先取证后拆栈"——down 前快照 journal（pre 窗）断言崩溃前写恰 1 次，恢复后（post 窗）断言零重复写，两段闭合证明恰好一次，不再依赖内存态 journal 跨重启存活。第九轮执行方复验：E2E-30 全量 12/0 全绿，C 段两断言 =1/=0 双过）** ｜ 发现时间：2026-09-02
+  04:1x UTC（第八轮全 stub 窗口）｜ 触发用例：E2E-30-C（compose down/up：repair 命令
+  IN_FLIGHT）｜ 影响面：第八轮全 stub E2E-30 唯一败点（10/1；A 3/0、B 7/0 不受影响）
+- ① 现象：期望 journal 中含 repair 命令 operation_id 的 POST 恰 1；实际 0。
+- ② 复现步骤：全 stub 模式 `cd /opt/build/pr/deploy && bash e2e-m2.sh E2E-30`。
+- ③ 输出原文（`smoke-evidence/e2e-20260902-121008/E2E-30-C/summary.txt`）：
+  ```text
+  == E2E-30-C compose down/up：repair 命令 IN_FLIGHT ==
+  [PASS] C 基线闭环
+  [FAIL] C：repair 远端写恰 1 次（恢复不重复写）：实际=[0] 期望=[1]
+  [PASS] C：新 PRESENT 行链回
+  [PASS] C：新行 remote_id（=7732238）
+  ```
+  日志关键前序行：`[就绪] C：repair 写已达 stub（IN_FLIGHT 窗口）（=1）`——**崩溃前那笔
+  POST 确实抵达过 journal**（m2_wait_journal_body 等到恰 1）。
+- ④ 环境快照（全 stub 模式）：
+  ```text
+  stub-checks.json（断言取据）requests 数=0（journal 已被清空）
+  DB PR#24281 资源链：旧行 7444392 REPAIRED ← 新行 7732238 PRESENT
+    （created_by=f9d67942…=repair 命令 ROPC，CONFIRMED）
+  repair_request（ROPC）：REPAIRED，attempt_count=1（零重复执行）
+  ```
+  断言源码 `e2e-m2.sh:387-390`：`m2_journal_find POST …/check-runs` 后按 ROPC 过滤
+  计数——执行点在 `docker compose down/up` **之后**；WireMock journal 为容器内存态，
+  down/up 即清空。up 后编排仅 `m2_probe_sync_republish_all` 重发布探针映射 +
+  `m2_check_present_add "$ROPC" "$NEWIDC"`（行 382 注释明示"恢复探针认领"）；delay/override
+  POST 映射（m2_post_check_delay_on）未重挂。
+- ⑤ 时间线：journal_reset → 基线闭环 → repair 命令 DISPATCHED（20s 写延迟放大窗口）→
+  POST 抵达 journal（wait=1 恰好）→ **compose down/up（journal 清空、mappings 清空）**
+  → 探针映射重发布+认领注册 → 产品恢复扫描 probe-first 命中（零写认领）→ 命令
+  CONFIRMED、修复单 REPAIRED（attempt=1）、新行 remote=NEWIDC=7732238 → 断言查 journal
+  =0 → FAIL。
+- ⑥ 初步猜想（标注：猜想）：**断言与编排自相矛盾，非产品缺陷**——产品恢复行为全部正确
+  （零重复写=比"恰 1"更强的保障、probe-first 认领与 E2E-29/ST-33 同语义、状态链完整）。
+  "恰 1"本意是数崩溃前那笔 POST（wait_journal_body 已实证=1），但断言执行点在 down/up
+  之后、journal 已被自身编排清空，**该断言在本用例自动化形态下必然 0≠1**（全 stub 首次
+  真实执行：补测二 E2E-30 被 TB-24 烧毁未及此断言；v1.7 主会话预检在混合模式未跑 30）。
+  修法建议（主会话裁定）：(a) "恰 1"证据前移到 down 前快照（wait_journal_body 步已具备），
+  up 后断言改为"含 ROPC 的新增 POST=0"（零重复写）；或 (b) 断言改为"新行 remote_id=
+  NEWIDC 且修复单 attempt_count=1"（两项已各自 PASS）。
+
 
 ## 用例触发 BUG（格式模板，按 TB-NN 递增追加）
 

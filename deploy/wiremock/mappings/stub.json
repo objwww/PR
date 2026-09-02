@@ -98,6 +98,7 @@
       "request": { "method": "POST", "urlPathPattern": ".*/chat/completions" },
       "response": {
         "status": 200,
+        "headers": { "Content-Type": "application/json" },
         "jsonBody": {
           "id": "chatcmpl-stub",
           "object": "chat.completion",

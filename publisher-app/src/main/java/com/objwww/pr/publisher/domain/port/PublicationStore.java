@@ -126,6 +126,10 @@ public interface PublicationStore {
      * 公平巡检扫描：JOIN outbox_command，取 {@code state IN ('PRESENT','MISSING')}
      * 且命令 CONFIRMED 且 {@code next_check_at <= now()} 的资源，按 next_check_at 升序
      * LIMIT（最久未查先查，不饿死尾部，E2E-15）。MISSING 在列是为了低频复核（§4.6）。
+     *
+     * <p>新建资源的 next_check_at 初值 = 创建时刻 + 首查宽限
+     * （{@code publisher.drift.first-check-grace-seconds}，默认 10s，TB-25），宽限窗内
+     * 不被本扫描选中——刚确认创建成功的对象不立即重探。
      */
     List<DriftCheckTarget> findDueForDriftCheck(int limit);
 

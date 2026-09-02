@@ -83,7 +83,7 @@ class CT24RepairRequestAtomicityIT extends PostgresITBase {
         var store = new PostgresPublicationStore(publisherJdbc, publisherTx, event -> {
             if (calls.incrementAndGet() == 2) throw new IllegalStateException("inject-second-event-failure");
             delegate.append(event);
-        });
+        }, java.time.Duration.ZERO);
         RepairRequestDraft draft = new RepairRequestDraft(UUID.randomUUID(), resourceId,
                 PublicationResourceType.CHECK_RUN, RepairPolicyTier.AUTO, 5, Instant.now());
 

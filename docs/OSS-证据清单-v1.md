@@ -577,6 +577,168 @@
   零新组件——但属**质量评测域（M5）**，不进 M3 范围（M3 只管调用可靠性与成本，不管
   输出质量分级）；finding 类别标签/置信度字段是否前置进 prompt 契约，记 M3-P17 由用户裁定。
 
+### F-29 OpenHands 沙箱架构【M4 agent↔sandbox 边界的最重要先例】
+
+- OpenHands（github.com/All-Hands-AI/OpenHands 文档+源码，2026-08-31 核对）：agent loop 与
+  沙箱之间是 **client-server 结构**——agent 进程经 REST 向沙箱内 runtime server 发 action、
+  收 observation，二者进程/容器边界清晰，不共享内存状态。
+- 沙箱镜像按内容 hash 打 tag（内容寻址），同一 hash 直接复用已构建镜像；事件日志 +
+  状态文件**两层持久化**（事件流可回放，状态文件原子写）；**沙箱侧不做持久化**，所有
+  状态归 agent 侧——与本项目"Sandbox Worker 无状态、Job 状态写 Postgres"的裁定同构。
+- 对本项目：验证 D3 通道模型（control 发 JobSpec/收 Result，不共享密钥/内存）是业界
+  成熟形态；observation 持久化到 control 侧（CAS）而非沙箱侧，获直接背书。
+
+### F-30 SWE-ReX 执行接口【沙箱内执行服务的形态参照】
+
+- SWE-ReX（github.com/SWE-agent/SWE-ReX，2026-08-31 核对）：容器内跑一个**薄 HTTP 执行
+  服务**，入口凭一次性 auth token；`execute()` 是**一次性命令**语义（非长驻交互 shell）——
+  无状态工具调用天然支持 checkpoint/重放，长驻 shell 的会话状态反而成为恢复障碍。
+- observation = exit_code + 截断后的 stdout/stderr（**截断是默认行为不是异常**）；
+  命令失败（非零退出）是**数据不是异常**，照常进 observation 喂回 agent。
+- 对本项目：Job 的一次性命令形态（build/test 各一次 execute）获背书；E10 噪声控制
+  （输出截断进账本、全文入 CAS）与"截断 stdout/stderr"同构；"失败即数据"与 tool_call
+  账本记录非零 exit_code 的设计一致。
+
+### F-31 E2B 沙箱服务【egress 与生命周期能力的对照系】
+
+- E2B（e2b.dev 文档，2026-08-31 核对）：业界沙箱服务**默认放开 egress**（出站不限），
+  收紧需自配——本项目 default-deny + 白名单（E7 v2.2）比业界默认更严，方向正确。
+- **TCP 假成功坑被官方明示**：default-deny 下 TCP connect 可能"成功"（连到拦截点）
+  但数据面不通，应用层必须验证真实响应，不能只看 connect 结果——直接佐证 E7 的
+  "假成功坑"条款和 F1-C 探测设计。
+- pause/resume 是 Firecracker microVM 能力，Docker 容器不要复刻该承诺（MVP 无暂停恢复）。
+
+### F-32 GitHub Actions fork PR 威胁模型【不可信代码执行的官方背书】
+
+- GitHub 官方文档（docs.github.com Actions 安全加固系列，2026-08-31 核对）：
+  `pull_request_target` 在 fork PR 上下文中检出 fork 代码 = 经典泄密坑；
+  `persist-credentials` 会把 token 落盘进 .git/config 被恶意代码读走；2026-06 起
+  checkout action 默认拒绝检出 fork PR 的代码。
+- self-hosted runner 跑不可信代码的官方结论：**ephemeral（一次性）+ 无可窃密信息**——
+  与 D3"沙箱零令牌、每作业一容器、作业后销毁"逐条对应。
+- 对本项目：评审目标仓库代码 = fork PR 同级不可信输入，官方威胁模型背书整个 M4 存在性；
+  **沙箱产出（stdout/文件/结果）回到 control 仍是不可信数据**，解析侧按注入面处理。
+
+### F-33 容器隔离技术矩阵（195 实测内核 3.10.0-1160）【G1 部署形态的技术事实底座】
+
+- **gVisor：NO-GO**——官方要求宿主内核 5.6+（runsc 依赖新版内核 API），3.10 直接出局。
+- **Firecracker：NO-GO**——需 KVM + 官方支持内核 5.10/6.1/6.18，3.10 双不满足。
+- **Kata Containers：条件 GO**——依赖 KVM，先 `ls /dev/kvm` + `kata-runtime check`
+  实测（云上虚拟机常关嵌套虚拟化）；不可用即退原生 Docker。
+- **rootless Docker：实际 NO-GO**——cgroup v1（3.10 标配）下 rootless 资源限额
+  （cpu/memory/pids）全部失效，且存储只剩 vfs（无 overlay2），性能与限额双失守。
+- **唯一全可用 = 原生 Docker 加固组合拳**（见 F-34）——这是 M4 MVP 隔离方案的落定结论，
+  Kata 留作 KVM 可用时的升级档（F-36 残余风险缓解项）。
+
+### F-34 Docker 加固选项与内核例外【安全剖面实现依据】
+
+- 以下选项全部官方可用且与内核新旧无关（Docker 文档，2026-08-31 核对）：
+  `--network none`、`--read-only` + tmpfs、`--cap-drop=ALL`、`no-new-privileges`、
+  默认 seccomp profile、`--user` 非 root、`--cpus`/`--memory`/`--pids-limit` 限额。
+- **overlay2 例外条款**：官方要求内核 4.x，但对 RHEL/CentOS 明确放行 3.10.0-514+——
+  195 的 3.10.0-1160 满足，overlay2 存储驱动可用（CAS/镜像层正常）。
+- **egress 白名单必须落 DOCKER-USER 链**：iptables 的 FORWARD/INPUT 链对容器流量
+  不生效（Docker 自己管 FORWARD），只有 DOCKER-USER 是官方承诺的用户插入点；
+  且 REJECT 优于 DROP（快速失败，避免工具卡到 TCP 超时，配合 F-31 假成功坑处理）。
+
+### F-35 docker-java 客户端实证【Broker 实现选型】
+
+- docker-java 3.7.1 + httpclient5 transport（需显式 `api.version=1.44`，2026-08-31
+  核对）：F-34 安全剖面全部字段在 HostConfig 中**类型安全表达**，无需拼裸 JSON。
+- 生命周期裁定：create → start → wait（`awaitStatusCode` 带超时）→ logs
+  （`followStream=false` 一次性收）→ remove（force + v）。**不用 autoRemove**——
+  容器停了即删则拿不到 exit_code/日志，"失败即数据"落空。
+- 超时控制：`awaitCompletion(timeout)` 超时返回 false，且其 `close()` 会中止在途
+  HTTP 请求——天然绕开 F-18 记的"Future.cancel 不中断在途调用"坑。
+- **exec/attach hijack 路径是挂起重灾区**（社区 issue 多发）→ 每作业一容器、
+  命令在 create 时定死、不用 exec 注入——与 F-30 一次性命令语义互证。
+- 所有 streaming callback 一律 try-with-resources；手撸 REST 出局（JDK HttpClient
+  不支持 unix socket，需自写协议栈，得不偿失）。
+
+### F-36 残余风险诚实清单【M4 方案"实际后果记录"节的必备输入】
+
+- runc 容器逃逸 CVE-2019-5736 / CVE-2024-21626：**与宿主内核版本无关**（用户态漏洞），
+  195 的 Docker 已带补丁，但此类属"修了还会再有"的类别，加固组合拳只是提高攻击成本，
+  **不构成内核级隔离**——不可信代码 + 原生 Docker 的残余风险必须对用户明示。
+- 3.10 内核已 EOL，不再收安全补丁：已知/未知内核洞在 195 上不会被修。
+- 缓解项（写进方案，逐条可执行）：① 有条件时换专用沙箱机（冻结 4c8g+2c4g 双机形态）；
+  ② 每作业一容器、作业后立即销毁（ephemeral，F-32 官方结论）；③ 沙箱侧审计外送
+  （Job/结果/异常全落 Postgres，容器本身无状态）；④ KVM 可用时升 Kata（F-33 升级档）。
+
+### F-37 Docker 断言核实（M4 G1 评审意见的一手资料验证）【评审反馈批判验证第一批】
+
+- 调研报告全文：`docs/OSS-调研-M4-G1-docker.md`（2026-09-01，来源=docker/docs、docker/cli、
+  moby/moby v20.10.24、docker-java master 的 GitHub raw 原文，即官方文档渲染来源）。
+- 评审断言核实结果（10 条）：**8 成立 / 2 部分成立**，全部关键断言有官方原话——
+  ① bind mount source 由 **daemon 宿主侧**解释（docs bind-mounts 逐字原话），Broker 容器内
+  tmpfs 不能作兄弟容器 bind source，须双路径映射（宿主固定根 ↔ Broker 容器内挂载点）；
+  ② 只设 `--memory` 不限 swap，禁止 swap 须 `--memory-swap`=`--memory`（resource_constraints
+  原话）；③ cmd 只覆盖 CMD，镜像有 ENTRYPOINT 时 cmd 变其参数，`--entrypoint` 才能覆盖；
+  ④ json-file `max-size`/`max-file` 与 local 默认轮转可按容器 log-opt 设置，官方 postinstall
+  文档自己警告不限制会耗尽宿主磁盘；⑤ 容器 labels + label filter list 支持 reaper 模式
+  （moby swagger filters 原文）；⑥ Broker 死后容器照跑不误（dockerd 托管）；⑦ dockerd
+  重启默认停容器、live-restore 默认关、restart policy 决定重启后是否拉起；⑧ docker.sock
+  访问 = root 级权限（linux-postinstall WARNING 框原话）。
+- **评审说错/说过头的三处（驳回其措辞，采纳其实质）**：a) "官方文档对解包 tar 有安全警告"——
+  无此出处；风险真实存在的正确出处是 moby 自身 docker cp symlink race **CVE-2018-15664**；
+  b) Entrypoint 在 Engine API 属容器 **Config**（create body 顶层，docker-java
+  `CreateContainerCmd.withEntrypoint`），**不在 HostConfig**——实现查表须纠正；
+  c) "`--rm`/restart policy 可在 Broker 死亡时停止容器"——因果错误：`--rm` 只在容器退出后删、
+  restart policy 只在退出后重启，对在跑容器均无约束力；真正兜底只有 PID 1 自杀或外部 reaper。
+- 加强项：docker-java `awaitCompletion(timeout)` 源码级实证——超时返回 false 且 finally
+  无条件 `close()` 在途流（比 F-35 原表述更强：无悬挂连接）。
+
+### F-38 Postgres 断言核实（M4 G1 评审意见的一手资料验证）【评审反馈批判验证第二批】
+
+- 调研报告全文：`docs/OSS-调研-M4-G1-postgres.md`（2026-09-01，postgresql.org/docs/16 原文
+  逐段核对）。**10 条断言全部成立**。
+- 关键确认：① SKIP LOCKED 只跳过"同一行"的锁（sql-select Locking Clause），两个 claimer
+  各领一行 PENDING 合法——**全局并发 1 必须另有数据库闸**；② CHECK 只查新行、仅 insert/update
+  时校验、不可引用他行（ddl-constraints）——状态迁移合法性只能靠限定条件 UPDATE
+  （0 行=冲突）；③ 列级 GRANT 是**叠加非收窄**（sql-grant 原话 "either the specific column or
+  its whole table"）——若角色已有整行 UPDATE，列级授权形同虚设，收紧=不给整行 UPDATE 只给
+  列级；④ jsonb_typeof/jsonb_array_length 可入 CHECK（注意 NULL 视为通过，须配 NOT NULL）；
+  ⑤ 计数原子扣减 `UPDATE ... SET used=used+n WHERE used+n<=max` 并发安全（transaction-iso：
+  后到者在已更新行版本上重估 WHERE）；⑥ DEFERRABLE INITIALLY DEFERRED 解循环 FK 可行
+  （仅 UNIQUE/PK/EXCLUDE/REFERENCES 可延迟；被引用侧须 non-deferrable 非部分；延迟唯一检查
+  显著更慢）——但单向 FK（只留 sandbox_job→tool_call）更简单，采纳单向方案。
+- **全局并发 1 的三方案对比与推荐**：单行槽表（串行点/热点行/锁持到事务结束）vs **部分唯一
+  索引 `((1)) WHERE state='LEASED'`（推荐）** vs advisory lock（抢锁者安静等待语义才需要）。
+  推荐部分唯一索引：把不变量固化为数据库层持久事实、任何写入路径绕不过、与"按 lease_until
+  回收再领"天然兼容、持有者可 SELECT 观测；既有 SKIP LOCKED claim SQL 零改动，仓储层把唯一
+  冲突（SQLState 23505）翻译为"名额占用"即可。注意谓词须覆盖未来 RUNNING/执行中状态集合。
+  （评审甲/乙建议的单行槽表被本调研降级为备选——同机单 Broker 下串行点无害，但部分唯一
+  索引断言面更强、改造面更小。）
+
+### F-39 沙箱工程做法先例（M4 G1 评审六大方向的业界对照）【评审反馈批判验证第三批】
+
+- 调研报告全文：`docs/OSS-调研-M4-G1-precedent.md`（2026-09-01，OpenHands/SWE-ReX/E2B/
+  GitHub Actions runner/GitLab runner 源码与官方文档）。
+- ① **可写 workspace 有强先例**：OpenHands 内建 overlay 挂载（ro lowerdir + 每容器 COW
+  upper）、GitHub runner 工具区 ro 工作区 rw——评审"/src 只读+复制到 /work 执行"方向采纳
+  （业界常态甚至更宽松：OpenHands 默认 rw bind，因 agent 要原地改代码；本项目只跑构建测试，
+  从严合理）。
+- ② **结果提取无直接先例**：业界主路径是容器内常驻 HTTP 服务回传（OpenHands copy_from/
+  SWE-ReX /upload）或 bind mount 免提取（GitHub runner）；docker archive API 路线因本项目
+  network none + 无容器内 agent 而成立但**实现需自创**；SWE-ReX 裸 `extractall` 是反面教材
+  ——输出 tar 当不可信输入安全解包这点业界完全无先例，属本项目防线自造（复用 B22 族）。
+- ③ **日志限额有强先例**：OpenHands 有界缓冲（HISTORY_LIMIT=10000 行）+truncated 标记；
+  GitLab 100MB 硬上限+超限标记失败丢弃；E2B 全量缓冲进内存=反面。评审要求采纳。
+- ④ **孤儿清扫有逐字先例**：GitHub runner 每 job 启动前按 label filter 找残留容器
+  `docker rm` + network prune，再注册 post-job 清理——评审的 orphan reaper 设计即此模式；
+  OpenHands 名字前缀+shutdown listener、E2B 服务端 TTL 为旁证。
+- ⑤ **失败分类部分有先例**：四家一致"命令非零退出=数据不重跑"；重试仅限传输层且有限次
+  （SWE-ReX num_retries=0+X-Request-ID 幂等键；OpenHands 只重试 RemoteProtocolError×5；
+  GitHub runner 只重试 pull/login×3）；评审"安全故障 fail-closed"独立一档**业界无先例**，
+  属本项目合理增强。
+- ⑥ **镜像/入口控制有先例**：显式覆盖 ENTRYPOINT（OpenHands `entrypoint=[]`、GitHub runner
+  `tail -f /dev/null`、GitLab 默认覆盖）；argv 无 shell 构造（SWE-ReX argv list、GitHub
+  runner ProcessInvoker）；SWE-ReX `pull=never/missing` 正是"部署期预取、运行期禁 pull"。
+- ⑦ **docker.sock 立场对照**：正面=OpenHands 官方 README 主容器挂 sock 作 broker（附硬化
+  指南与"单用户、勿多租户"信任域声明）；反面=GitLab 明令"不得向 **job 容器**挂 socket"、
+  ARC 从 docker.sock 演进到 dind/rootless——**broker 持 sock 可接受，透传给作业容器绝不可**；
+  authz 代理/rootless 等更深加固业界无成熟先例（rootless 在 3.10 已被 F-33 否决）。
+
 ---
 
 *证据清单完。任何 v2.2 条文被质疑时，回查本文对应索引；新引入设计决策时，先补本清单再入冻结文档。*

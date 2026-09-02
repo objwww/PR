@@ -63,8 +63,9 @@ public class PublisherWiringConfig {
 
     @Bean
     public PublicationStore publicationStore(JdbcClient jdbc, TransactionTemplate tx,
-                                             ExecutionEventAppender appender) {
-        return new PostgresPublicationStore(jdbc, tx, appender);
+                                             ExecutionEventAppender appender,
+                                             @Value("${publisher.drift.first-check-grace-seconds:10}") long firstCheckGraceSeconds) {
+        return new PostgresPublicationStore(jdbc, tx, appender, Duration.ofSeconds(firstCheckGraceSeconds));
     }
 
     @Bean

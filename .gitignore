@@ -10,3 +10,5 @@ node_modules/
 
 # 备份
 backups/
+# probe-sync 常驻守护运行时状态（TB-21，195 栈级运行态，不入库）
+deploy/probe-sync-state/

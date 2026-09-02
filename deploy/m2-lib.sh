@@ -30,6 +30,9 @@
 [ -n "${M2_LIB_LOADED:-}" ] && return 0
 M2_LIB_LOADED=1
 
+# 库文件所在目录（= deploy/）：probe-sync 稳定状态目录与常驻守护脚本锚点（TB-21）
+_M2_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # stub 固定 PR 元数据（wiremock/mappings/stub.json get-pr-metadata 映射）锚定的
 # head/base SHA——webhook 负载必须与其一致（M1 权威读），与 smoke-test.sh DP-05 同源。
 M2_REPO="stuborg/stubrepo"
@@ -37,8 +40,8 @@ M2_HEAD_SHA="deadbeefcccccccccccccccccccccccccccccccc"
 M2_BASE_SHA="cafe0000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 # ---------------------------------------------------------------- 基础原语
-m2_psql() { docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc "$1"; }
-m2_psql_db() { docker compose exec -T postgres psql -U postgres -d "$1" -tAc "$2"; }
+m2_psql() { timeout 20 docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tAc "$1"; }
+m2_psql_db() { timeout 20 docker compose exec -T postgres psql -U postgres -d "$1" -tAc "$2"; }
 
 m2_stub_admin() { echo "http://127.0.0.1:${STUB_ADMIN_PORT:-19090}"; }
 
@@ -128,42 +131,52 @@ M2_MAP_IDS=()
 
 m2_map_add() { # <mapping-json> → stdout: mapping id（失败为空）
     local id
-    id=$(curl -s -X POST "$(m2_stub_admin)/__admin/mappings" -H 'Content-Type: application/json' -d "$1" | jq -r '.id // empty')
+    id=$(curl -s --max-time 10 -X POST "$(m2_stub_admin)/__admin/mappings" -H 'Content-Type: application/json' -d "$1" | jq -r '.id // empty')
     if [ -n "$id" ]; then M2_MAP_IDS+=("$id"); fi
     echo "$id"
 }
 
 m2_map_del() { # <mapping id>
-    [ -n "$1" ] && curl -s -X DELETE "$(m2_stub_admin)/__admin/mappings/$1" > /dev/null
+    [ -n "$1" ] && curl -s --max-time 10 -X DELETE "$(m2_stub_admin)/__admin/mappings/$1" > /dev/null
     return 0
 }
 
-# ---- CHECK_RUN / REVIEW 探针可见性：probe-sync 状态文件 + 原子换装（TB-13/TB-18）----
+# ---- CHECK_RUN / REVIEW 探针可见性：probe-sync 常驻守护 + 稳定状态目录（TB-13/TB-18/TB-21/TB-22）----
 # 设计（取代旧的 M2_CK_ENTRIES 纯脚本态方案）：
 #   * stub 本是"无状态替身"，INC-44 随机 id 后脚本无法预注册探针可见映射 →
 #     每个新建/重建对象下轮巡检必判 MISSING → drift-repair 风暴（TB-13）。
-#     probe-sync 守护（m2_probe_sync_start）轮询 stub journal 的
-#     POST /check-runs、POST /pulls/{n}/reviews，按 external_id/marker 回查 DB
-#     取 remote_id，即时登记探针可见映射——stub 由此具备"重建即可见"的最小状态性。
-#   * 状态存文件（守护子 shell 与脚本函数共享，flock 互斥）：
-#       $M2_PS_DIR/ck_<sha>.json / rv_<pr>.json = 可见对象数组；*.mapid = 当前映射 id；
-#       seen.txt / pending-*.txt = 守护游标（journal 无响应体、无条目 id，
-#       loggedDate+external_id 去重，跨 journal reset 安全）。
+#     probe-sync 守护轮询 stub journal 的 POST /check-runs、POST /pulls/{n}/reviews，
+#     按 external_id/marker 回查 DB 取 remote_id，即时登记探针可见映射——
+#     stub 由此具备"重建即可见"的最小状态性。
+#   * TB-21/TB-22 教训（守护必须常驻且带超时）：
+#     - 守护曾是脚本生命周期的子进程：trap 退出即停 + m2_cleanup 摘除全部探针映射
+#       → 脚本外任何栈运行窗口（尤其重启）= 无防线，历史资源一次性消化风暴（TB-21）。
+#     - 案内冻结（TB-22）：curl/psql 全无超时，风暴负载尖峰上一轮扫描卡死即永久
+#       失能。现全链路 --max-time/timeout 兜底，单轮有界，下轮自愈。
+#     现制：守护由 deploy/probe-sync-daemon.sh 以 nohup 常驻（生命周期独立于任何
+#     测试脚本，栈重启不死）；脚本的 m2_probe_sync_start 改为 ensure（心跳检测，
+#     死了就地拉起）；脚本退出不再停守护、不再摘探针映射（映射即 stub 世界现状，
+#     与 DB 资源共存亡）。
+#   * 状态存稳定目录（守护与脚本共享，flock 互斥；不再随证据目录一轮一清）：
+#       ${M2_PROBE_SYNC_DIR:-deploy/probe-sync-state}/
+#       ck_<sha>.json / rv_<pr>.json = 可见对象数组；*.mapid = 当前映射 id；
+#       seen.txt / pending-*.txt = 守护私有 journal 游标（脚本永不写）；
+#       heartbeat = 守护心跳（每轮写 epoch 秒，ensure 据此判活）。
 #   * 守护只登记"新 POST"，不复活被脚本摘除的对象——m2_check_present_remove
 #     模拟"远端删除"的语义保持成立。
 #   * 换装一律 PUT /__admin/mappings/{id} 原地更新（TB-18：del/add 空档会让探针
 #     撞静态空响应 → 伪 NOT_FOUND → 伪 MISSING + 游离修复单）；映射因栈重启失效
-#     时自动回退 POST 重建。
-#   * compose down/up 后 stub 运行时映射全失 → 用例须调 m2_probe_sync_republish_all
-#     按状态文件恢复（E2E-30 三形态已挂接）。
+#     时自动回退 POST 重建；守护每轮探测已知 mapid 存活，stub 重启即全量重发布。
+#   * compose down/up 后 stub 运行时映射全失 → 用例亦可调 m2_probe_sync_republish_all
+#     按状态文件即时恢复（E2E-30 三形态已挂接；守护下一轮也会自动补）。
 M2_PS_DIR=""
-M2_PS_PID=""
 
 m2_ps_init() {
     [ -n "$M2_PS_DIR" ] && return 0
-    M2_PS_DIR="${M2_EVIDENCE:?}/.probe-sync"
+    # TB-21：状态目录稳定化（默认 deploy/probe-sync-state，env 可覆盖），
+    # 不再随 M2_EVIDENCE 一轮一清；seen.txt 游标归守护私有，此处绝不截断
+    M2_PS_DIR="${M2_PROBE_SYNC_DIR:-${_M2_LIB_DIR}/probe-sync-state}"
     mkdir -p "$M2_PS_DIR"
-    : > "${M2_PS_DIR}/seen.txt"
 }
 
 # m2_ps_publish <state-file> <mapid-file> <urlPath> <wrap-key或空串>：按状态文件重写映射
@@ -186,7 +199,7 @@ m2_ps_publish() {
               response:{status:200, jsonBody:$arr}, metadata:{m2ProbeSync:true}}')
     fi
     if [ -n "$mid" ]; then
-        rc=$(curl -s -o /dev/null -w '%{http_code}' -X PUT "$(m2_stub_admin)/__admin/mappings/$mid" \
+        rc=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X PUT "$(m2_stub_admin)/__admin/mappings/$mid" \
             -H 'Content-Type: application/json' -d "$json")
         [ "$rc" = "200" ] && return 0   # 原子换装成功
     fi
@@ -204,7 +217,7 @@ m2_ps_ck_upsert() {
         [ -f "$f" ] || echo '[]' > "$f"
         jq --arg e "$eid" '[.[] | select(.external_id != $e)]' "$f" > "$tmp" && mv "$tmp" "$f"
         jq --arg e "$eid" --arg id "$rid" \
-            '. + [{id:($id|tonumber), external_id:$e, html_url:("http://stub.local/check-runs/"+$id)}]' \
+            '(. + [{id:($id|tonumber), external_id:$e, html_url:("http://stub.local/check-runs/"+$id)}]) | .[-200:]' \
             "$f" > "$tmp" && mv "$tmp" "$f"
         m2_ps_publish "$f" "${M2_PS_DIR}/ck_${sha}.mapid" \
             "/repos/${M2_REPO}/commits/${sha}/check-runs" check_runs
@@ -273,32 +286,40 @@ m2_check_present_sync() { # 兼容旧内部助手：按状态文件重发布
 m2_review_present_set()   { m2_ps_rv_upsert "$1" "$2" "$3"; }
 m2_review_present_clear() { m2_ps_rv_clear "$1"; }
 
-# ---- probe-sync 守护 ----
-m2_probe_sync_start() { # 仅 stub GitHub 模式有意义；起后台轮询（1s/轮）
+# ---- probe-sync 常驻守护（TB-21/TB-22）----
+# 守护生命周期独立于测试脚本：由 probe-sync-daemon.sh 以 nohup 常驻，
+# 脚本侧只做 ensure（心跳新鲜+pid 存活则复用，否则就地拉起）。
+m2_probe_sync_start() { # 仅 stub GitHub 模式有意义
     m2_stub_github_mode || return 0
     m2_ps_init
-    [ -n "$M2_PS_PID" ] && return 0
-    # 上一轮残留清扫：摘掉本机制登记过的运行时映射（静态映射无此 metadata）
-    local ids id
-    ids=$(curl -s "$(m2_stub_admin)/__admin/mappings" \
-        | jq -r '.mappings[] | select(.metadata.m2ProbeSync == true) | .id' 2>/dev/null)
-    for id in $ids; do m2_map_del "$id"; done
-    m2_probe_sync_loop &
-    M2_PS_PID=$!
-    echo "$M2_PS_PID" > "${M2_PS_DIR}/.pid"
-    echo "  [probe-sync] 守护已启动（pid=$M2_PS_PID，轮询 stub journal→探针可见映射联动）"
+    bash "${_M2_LIB_DIR}/probe-sync-daemon.sh" ensure
 }
 
 m2_probe_sync_stop() {
-    [ -n "$M2_PS_PID" ] && kill "$M2_PS_PID" 2>/dev/null
-    M2_PS_PID=""
+    # TB-21：守护常驻化后脚本退出不再停守护（守护即 stub 世界的"状态性"，随栈共存亡）。
+    # 保留本函数仅为兼容既有调用点；显式停守护用 probe-sync-daemon.sh stop。
+    return 0
 }
 
-m2_probe_sync_loop() {
-    while true; do
-        m2_ps_scan_once || true
-        sleep 1
-    done
+# 守护主循环的单轮（由 probe-sync-daemon.sh run 调用；脚本不直接调）
+m2_ps_daemon_tick() {
+    m2_ps_scan_once || true
+    # stub 重启检测：已知 mapid 失效（404）且存在非空状态 → 全量重发布（幂等）
+    local mf mid rc f
+    mf=$(ls "${M2_PS_DIR}"/*.mapid 2>/dev/null | head -1)
+    if [ -n "$mf" ]; then
+        mid=$(cat "$mf" 2>/dev/null)
+        if [ -n "$mid" ]; then
+            rc=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$(m2_stub_admin)/__admin/mappings/$mid")
+            [ "$rc" = "404" ] && m2_probe_sync_republish_all
+        fi
+    else
+        for f in "${M2_PS_DIR}"/ck_*.json "${M2_PS_DIR}"/rv_*.json; do
+            [ -f "$f" ] || continue
+            if [ "$(cat "$f" 2>/dev/null)" != "[]" ]; then m2_probe_sync_republish_all; break; fi
+        done
+    fi
+    date +%s > "${M2_PS_DIR}/.heartbeat.tmp" && mv "${M2_PS_DIR}/.heartbeat.tmp" "${M2_PS_DIR}/heartbeat"
 }
 
 m2_ps_scan_once() {
@@ -306,7 +327,7 @@ m2_ps_scan_once() {
     admin=$(m2_stub_admin)
     # ---- check-runs：新 POST → pending ----
     jf="${M2_PS_DIR}/.scan-ck.json"
-    curl -s -X POST "$admin/__admin/requests/find" -H 'Content-Type: application/json' \
+    curl -s --max-time 15 -X POST "$admin/__admin/requests/find" -H 'Content-Type: application/json' \
         -d '{"method":"POST","urlPathPattern":"/repos/[^/]+/[^/]+/check-runs"}' > "$jf" 2>/dev/null
     jq -r '.requests[]? | [(.loggedDate|tostring),
              (.body | fromjson? | .external_id // ""),
@@ -319,7 +340,7 @@ m2_ps_scan_once() {
     done
     # ---- reviews：新 POST → pending（body 大且含换行，落文件）----
     local jf2="${M2_PS_DIR}/.scan-rv.json"
-    curl -s -X POST "$admin/__admin/requests/find" -H 'Content-Type: application/json' \
+    curl -s --max-time 15 -X POST "$admin/__admin/requests/find" -H 'Content-Type: application/json' \
         -d '{"method":"POST","urlPathPattern":"/repos/[^/]+/[^/]+/pulls/[0-9]+/reviews"}' > "$jf2" 2>/dev/null
     jq -c '.requests[]?' "$jf2" 2>/dev/null | while read -r req; do
         local rts pr opid
@@ -432,6 +453,7 @@ m2_model_delay_on() { # <毫秒>；响应体与静态 model-chat-completions 映
     M2_MODEL_DELAY_MAP_ID=$(m2_map_add "$(jq -n --argjson ms "$1" \
         '{priority:1, request:{method:"POST", urlPathPattern:".*/chat/completions"},
           response:{status:200, fixedDelayMilliseconds:$ms,
+            headers:{"Content-Type":"application/json"},
             jsonBody:{id:"chatcmpl-stub", object:"chat.completion", created:0, model:"stub",
               choices:[{index:0, finish_reason:"stop",
                 message:{role:"assistant",
@@ -612,15 +634,12 @@ m2_stack_ready() { # compose down/up 后的整栈就绪
 
 # ---------------------------------------------------------------- 复原（trap EXIT）
 m2_cleanup() {
-    local id mf
-    m2_probe_sync_stop
+    local id
+    m2_probe_sync_stop   # TB-21：no-op，守护常驻不随脚本退出
     for id in ${M2_MAP_IDS[@]+"${M2_MAP_IDS[@]}"}; do m2_map_del "$id"; done
     M2_MAP_IDS=()
-    if [ -n "${M2_PS_DIR:-}" ] && [ -d "$M2_PS_DIR" ]; then
-        for mf in "${M2_PS_DIR}"/*.mapid; do
-            [ -f "$mf" ] && m2_map_del "$(cat "$mf")"
-        done
-    fi
+    # TB-21：probe-sync 探针映射（*.mapid 登记的）不再随脚本退出摘除——
+    # 映射即 stub 世界现状，须与 DB 资源行同寿命，否则脚本间窗口必起 MISSING 风暴。
     docker unpause "$(docker compose ps -q control-app 2>/dev/null)" > /dev/null 2>&1
     docker unpause "$(docker compose ps -q publisher-app 2>/dev/null)" > /dev/null 2>&1
     docker rm -f e2e27-control2 > /dev/null 2>&1
