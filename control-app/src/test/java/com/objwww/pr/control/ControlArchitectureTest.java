@@ -29,7 +29,7 @@ import com.objwww.pr.control.domain.review.ReviewContractVersions;
 import com.objwww.pr.control.domain.service.CheckpointContract;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.review.ReviewBudget;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.support.OrchestratorFixture;
@@ -154,7 +154,7 @@ class ControlArchitectureTest {
         item.leaseTo("aft17-worker", now.plusSeconds(600), now);
         ObjectMapper mapper = new ObjectMapper();
         ReviewStepExecutor executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas,
-                fx.artifacts, new SafeTarExtractor(),
+                fx.artifacts, new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024),
                 new ReviewAgentLoop(modelClient, new FindingMapper(),
                         new PolicyEngine(new ToolRegistry())),
                 ReviewBudget.DEFAULT, mapper,

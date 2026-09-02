@@ -8,7 +8,7 @@ import com.objwww.pr.control.domain.repository.RunStepRepository;
 import com.objwww.pr.control.domain.repository.StepAttemptRepository;
 import com.objwww.pr.control.domain.repository.WorkItemRepository;
 import com.objwww.pr.control.domain.review.ModelOutputParseException;
-import com.objwww.pr.control.domain.snapshot.SecurityRejectionException;
+import com.objwww.pr.shared.snapshot.SecurityRejectionException;
 import com.objwww.pr.shared.AttemptStatus;
 import com.objwww.pr.shared.StepState;
 import org.slf4j.Logger;

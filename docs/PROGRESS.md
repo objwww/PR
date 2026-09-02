@@ -201,3 +201,15 @@
 - 主会话收尾动作：BUGLOG INC-65/66/67 关单；《测试进度.md》TB-29 索引行与详节对齐（执行方已更详节未更索引行，主会话收官时同步并留痕）；195 实测终态=混合模式四容器 Up。
 - 环境事实更正：执行方三文档的权威副本在**本地**（195 上为旧版，v2.1 内容零覆盖），收官后本地→195 同步补齐。
 - M3 至此五工序全闭。遗留待用户裁定：195 存量 4 个 CHECK_RUN MISSING + 28 张 PENDING MANUAL 的处置（保留观察 or 定点清理）；M3+M4 评审期累积改动的 commit+push。
+
+## 2026-09-03 M4 第六轮交付：主会话接手修复后落地工作区（未 commit）
+
+- 背景：用户裁定"查出问题主会话直接修"，终止打回循环。第六轮 zip（var/m4-review-6 留存）独立复核：交付仍 test-compile BUILD FAILURE（新 CT 测试引用未 import 的 PersistenceConfig），T00 探针连续第三轮缺席，BrokerConfig 虚假"T00 验证通过"注释残留。
+- 合并纪律：仅合并 pom/shared-kernel/control-app/publisher-app/sandbox-broker/docs/adr；**deploy/ 与 docs/ 未合并**（交付基于 34c6269，合并会回退 f1fe004 的 INC-65/66/67 修复）。真实改动 20 文件（git diff 口径，autocrlf 幻影条目已甄别）。
+- 主会话修复（子代理执行+主会话复核补刀）：
+  1. CT 测试重写为项目模式：新 `it/JdbcSandboxJobRepositoryIT`（继承 PostgresITBase，disabledWithoutDocker 本机跳过、195 真跑），6 用例含 23505 并发闸实证；旧跑偏文件删除；PostgresITBase.ALL_TABLES 补 V6 三表（16→19）。
+  2. T00 探针真实落码：broker `selfcheck/DockerFeasibilityProbe`（main()，9 项逐项 PASS/FAIL，退出码语义）+ `docs/M4-T00-探针执行说明.md`（195 逐条命令+判据，如实标注本机未执行待中转）。
+  3. 虚假注释清理（BrokerConfig/application.yml/SecurityProfileMapper 四处"T00 已验证"改"待 T00 实证"）。
+  4. **主会话复核补刀两处真 PG 必败**（INC-60 教训的同族）：`interval ':lease_duration seconds'` 命名参数在引号内不解析 → `make_interval(secs => :lease_duration)`（claimNext/renewLease 两处）；jsonb 列 String 直绑 → `CAST(:x AS jsonb)`（tool_call.tool_args、sandbox_job.job_spec_immutable 两处）。
+- 验证：工作区 `clean verify`（jdk21）五模块 BUILD SUCCESS；control 383 跑 0 败 8 环境跳过、broker 18/0、新 IT 6 用例环境性跳过（待 195 中转真跑）。
+- 下一步：用户确认后 commit；195 中转执行 T00 探针 + V6 上沙箱 PG 验证 + JdbcSandboxJobRepositoryIT 真跑（中转协议 §1.1）。AFT/UT 编号段覆盖仍属部分达成（AFT-33/CT-51 族已落，全矩阵补齐为后续工序）。

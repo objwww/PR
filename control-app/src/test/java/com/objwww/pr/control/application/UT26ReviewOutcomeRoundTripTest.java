@@ -14,7 +14,7 @@ import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.review.ReviewOutcome;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.support.OrchestratorFixture;
@@ -69,7 +69,7 @@ class UT26ReviewOutcomeRoundTripTest {
         var resume = new CheckpointResumeService(fx.checkpoints, fx.artifacts, fx.cas, fx.ledger, mapper);
         var writer = new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger);
         executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
-                new SafeTarExtractor(),
+                new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024),
                 new ReviewAgentLoop(modelClient, new FindingMapper(),
                         new PolicyEngine(new ToolRegistry())),
                 ReviewBudget.DEFAULT, mapper, resume, writer, fx.ledger,

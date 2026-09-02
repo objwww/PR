@@ -33,6 +33,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
@@ -57,6 +58,11 @@ public class PersistenceConfig {
     @Bean
     public JdbcClient jdbcClient(DataSource dataSource) {
         return JdbcClient.create(dataSource);
+    }
+
+    @Bean
+    public NamedParameterJdbcTemplate namedParameterJdbcTemplate(DataSource dataSource) {
+        return new NamedParameterJdbcTemplate(dataSource);
     }
 
     @Bean
@@ -133,5 +139,15 @@ public class PersistenceConfig {
     @Bean
     public SequenceAllocator sequenceAllocator(JdbcClient jdbc) {
         return new PostgresSequenceAllocator(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.domain.sandbox.SandboxJobRepository sandboxJobRepository(NamedParameterJdbcTemplate jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.JdbcSandboxJobRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.domain.sandbox.ToolCallRepository toolCallRepository(NamedParameterJdbcTemplate jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.JdbcToolCallRepository(jdbc);
     }
 }

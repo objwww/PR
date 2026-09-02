@@ -5,10 +5,11 @@ import com.objwww.pr.control.domain.model.ArtifactType;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.port.GitHubSourcePort;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
-import com.objwww.pr.control.domain.snapshot.SnapshotTree;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SnapshotTree;
 import com.objwww.pr.shared.Digest;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Objects;
@@ -47,7 +48,12 @@ public class SnapshotService {
                                    String baseSha, String headSha) {
         // 1) 源码快照：tarball → 安全解包 → digest → CAS
         byte[] tarball = source.fetchTarball(installationId, repoFullName, headSha);
-        SnapshotTree tree = extractor.extract(tarball);
+        SnapshotTree tree;
+        try {
+            tree = extractor.extractSnapshot(tarball);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to extract snapshot tarball", e);
+        }
         Digest snapshotDigest = tree.digest();
         String snapshotPath = artifactStore.putIfAbsent(snapshotDigest, tarball);
         artifactRepository.register(new ArtifactRecord(snapshotDigest, ArtifactType.SOURCE_SNAPSHOT,

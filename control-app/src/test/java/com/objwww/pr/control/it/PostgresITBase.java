@@ -19,13 +19,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * control-app 集成测试基座（与 publisher 侧 PostgresITBase 同形态，M1-T02 引入）：
- * Testcontainers 真 PG（postgres:16-alpine）+ 真实角色/授权/Flyway 迁移（V1~V5 在本模块
+ * Testcontainers 真 PG（postgres:16-alpine）+ 真实角色/授权/Flyway 迁移（V1~V6 在本模块
  * classpath:db/migration）。
  *
  * <p>形态：
  * <ul>
- *   <li>静态容器全 IT 类共享一个 PG 实例；每个测试方法前 TRUNCATE 全部 16 张表清场
- *       （V1 的 12 张 + V3/V4/V5 新表，RESTART IDENTITY CASCADE 兜底）；</li>
+ *   <li>静态容器全 IT 类共享一个 PG 实例；每个测试方法前 TRUNCATE 全部 19 张表清场
+ *       （V1 的 12 张 + V3/V4/V5/V6 新表，RESTART IDENTITY CASCADE 兜底）；</li>
  *   <li>admin（容器超级用户）先执行与 deploy/db/01-roles.sh 等价的 DO 块创建
  *       control_app / publisher_app 两角色（V2/V3 的 grant 依赖两角色存在），
  *       再以 admin 身份跑 Flyway；</li>
@@ -43,12 +43,12 @@ public abstract class PostgresITBase {
     protected static final String CONTROL_PASSWORD = "it-control-pass";
     protected static final String PUBLISHER_PASSWORD = "it-publisher-pass";
 
-    /** V1 的 12 张 + V3/V4/V5 新表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
+    /** V1 的 12 张 + V3/V4/V5/V6 新表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
             "review_finding", "artifact", "webhook_inbox", "step_checkpoint", "repair_request",
-            "model_call_ledger");
+            "model_call_ledger", "tool_call", "sandbox_job", "artifact_grant");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

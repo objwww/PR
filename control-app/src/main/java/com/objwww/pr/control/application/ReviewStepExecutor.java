@@ -17,8 +17,8 @@ import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.review.ReviewContractVersions;
 import com.objwww.pr.control.domain.review.ReviewFindingDraft;
 import com.objwww.pr.control.domain.review.ReviewOutcome;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
-import com.objwww.pr.control.domain.snapshot.SnapshotTree;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SnapshotTree;
 import com.objwww.pr.control.domain.service.CheckpointContract;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
@@ -27,6 +27,7 @@ import com.objwww.pr.shared.ExecutionEventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -120,7 +121,12 @@ public class ReviewStepExecutor implements StepExecutor {
         byte[] diffBytes = artifactStore.get(step.getInputArtifactDigest())
                 .orElseThrow(() -> new IllegalStateException(
                         "CAS 缺 diff: " + step.getInputArtifactDigest().value()));
-        SnapshotTree snapshot = extractor.extract(tarball); // 安全解包拒绝上抛（EX-10）
+        SnapshotTree snapshot;
+        try {
+            snapshot = extractor.extractSnapshot(tarball); // 安全解包拒绝上抛（EX-10）
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to extract snapshot tarball", e);
+        }
         String diffText = new String(diffBytes, StandardCharsets.UTF_8);
 
         // 2) 模型评审（M3：传 ModelCallContext，异常上抛由 Worker 归类；安全步骤不降级）

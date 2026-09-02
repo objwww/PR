@@ -25,7 +25,7 @@ import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
 import com.objwww.pr.control.domain.service.RevisionService;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
@@ -134,7 +134,7 @@ final class StCheckpointHarness {
     final ExecutionLedger ledger;
     private final OutboxWriter outboxWriter;
     private final ReviewOrchestrator orchestratorProxy;
-    private final SafeTarExtractor extractor = new SafeTarExtractor();
+    private final SafeTarExtractor extractor = new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024);
 
     StCheckpointHarness(Path casDir) {
         cas = new LocalCasArtifactStore(casDir);

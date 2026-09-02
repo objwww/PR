@@ -36,7 +36,7 @@ import com.objwww.pr.control.domain.service.RevisionService;
 import com.objwww.pr.control.domain.service.SequenceAllocator;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.service.RepairCommandFactory;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.review.FindingMapper;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
@@ -83,7 +83,8 @@ public class ReviewFlowConfig {
 
     @Bean
     public SafeTarExtractor safeTarExtractor() {
-        return new SafeTarExtractor();
+        // 使用默认安全限制：maxFiles=10000, maxFileSize=100MB, maxTotalSize=1GB
+        return new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024);
     }
 
     @Bean

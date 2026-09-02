@@ -2,7 +2,7 @@ package com.objwww.pr.control.domain.review;
 
 import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.ai.ModelCallContext;
-import com.objwww.pr.control.domain.snapshot.SnapshotTree;
+import com.objwww.pr.shared.snapshot.SnapshotTree;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;

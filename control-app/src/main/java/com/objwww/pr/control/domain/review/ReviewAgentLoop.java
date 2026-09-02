@@ -4,7 +4,7 @@ import com.objwww.pr.control.domain.ai.ModelCallContext;
 import com.objwww.pr.control.domain.ai.ModelGatewayPort;
 import com.objwww.pr.control.domain.ai.ModelRequest;
 import com.objwww.pr.control.domain.ai.RoutedModelResult;
-import com.objwww.pr.control.domain.snapshot.SnapshotTree;
+import com.objwww.pr.shared.snapshot.SnapshotTree;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 
 import java.nio.charset.StandardCharsets;

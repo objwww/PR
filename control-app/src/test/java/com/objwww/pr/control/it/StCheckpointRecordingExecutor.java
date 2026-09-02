@@ -15,7 +15,7 @@ import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 
 /**
  * ST-28 用：记录 Worker 内部产生的 {@link StepOutcome}（含 ReviewOutcome 对象图），

@@ -38,7 +38,7 @@ import com.objwww.pr.control.domain.service.RepairCommandFactory;
 import com.objwww.pr.control.domain.service.Projector;
 import com.objwww.pr.control.domain.service.RevisionService;
 import com.objwww.pr.control.domain.service.RunProjection;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
@@ -143,7 +143,7 @@ final class ItHarness {
     private ArtifactRepository artifactRepoInUse;
     final IntakeService intakeService;
     final SnapshotService snapshotService;
-    private final SafeTarExtractor extractor = new SafeTarExtractor();
+    private final SafeTarExtractor extractor = new SafeTarExtractor(10 * 1024 * 1024, 50_000, 100 * 1024 * 1024L);
     private final ReviewAgentLoop agentLoop;
     private ReviewBudget budget = ReviewBudget.DEFAULT;
 

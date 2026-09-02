@@ -13,8 +13,8 @@ import com.objwww.pr.control.domain.review.ModelOutputParseException;
 import com.objwww.pr.control.domain.review.ReviewAgentLoop;
 import com.objwww.pr.control.domain.review.ReviewBudget;
 import com.objwww.pr.control.domain.service.CheckpointResumeService;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
-import com.objwww.pr.control.domain.snapshot.SecurityRejectionException;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SecurityRejectionException;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
 import com.objwww.pr.control.support.OrchestratorFixture;
@@ -66,7 +66,7 @@ class ReviewStepExecutorTest {
         var resume = new CheckpointResumeService(fx.checkpoints, fx.artifacts, fx.cas, fx.ledger, mapper);
         var writer = new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger);
         return new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
-                new SafeTarExtractor(), loop, ReviewBudget.DEFAULT, mapper,
+                new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024), loop, ReviewBudget.DEFAULT, mapper,
                 resume, writer, fx.ledger,
                 requestedModel -> java.util.Optional.of(new ModelRouteIdentity(
                         "mock-provider", requestedModel, contractVersion)));

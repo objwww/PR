@@ -22,6 +22,7 @@
         <module>shared-kernel</module>
         <module>control-app</module>
         <module>publisher-app</module>
+        <module>sandbox-broker</module>
     </modules>
 
     <properties>

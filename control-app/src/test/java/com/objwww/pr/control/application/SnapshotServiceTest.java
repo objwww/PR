@@ -5,8 +5,8 @@ import com.objwww.pr.control.domain.model.ArtifactType;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.port.GitHubSourcePort;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
-import com.objwww.pr.control.domain.snapshot.SafeTarExtractor;
-import com.objwww.pr.control.domain.snapshot.SecurityRejectionException;
+import com.objwww.pr.shared.snapshot.SafeTarExtractor;
+import com.objwww.pr.shared.snapshot.SecurityRejectionException;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.support.TestTarballs;
 import com.objwww.pr.shared.Digest;
@@ -88,12 +88,12 @@ class SnapshotServiceTest {
         FakeGitHubSource source = new FakeGitHubSource(tarball);
         InMemoryArtifactRepository repo = new InMemoryArtifactRepository();
         SnapshotService service = new SnapshotService(
-                source, new SafeTarExtractor(), new LocalCasArtifactStore(casDir), repo);
+                source, new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024), new LocalCasArtifactStore(casDir), repo);
 
         SnapshotService.SnapshotOutcome outcome = service.prepare(INSTALLATION_ID, REPO, BASE, HEAD);
 
         // digest 可复算：独立再解包一次，结果一致
-        Digest recomputed = new SafeTarExtractor().extract(tarball).digest();
+        Digest recomputed = new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024).extractSnapshot(tarball).digest();
         assertEquals(recomputed, outcome.sourceSnapshotDigest());
         assertEquals(Digest.sha256Of(DIFF), outcome.diffDigest());
         assertEquals(2, outcome.fileCount());
@@ -117,7 +117,7 @@ class SnapshotServiceTest {
         FakeGitHubSource source = new FakeGitHubSource(tarball);
         InMemoryArtifactRepository repo = new InMemoryArtifactRepository();
         ArtifactStore store = new LocalCasArtifactStore(casDir);
-        SnapshotService service = new SnapshotService(source, new SafeTarExtractor(), store, repo);
+        SnapshotService service = new SnapshotService(source, new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024), store, repo);
 
         SnapshotService.SnapshotOutcome first = service.prepare(INSTALLATION_ID, REPO, BASE, HEAD);
         SnapshotService.SnapshotOutcome second = service.prepare(INSTALLATION_ID, REPO, BASE, HEAD);
@@ -135,7 +135,7 @@ class SnapshotServiceTest {
         FakeGitHubSource source = new FakeGitHubSource(evil);
         InMemoryArtifactRepository repo = new InMemoryArtifactRepository();
         SnapshotService service = new SnapshotService(
-                source, new SafeTarExtractor(), new LocalCasArtifactStore(casDir), repo);
+                source, new SafeTarExtractor(10000, 100 * 1024 * 1024, 1024L * 1024 * 1024), new LocalCasArtifactStore(casDir), repo);
 
         // EX-10 路径：安全解包拒绝直接上抛，CAS 与登记表零污染
         assertThrows(SecurityRejectionException.class,

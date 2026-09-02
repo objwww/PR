@@ -20,6 +20,11 @@ public record Digest(String value) {
         return new Digest(Digests.sha256Hex(canonical));
     }
 
+    /** 便捷方法：获取 hex 字符串（等同 value()） */
+    public String hex() {
+        return value;
+    }
+
     @Override
     public String toString() {
         return value;
