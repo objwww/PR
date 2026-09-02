@@ -2,7 +2,7 @@ package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.StepOutcome;
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,7 +49,7 @@ class St25PartialArtifactCrashIT extends PostgresITBase {
     void crashBetweenTwoCasPutsLeavesNoCheckpointAndReruns() {
         StCheckpointHarness.Seed seed = h.seedFirstRun(103, "head-st25a", StCheckpointHarness.PROMPT_V1);
         StCheckpointCrashArtifactStore crashCas = new StCheckpointCrashArtifactStore(h.cas);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
         crashCas.armFailOnPut(2); // findings blob 已落、model response blob 未写即崩
 
         WorkItemWorker workerA = h.newWorker("st25a-worker-a",
@@ -81,7 +81,7 @@ class St25PartialArtifactCrashIT extends PostgresITBase {
     @Test
     void checkpointPresentButModelBlobMissingDiscardsAndReruns() throws Exception {
         StCheckpointHarness.Seed seed = h.seedFirstRun(104, "head-st25b", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
 
         // attempt#1 完整写入（模型 + 双 CAS + checkpoint 行），随后崩溃（不做 T2）
         StCheckpointHarness.Claimed first = h.claim("st25b-worker-a");

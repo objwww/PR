@@ -1,8 +1,11 @@
 package com.objwww.pr.control.it;
 
-import com.objwww.pr.control.domain.ai.ModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
+import com.objwww.pr.control.domain.ai.ModelCallContext;
+import com.objwww.pr.control.domain.ai.ModelGatewayPort;
 import com.objwww.pr.control.domain.ai.ModelRequest;
 import com.objwww.pr.control.domain.ai.ModelResult;
+import com.objwww.pr.control.domain.ai.RoutedModelResult;
 import com.objwww.pr.control.domain.ai.TokenUsage;
 
 import java.util.concurrent.CountDownLatch;
@@ -14,7 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 已领到租约并卡在模型调用内（"执行中"窗口），测试主线程随后拨过期租约让新 Worker
  * 接管；{@link #release()} 放行后旧 Worker 的晚到写必须被租约栅栏拦下。
  */
-final class StCheckpointBlockingModelClient implements ModelClient {
+final class StCheckpointBlockingModelClient implements ModelGatewayPort {
 
     private final CountDownLatch entered = new CountDownLatch(1);
     private final CountDownLatch release = new CountDownLatch(1);
@@ -26,7 +29,7 @@ final class StCheckpointBlockingModelClient implements ModelClient {
     }
 
     @Override
-    public ModelResult complete(ModelRequest request) {
+    public RoutedModelResult complete(ModelRequest request, ModelCallContext context) {
         calls.incrementAndGet();
         entered.countDown();
         try {
@@ -37,7 +40,7 @@ final class StCheckpointBlockingModelClient implements ModelClient {
             Thread.currentThread().interrupt();
             throw new StCheckpointHarness.SimulatedCrash("阻塞模型被中断");
         }
-        return new ModelResult(content, new TokenUsage(0, 0, 0), "mock-model");
+        return MockModelGateway.routed(new ModelResult(content, new TokenUsage(0, 0, 0), "mock-model"));
     }
 
     /** 等旧 Worker 进入模型调用（= 已领租约、执行中） */

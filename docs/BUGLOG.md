@@ -514,3 +514,59 @@
 - **解决方案**（`deploy/e2e-m2.sh` E2E-30-C）：拆栈前先取证——`m2_journal_find` 快照崩溃前 journal 到 `stub-checks-pre.json`；断言拆成两条确定性断言：「崩溃前 repair 远端写恰 1 次」（pre=1）+「恢复后 repair 远端零重复写」（post=0）。恰好一次的总量由 pre+post 两窗闭合证明，不再依赖单一日志面存活。
 - **预防措施**：凡用例自编排含 `down/up`/重启栈的动作，journal/内存态证据一律**先取证后拆栈**；跨重启的"恰好一次"断言改用"重启前快照 + 重启后增量"两段闭合，或改断 DB/事件面（持久证据）。
 - **关联**：TB-26、E2E-30-C、TB-13（stub 内存态同族教训：凡依赖 stub 内存态的断言都要先问它活多久）。
+
+### INC-58 —— 已修复（M3 工序 4 部署验证发现：CT22V4UpgradeIT 硬编码断言 flyway 版本 =4，V5 落地后必败；M2-era IT 的 M3 适配遗漏，本机无 docker 盲区未暴露）
+
+- **现象**：M3 代码首次 195 真跑全量 verify（2026-09-02），control IT 52 条中 CT22V4UpgradeIT 唯一败：`expected "4" but was "5"`。
+- **根因**：M2 编码 CT-22 时把"全链升级后的 flyway 版本"硬编码为 4（两处断言 + 坏迁移注入用 V5__bad.sql 占位）；M3 新增 V5 正式迁移后，migrate 到最新=5、坏迁移占位的 V5 版本号撞正式迁移。M3 编码期的测试适配遗漏了这条 M2-era IT（本机无 docker，IT 从未本机跑过——INC-27 同族盲区）。
+- **解决方案**：两处版本断言 4→5（注释改为"当前最新版"，javadoc 注明随迁移目录演进）；坏迁移注入改 V6__bad.sql（版本号必须未被占用）。
+- **预防措施**：版本号/阶段号硬编码断言在新增迁移时必炸——部署门侧 DP-01/DP-19 已用迁移目录动态最大版本（TB-06 修复的既有正确姿势），IT 侧本次跟进；后续新增 V6+ 时全库 grep 既有 IT 的版本字面量。M3 类跨版本适配清单应含"M2-era IT 逐条过一遍版本/构造签名假设"。
+- **关联**：CT-22、DP-19、INC-27（本机 docker 盲区）、TB-06（动态版本门禁先例）。
+
+### INC-59 —— 已修复（M3 工序 4 部署验证发现：EX06ModelFailureIT 预算用例仍走 M0 语义（线束内 ModelBudgetGuard 兜底），M3 预算闸移至真 Gateway 后 mock 线束不再触发；IT 适配遗漏）
+
+- **现象**：同上轮 195 verify，publisher IT 中 EX06ModelFailureIT.budgetExceededFailsStepAndLedgersEvent 败：`expected FAILED but was REVIEW_COMPLETE`——入队 completion=9000 超预算的 ModelResult，无人拒绝，评审照常完成。
+- **根因**：M0/M2 的逐次预算校验在线束注入的 ModelBudgetGuard（ReviewAgentLoop 构造参数）；M3 把预算闸收进真 ModelGateway（ModelStepBudgetGuard，单测覆盖），ReviewAgentLoop 只认 ModelGatewayPort——IT 线束的 ItModelClient/MockModelGateway 不经过预算闸，EX06 测试 1 的"超预算用量→FAILED"前提不再成立。M3 编码期适配了 EX06 的超时半段（ModelCallFailedException 承载）但漏了预算半段。
+- **解决方案**：EX06 测试 1 改按接口契约入队 `ModelBudgetExceededException`（ModelGatewayPort javadoc 明示的预算拒绝通道）——断言语义不变（WorkItemWorker→Step FAILED/MODEL_BUDGET_EXCEEDED/BUDGET_EXCEEDED 事件/零 outbox），预算判定本身归 ModelGateway/ModelStepBudgetGuard 单测。清理随之失效的 ModelResult/TokenUsage import。
+- **预防措施**：删除一个"构造注入的守卫组件"时，必须全量盘点它的间接行为面（哪些测试靠它拦）；IT 适配清单按"异常类型×注入点"矩阵过，不只按编译错误过。
+- **关联**：EX-06、M3 方案 §4.4（预算闸落点）、INC-58（同批 M3 适配遗漏）。
+
+### INC-60 —— 已修复待回归（M3 工序 4 部署验证发现：markUnknownOlderThan 直接绑定 Instant，pgjdbc 07006 拒推类型 → Recovery 每分钟静默失败、超龄 STARTED 永不标 UNKNOWN；零真 PG 覆盖盲区）
+
+- **现象**：195 起栈（V5 首上）后 control 日志每分钟一条 `账本 Recovery 扫描失败（下周期重试）: BadSqlGrammarException`；catch 块只记异常类名不记 message，PG 服务端零错误日志（语句根本没发到库）。
+- **根因**：`PostgresModelCallLedgerRepository.markUnknownOlderThan` 用 `jdbc.update(sql, threshold)` 直接绑 `java.time.Instant`——pgjdbc 全版本不支持 Instant 类型推导（`Can't infer the SQL type to use for an instance of java.time.Instant`，SQLState 07006，Spring 误归类 BadSqlGrammarException）。该方法此前只有单测假仓储覆盖，无任何真 PG IT——M3 编码期"新仓储方法必须配真 PG 用例"的执行漏洞（CT 矩阵漏列）。195 探针（同驱动 jar + 同角色 + 同语句 + setObject(Instant)）1 次复现；手动 psql 同语义 UPDATE 正常，坐实是客户端类型绑定问题而非授权/DDL。
+- **解决方案**：绑定改 `Timestamp.from(threshold)`（项目既有惯例，INC-60 注释留痕）。补真 PG 回归 `PostgresModelCallLedgerRepositoryTest`：超龄 STARTED→UNKNOWN+fresh 不动+终态不可改写+幂等重扫，insertStarted→completeTerminalSuccess 主写路径走真实 control_app 列级授权+V5 CHECK。连带修 `PostgresITBase` 清场清单漏 V5 表（ALL_TABLES + model_call_ledger，16 张，javadoc 同步）——不清场会让工序 5 的账本断言吃到 IT 残留。
+- **预防措施**：① 新增仓储方法一律配真 PG 组件测试，"单测假仓储全绿"不构成持久层证据；② 时间参数绑定只用项目惯例 `Timestamp.from`，禁用 Instant 直绑（架构测试可加静态扫描：src/main 中 `jdbc.update(...Instant` 形态拒入）；③ catch 告警日志必须带 `e.getMessage()`（本次诊断被"只记类名"拖慢一轮，异常消息零成本且常常一句话定位）。
+- **关联**：M3 方案 §4.6（Recovery 语义）、DP-22（账本冒烟依赖 Recovery 收敛超龄 STARTED）、INC-27/58（本机无 docker 盲区同族）。
+
+### INC-61 —— 已修复（M3 工序 4 全 stub 窗口接线缺口：APP_MODEL_GATEWAY_TOTALDEADLINEMS 只进 .env 不进 compose 环境块，旋钮根本到不了容器；连带暴露 perCall ≤ totalDeadline 第三环）
+
+- **现象**：全 stub 窗口（`.env.allstub.bak-r8`：lease=60 + TOTALDEADLINEMS=30000 已配对）切窗后 control 仍被 F-22 拒启；修好 compose 透传后又被 `perCallTimeout 不得大于 gatewayTotalDeadline` 拒启（per-call 默认 120s > 窗口 deadline 30s）。
+- **根因**：两层。① compose control-app 环境块只透传了 M2 旋钮 `APP_WORKER_MAXLEASESECONDS`，M3 新旋钮 `APP_MODEL_GATEWAY_TOTALDEADLINEMS` 在 .env 里声明了但 compose 从不引用——`.env` 不是容器环境的隐式通道，未声明的键根本进不了容器（工序 4 之前全 stub 窗口从未真跑过 M3 代码，INC-56"未真跑模式必有第二层缺陷"同族）。② M3 启动校验不等式链是三环：lease > deadline + 10s 余量（F-22）∧ perCall ≤ deadline（ModelGatewayParams 构造）∧ recovery-after ≥ 2×perCall——只配平第一环不够。
+- **解决方案**：compose 补两行透传（`APP_MODEL_GATEWAY_TOTALDEADLINEMS:-300000`、`APP_MODEL_PERCALLTIMEOUTMS:-120000`，默认值=代码默认，注释写明不等式链与合法三元组）；195 `.env.allstub.bak-r8` 补 `APP_MODEL_PERCALLTIMEOUTMS=20000`——演练窗合法三元组定型为 **lease=60 / deadline=30000 / percall=20000**（recovery-after 默认 240 ≥ 2×20 自动满足）。DP-28 随之重写为模式感知：混合模式断言 .env 零声明+渲染值=代码默认；演练窗断言三元组精确成对；CIRCUIT/LEDGER/MAXCALL 三个从未接线的旋钮保持三面零出现断言。
+- **预防措施**：① 新增配置旋钮时必须"链路三段"同时落——yml 占位、compose 透传、部署门禁的渲染值断言，缺一即"旋钮是摆设"；② 不等式链有几个环就要在部署文档写几个环的合法组合，只写一个环的组合必在下一环炸；③ 门禁断言值为"名称出现次数=0"类时，一旦该旋钮被正式接线就必须同步改断言语义（残留检查→值检查）。
+- **关联**：INC-56（未真跑模式同族）、F-22、DP-28、M3 方案 §4.9。
+
+### INC-62 —— 已修复（G2 核心集真跑发现：E2E-48 双断言缺陷——OPEN_REJECT 时间锚查错列名静默返空 + 探针统计窗口把烧闸请求圈进探针集）
+
+- **现象**：E2E-48 首跑 FAIL=1「无 OPEN_REJECT 事件时间锚」，但同案 REJ=149 事件计数断言 PASS（事件明明存在）；修列名后复跑又 FAIL「探针间隔过密 932ms<55s」。
+- **根因**：两层。① TOPEN 查询写 `min(ee.created_at)`，`execution_event` 表无此列（正确列 `occurred_at`）——psql 报错被 `|| true` 链路吞掉，静默返空。② 探针统计窗口写 `loggedDate >= TOPEN-2000`，把熔断打开**之前**的 3 次烧闸请求圈进"探针"集；932ms 实为烧闸请求互间隔。真实时间线（journal 实证）：3 次烧闸（3.3s 内）→ OPEN → 91s 后 1 个 HALF_OPEN 探针，完全符合"冷却 60s、每周期恰一发"。
+- **解决方案**：TOPEN 改 `min(ee.occurred_at)`；探针窗口严格从 TOPEN 起算（`loggedDate >= $t0`），新增断言"首个探针距开闸 ≥55s"（冷却期内零提前放行）。
+- **预防措施**：① 取证 SQL 列名必须对 `\d <table>` 核实，"查询返空"与"事件不存在"必须可区分（psql 错误不得静默吞）；② 时间窗断言先画出真实事件时间线再定窗口边界，容差方向要想清楚往哪边偏。
+- **关联**：M3 方案 §11 E2E-48（G2-H3）、e2e-m3.sh `e2e_48`。
+
+### INC-63 —— 已修复（G2 核心集真跑发现：E2E-49 被跨案污染——E2E-48 的 50 个 FAILED 演练 PR 未收尾，PrStateReconciler 按设计重燃，30 次真实模型调用冲进后案 journal 窗口）
+
+- **现象**：E2E-49「恢复后模型调用恰 1 次」实测 31；故障窗内零请求、账本恰 1 行 SUCCEEDED 均 PASS，唯独 journal 全局计数爆表。
+- **根因**：E2E-48 的 50 个演练 PR 全部 FAILED 终态但在 stub 侧仍 OPEN；`PrStateReconciler`（M2 既有自愈设计，`reconciler:pr-state:` 合成 intake）扫描到"OPEN 且无成功评审"即重燃——30 个重燃 Run 各打 1 次真实模型调用（09:20:07~11 密集爆发，账本 `started_at` 逐行实证），落在 E2E-49 的 journal 计数窗口内。另查明 195 上另有 12 个 M2 时代同类残留主体，为全套件级污染源。
+- **解决方案**：① `e2e_48`/`e2e_60` 收尾段把本案演练 PR 主体就地 CLOSED（`update pr_subject set state='CLOSED'`），掐断重燃源——污染源治理优先于放松断言；② 195 存量 62 个残留 OPEN 主体一次性 CLOSED 清场；③ E2E-49 复跑 6/0 全绿（「恰 1 次」=1 实证）。
+- **预防措施**：① 任何"故意制造 FAILED Run"的用例，收尾必须回答"这些 OPEN 主体下一轮 reconciler 扫描会怎样"——FAILED≠环境静默；② journal 全局计数类断言对跨案并发天然脆弱，用例设计要么收窄计数口径、要么保证前案零残留；③ 排障先查账本 `trigger_key` 前缀（`reconciler:`/`repair:`/delivery_id 三族一眼分流）。
+- **关联**：`PrStateReconciler`（control/application）、e2e-m3.sh `e2e_48`/`e2e_60` 收尾段。
+
+### INC-64 —— 已修复（G2 核心集真跑发现：E2E-51 缺熔断器进程内存态隔离 + E2E-60 断言误解 §4.4「耗尽即 Fail」语义）
+
+- **现象**：dual-distinct 批 E2E-51「崩溃前主侧恰 3 次」实测 0、账本实测 1 行（期望 4）；E2E-60「step_attempt 恰 3 行」实测 1。
+- **根因**：两案各一层。① E2E-51 与 E2E-42 同容器连跑仅隔 ~10s：E2E-42 主侧三连烧 500 已把主路由熔断器（进程内存态，冷却 60s）留在 OPEN，E2E-51 主侧调用被 OPEN_REJECT 快败、零触网直切备——fallback 本身按设计工作，但用例前提"主侧烧 3 次再切备"被前案状态短路。② E2E-60 双路由同挂 500 时，物理调用预算 6（主备共享，§4.4）在 attempt1 内 3 主+3 备烧满 → 耗尽即 Fail，Step 一 attempt 直接 FAILED；原断言"恰 3 attempt"误解了方案语义（attempt 预算是进程崩溃级兜底，本场景不行使；对比 E2E-48：OPEN_REJECT 快败不耗物理预算才走满 3 attempt）。产品行为与方案一致，错的是断言。
+- **解决方案**：① `e2e_51`/`e2e_60` 开头重启 control 归零熔断器（同 E2E-48 既有口径），隔离前案内存态；② E2E-60 断言改"step_attempt 恰 1 行 + 账本恰 6 行"，等待文案同步修正；③ 复跑双绿（各 12/0）。
+- **预防措施**：① 凡断言依赖熔断器初始态的用例，开头必须重启归零或显式等待冷却——进程内存态是跨案隐藏耦合面；② 写断言前先对方案语义条目（§4.4 预算共享/耗尽语义），"预期行为"不得凭直觉写。
+- **关联**：M3 方案 §4.4（I35 预算 Step 级共享）、§4.10（熔断器内存态）、e2e-m3.sh `e2e_51`/`e2e_60`。

@@ -1,8 +1,8 @@
 package com.objwww.pr.control.application;
 
-import com.objwww.pr.control.domain.ai.MockModelClient;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
-import com.objwww.pr.control.domain.ai.ModelTimeoutException;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
+import com.objwww.pr.control.domain.ai.ModelCallFailedException;
+import com.objwww.pr.control.domain.ai.ModelRouteIdentity;
 import com.objwww.pr.control.domain.model.ArtifactType;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewRun;
@@ -40,7 +40,7 @@ class ReviewStepExecutorTest {
     private static final Digest DIFF_DIGEST = Digest.sha256Of("diff");
 
     private OrchestratorFixture fx;
-    private MockModelClient modelClient;
+    private MockModelGateway modelClient;
     private ReviewStepExecutor executor;
     private RunStep step;
     private WorkItem item;
@@ -48,7 +48,7 @@ class ReviewStepExecutorTest {
     @BeforeEach
     void setUp() {
         fx = new OrchestratorFixture();
-        modelClient = new MockModelClient();
+        modelClient = new MockModelGateway();
         ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
                 PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
                 DIFF_DIGEST, SNAPSHOT_DIGEST,
@@ -57,17 +57,19 @@ class ReviewStepExecutorTest {
         item = fx.workItems.findByStepId(step.getId()).orElseThrow();
         Instant now = Instant.now();
         item.leaseTo("test-worker", now.plusSeconds(600), now);
-        executor = executorWith(new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
-                new PolicyEngine(new ToolRegistry())), "test/model/v1");
+        executor = executorWith(new ReviewAgentLoop(modelClient, new FindingMapper(),
+                new PolicyEngine(new ToolRegistry())), "v1");
     }
 
-    private ReviewStepExecutor executorWith(ReviewAgentLoop loop, String modelIdentity) {
+    private ReviewStepExecutor executorWith(ReviewAgentLoop loop, String contractVersion) {
         ObjectMapper mapper = new ObjectMapper();
         var resume = new CheckpointResumeService(fx.checkpoints, fx.artifacts, fx.cas, fx.ledger, mapper);
         var writer = new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger);
         return new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
                 new SafeTarExtractor(), loop, ReviewBudget.DEFAULT, mapper,
-                resume, writer, fx.ledger, modelIdentity);
+                resume, writer, fx.ledger,
+                requestedModel -> java.util.Optional.of(new ModelRouteIdentity(
+                        "mock-provider", requestedModel, contractVersion)));
     }
 
     private void stageInput() {
@@ -78,7 +80,7 @@ class ReviewStepExecutorTest {
     }
 
     private StepExecutionContext context() {
-        return new StepExecutionContext(item, step);
+        return new StepExecutionContext(item, step, java.util.UUID.randomUUID());
     }
 
     @Test
@@ -147,8 +149,8 @@ class ReviewStepExecutorTest {
 
         modelClient.enqueueContent("[]");
         ReviewStepExecutor changed = executorWith(new ReviewAgentLoop(modelClient,
-                new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry())),
-                "test/model/v2");
+                new FindingMapper(), new PolicyEngine(new ToolRegistry())),
+                "v2");
         changed.execute(context(), () -> true);
 
         assertThat(modelClient.requests()).hasSize(2);
@@ -219,13 +221,13 @@ class ReviewStepExecutorTest {
     @Test
     void modelTimeoutPropagates() {
         stageInput();
-        ReviewStepExecutor timeoutExecutor = executorWith(new ReviewAgentLoop(req -> {
-                    throw new ModelTimeoutException("模型超时", null);
-                }, new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry())),
-                "test/model/v1");
+        ReviewStepExecutor timeoutExecutor = executorWith(new ReviewAgentLoop((req, ctx) -> {
+                    throw new ModelCallFailedException("TIMEOUT", "模型超时", true);
+                }, new FindingMapper(), new PolicyEngine(new ToolRegistry())),
+                "v1");
 
         assertThatThrownBy(() -> timeoutExecutor.execute(context(), () -> true))
-                .isInstanceOf(ModelTimeoutException.class);
+                .isInstanceOf(ModelCallFailedException.class);
     }
 
     @Test

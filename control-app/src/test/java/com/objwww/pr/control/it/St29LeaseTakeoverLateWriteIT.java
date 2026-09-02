@@ -1,7 +1,7 @@
 package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +50,7 @@ class St29LeaseTakeoverLateWriteIT extends PostgresITBase {
         StCheckpointHarness.Seed seed = h.seedFirstRun(109, "head-st29", StCheckpointHarness.PROMPT_V1);
         StCheckpointBlockingModelClient blockingModel =
                 new StCheckpointBlockingModelClient(StCheckpointHarness.MODEL_OUTPUT);
-        MockModelClient modelB = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway modelB = StCheckpointHarness.modelReturningOutput();
 
         // worker-a：领租约 → 执行 → 卡在模型调用内（"执行中"窗口）
         WorkItemWorker workerA = h.newWorker("st29-worker-a", blockingModel);

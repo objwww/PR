@@ -1,8 +1,7 @@
 package com.objwww.pr.publisher.it;
 
-import com.objwww.pr.control.domain.ai.ModelTimeoutException;
-import com.objwww.pr.control.domain.ai.ModelResult;
-import com.objwww.pr.control.domain.ai.TokenUsage;
+import com.objwww.pr.control.domain.ai.ModelBudgetExceededException;
+import com.objwww.pr.control.domain.ai.ModelCallFailedException;
 import com.objwww.pr.control.domain.model.ReviewRun;
 import com.objwww.pr.shared.AttemptStatus;
 import com.objwww.pr.shared.ExecutionEventType;
@@ -37,8 +36,11 @@ class EX06ModelFailureIT extends PostgresITBase {
                         "head" + "5".repeat(36), "opened"),
                 ItTarballs.singleFile("src/A.java", "class A {}\n"), "diff");
 
-        // 实际 completion 用量超单次预算（默认 8000）→ ModelBudgetExceededException（不可重试）
-        harness.modelClient.enqueue(new ModelResult("[]", new TokenUsage(100, 9000, 9100), "m"));
+        // M3：预算闸在真 ModelGateway 内（ModelStepBudgetGuard，单测覆盖）；IT 线束用 mock
+        // gateway 不走预算闸，故按接口契约直接入队 ModelBudgetExceededException——
+        // 本用例钉的是 WorkItemWorker/orchestrator 对预算拒绝的 Step 级语义（§6.6 不降级）。
+        harness.modelClient.enqueueFailure(
+                new ModelBudgetExceededException("completion 9000 > max-completion-tokens-per-call 8000"));
         harness.newWorker("worker-1").runOnce();
 
         assertThat(harness.runRepo.findById(run.getId()).orElseThrow().getState())
@@ -63,7 +65,8 @@ class EX06ModelFailureIT extends PostgresITBase {
                 ItTarballs.singleFile("src/A.java", "class A {}\n"), "diff");
 
         // 第 1 次超时（可重试）→ RETRY_WAIT 退避；Run 不终态
-        harness.modelClient.enqueueFailure(new ModelTimeoutException("模型超时", null));
+        // M3：ModelTimeoutException 已删除，超时经 ModelCallFailedException("TIMEOUT", retryable=true) 承载
+        harness.modelClient.enqueueFailure(new ModelCallFailedException("TIMEOUT", "模型超时", true));
         harness.newWorker("worker-1").runOnce();
         var step = harness.stepRepo.findByRunId(run.getId()).get(0);
         assertThat(step.getState()).isEqualTo(StepState.WAITING);

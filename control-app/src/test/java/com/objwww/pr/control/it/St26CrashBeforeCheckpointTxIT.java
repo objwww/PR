@@ -1,7 +1,7 @@
 package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +45,7 @@ class St26CrashBeforeCheckpointTxIT extends PostgresITBase {
     @Test
     void crashBeforeCheckpointTxRerunsModelWithoutDuplicateArtifacts() throws Exception {
         StCheckpointHarness.Seed seed = h.seedFirstRun(105, "head-st26", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
         var crashWriter = new StCheckpointCrashCheckpointWriter(h.artifactRepo, h.checkpointRepo,
                 h.ledger);
 

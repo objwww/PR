@@ -6,6 +6,7 @@ import com.objwww.pr.control.application.LeaseHeartbeat;
 import com.objwww.pr.control.application.ReviewStepExecutor;
 import com.objwww.pr.control.application.StepExecutionContext;
 import com.objwww.pr.control.application.StepOutcome;
+import com.objwww.pr.control.domain.ai.ModelRouteCatalog;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.repository.ArtifactRepository;
 import com.objwww.pr.control.domain.repository.PRRevisionRepository;
@@ -32,10 +33,10 @@ final class StCheckpointRecordingExecutor extends ReviewStepExecutor {
                                   ReviewBudget budget, ObjectMapper objectMapper,
                                   CheckpointResumeService resumeService,
                                   CheckpointWriter checkpointWriter,
-                                  ExecutionLedger ledger, String modelIdentity) {
+                                  ExecutionLedger ledger, ModelRouteCatalog routeCatalog) {
         super(runRepository, revisionRepository, artifactStore, artifactRepository, extractor,
                 agentLoop, budget, objectMapper, resumeService, checkpointWriter, ledger,
-                modelIdentity);
+                routeCatalog);
     }
 
     @Override

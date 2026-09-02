@@ -14,8 +14,6 @@ import com.objwww.pr.control.application.WorkItemWorker;
 import com.objwww.pr.control.application.CheckpointWriter;
 import com.objwww.pr.control.application.RepairDispatchService;
 import com.objwww.pr.control.application.RepairPlanner;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
-import com.objwww.pr.control.domain.ai.ModelClient;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.domain.port.CredentialTokenPort;
 import com.objwww.pr.control.domain.port.GitHubPrMetadataPort;
@@ -48,8 +46,6 @@ import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.infrastructure.github.GitHubPrMetadataAdapter;
 import com.objwww.pr.control.infrastructure.github.GitHubReadAdapter;
 import com.objwww.pr.control.infrastructure.github.HttpCredentialTokenPort;
-import com.objwww.pr.control.infrastructure.model.SpringAiModelClient;
-import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -95,10 +91,8 @@ public class ReviewFlowConfig {
         return new FindingMapper();
     }
 
-    @Bean
-    public ModelBudgetGuard modelBudgetGuard() {
-        return new ModelBudgetGuard();
-    }
+    // M3：ModelBudgetGuard 已移除，预算由 ModelGateway 统一管理
+    // M3：ModelClient / SpringAiModelClient 已移除，唯一出口是 ModelGatewayPort
 
     @Bean
     public ToolRegistry toolRegistry() {
@@ -141,18 +135,16 @@ public class ReviewFlowConfig {
         return new GitHubPrMetadataAdapter(credentialTokenPort, apiBase);
     }
 
-    @Bean
-    public ModelClient modelClient(OpenAiChatModel chatModel, ModelBudgetGuard budgetGuard,
-                                   @Value("${spring.ai.openai.chat.options.model}") String model) {
-        return new SpringAiModelClient(chatModel, budgetGuard, model);
-    }
+    // M3：旧 ModelClient bean 已移除，统一使用 ModelGatewayPort（I28 唯一出口）
 
     // ---------- application 服务 ----------
 
     @Bean
-    public ReviewAgentLoop reviewAgentLoop(ModelClient modelClient, ModelBudgetGuard budgetGuard,
-                                           FindingMapper findingMapper, PolicyEngine policyEngine) {
-        return new ReviewAgentLoop(modelClient, budgetGuard, findingMapper, policyEngine);
+    public ReviewAgentLoop reviewAgentLoop(
+            com.objwww.pr.control.domain.ai.ModelGatewayPort modelGateway,
+            FindingMapper findingMapper,
+            PolicyEngine policyEngine) {
+        return new ReviewAgentLoop(modelGateway, findingMapper, policyEngine);
     }
 
     @Bean
@@ -203,13 +195,11 @@ public class ReviewFlowConfig {
                                                  CheckpointResumeService resumeService,
                                                  CheckpointWriter checkpointWriter,
                                                  ExecutionLedger ledger,
-                                                 @Value("${app.review.model-provider:openai-compatible}") String provider,
-                                                 @Value("${spring.ai.openai.chat.options.model}") String model,
-                                                 @Value("${app.review.model-version:configured}") String modelVersion) {
+                                                 // M3（§4.7/I30）：checkpoint 契约身份由 Gateway 路由目录提供
+                                                 com.objwww.pr.control.domain.ai.ModelRouteCatalog routeCatalog) {
         return new ReviewStepExecutor(runRepository, revisionRepository, artifactStore,
                 artifactRepository, extractor, agentLoop, ReviewBudget.DEFAULT, objectMapper,
-                resumeService, checkpointWriter, ledger,
-                provider + "/" + model + "/" + modelVersion);
+                resumeService, checkpointWriter, ledger, routeCatalog);
     }
 
     /** WorkItem Worker（评审修正 #2）：虚拟线程循环，start/stop 由容器生命周期驱动 */

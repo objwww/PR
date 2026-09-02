@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 /** checkpoint 三条件恢复：行存在、双 CAS/登记/schema 完整、五分量契约相同。 */
 public final class CheckpointResumeService {
@@ -57,13 +58,32 @@ public final class CheckpointResumeService {
         this.mapper = Objects.requireNonNull(mapper);
     }
 
+    /**
+     * M3（§4.7/I30）：resume 不再接收"当前路由"契约——恢复发生在模型调用前，
+     * 当前实际路由身份未知（G1 阻断项 2 裁定）。改为按 checkpoint 保存的
+     * model_identity 反查当前配置路由的契约身份：
+     * resolver 抛异常（身份无法解析）→ CHECKPOINT_CORRUPT；
+     * 返回 null（路由已被移除/禁用）→ ROUTE_REMOVED；
+     * 否则以解析出的契约走既有五分量比较与 CAS 校验。
+     */
     public Optional<ResumeHit> resume(ReviewRun run, RunStep step, UUID attemptId,
-                                      CheckpointContract contract) {
+                                      Function<String, CheckpointContract> contractResolver) {
         Optional<StepCheckpoint> found = checkpoints.find(step.getId(), StepCheckpoint.REVIEW_OUTCOME);
         if (found.isEmpty()) {
             return Optional.empty();
         }
         StepCheckpoint checkpoint = found.get();
+        CheckpointContract contract;
+        try {
+            contract = contractResolver.apply(checkpoint.modelIdentity());
+        } catch (RuntimeException e) {
+            discard(run, step, attemptId, checkpoint, DiscardReason.CHECKPOINT_CORRUPT.name());
+            return Optional.empty();
+        }
+        if (contract == null) {
+            discard(run, step, attemptId, checkpoint, "ROUTE_REMOVED");
+            return Optional.empty();
+        }
         String contractChange = contractChange(checkpoint, contract);
         if (contractChange != null) {
             discard(run, step, attemptId, checkpoint, contractChange);
@@ -82,7 +102,7 @@ public final class CheckpointResumeService {
         }
         try {
             ReviewOutcome outcome = parseOutcome(output.bytes(),
-                    new String(model.bytes(), StandardCharsets.UTF_8));
+                    new String(model.bytes(), StandardCharsets.UTF_8), checkpoint.modelIdentity());
             ledger.append(ledger.newEvent(run.getId(), run.getPrRevisionId(), step.getId(), attemptId,
                     ExecutionEventType.CHECKPOINT_REUSED, null, run.getId(), PRODUCER, Map.of(
                             "checkpoint_id", checkpoint.id().toString(),
@@ -147,7 +167,7 @@ public final class CheckpointResumeService {
         }
     }
 
-    private ReviewOutcome parseOutcome(byte[] json, String modelResponse) {
+    private ReviewOutcome parseOutcome(byte[] json, String modelResponse, String modelIdentity) {
         try {
             JsonNode root = mapper.readTree(json);
             if (root == null || !root.isObject() || !root.path("findings").isArray()
@@ -171,7 +191,8 @@ public final class CheckpointResumeService {
                     requiredInt(stats, "selected_files"), requiredInt(stats, "truncated_files"),
                     new TokenUsage(requiredLong(usage, "prompt_tokens"),
                             requiredLong(usage, "completion_tokens"),
-                            requiredLong(usage, "total_tokens")), modelResponse);
+                            requiredLong(usage, "total_tokens")), modelResponse,
+                    com.objwww.pr.control.domain.ai.ModelRouteIdentity.fromCanonicalString(modelIdentity));
         } catch (Exception e) {
             throw new IllegalArgumentException("checkpoint findings 无法恢复", e);
         }

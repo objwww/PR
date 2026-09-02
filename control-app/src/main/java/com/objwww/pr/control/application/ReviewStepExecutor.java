@@ -1,6 +1,7 @@
 package com.objwww.pr.control.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.domain.ai.ModelRouteCatalog;
 import com.objwww.pr.control.domain.model.ArtifactRecord;
 import com.objwww.pr.control.domain.model.ArtifactType;
 import com.objwww.pr.control.domain.model.PRRevision;
@@ -61,7 +62,7 @@ public class ReviewStepExecutor implements StepExecutor {
     private final CheckpointResumeService resumeService;
     private final CheckpointWriter checkpointWriter;
     private final ExecutionLedger ledger;
-    private final String modelIdentity;
+    private final ModelRouteCatalog routeCatalog;
 
     public ReviewStepExecutor(ReviewRunRepository runRepository,
                               PRRevisionRepository revisionRepository,
@@ -70,7 +71,7 @@ public class ReviewStepExecutor implements StepExecutor {
                               ReviewBudget budget, ObjectMapper objectMapper,
                               CheckpointResumeService resumeService,
                               CheckpointWriter checkpointWriter,
-                              ExecutionLedger ledger, String modelIdentity) {
+                              ExecutionLedger ledger, ModelRouteCatalog routeCatalog) {
         this.runRepository = Objects.requireNonNull(runRepository);
         this.revisionRepository = Objects.requireNonNull(revisionRepository);
         this.artifactStore = Objects.requireNonNull(artifactStore);
@@ -82,7 +83,7 @@ public class ReviewStepExecutor implements StepExecutor {
         this.resumeService = Objects.requireNonNull(resumeService);
         this.checkpointWriter = Objects.requireNonNull(checkpointWriter);
         this.ledger = Objects.requireNonNull(ledger);
-        this.modelIdentity = Objects.requireNonNull(modelIdentity);
+        this.routeCatalog = Objects.requireNonNull(routeCatalog);
     }
 
     @Override
@@ -99,13 +100,15 @@ public class ReviewStepExecutor implements StepExecutor {
         PRRevision revision = revisionRepository.findById(run.getPrRevisionId())
                 .orElseThrow(() -> new IllegalStateException("pr_revision 不存在: " + run.getPrRevisionId()));
 
-        CheckpointContract contract = new CheckpointContract(
-                run.getPromptVersion() + "/" + ReviewAgentLoop.PROMPT_TEMPLATE_VERSION,
-                ReviewContractVersions.FINDING_SCHEMA_VERSION,
-                FindingMapper.CONTRACT_VERSION,
-                ReviewAgentLoop.CONTEXT_BUILDER_VERSION,
-                modelIdentity);
-        var resumed = resumeService.resume(run, step, context.attemptId(), contract);
+        // M3（§4.7/I30）：恢复发生在模型调用前，当前实际路由未知——按 checkpoint 保存的
+        // model_identity 反查当前配置路由的契约身份；路由已移除 → ROUTE_REMOVED discard。
+        var resumed = resumeService.resume(run, step, context.attemptId(), savedIdentity -> {
+            String requestedModel = com.objwww.pr.control.domain.ai.ModelRouteIdentity
+                    .fromCanonicalString(savedIdentity).requestedModel();
+            return routeCatalog.findContractIdentityByModel(requestedModel)
+                    .map(identity -> baseContract(run.getPromptVersion(), identity.toCanonicalString()))
+                    .orElse(null);
+        });
         if (resumed.isPresent()) {
             return new StepOutcome.Succeeded(resumed.get().outputDigest(), resumed.get().outcome());
         }
@@ -120,9 +123,19 @@ public class ReviewStepExecutor implements StepExecutor {
         SnapshotTree snapshot = extractor.extract(tarball); // 安全解包拒绝上抛（EX-10）
         String diffText = new String(diffBytes, StandardCharsets.UTF_8);
 
-        // 2) 模型评审（超时/超预算/乱输出异常上抛，Worker 归类；安全步骤不降级）
+        // 2) 模型评审（M3：传 ModelCallContext，异常上抛由 Worker 归类；安全步骤不降级）
         checkAlive(heartbeat);
-        ReviewOutcome outcome = agentLoop.review(snapshot, revision.getHeadSha(), diffText, budget);
+        com.objwww.pr.control.domain.ai.ModelCallContext modelContext =
+                new com.objwww.pr.control.domain.ai.ModelCallContext(
+                        run.getId(),
+                        run.getPrRevisionId(),
+                        step.getId(),
+                        context.attemptId(),
+                        context.workItem().getLeaseEpoch(),
+                        Instant.now().plus(budget.timeout()), // stepDeadline
+                        heartbeat::isAlive // leaseHeartbeat：传检查方法
+                );
+        ReviewOutcome outcome = agentLoop.review(snapshot, revision.getHeadSha(), diffText, budget, modelContext);
 
         // 3) findings JSON 落 CAS（大对象只进 CAS，库里存 digest，v2.2 §5）
         checkAlive(heartbeat);
@@ -141,13 +154,17 @@ public class ReviewStepExecutor implements StepExecutor {
         ArtifactRecord modelRecord = new ArtifactRecord(modelDigest, ArtifactType.MODEL_RESPONSE,
                 modelBody.length, modelPath, storedAt);
 
+        // M3：checkpoint 契约按实际路由身份铸造——digest 与五分量自洽（消灭占位符 digest）
+        CheckpointContract contract = baseContract(run.getPromptVersion(),
+                outcome.contractIdentity().toCanonicalString());
         var checkpoint = new com.objwww.pr.control.domain.model.StepCheckpoint(
                 UUID.randomUUID(), step.getId(),
                 com.objwww.pr.control.domain.model.StepCheckpoint.REVIEW_OUTCOME,
                 outputDigest, modelDigest, contract.digest(),
                 contract.promptTemplateVersion(), contract.findingSchemaVersion(),
                 contract.mapperContractVersion(), contract.contextBuilderVersion(),
-                contract.modelIdentity(), context.workItem().getLeaseEpoch(),
+                outcome.contractIdentity().toCanonicalString(), // M3：实际路由契约身份
+                context.workItem().getLeaseEpoch(),
                 context.workItem().getAttemptCount(), storedAt);
         var event = ledger.newEvent(run.getId(), run.getPrRevisionId(), step.getId(), context.attemptId(),
                 ExecutionEventType.CHECKPOINT_STORED, null, run.getId(), PRODUCER, Map.of(
@@ -172,6 +189,16 @@ public class ReviewStepExecutor implements StepExecutor {
         if (!heartbeat.isAlive()) {
             throw new LeaseLostException("租约已失效（心跳 0 行），停止执行");
         }
+    }
+
+    /** 五分量契约：四个代码版本 + 模型契约身份（resume 用保存身份反查值，落库用实际路由值）。 */
+    private CheckpointContract baseContract(String promptVersion, String modelIdentity) {
+        return new CheckpointContract(
+                promptVersion + "/" + ReviewAgentLoop.PROMPT_TEMPLATE_VERSION,
+                ReviewContractVersions.FINDING_SCHEMA_VERSION,
+                FindingMapper.CONTRACT_VERSION,
+                ReviewAgentLoop.CONTEXT_BUILDER_VERSION,
+                modelIdentity);
     }
 
     /** findings + 统计的确定性 JSON（与 T2 落 review_finding 同源） */

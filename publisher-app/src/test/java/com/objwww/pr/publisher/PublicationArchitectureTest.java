@@ -178,4 +178,41 @@ class PublicationArchitectureTest {
             }
         }
     }
+
+    /**
+     * AFT-22（M3 方案 §1 不做项）：publisher 全模块源码零引用模型治理类——
+     * Gateway/路由/熔断/预算/定价/账本一律不得出现在 publisher 依赖中。
+     * 动态兜底：publisher 对账本表的零权限由 DP-20/DP-24 栈级断言。
+     */
+    @Test
+    void publisherHasNoModelGovernanceDependency() {
+        noClasses().that().resideInAPackage("..publisher..")
+                .should().dependOnClassesThat().resideInAPackage("..control.domain.ai..")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("ModelGateway")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("ModelRoute")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("CircuitBreaker")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("ModelStepBudgetGuard")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("PricingService")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("ModelCallLedger")
+                .check(classes);
+    }
+
+    /**
+     * AFT-32（M3 方案 §1 不做项，与 AFT-22 互补）：依赖图向钉死——publisher 不得依赖
+     * Gateway / 路由目录 / 定价 / 账本仓储任何其一（AFT-22 扫类名引用面，本条按全限定名
+     * 钉关键类型本身，防改名绕过）。
+     */
+    @Test
+    void publisherDoesNotDependOnGatewayRoutePricingOrLedger() {
+        noClasses().that().resideInAPackage("..publisher..")
+                .should().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.objwww.pr.control.application.ModelGateway")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.objwww.pr.control.domain.ai.ModelCallLedgerRepository")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.objwww.pr.control.domain.ai.PricingService")
+                .orShould().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.objwww.pr.control.domain.ai.ModelRouteCatalog")
+                .check(classes);
+    }
 }

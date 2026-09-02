@@ -47,7 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class UT17ResumeCombinationTest {
 
     private static final CheckpointContract CONTRACT = new CheckpointContract(
-            "prompt-v1", "schema-v1", "mapper-v1", "context-v1", "model-v1");
+            "prompt-v1", "schema-v1", "mapper-v1", "context-v1", "test/model/v1");
     private static final byte[] FINDINGS_JSON = """
             {"findings":[],"stats":{"findings":0,"dropped":0,"malformed":0,\
             "candidate_files":0,"selected_files":0,"truncated_files":0},\
@@ -180,7 +180,7 @@ class UT17ResumeCombinationTest {
                 "prompt-v1", "schema-v1", "mapper-v1", "context-v1", "model-v2");
 
         Optional<CheckpointResumeService.ResumeHit> hit =
-                service.resume(run, step, UUID.randomUUID(), current);
+                service.resume(run, step, UUID.randomUUID(), savedIdentity -> current);
 
         if (expectedReason == null) {
             assertThat(hit).isPresent();

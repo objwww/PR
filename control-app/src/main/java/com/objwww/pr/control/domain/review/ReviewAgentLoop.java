@@ -1,9 +1,9 @@
 package com.objwww.pr.control.domain.review;
 
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
-import com.objwww.pr.control.domain.ai.ModelClient;
+import com.objwww.pr.control.domain.ai.ModelCallContext;
+import com.objwww.pr.control.domain.ai.ModelGatewayPort;
 import com.objwww.pr.control.domain.ai.ModelRequest;
-import com.objwww.pr.control.domain.ai.ModelResult;
+import com.objwww.pr.control.domain.ai.RoutedModelResult;
 import com.objwww.pr.control.domain.snapshot.SnapshotTree;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 
@@ -15,14 +15,16 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 评审 Agent 主循环（domain 服务，§3/§6.6）：外层确定性状态机 + 内层单轮模型调用。
+ * 评审 Agent 主循环（domain 服务，§3/附录 D）：外层确定性状态机 + 内层单轮模型调用。
+ *
+ * <p>M3 修改：改依赖 ModelGatewayPort（上层端口）；删除内联 budgetGuard 调用（预算上收 Gateway）。
  *
  * <p>确定性流程（同输入同产出）：
  * <ol>
  *   <li>文件选择：快照条目已按路径字典序定序，按 maxFiles/maxBytes 预算顺序截断，
  *       截断记数（不允许"悄悄不看"）；</li>
  *   <li>打包：diff 全文 + 选中文件内容打成单个 prompt bundle（M0 单轮，多 bundle 分组是 M2+）；</li>
- *   <li>模型调用：ModelBudgetGuard 调用前后两道校验，超时/超预算抛领域异常（Step FAILED，不降级）；</li>
+ *   <li>模型调用：经 ModelGateway 全链路（重试/fallback/熔断/账本/预算）；</li>
  *   <li>解析：结构化 findings JSON，整体乱输出 → {@link ModelOutputParseException} 安全失败；</li>
  *   <li>映射：FindingMapper 按 existing_code 重定位行号 + fingerprint，丢弃计数。</li>
  * </ol>
@@ -35,16 +37,15 @@ public final class ReviewAgentLoop {
     public static final String PROMPT_TEMPLATE_VERSION = "review-prompt-template-v1";
     public static final String CONTEXT_BUILDER_VERSION = "single-bundle-context-v1";
 
-    private final ModelClient modelClient;
-    private final ModelBudgetGuard budgetGuard;
+    private final ModelGatewayPort modelGateway;
     private final FindingMapper findingMapper;
     @SuppressWarnings("unused") // M2 工具循环检查点留缝：多轮工具调用放开时在此过 Policy
     private final PolicyEngine policyEngine;
 
-    public ReviewAgentLoop(ModelClient modelClient, ModelBudgetGuard budgetGuard,
-                           FindingMapper findingMapper, PolicyEngine policyEngine) {
-        this.modelClient = Objects.requireNonNull(modelClient);
-        this.budgetGuard = Objects.requireNonNull(budgetGuard);
+    public ReviewAgentLoop(ModelGatewayPort modelGateway,
+                           FindingMapper findingMapper,
+                           PolicyEngine policyEngine) {
+        this.modelGateway = Objects.requireNonNull(modelGateway);
         this.findingMapper = Objects.requireNonNull(findingMapper);
         this.policyEngine = Objects.requireNonNull(policyEngine);
     }
@@ -56,13 +57,15 @@ public final class ReviewAgentLoop {
      * @param headSha  评审对象代码身份（fingerprint 组分）
      * @param diffText base..head unified diff 全文（prompt 组分）
      * @param budget   确定性预算
+     * @param context  模型调用上下文（显式传递，M3 新增）
      */
     public ReviewOutcome review(SnapshotTree snapshot, String headSha, String diffText,
-                                ReviewBudget budget) {
+                                ReviewBudget budget, ModelCallContext context) {
         Objects.requireNonNull(snapshot, "snapshot");
         Objects.requireNonNull(headSha, "headSha");
         Objects.requireNonNull(diffText, "diffText");
         Objects.requireNonNull(budget, "budget");
+        Objects.requireNonNull(context, "context");
 
         // 1) 确定性文件选择：字典序已定序，预算内顺序收录，超预算即截断并记数
         List<SnapshotTree.Entry> candidates = snapshot.entries();
@@ -80,14 +83,12 @@ public final class ReviewAgentLoop {
         // 2) 打包：diff + 选中文件内容（单 bundle，M0 单轮）
         String prompt = buildPrompt(diffText, selected);
 
-        // 3) 模型调用：预算守卫前后两道（守卫也在适配器内执行，此处是领域侧独立防线）
+        // 3) 模型调用：经 ModelGateway 全链路（预算已在 Gateway 内校验）
         ModelRequest request = new ModelRequest(prompt, budget.maxCompletionTokens(), budget.timeout());
-        budgetGuard.validate(request);
-        ModelResult result = modelClient.complete(request);
-        budgetGuard.checkUsage(request, result.tokenUsage());
+        RoutedModelResult routedResult = modelGateway.complete(request, context);
 
         // 4) 解析：整体乱输出 → 安全失败异常（不产出半个 ReviewOutcome）
-        FindingJsonParser.ParseResult parsed = new FindingJsonParser().parse(result.content());
+        FindingJsonParser.ParseResult parsed = new FindingJsonParser().parse(routedResult.result().content());
 
         // 5) 行号工程映射：不信模型行号，按 existing_code 重定位。
         //    映射面 = 全量快照（不是仅入选 prompt 的文件）：INC-19 真实联调发现模型从
@@ -99,8 +100,17 @@ public final class ReviewAgentLoop {
         }
         FindingMapper.MappingResult mapped = findingMapper.map(headSha, contents, parsed.findings());
 
-        return new ReviewOutcome(mapped.findings(), mapped.droppedCount(), parsed.malformedCount(),
-                candidates.size(), selected.size(), truncated, result.tokenUsage(), result.content());
+        return new ReviewOutcome(
+                mapped.findings(),
+                mapped.droppedCount(),
+                parsed.malformedCount(),
+                candidates.size(),
+                selected.size(),
+                truncated,
+                routedResult.result().tokenUsage(),
+                routedResult.result().content(),
+                routedResult.contractIdentity() // M3 新增：实际路由契约身份
+        );
     }
 
     /** prompt 组装（确定性：文件按定序清单逐节拼接） */

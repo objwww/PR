@@ -15,7 +15,6 @@ import com.objwww.pr.control.application.WorkItemWorker;
 import com.objwww.pr.control.application.CheckpointWriter;
 import com.objwww.pr.control.application.RepairDispatchService;
 import com.objwww.pr.control.application.RepairPlanner;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewRun;
 import com.objwww.pr.control.domain.model.RunStep;
@@ -184,7 +183,7 @@ final class ItHarness {
                 sequenceAllocator, casStore, artifactRepo);
         orchestratorProxy = transactionalProxy(buildOrchestrator());
         snapshotService = new SnapshotService(sourcePort, extractor, casStore, artifactRepo);
-        agentLoop = new ReviewAgentLoop(modelClient, new ModelBudgetGuard(),
+        agentLoop = new ReviewAgentLoop(modelClient,
                 new FindingMapper(), new PolicyEngine(new ToolRegistry()));
         // M1-T04：IntakeService 是纯执行段（同步 dispatch），不再有自持 Executor 的 accept 入口
         intakeService = new IntakeService(snapshotService, orchestratorProxy, casStore, artifactRepo,
@@ -246,7 +245,9 @@ final class ItHarness {
                 ledger, PostgresITBase.OM);
         StepExecutor reviewExecutor = new ReviewStepExecutor(runRepo, revisionRepo, casStore,
                 artifactRepo, extractor, agentLoop, budget, PostgresITBase.OM,
-                resumeService, checkpointWriter, ledger, "it/mock-model/v1");
+                resumeService, checkpointWriter, ledger,
+                // M3：catalog 反查身份与 ItModelClient 上报的契约身份一致（checkpoint 复用不断链）
+                requestedModel -> java.util.Optional.of(ItModelClient.IDENTITY));
         // 心跳间隔拉大：确定性测试不依赖心跳线程；租约时长 60s
         return new WorkItemWorker(workItemRepo, stepRepo, attemptRepo, List.of(reviewExecutor),
                 orchestratorProxy, workerId, 60, 60_000, 0, 0, 50);

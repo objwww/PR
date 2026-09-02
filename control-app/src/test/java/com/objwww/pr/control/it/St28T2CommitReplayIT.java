@@ -2,7 +2,7 @@ package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.StepCompletion;
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -48,7 +48,7 @@ class St28T2CommitReplayIT extends PostgresITBase {
     @Test
     void replayAfterT2CommitProducesNoDuplicates() {
         StCheckpointHarness.Seed seed = h.seedFirstRun(107, "head-st28", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
         StCheckpointRecordingExecutor executor = h.newRecordingExecutor(model);
         WorkItemWorker workerA = h.newWorker("st28-worker-a", executor);
 

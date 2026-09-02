@@ -1,7 +1,7 @@
 package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>预期断言（可机器检查）：
  * <ul>
- *   <li>模型调用恰 1 次（MockModelClient.requests 留痕）；</li>
+ *   <li>模型调用恰 1 次（MockModelGateway.requests 留痕）；</li>
  *   <li>step_checkpoint 恰 1 行（key=REVIEW_OUTCOME，lease_epoch/attempt_no=1）；</li>
  *   <li>artifact 登记 4 行：FINDING_BODY + MODEL_RESPONSE + 2×REVIEW_PAYLOAD（T2 outbox
  *       payload），digest 全唯一；</li>
@@ -44,7 +44,7 @@ class St23FirstRunCheckpointIT extends PostgresITBase {
     @Test
     void firstRunStoresCheckpointAndBothArtifacts() {
         StCheckpointHarness.Seed seed = h.seedFirstRun(101, "head-st23", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
         WorkItemWorker worker = h.newWorker("st23-worker", model);
 
         worker.runOnce();

@@ -1,7 +1,7 @@
 package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.StepOutcome;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,7 +46,7 @@ class St27CheckpointResumeZeroModelIT extends PostgresITBase {
     @Test
     void resumeAfterCheckpointCommitCallsModelZeroTimes() {
         StCheckpointHarness.Seed seed = h.seedFirstRun(106, "head-st27", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
 
         // attempt#1：checkpoint 提交后"进程死亡"（T2 前窗口）
         StCheckpointHarness.Claimed first = h.claim("st27-worker-a");

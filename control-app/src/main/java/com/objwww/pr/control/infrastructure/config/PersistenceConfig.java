@@ -32,6 +32,7 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresWorkItemReposito
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
@@ -116,6 +117,12 @@ public class PersistenceConfig {
     @Bean
     public ArtifactRepository artifactRepository(JdbcClient jdbc) {
         return new PostgresArtifactRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.domain.ai.ModelCallLedgerRepository modelCallLedgerRepository(JdbcClient jdbc, DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresModelCallLedgerRepository(
+                new JdbcTemplate(dataSource));
     }
 
     @Bean

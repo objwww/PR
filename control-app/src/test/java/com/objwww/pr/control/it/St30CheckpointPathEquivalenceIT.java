@@ -3,7 +3,7 @@ package com.objwww.pr.control.it;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.objwww.pr.control.application.StepOutcome;
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,7 +63,7 @@ class St30CheckpointPathEquivalenceIT extends PostgresITBase {
     void resumedPathIsEquivalentToColdPath() throws Exception {
         // ---- Run X：checkpoint 提交后崩溃 → 零模型续跑闭环
         StCheckpointHarness.Seed seedX = h.seedFirstRun(110, "head-st30-x", StCheckpointHarness.PROMPT_V1);
-        MockModelClient modelX = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway modelX = StCheckpointHarness.modelReturningOutput();
         StCheckpointHarness.Claimed first = h.claim("st30-worker-a");
         StepOutcome crashed = h.newReviewExecutor(modelX).execute(first.context(), () -> true);
         assertThat(crashed).isInstanceOf(StepOutcome.Succeeded.class);
@@ -79,7 +79,7 @@ class St30CheckpointPathEquivalenceIT extends PostgresITBase {
         // ---- Run Y：同 subject 同输入，冷路径直达闭环
         StCheckpointHarness.Seed seedY = h.seedRunOnSubject(seedX.subjectId(), 110, "head-st30-y",
                 StCheckpointHarness.PROMPT_V1);
-        MockModelClient modelY = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway modelY = StCheckpointHarness.modelReturningOutput();
         WorkItemWorker workerY = h.newWorker("st30-worker-c", modelY);
         workerY.runOnce();
         assertThat(modelY.requests()).hasSize(1);

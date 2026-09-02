@@ -53,5 +53,23 @@ public enum ExecutionEventType {
     REPAIR_APPROVED,
     REPAIR_REPAIRED,
     REPAIR_FAILED,
-    REPAIR_EXPIRED
+    REPAIR_EXPIRED,
+    /**
+     * 熔断 OPEN 快败拒绝（M3，附录 C）：未触网，payload 含 route_id/invocation_id/
+     * fault_scope/reason；非物理调用，不混入 model_call_ledger。
+     */
+    MODEL_CIRCUIT_OPEN_REJECT,
+    /**
+     * 预算拒绝（M3，附录 C）：零触网，payload 含 route_id/invocation_id/reason。
+     */
+    MODEL_BUDGET_REJECTED,
+    /**
+     * 路由切换决策（M3，附录 C）：payload 含 from_route/to_route/invocation_id/fault_scope/reason。
+     */
+    MODEL_FALLBACK_SELECTED,
+    /**
+     * 长 Retry-After 转 durable 延迟（M3，附录 C）：payload 含 route_id/invocation_id/
+     * not_before/reason；Gateway 不在 Worker 线程内长睡。
+     */
+    MODEL_RETRY_DEFERRED
 }

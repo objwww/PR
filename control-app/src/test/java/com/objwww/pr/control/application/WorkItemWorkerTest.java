@@ -1,5 +1,6 @@
 package com.objwww.pr.control.application;
 
+import com.objwww.pr.control.domain.ai.ModelRouteIdentity;
 import com.objwww.pr.control.domain.ai.TokenUsage;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewRun;
@@ -57,7 +58,8 @@ class WorkItemWorkerTest {
         return new StepOutcome.Succeeded(Digest.sha256Of("output"),
                 new ReviewOutcome(List.of(new ReviewFindingDraft("a/Foo.java", 3, 3,
                         "rule-1", "MAJOR", "msg", Digest.sha256Of("fp-1"))),
-                        0, 0, 1, 1, 0, new TokenUsage(10, 20, 30), "[]"));
+                        0, 0, 1, 1, 0, new TokenUsage(10, 20, 30), "[]",
+                        new ModelRouteIdentity("mock-provider", "mock-model", "v1")));
     }
 
     /** 可编程执行器 stub：workType 固定 REVIEW，逻辑由函数注入 */

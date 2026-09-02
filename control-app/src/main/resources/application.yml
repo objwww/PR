@@ -11,12 +11,16 @@ spring:
   flyway:
     enabled: false
   ai:
+    # M3：模型调用全走手工装配的双路由（M3ModelGatewayConfig），自动配置的单一
+    # OpenAiChatModel 无人消费——显式关闭 chat 自动配置
+    model:
+      chat: none
     openai:
-      # 仅占位，保证默认 profile 无真实凭证时也能启动；真实值由环境变量注入
+      # 仅占位：audio/image 等其余 OpenAI 自动配置（matchIfMissing）装配期要求非空 key，
+      # 无真实凭证的 profile 也能启动；这些 bean 均无人消费。真实值只走环境变量注入
       api-key: ${AGENT_MODEL_API_KEY:placeholder-not-configured}
-      chat:
-        options:
-          model: ${AGENT_MODEL:qwen-plus}
+    retry:
+      max-attempts: 1  # M3 INC-42/I34: 关闭 Spring AI 内置重试（官方默认 10 次），由 Gateway 管控；启动自检断言
 
 # CAS（内容寻址存储）根目录：M0-T06 SnapshotService 落盘位置，不写死
 app:
@@ -31,3 +35,34 @@ app:
     policy-version: ${APP_POLICY_VERSION:m0-policy-v1}
     prompt-version: ${APP_PROMPT_VERSION:m0-prompt-v1}
     toolset-version: ${APP_TOOLSET_VERSION:m0-toolset-v1}
+    # M3 checkpoint 契约身份两段（V4 兼容：默认值与 M2 接线一致，主路由不变时旧 checkpoint 可复用）
+    model-provider: ${APP_MODEL_PROVIDER:openai-compatible}
+    model-version: ${APP_MODEL_VERSION:configured}
+  # M3 模型治理配置（§4.9；路由的模型/端点/密钥直接走环境变量 AGENT_MODEL /
+  # AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
+  model:
+    route:
+      primary-id: ${APP_MODEL_ROUTE_PRIMARY_ID:primary}
+      fallback-id: ${APP_MODEL_ROUTE_FALLBACK_ID:fallback}
+    max-call-retries: 2            # 同路由 call 级重试上限（含首次共 3 次）
+    budget:
+      max-physical-calls-per-step: 6     # 主备共享
+      max-prompt-tokens-per-call: 100000
+      max-completion-tokens-per-call: 16000
+      max-total-tokens-per-step: 120000
+    gateway:
+      total-deadline-ms: 300000          # Gateway 总时限（含一切退避等待）
+      inline-retry-max-delay-ms: 15000   # 线程内等待上限，超出走 durable Defer
+    per-call-timeout-ms: 120000          # 单次物理调用硬超时（同时派生 socket read-timeout）
+    circuit:
+      failure-threshold: 3
+      cool-down-seconds: 60
+    ledger:
+      recovery-after-seconds: 240        # 启动校验：>= 2 × per-call-timeout
+      recovery-scan-interval-ms: 60000
+    retry:
+      backoff-base-ms: 1000              # 无头 429 指数退避基数（带抖动）
+      backoff-max-ms: 60000
+    # 单价表：app.model.price.<model>.{input,output}-micros-per-1k + pricing-version + currency；
+    # 双单价均为 0（默认）= 不估算；改价必须升 pricing-version
+    price: {}

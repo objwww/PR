@@ -11,9 +11,10 @@ import com.objwww.pr.control.application.StepExecutor;
 import com.objwww.pr.control.application.StepOutcome;
 import com.objwww.pr.control.application.T2Outcome;
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
-import com.objwww.pr.control.domain.ai.ModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
+import com.objwww.pr.control.domain.ai.ModelGatewayPort;
+import com.objwww.pr.control.domain.ai.ModelRouteCatalog;
+import com.objwww.pr.control.domain.ai.ModelRouteIdentity;
 import com.objwww.pr.control.domain.model.RunStep;
 import com.objwww.pr.control.domain.model.StepAttempt;
 import com.objwww.pr.control.domain.model.WorkItem;
@@ -83,7 +84,6 @@ final class StCheckpointHarness {
     static final String TOOLSET = "m2-toolset-v1";
     static final String PROMPT_V1 = "m2-prompt-v1";
     static final String PROMPT_V2 = "m2-prompt-v2";
-    static final String MODEL_IDENTITY = "it/mock-model/v1";
     static final long INSTALLATION_ID = 77L;
     static final long REPOSITORY_ID = 12345L;
     static final String REPO_FULL_NAME = "org/repo";
@@ -173,29 +173,33 @@ final class StCheckpointHarness {
         return transactionalProxy(new CheckpointWriter(artifactRepo, checkpointRepo, ledger));
     }
 
-    /** 以指定 CAS/CheckpointWriter/模型客户端装配 REVIEW 执行器（注入桩在此接线） */
+    /** mock 路由目录：按请求模型名反查 mock 契约身份（checkpoint 落库身份与 resume 反查一致） */
+    static final ModelRouteCatalog MOCK_ROUTE_CATALOG = requestedModel ->
+            java.util.Optional.of(new ModelRouteIdentity("mock-provider", requestedModel, "v1"));
+
+    /** 以指定 CAS/CheckpointWriter/模型网关装配 REVIEW 执行器（注入桩在此接线） */
     ReviewStepExecutor newReviewExecutor(ArtifactStore store, CheckpointWriter writer,
-                                         ModelClient modelClient) {
+                                         ModelGatewayPort modelGateway) {
         var resume = new CheckpointResumeService(checkpointRepo, artifactRepo, store, ledger, om);
-        var agentLoop = new ReviewAgentLoop(modelClient, new ModelBudgetGuard(),
+        var agentLoop = new ReviewAgentLoop(modelGateway,
                 new FindingMapper(), new PolicyEngine(new ToolRegistry()));
         return new ReviewStepExecutor(runRepo, revisionRepo, store, artifactRepo, extractor,
-                agentLoop, ReviewBudget.DEFAULT, om, resume, writer, ledger, MODEL_IDENTITY);
+                agentLoop, ReviewBudget.DEFAULT, om, resume, writer, ledger, MOCK_ROUTE_CATALOG);
     }
 
-    /** 默认形态执行器（真 CAS + 真 checkpoint 写器 + 指定模型客户端） */
-    ReviewStepExecutor newReviewExecutor(ModelClient modelClient) {
-        return newReviewExecutor(cas, newCheckpointWriter(), modelClient);
+    /** 默认形态执行器（真 CAS + 真 checkpoint 写器 + 指定模型网关） */
+    ReviewStepExecutor newReviewExecutor(ModelGatewayPort modelGateway) {
+        return newReviewExecutor(cas, newCheckpointWriter(), modelGateway);
     }
 
     /** ST-28 用：记录最近一次执行结果的执行器（接线同默认形态） */
-    StCheckpointRecordingExecutor newRecordingExecutor(ModelClient modelClient) {
+    StCheckpointRecordingExecutor newRecordingExecutor(ModelGatewayPort modelGateway) {
         var resume = new CheckpointResumeService(checkpointRepo, artifactRepo, cas, ledger, om);
-        var agentLoop = new ReviewAgentLoop(modelClient, new ModelBudgetGuard(),
+        var agentLoop = new ReviewAgentLoop(modelGateway,
                 new FindingMapper(), new PolicyEngine(new ToolRegistry()));
         return new StCheckpointRecordingExecutor(runRepo, revisionRepo, cas, artifactRepo,
                 extractor, agentLoop, ReviewBudget.DEFAULT, om, resume, newCheckpointWriter(),
-                ledger, MODEL_IDENTITY);
+                ledger, MOCK_ROUTE_CATALOG);
     }
 
     /** 新建 Worker（心跳 60s 不干扰确定性时序；租约上限 600s；runOnce 单轮驱动） */
@@ -204,8 +208,8 @@ final class StCheckpointHarness {
                 orchestratorProxy, workerId, 600, 60_000, 0, 0, 50);
     }
 
-    WorkItemWorker newWorker(String workerId, ModelClient modelClient) {
-        return newWorker(workerId, newReviewExecutor(modelClient));
+    WorkItemWorker newWorker(String workerId, ModelGatewayPort modelGateway) {
+        return newWorker(workerId, newReviewExecutor(modelGateway));
     }
 
     ReviewOrchestrator orchestrator() {
@@ -350,10 +354,10 @@ final class StCheckpointHarness {
                 .param("id", runId).query(String.class).single();
     }
 
-    /** 模型调用计数用客户端（requests() 留痕） */
-    static MockModelClient modelReturningOutput() {
-        MockModelClient client = new MockModelClient();
-        client.enqueueContent(MODEL_OUTPUT);
-        return client;
+    /** 模型调用计数用网关（requests() 留痕） */
+    static MockModelGateway modelReturningOutput() {
+        MockModelGateway gateway = new MockModelGateway();
+        gateway.enqueueContent(MODEL_OUTPUT);
+        return gateway;
     }
 }

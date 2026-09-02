@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CheckpointResumeServiceTest {
 
     private static final CheckpointContract CONTRACT = new CheckpointContract(
-            "prompt-v1", "schema-v1", "mapper-v1", "context-v1", "model-v1");
+            "prompt-v1", "schema-v1", "mapper-v1", "context-v1", "test/model/v1");
     private static final byte[] FINDINGS_JSON = """
             {"findings":[],"stats":{"findings":0,"dropped":0,"malformed":0,\
             "candidate_files":0,"selected_files":0,"truncated_files":0},\
@@ -138,7 +138,7 @@ class CheckpointResumeServiceTest {
     }
 
     private Optional<CheckpointResumeService.ResumeHit> resume() {
-        return service.resume(run, step, UUID.randomUUID(), CONTRACT);
+        return service.resume(run, step, UUID.randomUUID(), savedIdentity -> CONTRACT);
     }
 
     private String discardReason() {

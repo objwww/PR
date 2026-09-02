@@ -12,14 +12,6 @@ spring:
     # T18：迁移由 compose 独立 one-shot 服务 migrate（flyway/flyway，owner 身份）执行；
     # control 容器不持 DDL 凭证，compose 以 SPRING_FLYWAY_ENABLED=false 关闭此处自动迁移
     enabled: true
-  ai:
-    openai:
-      # OpenAI 兼容端点（百炼等），见 .env
-      base-url: ${OPENAI_COMPAT_BASE_URL}
-      api-key: ${AGENT_MODEL_API_KEY}
-      chat:
-        options:
-          model: ${AGENT_MODEL:qwen-plus}
 
 # docker 栈内 CAS 目录挂卷（B16：独立于应用只读 rootfs 的可写卷）
 app:
@@ -51,3 +43,18 @@ app:
       backoff-base-seconds: 60      # 失败指数退避基数：next = now() + base*2^(errorCount-1)
       degraded-threshold: 3         # 连续失败 >= 3 → ReconcilerDegraded 告警（措辞修正 #3）
       error-sleep-ms: 30000
+  # M3 模型治理（§4.9）：旋钮默认值见 application.yml；这里只留部署期需按需覆盖的面。
+  # 路由模型/端点/密钥直接走环境变量（AGENT_MODEL(_FALLBACK) / OPENAI_COMPAT_BASE_URL(_FALLBACK) /
+  # AGENT_MODEL_API_KEY(_FALLBACK)），不落 yml。
+  model:
+    budget:
+      max-prompt-tokens-per-call: ${APP_MODEL_MAX_PROMPT_TOKENS:100000}
+      max-completion-tokens-per-call: ${APP_MODEL_MAX_COMPLETION_TOKENS:16000}
+      max-total-tokens-per-step: ${APP_MODEL_MAX_TOTAL_TOKENS:120000}
+    # 单价表（部署时按模型档位填；双单价 0 = 不估算）：示例——
+    # price:
+    #   qwen-plus:
+    #     pricing-version: v2025-01
+    #     currency: CNY
+    #     input-micros-per-1k: 800
+    #     output-micros-per-1k: 2000

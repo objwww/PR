@@ -415,9 +415,16 @@ public class ReviewOrchestrator {
         // 1) 租约栅栏（I11）：晚到结果 UPDATE 0 行 → 记 STALE，不推进 Step/Run
         WorkItemState workItemTarget = success ? WorkItemState.DONE
                 : retryWithBudgetLeft ? WorkItemState.RETRY_WAIT : WorkItemState.DEAD;
-        Instant retryAt = workItemTarget == WorkItemState.RETRY_WAIT
-                ? now.plusSeconds(RETRY_BACKOFF_BASE_SECONDS * Math.max(1, workItem.getAttemptCount()))
-                : null;
+
+        // M3（v1.3 冻结公式）：retryAt = max(线性退避, failure.notBefore)——
+        // Retry-After 只抬高下限，不得取消 attempt 层退避节奏（防 Provider 短头值热循环）
+        Instant retryAt = null;
+        if (workItemTarget == WorkItemState.RETRY_WAIT) {
+            Instant linear = now.plusSeconds(RETRY_BACKOFF_BASE_SECONDS * Math.max(1, workItem.getAttemptCount()));
+            retryAt = failure.notBefore() != null && failure.notBefore().isAfter(linear)
+                    ? failure.notBefore() : linear;
+        }
+
         boolean leaseCurrent = workItemRepository.transitionIfLeaseCurrent(completion.workItemId(),
                 completion.leaseOwner(), completion.leaseEpoch(), workItemTarget, retryAt);
         if (!leaseCurrent) {

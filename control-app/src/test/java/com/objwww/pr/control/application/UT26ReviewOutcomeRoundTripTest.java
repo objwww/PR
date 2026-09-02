@@ -1,9 +1,9 @@
 package com.objwww.pr.control.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.objwww.pr.control.domain.ai.MockModelClient;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.ai.ModelResult;
+import com.objwww.pr.control.domain.ai.ModelRouteIdentity;
 import com.objwww.pr.control.domain.ai.TokenUsage;
 import com.objwww.pr.control.domain.model.PrSubjectState;
 import com.objwww.pr.control.domain.model.ReviewRun;
@@ -48,7 +48,7 @@ class UT26ReviewOutcomeRoundTripTest {
     private static final TokenUsage USAGE = new TokenUsage(123, 45, 168);
 
     private OrchestratorFixture fx;
-    private MockModelClient modelClient;
+    private MockModelGateway modelClient;
     private ReviewStepExecutor executor;
     private RunStep step;
     private WorkItem item;
@@ -56,7 +56,7 @@ class UT26ReviewOutcomeRoundTripTest {
     @BeforeEach
     void setUp() {
         fx = new OrchestratorFixture();
-        modelClient = new MockModelClient();
+        modelClient = new MockModelGateway();
         ReviewRun run = fx.orchestrator.runIntake(new IntakeCommand(987L, 12345L, "org/repo", 7,
                 PrSubjectState.OPEN, false, false, "head1", "main", "base1", null,
                 DIFF_DIGEST, SNAPSHOT_DIGEST,
@@ -70,9 +70,11 @@ class UT26ReviewOutcomeRoundTripTest {
         var writer = new CheckpointWriter(fx.artifacts, fx.checkpoints, fx.ledger);
         executor = new ReviewStepExecutor(fx.runs, fx.revisions, fx.cas, fx.artifacts,
                 new SafeTarExtractor(),
-                new ReviewAgentLoop(modelClient, new ModelBudgetGuard(), new FindingMapper(),
+                new ReviewAgentLoop(modelClient, new FindingMapper(),
                         new PolicyEngine(new ToolRegistry())),
-                ReviewBudget.DEFAULT, mapper, resume, writer, fx.ledger, "ut26/model/v1");
+                ReviewBudget.DEFAULT, mapper, resume, writer, fx.ledger,
+                requestedModel -> java.util.Optional.of(new ModelRouteIdentity(
+                        "mock-provider", requestedModel, "v1")));
         byte[] tarball = TestTarballs.tarGz(out -> TestTarballs.file(out,
                 TestTarballs.GH_PREFIX + "a/Foo.java", "int a = 1;\nint x = 0/1;\n"));
         fx.cas.putIfAbsent(SNAPSHOT_DIGEST, tarball);
@@ -83,8 +85,8 @@ class UT26ReviewOutcomeRoundTripTest {
     void resumedOutcomeIsFieldByFieldIdenticalToOriginal() {
         modelClient.enqueue(new ModelResult(MODEL_OUTPUT, USAGE, "mock-model"));
 
-        StepOutcome first = executor.execute(new StepExecutionContext(item, step), () -> true);
-        StepOutcome second = executor.execute(new StepExecutionContext(item, step), () -> true);
+        StepOutcome first = executor.execute(new StepExecutionContext(item, step, java.util.UUID.randomUUID()), () -> true);
+        StepOutcome second = executor.execute(new StepExecutionContext(item, step, java.util.UUID.randomUUID()), () -> true);
 
         // 第二跑命中 checkpoint：零模型调用 + REUSED 事件
         assertThat(modelClient.requests()).hasSize(1);

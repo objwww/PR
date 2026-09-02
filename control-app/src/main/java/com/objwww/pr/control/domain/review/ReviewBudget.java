@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * 单次评审的确定性预算（§6.6）：文件数/总字节上限决定截断点，
- * maxCompletionTokens + timeout 是单次模型调用的硬约束（ModelBudgetGuard 执行）。
+ * maxCompletionTokens + timeout 是单次模型调用的硬约束（M3 起由 ModelGateway 统一执行）。
  * 预算截断必须记数（ReviewOutcome.truncatedFiles），不允许"悄悄不看"（§3 ReviewAgentLoop）。
  */
 public record ReviewBudget(int maxFiles, long maxBytes, int maxCompletionTokens, Duration timeout) {

@@ -152,6 +152,15 @@ services:
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:?} # stub 模式 = http://github-stub:8080
       AGENT_MODEL_API_KEY: ${AGENT_MODEL_API_KEY:?}       # stub 模式 = 占位串（stub 不验）
       AGENT_MODEL: ${AGENT_MODEL:-qwen-plus}
+      # M3 双路由（裁定 C-2 半配置，M3ModelGatewayConfig）：三键空默认 = 单路由合法。
+      # E2E-42/51/60 需「端点覆盖档」（OPENAI_COMPAT_BASE_URL_FALLBACK 指向
+      #   github-stub 的 /fallback 前缀，WireMock urlPath 可区分主备）；
+      # E2E-46 需「继承档」（仅设 AGENT_MODEL_FALLBACK，端点/密钥继承主侧）。
+      # .env 两档增补（含密钥值）与 control 重建由执行方在 195 操作；e2e-m3.sh 只做
+      # 形态前置检查，形态不符记 [SKIP] 并打印所需键名，不伪造通过。
+      AGENT_MODEL_FALLBACK: ${AGENT_MODEL_FALLBACK:-}
+      OPENAI_COMPAT_BASE_URL_FALLBACK: ${OPENAI_COMPAT_BASE_URL_FALLBACK:-}
+      AGENT_MODEL_API_KEY_FALLBACK: ${AGENT_MODEL_API_KEY_FALLBACK:-}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?}
       INTERNAL_TOKEN_SECRET: ${INTERNAL_TOKEN_SECRET:?}
       PUBLISHER_TOKEN_ENDPOINT: http://publisher-app:8081
@@ -161,6 +170,14 @@ services:
       # M2 测试加速旋钮（Spring relaxed binding → app.worker.max-lease-seconds）；
       # 默认 600 与代码默认一致，仅 .env 显式覆盖时生效（E2E-26/27/30 租约回收等待）
       APP_WORKER_MAXLEASESECONDS: ${APP_WORKER_MAXLEASESECONDS:-600}
+      # M3 F-22 配对旋钮（→ app.model.gateway.total-deadline-ms，默认 300000=300s 同代码默认）：
+      # 加速窗口下调 max-lease 时必须成对下调本值（不等式 max-lease > deadline + 10s 余量，
+      # 单降 lease 会被启动校验拒启——工序 4 实证，INC-61）
+      APP_MODEL_GATEWAY_TOTALDEADLINEMS: ${APP_MODEL_GATEWAY_TOTALDEADLINEMS:-300000}
+      # 同上第三环（→ app.model.per-call-timeout-ms，默认 120000=120s）：
+      # perCall ≤ totalDeadline 不等式（ModelGatewayParams 构造校验），演练窗合法三元组
+      # = lease 60 / deadline 30000 / percall 20000（DP-28 模式感知断言）
+      APP_MODEL_PERCALLTIMEOUTMS: ${APP_MODEL_PERCALLTIMEOUTMS:-120000}
     ports:
       # 默认仅绑 loopback（安全底线）；真实联调需 GitHub 公网投递时在 .env 设
       # CONTROL_BIND=0.0.0.0（HMAC 验签 fail-closed 兜底，M0 已实测）

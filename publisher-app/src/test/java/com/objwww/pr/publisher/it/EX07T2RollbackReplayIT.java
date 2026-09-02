@@ -61,7 +61,8 @@ class EX07T2RollbackReplayIT extends PostgresITBase {
         StepOutcome.Succeeded success = new StepOutcome.Succeeded(Digest.sha256Of("ex07-output"),
                 new ReviewOutcome(List.of(new ReviewFindingDraft("src/A.java", 1, 1,
                         "rule-1", "INFO", "msg", Digest.sha256Of("ex07-fp"))),
-                        0, 0, 1, 1, 0, new TokenUsage(0, 0, 0), "model-response-raw"));
+                        0, 0, 1, 1, 0, new TokenUsage(0, 0, 0), "model-response-raw",
+                        com.objwww.pr.control.domain.ai.ModelRouteIdentity.fromCanonicalString("it/mock-model/v1")));
         StepCompletion completion = new StepCompletion(claimed.workItem().getId(),
                 claimed.step().getId(), claimed.attempt().getId(), "worker-1", 1, success);
 
@@ -113,7 +114,8 @@ class EX07T2RollbackReplayIT extends PostgresITBase {
         StepOutcome.Succeeded success = new StepOutcome.Succeeded(Digest.sha256Of("ex07-output2"),
                 new ReviewOutcome(List.of(new ReviewFindingDraft("src/A.java", 1, 1,
                         "rule-1", "INFO", "msg", Digest.sha256Of("ex07-fp2"))),
-                        0, 0, 1, 1, 0, new TokenUsage(0, 0, 0), "model-response-raw"));
+                        0, 0, 1, 1, 0, new TokenUsage(0, 0, 0), "model-response-raw",
+                        com.objwww.pr.control.domain.ai.ModelRouteIdentity.fromCanonicalString("it/mock-model/v1")));
         StepCompletion completion = new StepCompletion(claimed.workItem().getId(),
                 claimed.step().getId(), claimed.attempt().getId(), "worker-1", 1, success);
 

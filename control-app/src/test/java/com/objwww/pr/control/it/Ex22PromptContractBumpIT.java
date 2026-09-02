@@ -2,7 +2,7 @@ package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.application.StepOutcome;
 import com.objwww.pr.control.application.WorkItemWorker;
-import com.objwww.pr.control.domain.ai.MockModelClient;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
 import com.objwww.pr.control.domain.model.StepCheckpoint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ class Ex22PromptContractBumpIT extends PostgresITBase {
     @Test
     void promptBumpDiscardsCheckpointAndReruns() {
         StCheckpointHarness.Seed seed = h.seedFirstRun(112, "head-ex22", StCheckpointHarness.PROMPT_V1);
-        MockModelClient model = StCheckpointHarness.modelReturningOutput();
+        MockModelGateway model = StCheckpointHarness.modelReturningOutput();
 
         // attempt#1 完整写入后崩溃（T2 前窗口）
         StCheckpointHarness.Claimed first = h.claim("ex22-worker-a");

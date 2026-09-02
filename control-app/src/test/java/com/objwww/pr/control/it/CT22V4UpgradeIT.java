@@ -20,13 +20,14 @@ import static org.assertj.core.api.Assertions.catchThrowable;
  * CT-22（docs/M2-技术方案.md §11 L2 表，回指评审 #17 / §4.1 V4 DDL）。
  *
  * <p>场景：带历史数据原地升级——在独立库（同容器，不影响共享主库）按 V1→V3 迁移，
- * 灌 V3 形态历史数据（Run/Outbox/PRESENT/MISSING 资源行），再 Flyway 全链升 V4；
+ * 灌 V3 形态历史数据（Run/Outbox/PRESENT/MISSING 资源行），再 Flyway 全链升至最新
+ * （M3 起为 V5；版本号断言随迁移目录演进）；
  * 最后注入一条坏迁移验证 flyway 阻断启动。
  *
  * <p>断言：升级后数据零丢失（五表计数不变）、旧记录逐字段可读、V4 新列默认 NULL；
  * 权限不放宽——publisher 仍零 outbox INSERT（42501）、repair_request 列级 INSERT 生效
  * （越权列写 42501；合列但 state='APPROVED' 被 trg_repair_insert_pending 以 P0001 拒绝）；
- * 坏迁移使 migrate() 抛 FlywayException 且成功历史停在 V4。
+ * 坏迁移使 migrate() 抛 FlywayException 且成功历史停在当前最新版。
  *
  * <p>取证：flyway_schema_history.version/success；pr_subject/pr_revision/review_run/
  * outbox_command/publication_resource 行计数与字段值；publication_resource 的
@@ -59,10 +60,10 @@ class CT22V4UpgradeIT extends PostgresITBase {
             UUID op2 = seedConfirmedCommand(admin2Jdbc, s2, "PUBLISH_REVIEW", "{\"body\":\"r\"}");
             UUID missing = seedResource(admin2Jdbc, s2, op2, "REVIEW", "MISSING", "ct22-missing");
 
-            // ---- 阶段二：全链升 V4 ----
+            // ---- 阶段二：全链升至最新（M3 起 = V5） ----
             Flyway.configure().dataSource(admin2).locations("classpath:db/migration")
                     .load().migrate();
-            assertThat(maxSuccessMigration(admin2Jdbc)).isEqualTo("4");
+            assertThat(maxSuccessMigration(admin2Jdbc)).isEqualTo("5");
 
             // 数据零丢失
             for (String table : new String[]{"pr_subject", "pr_revision", "review_run",
@@ -133,14 +134,15 @@ class CT22V4UpgradeIT extends PostgresITBase {
 
             // ---- 阶段四：注入坏迁移 → flyway 阻断启动 ----
             Path badDir = Files.createTempDirectory("ct22-bad-migration");
-            Files.writeString(badDir.resolve("V5__bad.sql"), "this is not valid sql;");
+            // 版本号必须未被占用（V5 已是 M3 正式迁移），坏迁移以 V6 注入
+            Files.writeString(badDir.resolve("V6__bad.sql"), "this is not valid sql;");
             Throwable blocked = catchThrowable(() -> Flyway.configure().dataSource(admin2)
                     // Windows 反斜杠路径统一转 /，Flyway filesystem location 只认正斜杠
                     .locations("classpath:db/migration",
                             "filesystem:" + badDir.toString().replace('\\', '/'))
                     .load().migrate());
             assertThat(blocked).isInstanceOf(FlywayException.class);
-            assertThat(maxSuccessMigration(admin2Jdbc)).isEqualTo("4"); // 成功历史停在 V4
+            assertThat(maxSuccessMigration(admin2Jdbc)).isEqualTo("5"); // 成功历史停在当前最新版（V5）
         }
     }
 

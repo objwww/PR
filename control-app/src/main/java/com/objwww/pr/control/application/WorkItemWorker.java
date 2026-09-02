@@ -1,7 +1,6 @@
 package com.objwww.pr.control.application;
 
 import com.objwww.pr.control.domain.ai.ModelBudgetExceededException;
-import com.objwww.pr.control.domain.ai.ModelTimeoutException;
 import com.objwww.pr.control.domain.model.RunStep;
 import com.objwww.pr.control.domain.model.StepAttempt;
 import com.objwww.pr.control.domain.model.WorkItem;
@@ -133,7 +132,7 @@ public class WorkItemWorker {
         StepOutcome outcome;
         if (executor == null) {
             outcome = new StepOutcome.Failed("UnknownWorkType", "UNKNOWN_WORK_TYPE",
-                    "无执行器: " + item.getWorkType(), false);
+                    "无执行器: " + item.getWorkType(), false, null);
         } else {
             HeartbeatRunner heartbeat = new HeartbeatRunner(item);
             try {
@@ -152,26 +151,34 @@ public class WorkItemWorker {
                 item.getId(), attempt.getAttemptNo(), outcome.getClass().getSimpleName(), t2);
     }
 
-    /** 异常 → Failed 归类（errorClass 列 varchar(32)：用语义码而非类全名） */
+    /** 异常 → Failed 归类（errorClass 列 varchar(32)：用语义码而非类全名）
+     *  M3：捕获 ModelRetryDeferredException，传递 notBefore 实现 durable defer */
     private static StepOutcome.Failed classify(Exception e) {
         if (e instanceof LeaseLostException) {
-            return new StepOutcome.Failed("LeaseLost", "LEASE_LOST", e.getMessage(), false);
+            return new StepOutcome.Failed("LeaseLost", "LEASE_LOST", e.getMessage(), false, null);
         }
         if (e instanceof SecurityRejectionException) {
-            return new StepOutcome.Failed("SecurityRejection", "SECURITY_REJECTION", e.getMessage(), false);
+            return new StepOutcome.Failed("SecurityRejection", "SECURITY_REJECTION", e.getMessage(), false, null);
         }
-        if (e instanceof ModelTimeoutException) {
-            return new StepOutcome.Failed("ModelTimeout", "MODEL_TIMEOUT", e.getMessage(), true);
+        if (e instanceof com.objwww.pr.control.domain.ai.ModelRetryDeferredException defer) {
+            // M3：Retry-After 长延迟 → notBefore → T2 写 available_at
+            return new StepOutcome.Failed("ModelRetryDeferred", "MODEL_RETRY_DEFERRED",
+                    defer.getMessage(), true, defer.notBefore());
         }
         if (e instanceof ModelBudgetExceededException) {
-            return new StepOutcome.Failed("ModelBudgetExceeded", "MODEL_BUDGET_EXCEEDED", e.getMessage(), false);
+            return new StepOutcome.Failed("ModelBudgetExceeded", "MODEL_BUDGET_EXCEEDED", e.getMessage(), false, null);
         }
         if (e instanceof ModelOutputParseException) {
-            return new StepOutcome.Failed("ModelOutputParse", "MODEL_OUTPUT_PARSE", e.getMessage(), false);
+            return new StepOutcome.Failed("ModelOutputParse", "MODEL_OUTPUT_PARSE", e.getMessage(), false, null);
+        }
+        if (e instanceof com.objwww.pr.control.domain.ai.ModelCallFailedException mcf) {
+            // M3 修正：使用异常自带的stepRetryable，不硬编码（阻断项3）
+            return new StepOutcome.Failed("ModelCallFailed", mcf.errorCode() != null ? mcf.errorCode() : "MODEL_CALL_FAILED",
+                    e.getMessage(), mcf.stepRetryable(), null);
         }
         // 未预期异常按可重试处理；确定性缺陷靠 attempt 预算耗尽兜底（不无限打转）
         return new StepOutcome.Failed("Unexpected", "UNEXPECTED",
-                e.getClass().getSimpleName() + ": " + e.getMessage(), true);
+                e.getClass().getSimpleName() + ": " + e.getMessage(), true, null);
     }
 
     // ------------------------------------------------------------------ 循环

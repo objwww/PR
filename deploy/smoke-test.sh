@@ -9,6 +9,13 @@
 #   DP-15 V4 权限矩阵栈级断言；DP-16 双自检+401+M0/M1 回归门（回归=本脚本
 #   前半段 DP-01~05/11~14 的全量执行结果）；DP-17 SIGKILL 后续跑模型计数恰 1；
 #   DP-18 drift 修复闭环栈级门禁；DP-19 带 V3 种子数据原地升 V4（临时库）。
+# DP-20~28 部署门（M3，docs/M3-技术方案.md §11 部署门表）：
+#   DP-20 V5 权限矩阵（model_call_ledger 位面）；DP-21 启动自检矩阵（负例拒启）；
+#   DP-22 账本冒烟（两段记账恰好一条，stub 模型模式限定，否则 SKIP）；
+#   DP-23 V5 全约束种子（非法逐条拒绝，超库身份）；DP-24 V5 权限行为面（SET ROLE）；
+#   DP-25 主备配置矩阵（C-2 继承/独立/防伪）；DP-26 密钥挂载零回显；
+#   DP-27 Gateway 冒烟（账本↔checkpoint↔发布一致，stub 模型模式限定）；
+#   DP-28 熔断/时限旋钮模式感知（混合=默认值零声明，演练窗=三元组成对）。模型端点故障注入面在 m3-lib.sh（m3_model_fault_on/off）。
 # DP-05/DP-14 依赖 stub 模式（GITHUB_API_BASE 指 github-stub）与
 # wiremock 固定 PR 元数据映射（head/base SHA 与本脚本负载一致）。
 # M2 起新增：CONFIRMED 后立即经 m2_register_pr_resources 注入"探针可见"运行时
@@ -526,7 +533,10 @@ if ! m2_stub_github_mode || ! m2_stub_model_mode; then
     echo "  [SKIP] DP-17 需全 stub 模式（GITHUB_API_BASE 与 OPENAI_COMPAT_BASE_URL 均指 github-stub）；当前 OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-未设}" | tee -a "$SUMMARY"
 else
     m2_journal_reset
-    m2_model_delay_on 45000   # 模型延迟 45s：放大窗口，保证脚本来得及观察中间态
+    # 模型延迟放大观察窗口。M3 起必须 < per-call-timeout（全 stub 演练窗三元组
+    # percall=20s，INC-61）：旧值 45000 在 M2（percall=120s）可存活，在 M3 窗口
+    # 会逐次 TIMEOUT 烧光重试预算
+    m2_model_delay_on 12000
     PR17_NUM=$((9000 + RANDOM % 500))
     HTTP17=$(m2_send_pr_webhook "$PR17_NUM" opened "$M2_HEAD_SHA" "$M2_BASE_SHA" dp17)
     assert_eq "DP-17 webhook 受理" "$HTTP17" "202"
@@ -641,6 +651,295 @@ assert_eq "升级后 publisher 对 repair_request 列级 INSERT 有（state 列�
     "$(m2_psql_db "$DP19_DB" "select has_column_privilege('publisher_app','repair_request','state','INSERT')" | tr -d '[:space:]')" "t"
 psql "drop database if exists $DP19_DB" > /dev/null 2>&1 \
     && echo "  复原：临时库 $DP19_DB 已删除" | tee -a "$SUMMARY"
+
+# ---------------------------------------------------------------- DP-20
+# V5 权限矩阵（model_call_ledger，§4.1；CT-30/31 的部署面复核）。
+# flyway 版本门禁 = DP-01 的动态 EXPECT_V（迁移目录最大版本），V5 落地后自动跟随。
+echo "== DP-20 V5 权限矩阵（model_call_ledger） ==" | tee -a "$SUMMARY"
+assert_eq "control 对 model_call_ledger SELECT"  "$(tp control_app model_call_ledger SELECT)" "t"
+assert_eq "control 对 model_call_ledger INSERT"  "$(tp control_app model_call_ledger INSERT)" "t"
+assert_eq "control 对 model_call_ledger 表级 UPDATE 无" "$(tp control_app model_call_ledger UPDATE)" "f"
+assert_eq "control 对 model_call_ledger DELETE 无" "$(tp control_app model_call_ledger DELETE)" "f"
+for col in state outcome finished_at total_tokens cost_micros error_code; do
+    assert_eq "control 列级 UPDATE $col（终态列放行）" "$(cp_ control_app model_call_ledger $col UPDATE)" "t"
+done
+for col in id invocation_id call_seq review_run_id run_step_id attempt_id route_id requested_model started_at; do
+    assert_eq "control 列级 UPDATE $col 无（身份/谱系不可变）" "$(cp_ control_app model_call_ledger $col UPDATE)" "f"
+done
+for p in SELECT INSERT UPDATE DELETE; do
+    assert_eq "publisher 对 model_call_ledger $p 零权限" "$(tp publisher_app model_call_ledger $p)" "f"
+done
+# PUBLIC 是伪角色，has_table_privilege 的 regrole 转换不认；改查授权目录本体（=0 行授权）
+assert_eq "PUBLIC 对 model_call_ledger 零授权行" \
+    "$(psql "select count(*) from information_schema.table_privileges where table_schema='public' and table_name='model_call_ledger' and grantee='PUBLIC'" | tr -d '[:space:]')" "0"
+
+# ---------------------------------------------------------------- DP-21
+# 启动自检矩阵（§4.9，负例）：一次性容器注入非法配置 → 拒启（exited 非零）+
+# 日志点名旋钮、不回显密钥本体（EX-45）。负例在 bean 装配期失败，不触库写。
+# 说明（诚实清单）：M3 校验失败发生在 Spring 上下文刷新期，日志为
+# BeanCreationException 包装的配置异常信息，不经 StartupSelfCheckRunner 的
+# "启动自检失败" 统一前缀——本门断言校验信息本体 + 非零退出码。
+echo "== DP-21 启动自检矩阵（半配置/隐藏重试/数值/租约不等式，负例） ==" | tee -a "$SUMMARY"
+dp_boot_refuse() { # <名称> <日志期望子串> [-e ...]...
+    local name="$1" expect="$2"; shift 2
+    local cname="dp21-$name"
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+    docker compose run -d -T --no-deps --name "$cname" "$@" control-app >/dev/null 2>&1
+    local deadline=$((SECONDS + 150)) st ec
+    while [ $SECONDS -lt $deadline ]; do
+        st=$(docker inspect "$cname" -f '{{.State.Status}}' 2>/dev/null)
+        [ "$st" = "exited" ] && break
+        sleep 3
+    done
+    docker logs "$cname" > "$EVIDENCE/$cname.log" 2>&1
+    ec=$(docker inspect "$cname" -f '{{.State.ExitCode}}' 2>/dev/null)
+    if [ "$st" = "exited" ] && [ "$ec" != "0" ]; then
+        ok "$name 被拒启（exited/$ec）"
+    else
+        bad "$name 未拒启（State=$st ExitCode=$ec）"
+    fi
+    assert_contains "$name 日志点名校验规则" "$EVIDENCE/$cname.log" "$expect"
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+}
+dp_boot_refuse retry10  "spring.ai.retry.max-attempts 必须为 1" -e SPRING_AI_RETRY_MAXATTEMPTS=5
+dp_boot_refuse keyblank "AGENT_MODEL_API_KEY 缺失或为占位符"     -e AGENT_MODEL_API_KEY=
+dp_boot_refuse keyph    "AGENT_MODEL_API_KEY 缺失或为占位符"     -e AGENT_MODEL_API_KEY=placeholder-not-configured
+dp_boot_refuse retryneg "maxCallRetries 不能为负"                -e APP_MODEL_MAXCALLRETRIES=-1
+dp_boot_refuse circuit0 "failureThreshold 必须为正"              -e APP_MODEL_CIRCUIT_FAILURETHRESHOLD=0
+dp_boot_refuse percall  "perCallTimeout 不得大于 gatewayTotalDeadline" -e APP_MODEL_PERCALLTIMEOUTMS=400000
+dp_boot_refuse recovery "app.model.ledger.recovery-after-seconds 必须 >= 2 × per-call-timeout" \
+    -e APP_MODEL_LEDGER_RECOVERYAFTERSECONDS=10
+# lease 负例必须自带非法组合：stub 演练窗 .env 合法三元组 lease=60/deadline=30000
+# 使单注 lease=60 反而合法（INC-61）；显式注入 deadline=55000 → 60 ≤ 55+10 必拒，
+# 混合窗（deadline 默认 300000）同被覆写同拒——两种模式语义一致
+dp_boot_refuse lease    "app.worker.max-lease-seconds 必须大于 app.model.gateway.total-deadline-ms" \
+    -e APP_WORKER_MAXLEASESECONDS=60 -e APP_MODEL_GATEWAY_TOTALDEADLINEMS=55000
+
+# ---------------------------------------------------------------- DP-22
+# 账本冒烟（I29 两段记账）：stub 模型固定 usage（100/50/150）下 DP-05 的评审
+# 应在 model_call_ledger 留下恰好一条 STARTED→SUCCEEDED；无悬挂 STARTED。
+# 真实模型模式 token 数由百炼决定，本门记 [SKIP]（同 DP-17 惯例）。
+echo "== DP-22 账本冒烟（两段记账恰好一条） ==" | tee -a "$SUMMARY"
+if ! m2_stub_model_mode; then
+    echo "  [SKIP] DP-22 需 stub 模型模式（固定 usage）；当前 OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-未设}" | tee -a "$SUMMARY"
+else
+    L22_WHERE="from model_call_ledger ml join review_run rr on rr.id=ml.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.pr_number=$PR05_NUM"
+    psql "select ml.state, ml.outcome, ml.prompt_tokens, ml.completion_tokens, ml.total_tokens, ml.usage_missing, ml.route_role, ml.requested_model $L22_WHERE order by ml.started_at" \
+        | tee "$EVIDENCE/dp22-ledger.txt"
+    assert_eq "DP-05 评审账本恰 1 行（无重复计费）" "$(psql "select count(*) $L22_WHERE" | tr -d '[:space:]')" "1"
+    assert_eq "账本行 SUCCEEDED" "$(psql "select count(*) $L22_WHERE and ml.state='SUCCEEDED'" | tr -d '[:space:]')" "1"
+    assert_eq "账本 outcome=OK" "$(psql "select count(*) $L22_WHERE and ml.outcome='OK'" | tr -d '[:space:]')" "1"
+    assert_eq "stub 固定 usage 100/50/150 落账" \
+        "$(psql "select count(*) $L22_WHERE and ml.prompt_tokens=100 and ml.completion_tokens=50 and ml.total_tokens=150" | tr -d '[:space:]')" "1"
+    assert_eq "usage_missing=false" "$(psql "select count(*) $L22_WHERE and ml.usage_missing=false" | tr -d '[:space:]')" "1"
+    assert_eq "route_role=PRIMARY（单路由无 fallback）" \
+        "$(psql "select count(*) $L22_WHERE and ml.route_role='PRIMARY' and ml.fallback_from is null" | tr -d '[:space:]')" "1"
+    # 悬挂 STARTED 兜底：超龄（>10min，recovery-after 默认 240s + 扫描周期 60s 两倍余量）
+    # 的 STARTED 行应已被 ModelCallLedgerRecovery 标 UNKNOWN（DP-17 SIGKILL 残骸即案例）
+    assert_eq "无悬挂 STARTED（超龄全部已收敛 UNKNOWN）" \
+        "$(psql "select count(*) from model_call_ledger where state='STARTED' and started_at < now() - interval '10 minutes'" | tr -d '[:space:]')" "0"
+fi
+
+# ---------------------------------------------------------------- DP-23
+# V5 全约束种子（§4.1 全 CHECK/唯一/FK 的部署面复验；CT-35~39 对应）。
+# 手法：超库身份（约束级，不含权限面——权限面在 DP-20/24）；合法行以 route_id='dp23'
+# 标记，结尾定点删除，零残留。
+echo "== DP-23 V5 全约束种子（非法逐条拒绝） ==" | tee -a "$SUMMARY"
+# 父行选择必须沿 FK 链取（reconciler 会持续合成无 step 的新 Run，"最新 Run"不可靠）
+RUN23=$(psql "select r.id from review_run r join run_step s on s.review_run_id=r.id join step_attempt a on a.step_id=s.id order by r.created_at desc limit 1" | tr -d '[:space:]')
+STEP23=$(psql "select id from run_step where review_run_id='$RUN23' limit 1" | tr -d '[:space:]')
+ATT23=$(psql "select id from step_attempt where step_id='$STEP23' limit 1" | tr -d '[:space:]')
+if [ -z "$RUN23" ] || [ -z "$STEP23" ] || [ -z "$ATT23" ]; then
+    bad "DP-23 缺 FK 父行（run/step/attempt 需由 DP-05 等前置门产生；请全脚本顺序执行）"
+else
+    DP23_COLS="id,invocation_id,call_seq,review_run_id,run_step_id,attempt_id,lease_epoch,route_id,route_role,endpoint_scope,quota_scope,requested_model,state,outcome,http_status,prompt_tokens,completion_tokens,total_tokens,started_at,finished_at"
+    DP23_BASE="'11111111-1111-4111-8111-111111111101',1,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now()"
+    dp23_reject() { # <描述> <values 覆写后的完整 SQL>
+        if psql "$1" >/dev/null 2>"$EVIDENCE/dp23-last-err.txt"; then
+            bad "$2：未被数据库拒绝"
+        else
+            ok "$2（已拒绝：$(head -c 80 "$EVIDENCE/dp23-last-err.txt" | tr '\n' ' ')…）"
+        fi
+    }
+    # 基线：合法行可插入
+    if psql "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),$DP23_BASE)" >/dev/null 2>&1; then
+        ok "合法种子行插入成功（终态 SUCCEEDED 形态自洽）"
+    else
+        bad "合法种子行插入失败（合法形态被误伤，后续拒绝断言不可信）"
+    fi
+    assert_eq "合法行已落（route_id=dp23 恰 1）" \
+        "$(psql "select count(*) from model_call_ledger where route_id='dp23'" | tr -d '[:space:]')" "1"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),$DP23_BASE)" \
+        "UNIQUE(invocation_id,call_seq) 重复拒绝"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111102',2,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','DP23BOGUS',null,null,null,0,0,0,now(),null)" \
+        "state CHECK 拒绝非法状态"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111103',2,'$RUN23','$STEP23','$ATT23',1,'dp23','FALLBACK','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now())" \
+        "lineage CHECK：FALLBACK 缺 fallback_from 拒绝"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111104',2,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),null)" \
+        "状态机 CHECK：SUCCEEDED 缺 finished_at 拒绝"
+    dp23_reject "insert into model_call_ledger($DP23_COLS,usage_missing) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111105',2,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now(),true)" \
+        "usage_missing=true 但计数非零拒绝"
+    dp23_reject "insert into model_call_ledger($DP23_COLS,cost_micros) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111106',2,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now(),5)" \
+        "cost_micros 非空但价格快照缺失拒绝"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111107',0,'$RUN23','$STEP23','$ATT23',1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now())" \
+        "call_seq=0 拒绝（CHECK call_seq>=1）"
+    dp23_reject "insert into model_call_ledger($DP23_COLS) values (gen_random_uuid(),'11111111-1111-4111-8111-111111111108',2,'$RUN23','$STEP23',gen_random_uuid(),1,'dp23','PRIMARY','dp23-ep','dp23-q','dp23-model','SUCCEEDED','OK',200,1,1,2,now(),now())" \
+        "FK：不存在 attempt_id 拒绝"
+    psql "delete from model_call_ledger where route_id='dp23'" > /dev/null
+    assert_eq "复原：dp23 种子零残留" \
+        "$(psql "select count(*) from model_call_ledger where route_id='dp23'" | tr -d '[:space:]')" "0"
+fi
+
+# ---------------------------------------------------------------- DP-24
+# 完整权限矩阵行为面复核（DP-20 位面之外的实库尝试；事务内验证后 rollback，零残留）。
+echo "== DP-24 V5 权限行为面（SET ROLE 实库尝试） ==" | tee -a "$SUMMARY"
+dp24_try() { # <描述> <role> <SQL> <期望：reject|ok>
+    local desc="$1" role="$2" sql="$3" expect="$4" out
+    out=$(docker compose exec -T postgres psql -U postgres -d "${POSTGRES_DB:-pr_agent}" -tA 2>&1 <<SQL
+BEGIN; SET LOCAL ROLE $role; $sql; ROLLBACK;
+SQL
+)
+    if [ "$expect" = reject ]; then
+        echo "$out" | grep -qiE "permission denied|42501" && ok "$desc（已拒）" || bad "$desc：未被拒绝（$out）"
+    else
+        echo "$out" | grep -qiE "permission denied|42501|ERROR" && bad "$desc：被误拒（$out）" || ok "$desc（放行）"
+    fi
+}
+dp24_try "publisher SELECT model_call_ledger"  publisher_app "select count(*) from model_call_ledger" reject
+dp24_try "publisher INSERT model_call_ledger"  publisher_app "insert into model_call_ledger(id,invocation_id,call_seq,review_run_id,run_step_id,attempt_id,lease_epoch,route_id,route_role,endpoint_scope,quota_scope,requested_model,state) values (gen_random_uuid(),gen_random_uuid(),1,gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),1,'dp24','PRIMARY','e','q','m','STARTED')" reject
+dp24_try "publisher UPDATE model_call_ledger"  publisher_app "update model_call_ledger set state=state where false" reject
+dp24_try "control 列级越权 UPDATE requested_model（身份列）" control_app "update model_call_ledger set requested_model='x' where false" reject
+dp24_try "control 列级 UPDATE state（终态列，WHERE false 零行）" control_app "update model_call_ledger set state=state where false" ok
+
+# ---------------------------------------------------------------- DP-25
+# 主备配置矩阵（裁定 C-2，§4.9 半配置规则）：正例指向独立临时库（防第二 control
+# worker 在主库抢活）；负例同 DP-21 拒启判据。
+echo "== DP-25 主备配置矩阵 ==" | tee -a "$SUMMARY"
+DP25_DB="dp25_boot"
+psql "drop database if exists $DP25_DB" > /dev/null 2>&1
+psql "create database $DP25_DB" > "$EVIDENCE/dp25.log" 2>&1
+docker compose run --rm -T --no-deps -e "FLYWAY_URL=jdbc:postgresql://postgres:5432/$DP25_DB" \
+    migrate -connectRetries=30 migrate >> "$EVIDENCE/dp25.log" 2>&1
+assert_eq "临时库 $DP25_DB 迁移退出码" "$?" "0"
+dp_boot_ok() { # <名称> [-e ...]...（POSTGRES_DB 固定指临时库）
+    local name="$1"; shift
+    local cname="dp25-$name" deadline ok_=0 st
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+    docker compose run -d -T --no-deps --name "$cname" -e POSTGRES_DB="$DP25_DB" "$@" control-app >/dev/null 2>&1
+    deadline=$((SECONDS + 180))
+    while [ $SECONDS -lt $deadline ]; do
+        if docker logs "$cname" 2>&1 | grep -q "启动自检通过"; then ok_=1; break; fi
+        st=$(docker inspect "$cname" -f '{{.State.Status}}' 2>/dev/null)
+        [ "$st" = "exited" ] && break
+        sleep 3
+    done
+    docker logs "$cname" > "$EVIDENCE/$cname.log" 2>&1
+    [ "$ok_" = 1 ] && ok "$name 启动自检通过" || bad "$name 未通过启动自检（详见 $EVIDENCE/$cname.log）"
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+}
+dp_boot_ok inherit-only -e AGENT_MODEL_FALLBACK=qwen-max
+dp_boot_ok independent  -e AGENT_MODEL_FALLBACK=qwen-max \
+    -e OPENAI_COMPAT_BASE_URL_FALLBACK=http://github-stub:8080 -e AGENT_MODEL_API_KEY_FALLBACK=dp25-other-key-1
+dp_boot_refuse dup-route-id "主备 route_id 相同" \
+    -e AGENT_MODEL_FALLBACK=qwen-max -e APP_MODEL_ROUTE_PRIMARY_ID=dup -e APP_MODEL_ROUTE_FALLBACK_ID=dup
+# 五元组全同（fallback 模型=主模型 + key 显式=主 key + 端点继承）→ 拒绝；且日志不回显 key 本体
+docker rm -f dp21-fivetuple >/dev/null 2>&1 || true
+docker compose run -d -T --no-deps --name dp21-fivetuple \
+    -e AGENT_MODEL_FALLBACK="$AGENT_MODEL" -e AGENT_MODEL_API_KEY_FALLBACK="$AGENT_MODEL_API_KEY" \
+    control-app >/dev/null 2>&1
+FT_DEADLINE=$((SECONDS + 150))
+while [ $SECONDS -lt $FT_DEADLINE ]; do
+    [ "$(docker inspect dp21-fivetuple -f '{{.State.Status}}' 2>/dev/null)" = "exited" ] && break
+    sleep 3
+done
+docker logs dp21-fivetuple > "$EVIDENCE/dp21-fivetuple.log" 2>&1
+FT_EC=$(docker inspect dp21-fivetuple -f '{{.State.ExitCode}}' 2>/dev/null)
+[ "$FT_EC" != "0" ] && ok "主备五元组全同被拒启（ExitCode=$FT_EC）" || bad "主备五元组全同未拒启"
+assert_contains "日志点名五元组规则" "$EVIDENCE/dp21-fivetuple.log" "主备五元组完全相同"
+if grep -qF "$AGENT_MODEL_API_KEY" "$EVIDENCE/dp21-fivetuple.log"; then
+    bad "密钥值泄漏进日志（EX-45 违例）"
+else
+    ok "密钥值未进日志（EX-45 不回显）"
+fi
+docker rm -f dp21-fivetuple >/dev/null 2>&1 || true
+psql "drop database if exists $DP25_DB" > /dev/null 2>&1 \
+    && echo "  复原：临时库 $DP25_DB 已删除" | tee -a "$SUMMARY"
+
+# ---------------------------------------------------------------- DP-26
+# 密钥挂载：key 只从环境变量注入；运行日志零回显；容器无 key 文件挂载。
+echo "== DP-26 密钥挂载与零回显 ==" | tee -a "$SUMMARY"
+CID26=$(docker compose ps -q control-app)
+docker inspect "$CID26" -f '{{json .Config.Env}}' > "$EVIDENCE/dp26-control-env.json"
+grep -q "AGENT_MODEL_API_KEY" "$EVIDENCE/dp26-control-env.json" \
+    && ok "control 经环境变量注入 AGENT_MODEL_API_KEY" || bad "control 缺 AGENT_MODEL_API_KEY 环境注入"
+docker inspect "$CID26" -f '{{json .Mounts}}' | grep -qiE "api.?key|model.?key" \
+    && bad "control 出现模型密钥文件挂载" || ok "control 无模型密钥文件挂载（仅 env 通道）"
+docker compose logs --no-color control-app > "$EVIDENCE/dp26-control.log" 2>&1
+if grep -qF "$AGENT_MODEL_API_KEY" "$EVIDENCE/dp26-control.log"; then
+    bad "运行日志含密钥值（EX-45 违例）"
+else
+    ok "运行日志零密钥值"
+fi
+grep -q 'AGENT_MODEL_API_KEY: ${AGENT_MODEL_API_KEY' docker-compose.yml \
+    && ok "compose 中密钥为变量引用（非字面量）" || bad "compose 中密钥疑似硬编码"
+
+# ---------------------------------------------------------------- DP-27
+# Gateway 冒烟（I30）：stub 固定 usage 的成功调用 → 账本、checkpoint、发布三面一致。
+# 真实模型模式记 [SKIP]（同 DP-17/22 惯例）。
+echo "== DP-27 Gateway 冒烟（账本↔checkpoint↔发布一致） ==" | tee -a "$SUMMARY"
+if ! m2_stub_model_mode; then
+    echo "  [SKIP] DP-27 需 stub 模型模式；当前 OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-未设}" | tee -a "$SUMMARY"
+else
+    EXPECT_IDENTITY="openai-compatible/${AGENT_MODEL:-qwen-plus}/configured"
+    psql "select sc.model_identity, ml.run_step_id = sc.step_id as same_step from step_checkpoint sc join run_step rs on rs.id=sc.step_id join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id left join model_call_ledger ml on ml.run_step_id = rs.id where s.pr_number=$PR05_NUM" \
+        | tee "$EVIDENCE/dp27-cross.txt"
+    assert_eq "checkpoint model_identity=实际路由身份（I30）" \
+        "$(psql "select count(*) from step_checkpoint sc join run_step rs on rs.id=sc.step_id join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.pr_number=$PR05_NUM and sc.model_identity='$EXPECT_IDENTITY'" | tr -d '[:space:]')" "1"
+    assert_eq "账本行与 checkpoint 同属一个 step" \
+        "$(psql "select count(*) from model_call_ledger ml join step_checkpoint sc on sc.step_id=ml.run_step_id join run_step rs on rs.id=ml.run_step_id join review_run rr on rr.id=rs.review_run_id join pr_revision rev on rev.id=rr.pr_revision_id join pr_subject s on s.id=rev.pr_subject_id where s.pr_number=$PR05_NUM" | tr -d '[:space:]')" "1"
+    assert_eq "发布面已 CONFIRMED（引用 DP-05 结果复核）" "$CONFIRMED" "2"
+fi
+
+# ---------------------------------------------------------------- DP-28
+# 熔断/时限旋钮复原（G2 硬门 H 系配套）：模式感知断言——
+#   混合（默认）模式：.env 零声明，compose 渲染值/运行容器 env = 代码默认
+#     （lease 600 / deadline 300000 / percall 120000）；
+#   演练窗口（.env 声明 APP_MODEL_GATEWAY_TOTALDEADLINEMS）：合法三元组
+#     lease=60/deadline=30000/percall=20000 必须精确成对（F-22 不等式链，
+#     见 compose 注释/INC-61），其余取值 = 残留或错配。
+# 从未接线的旋钮（CIRCUIT/LEDGER/MAXCALL）三面恒零出现。
+echo "== DP-28 熔断/时限旋钮（零演练残留/演练窗成对） ==" | tee -a "$SUMMARY"
+docker compose config > "$EVIDENCE/dp28-compose-config.yml" 2>/dev/null
+docker inspect "$(docker compose ps -q control-app)" -f '{{json .Config.Env}}' > "$EVIDENCE/dp28-control-env.json"
+dp28_cfg() { grep -oE "$1: \"?[0-9]+\"?" "$EVIDENCE/dp28-compose-config.yml" | head -1 | grep -oE '[0-9]+'; }
+dp28_env() { grep -oE "$1=[0-9]+" "$EVIDENCE/dp28-control-env.json" | head -1 | cut -d= -f2; }
+assert_eq "compose 无未接线旋钮（CIRCUIT/LEDGER/MAXCALL）" \
+    "$(grep -cE 'APP_MODEL_(CIRCUIT|LEDGER|MAXCALL)' "$EVIDENCE/dp28-compose-config.yml")" "0"
+assert_eq "运行容器无未接线旋钮（CIRCUIT/LEDGER/MAXCALL）" \
+    "$(grep -coE 'APP_MODEL_(CIRCUIT|LEDGER|MAXCALL)' "$EVIDENCE/dp28-control-env.json")" "0"
+if grep -qE '^APP_MODEL_GATEWAY_TOTALDEADLINEMS=' .env; then
+    # 演练窗口：三元组成对 + 未接线旋钮 .env 零声明
+    assert_eq ".env 演练窗三元组齐备（3 行声明）" \
+        "$(grep -cE '^(APP_WORKER_MAXLEASESECONDS|APP_MODEL_GATEWAY_TOTALDEADLINEMS|APP_MODEL_PERCALLTIMEOUTMS)=' .env)" "3"
+    assert_eq ".env 无未接线旋钮声明" \
+        "$(grep -cE '^APP_MODEL_(CIRCUIT|LEDGER|MAXCALL)' .env)" "0"
+    assert_eq "演练窗 compose lease=60" "$(dp28_cfg APP_WORKER_MAXLEASESECONDS)" "60"
+    assert_eq "演练窗 compose deadline=30000" "$(dp28_cfg APP_MODEL_GATEWAY_TOTALDEADLINEMS)" "30000"
+    assert_eq "演练窗 compose percall=20000" "$(dp28_cfg APP_MODEL_PERCALLTIMEOUTMS)" "20000"
+    assert_eq "演练窗容器 lease=60" "$(dp28_env APP_WORKER_MAXLEASESECONDS)" "60"
+    assert_eq "演练窗容器 deadline=30000" "$(dp28_env APP_MODEL_GATEWAY_TOTALDEADLINEMS)" "30000"
+    assert_eq "演练窗容器 percall=20000" "$(dp28_env APP_MODEL_PERCALLTIMEOUTMS)" "20000"
+else
+    # 混合（默认）模式：零声明 + 渲染值=代码默认（有声明无残留）
+    assert_eq ".env 无熔断/时限旋钮声明" \
+        "$(grep -cE '^APP_MODEL_(CIRCUIT|GATEWAY|LEDGER|PERCALL|MAXCALL)' .env)" "0"
+    assert_eq "compose lease 渲染=默认 600" "$(dp28_cfg APP_WORKER_MAXLEASESECONDS)" "600"
+    assert_eq "compose deadline 渲染=默认 300000" "$(dp28_cfg APP_MODEL_GATEWAY_TOTALDEADLINEMS)" "300000"
+    assert_eq "compose percall 渲染=默认 120000" "$(dp28_cfg APP_MODEL_PERCALLTIMEOUTMS)" "120000"
+    assert_eq "容器 lease=默认 600" "$(dp28_env APP_WORKER_MAXLEASESECONDS)" "600"
+    assert_eq "容器 deadline=默认 300000" "$(dp28_env APP_MODEL_GATEWAY_TOTALDEADLINEMS)" "300000"
+    assert_eq "容器 percall=默认 120000" "$(dp28_env APP_MODEL_PERCALLTIMEOUTMS)" "120000"
+fi
 
 # ---------------------------------------------------------------- 汇总
 echo "==================================================" | tee -a "$SUMMARY"

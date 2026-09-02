@@ -1,7 +1,7 @@
 package com.objwww.pr.control.domain.review;
 
-import com.objwww.pr.control.domain.ai.MockModelClient;
-import com.objwww.pr.control.domain.ai.ModelBudgetGuard;
+import com.objwww.pr.control.domain.ai.MockModelGateway;
+import com.objwww.pr.control.domain.ai.ModelCallContext;
 import com.objwww.pr.control.domain.snapshot.SnapshotTree;
 import com.objwww.pr.control.domain.tool.PolicyEngine;
 import com.objwww.pr.control.domain.tool.ToolRegistry;
@@ -9,19 +9,33 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * ReviewAgentLoop：预算截断确定性 + 模型乱输出安全失败 + 正常一轮映射。
+ * ReviewAgentLoop：预算截断确定性 + 模型乱输出安全失败 + 正常一轮映射（M3 修订）。
  */
 class ReviewAgentLoopTest {
 
-    private final MockModelClient model = new MockModelClient();
+    private final MockModelGateway mockGateway = new MockModelGateway();
     private final ReviewAgentLoop loop = new ReviewAgentLoop(
-            model, new ModelBudgetGuard(), new FindingMapper(), new PolicyEngine(new ToolRegistry()));
+            mockGateway, new FindingMapper(), new PolicyEngine(new ToolRegistry()));
+
+    private static ModelCallContext mockContext() {
+        return new ModelCallContext(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                1L,
+                Instant.now().plusSeconds(120),
+                () -> true
+        );
+    }
 
     private static SnapshotTree treeOf(String... pathContentPairs) {
         List<SnapshotTree.Entry> entries = new java.util.ArrayList<>();
@@ -35,13 +49,13 @@ class ReviewAgentLoopTest {
     @Test
     void happyPath_mapsFindingsAndReportsStats() {
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {\n  int x = 0/1;\n}\n");
-        model.enqueueContent("""
+        mockGateway.enqueueContent("""
                 ```json
                 [{"file":"a/Foo.java","line":50,"existing_code":"int x = 0/1;","rule":"div-zero","severity":"MAJOR","message":"除零"}]
                 ```
                 """);
 
-        ReviewOutcome outcome = loop.review(tree, "headsha1", "diff text", ReviewBudget.DEFAULT);
+        ReviewOutcome outcome = loop.review(tree, "headsha1", "diff text", ReviewBudget.DEFAULT, mockContext());
 
         assertThat(outcome.findings()).hasSize(1);
         assertThat(outcome.findings().get(0).lineStart()).isEqualTo(2); // 模型报 50，纠正为 2
@@ -57,9 +71,9 @@ class ReviewAgentLoopTest {
         // 0 findings / 0 malformed / 0 dropped——不抛 ModelOutputParseException（非失败）、
         // 不计 dropped（非映射丢弃）。Step 层据此走 Succeeded 路径。
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {}\n");
-        model.enqueueContent("[]");
+        mockGateway.enqueueContent("[]");
 
-        ReviewOutcome outcome = loop.review(tree, "headsha1", "diff text", ReviewBudget.DEFAULT);
+        ReviewOutcome outcome = loop.review(tree, "headsha1", "diff text", ReviewBudget.DEFAULT, mockContext());
 
         assertThat(outcome.findings()).isEmpty();
         assertThat(outcome.malformedFindings()).isZero();
@@ -75,18 +89,18 @@ class ReviewAgentLoopTest {
                 "f2.java", "2", "f1.java", "1", "f4.java", "4",
                 "f3.java", "3", "f6.java", "6", "f5.java", "5");
         ReviewBudget budget = new ReviewBudget(3, 1L * 1024 * 1024, 1000, Duration.ofSeconds(10));
-        model.enqueueContent("[]");
-        model.enqueueContent("[]");
+        mockGateway.enqueueContent("[]");
+        mockGateway.enqueueContent("[]");
 
-        ReviewOutcome first = loop.review(tree, "h", "d", budget);
-        ReviewOutcome second = loop.review(tree, "h", "d", budget);
+        ReviewOutcome first = loop.review(tree, "h", "d", budget, mockContext());
+        ReviewOutcome second = loop.review(tree, "h", "d", budget, mockContext());
 
         assertThat(first.candidateFiles()).isEqualTo(6);
         assertThat(first.selectedFiles()).isEqualTo(3);
         assertThat(first.truncatedFiles()).isEqualTo(3);
         assertThat(first).isEqualTo(second);
         // prompt 中只含字典序前 3 个文件
-        String prompt = model.requests().get(0).prompt();
+        String prompt = mockGateway.requests().get(0).prompt();
         assertThat(prompt).contains("FILE: f1.java", "FILE: f2.java", "FILE: f3.java");
         assertThat(prompt).doesNotContain("FILE: f4.java");
     }
@@ -96,9 +110,9 @@ class ReviewAgentLoopTest {
         // maxBytes=5：a(2B)+b(2B)=4B 入选，c(2B) 超限 → 截断 1
         SnapshotTree tree = treeOf("a", "12", "b", "34", "c", "56");
         ReviewBudget budget = new ReviewBudget(10, 5, 1000, Duration.ofSeconds(10));
-        model.enqueueContent("[]");
+        mockGateway.enqueueContent("[]");
 
-        ReviewOutcome outcome = loop.review(tree, "h", "d", budget);
+        ReviewOutcome outcome = loop.review(tree, "h", "d", budget, mockContext());
 
         assertThat(outcome.selectedFiles()).isEqualTo(2);
         assertThat(outcome.truncatedFiles()).isEqualTo(1);
@@ -107,18 +121,18 @@ class ReviewAgentLoopTest {
     @Test
     void malformedModelOutputFailsSafely() {
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {}\n");
-        model.enqueueContent("我觉得这个 PR 写得挺好的，没什么问题。（非 JSON 输出）");
+        mockGateway.enqueueContent("我觉得这个 PR 写得挺好的，没什么问题。（非 JSON 输出）");
 
-        assertThatThrownBy(() -> loop.review(tree, "h", "d", ReviewBudget.DEFAULT))
+        assertThatThrownBy(() -> loop.review(tree, "h", "d", ReviewBudget.DEFAULT, mockContext()))
                 .isInstanceOf(ModelOutputParseException.class);
     }
 
     @Test
     void nonArrayJsonFailsSafely() {
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {}\n");
-        model.enqueueContent("{\"error\":\"not an array\"}");
+        mockGateway.enqueueContent("{\"error\":\"not an array\"}");
 
-        assertThatThrownBy(() -> loop.review(tree, "h", "d", ReviewBudget.DEFAULT))
+        assertThatThrownBy(() -> loop.review(tree, "h", "d", ReviewBudget.DEFAULT, mockContext()))
                 .isInstanceOf(ModelOutputParseException.class);
     }
 
@@ -126,12 +140,12 @@ class ReviewAgentLoopTest {
     void malformedEntrySkippedAndCounted() {
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {\n  int x = 0/1;\n}\n");
         // 一条缺 existing_code（畸形跳过计数），一条正常
-        model.enqueueContent("""
+        mockGateway.enqueueContent("""
                 [{"file":"a/Foo.java","rule":"r","severity":"MAJOR","message":"没锚点"},
                  {"file":"a/Foo.java","existing_code":"int x = 0/1;","rule":"r2","severity":"MINOR","message":"ok"}]
                 """);
 
-        ReviewOutcome outcome = loop.review(tree, "h", "d", ReviewBudget.DEFAULT);
+        ReviewOutcome outcome = loop.review(tree, "h", "d", ReviewBudget.DEFAULT, mockContext());
 
         assertThat(outcome.malformedFindings()).isEqualTo(1);
         assertThat(outcome.findings()).hasSize(1);
@@ -141,11 +155,11 @@ class ReviewAgentLoopTest {
     @Test
     void unlocatableSnippetDroppedAndCounted() {
         SnapshotTree tree = treeOf("a/Foo.java", "class Foo {}\n");
-        model.enqueueContent("""
+        mockGateway.enqueueContent("""
                 [{"file":"a/Foo.java","existing_code":"不存在的代码片段","rule":"r","severity":"MAJOR","message":"幻觉"}]
                 """);
 
-        ReviewOutcome outcome = loop.review(tree, "h", "d", ReviewBudget.DEFAULT);
+        ReviewOutcome outcome = loop.review(tree, "h", "d", ReviewBudget.DEFAULT, mockContext());
 
         assertThat(outcome.findings()).isEmpty();
         assertThat(outcome.droppedFindings()).isEqualTo(1);
@@ -160,11 +174,11 @@ class ReviewAgentLoopTest {
                 "b/B.java", "class B {}\n",
                 "z/Service.java", "class S {\n  String sql = \"SELECT * FROM t WHERE u='\" + u + \"'\";\n}\n");
         ReviewBudget budget = new ReviewBudget(2, 1L * 1024 * 1024, 1000, Duration.ofSeconds(10));
-        model.enqueueContent("""
+        mockGateway.enqueueContent("""
                 [{"file":"z/Service.java","line":2,"existing_code":"String sql = \\"SELECT * FROM t WHERE u='\\" + u + \\"'\\";","rule":"sql-injection","severity":"BLOCKER","message":"拼接 SQL"}]
                 """);
 
-        ReviewOutcome outcome = loop.review(tree, "h", "d", budget);
+        ReviewOutcome outcome = loop.review(tree, "h", "d", budget, mockContext());
 
         assertThat(outcome.selectedFiles()).isEqualTo(2); // z/Service.java 未入选 prompt
         assertThat(outcome.truncatedFiles()).isEqualTo(1);

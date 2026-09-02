@@ -3,6 +3,7 @@ package com.objwww.pr.control.application;
 import com.objwww.pr.control.domain.review.ReviewOutcome;
 import com.objwww.pr.shared.Digest;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -17,11 +18,18 @@ public sealed interface StepOutcome {
         }
     }
 
-    /** 失败：retryable=false 或预算耗尽 → Step FAILED；retryable=true 且预算未尽 → RETRY_WAIT 退避 */
+    /** 失败：retryable=false 或预算耗尽 → Step FAILED；retryable=true 且预算未尽 → RETRY_WAIT 退避
+     *  M3 新增：notBefore 支持 durable defer（Retry-After → available_at）*/
     record Failed(String errorClass, String errorCode, String errorDetail,
-                  boolean retryable) implements StepOutcome {
+                  boolean retryable, Instant notBefore) implements StepOutcome {
         public Failed {
             Objects.requireNonNull(errorClass, "errorClass");
+            // notBefore 可为 null（立即重试）
+        }
+
+        /** 附录C冻结的4参重载（兼容既有调用点，notBefore默认null） */
+        public Failed(String errorClass, String errorCode, String errorDetail, boolean retryable) {
+            this(errorClass, errorCode, errorDetail, retryable, null);
         }
     }
 }
