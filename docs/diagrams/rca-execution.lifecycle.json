@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "RCA Execution 生命周期状态机",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 566],
+    "views": [
+      { "id": "main-path", "label": "正常主路径", "focus": ["received", "normalized", "running", "verifying", "completed"], "note": "五个主阶段由持久化状态和 generation 控制。" },
+      { "id": "wait-retry", "label": "等待与恢复", "focus": ["running", "approval", "retrywait", "verifying"], "note": "审批和重试都是可恢复等待，不占用工作线程。" },
+      { "id": "terminal", "label": "终态出口", "focus": ["cancelled", "dlq", "completed"], "note": "终态不可直接回到活动状态；DLQ replay 创建关联的新执行。" }
+    ]
+  },
+  "lanes": [
+    { "id": "main", "label": "主生命周期" },
+    { "id": "waiting", "label": "持久等待" },
+    { "id": "recovery", "label": "可恢复失败" },
+    { "id": "terminal", "label": "终态出口" }
+  ],
+  "states": [
+    { "id": "received", "type": "start", "label": "RECEIVED", "sublabel": "Webhook 已持久化", "lane": "main", "col": 0, "step": "01", "tag": "entry" },
+    { "id": "normalized", "type": "active", "label": "NORMALIZED", "sublabel": "分组、路由、幂等完成", "lane": "main", "col": 1, "step": "02", "tag": "control" },
+    { "id": "running", "type": "active", "label": "RUNNING", "sublabel": "Analyzer/Agent/Tool 循环", "lane": "main", "col": 2, "step": "03", "tag": "lease" },
+    { "id": "verifying", "type": "decision", "label": "VERIFYING", "sublabel": "冲突裁决与证据校验", "lane": "main", "col": 3, "step": "04", "tag": "gate" },
+    { "id": "completed", "type": "success", "label": "COMPLETED", "sublabel": "VERIFIED 或 UNRESOLVED", "lane": "main", "col": 4, "step": "05", "tag": "terminal" },
+
+    { "id": "approval", "type": "waiting", "label": "WAITING_APPROVAL", "sublabel": "绑定 action_digest", "lane": "waiting", "col": 0, "tag": "no thread held" },
+    { "id": "retrywait", "type": "failure", "label": "RETRY_WAIT", "sublabel": "available_at + full jitter", "lane": "recovery", "col": 2, "tag": "retryable" },
+
+    { "id": "cancelled", "type": "failure", "label": "CANCELLED", "sublabel": "人工取消或审批拒绝", "lane": "terminal", "col": 1, "yOffset": -70, "tag": "terminal" },
+    { "id": "dlq", "type": "failure", "label": "DLQ", "sublabel": "预算耗尽或永久失败", "lane": "terminal", "col": 2, "yOffset": -70, "tag": "replay creates new run" }
+  ],
+  "transitions": [
+    { "id": "approval-needed", "from": "running", "to": "approval", "label": "高风险动作", "labelAt": [402, 210], "variant": "security", "fromSide": "bottom", "toSide": "top" },
+    { "id": "approval-resume", "from": "approval", "to": "running", "variant": "emphasis", "fromSide": "right", "toSide": "right", "via": [[480, 307], [480, 157]] },
+    { "id": "approval-cancel", "from": "approval", "to": "cancelled", "label": "拒绝/过期", "labelAt": [360, 354], "variant": "security", "fromSide": "bottom", "toSide": "left", "via": [[402, 370], [470, 370], [470, 409]] },
+    { "id": "transient-failure", "from": "running", "to": "retrywait", "label": "瞬时错误", "labelAt": [590, 365], "variant": "security", "fromSide": "right", "toSide": "bottom", "via": [[480, 157], [480, 350], [710, 350]] },
+    { "id": "retry-resume", "from": "retrywait", "to": "running", "variant": "emphasis", "fromSide": "right", "toSide": "top", "via": [[820, 307], [820, 55], [402, 55]] },
+    { "id": "budget-exhausted", "from": "retrywait", "to": "dlq", "label": "预算耗尽", "labelAt": [752, 365], "variant": "security", "fromSide": "bottom", "toSide": "top" },
+    { "id": "verification-retry", "from": "verifying", "to": "running", "label": "证据仍可补齐", "variant": "dashed", "route": "top-channel" }
+  ]
+}

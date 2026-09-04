@@ -1,0 +1,16 @@
+# AM0 验证定制（告警AM0-部署验证设计.md §6 S5）
+# 在 core 层 collector 上加 prometheus exporter（拉模式），供独立 Prometheus 抓取。
+# 官方说明：collector 合并多层 --config 时，数组（如 pipeline exporters）是整体替换，
+# 因此 metrics pipeline 的 exporters 必须重复 base 层的 debug。
+# 原始空文件备份于 otelcol-config-extras.yml.orig
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:9464"
+    resource_to_telemetry_conversion:
+      enabled: true
+    metric_expiration: 5m
+
+service:
+  pipelines:
+    metrics:
+      exporters: [debug, prometheus]

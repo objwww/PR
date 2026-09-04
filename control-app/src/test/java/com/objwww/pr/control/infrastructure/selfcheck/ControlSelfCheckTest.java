@@ -11,55 +11,31 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Control 启动自检（B25/§6.5）：假探针覆盖每条拒绝路径与放行路径（无 docker 可跑）。
- * 真实 SQL 的 has_table_privilege 语义与 V2 grants 冻结矩阵一致（DP-03 在 compose 栈验证）。
+ * Control 启动自检：假探针覆盖每条拒绝路径与放行路径（无 docker 可跑）。
+ * 真实 SQL 的 has_table_privilege 语义与 V5 grants 冻结矩阵一致（部署门在 compose 栈验证）。
+ * AM1-T00 清障后：PR 域检查项随死代码删除，告警域检查项由 T09 AlertSelfCheck 增补。
  */
 class ControlSelfCheckTest {
 
-    /** 干净环境：模型 key 在位；webhook 密钥与只读 token 是 Control 合法变量 */
+    /** 干净环境：模型 key 在位 + webhook token 在位 */
     private static Map<String, String> cleanEnv() {
         Map<String, String> env = new HashMap<>();
         env.put("AGENT_MODEL_API_KEY", "sk-xxx");
-        env.put("GITHUB_WEBHOOK_SECRET", "wh");
-        env.put("GITHUB_READONLY_TOKEN", "readonly");
+        env.put("ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "test-token");
         return env;
     }
 
-    private static DbPrivilegeProbe db(boolean update, boolean insert) {
+    private static DbPrivilegeProbe goodDb() {
+        // AM1-T09：AlertSelfCheck 需要 V7 九表权限（SELECT/INSERT/UPDATE，无 DELETE）
         return (table, privilege) -> switch (privilege) {
-            case "UPDATE" -> update;
-            case "INSERT" -> insert;
+            case "INSERT", "SELECT", "UPDATE" -> true;
             default -> throw new IllegalArgumentException(privilege);
         };
-    }
-
-    private static DbPrivilegeProbe goodDb() {
-        return db(false, true);
     }
 
     @Test
     void passesWithCleanEnvironmentAndFrozenPrivileges() {
         assertThat(ControlSelfCheck.violations(cleanEnv(), goodDb())).isEmpty();
-    }
-
-    @Test
-    void rejectsKnownWriteCredentialVariables() {
-        for (String name : List.of("GITHUB_APP_KEY", "GITHUB_APP_PRIVATE_KEY",
-                "GITHUB_WRITE_TOKEN", "GITHUB_TOKEN", "GH_TOKEN")) {
-            Map<String, String> env = cleanEnv();
-            env.put(name, "x");
-            assertThat(ControlSelfCheck.violations(env, goodDb()))
-                    .anySatisfy(v -> assertThat(v).contains(name));
-        }
-    }
-
-    @Test
-    void rejectsPatternMatchedCredentialVariables() {
-        // 名单之外、名字模式命中的兜底（如自定义的 *_GITHUB_*_PRIVATE_KEY）
-        Map<String, String> env = cleanEnv();
-        env.put("MY_GITHUB_APP_PRIVATE_KEY_PEM", "x");
-        assertThat(ControlSelfCheck.violations(env, goodDb()))
-                .anySatisfy(v -> assertThat(v).contains("MY_GITHUB_APP_PRIVATE_KEY_PEM"));
     }
 
     @Test
@@ -71,24 +47,26 @@ class ControlSelfCheckTest {
     }
 
     @Test
-    void rejectsUpdatePrivilegeOnOutbox() {
-        // DP-03：UPDATE 权为 true = AFT-06 冻结被破坏
-        assertThat(ControlSelfCheck.violations(cleanEnv(), db(true, true)))
-                .anySatisfy(v -> assertThat(v).contains("UPDATE").contains("outbox_command"));
-    }
-
-    @Test
-    void rejectsMissingInsertPrivilegeOnOutbox() {
-        assertThat(ControlSelfCheck.violations(cleanEnv(), db(false, false)))
-                .anySatisfy(v -> assertThat(v).contains("INSERT"));
+    void rejectsMissingInsertPrivilegeOnModelLedger() {
+        DbPrivilegeProbe badDb = (table, privilege) -> switch (privilege) {
+            case "INSERT" -> false;
+            case "SELECT", "UPDATE" -> true;  // AlertSelfCheck 需要 SELECT/UPDATE
+            default -> throw new IllegalArgumentException(privilege);
+        };
+        assertThat(ControlSelfCheck.violations(cleanEnv(), badDb))
+                .anySatisfy(v -> assertThat(v).contains("INSERT").contains("model_call_ledger"));
     }
 
     @Test
     void aggregatesMultipleViolations() {
-        Map<String, String> env = new HashMap<>(); // 缺模型 key
-        env.put("GITHUB_WRITE_TOKEN", "x"); // 且有写 token
-        List<String> violations = ControlSelfCheck.violations(env, db(true, false));
-        assertThat(violations).hasSize(4); // 写 token + 缺模型 key + UPDATE + 无 INSERT
+        Map<String, String> env = new HashMap<>(); // 缺模型 key 和 webhook token
+        DbPrivilegeProbe badDb = (table, privilege) -> switch (privilege) {
+            case "INSERT" -> false;
+            case "SELECT", "UPDATE" -> true;  // AlertSelfCheck 需要 SELECT/UPDATE
+            default -> throw new IllegalArgumentException(privilege);
+        };
+        List<String> violations = ControlSelfCheck.violations(env, badDb);
+        assertThat(violations).hasSizeGreaterThanOrEqualTo(3); // 缺模型 key + 缺 webhook token + 无 INSERT
     }
 
     @Test

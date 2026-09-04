@@ -1,0 +1,73 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "当前告警接入层流程（代码实况）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "docs/接入层当前流程.html"
+  },
+  "lanes": [
+    { "id": "request", "label": "同步 HTTP 接入" },
+    { "id": "failure", "label": "同步终止路径", "variant": "exception" },
+    { "id": "durable", "label": "持久化边界" },
+    { "id": "async", "label": "异步处理" }
+  ],
+  "phases": [
+    { "id": "entry", "label": "认证", "fromCol": 0, "toCol": 1, "variant": "security" },
+    { "id": "validation", "label": "协议与尺寸校验", "fromCol": 2, "toCol": 3 },
+    { "id": "acceptance", "label": "持久化与异步", "fromCol": 4, "toCol": 5, "variant": "emphasis" }
+  ],
+  "mainPath": ["alertmanager", "endpoint", "bearer", "payloadGate", "inbox", "accepted202"],
+  "semanticChecks": {
+    "allowedRoots": ["alertmanager"],
+    "allowedTerminals": ["unauthorized", "badRequest", "unavailable", "accepted202", "projector"],
+    "requiredPaths": [
+      { "from": "alertmanager", "to": "accepted202" },
+      { "from": "inbox", "to": "projector" }
+    ]
+  },
+  "nodes": [
+    { "id": "alertmanager", "lane": "request", "col": 0, "type": "external", "label": "Webhook POST", "sublabel": "/webhooks/alertmanager", "tag": "Alertmanager", "width": 150 },
+    { "id": "endpoint", "lane": "request", "col": 1, "type": "backend", "label": "Webhook Controller", "sublabel": "docker profile", "width": 130 },
+    { "id": "bearer", "lane": "request", "col": 2, "type": "security", "label": "Bearer 校验", "sublabel": "常量时间比较", "width": 120 },
+    { "id": "payloadGate", "lane": "request", "col": 3, "type": "security", "label": "载荷校验", "sublabel": "JSON / 尺寸 / gzip", "width": 130 },
+    { "id": "inbox", "lane": "durable", "col": 4, "type": "database", "label": "PostgreSQL alert_inbox", "sublabel": "raw + digest + UUID", "tag": "持久化队列", "width": 150 },
+    { "id": "accepted202", "lane": "request", "col": 5, "type": "backend", "label": "HTTP 202", "sublabel": "返回 inboxId", "width": 110 },
+    { "id": "unauthorized", "lane": "failure", "col": 2, "type": "security", "label": "HTTP 401", "sublabel": "零落库", "width": 110 },
+    { "id": "badRequest", "lane": "failure", "col": 3, "type": "security", "label": "HTTP 400 / 413", "sublabel": "零落库", "width": 120 },
+    { "id": "unavailable", "lane": "failure", "col": 4, "type": "security", "label": "HTTP 503", "sublabel": "DB 失败", "width": 110 },
+    { "id": "worker", "lane": "async", "col": 4, "type": "messagebus", "label": "Inbox 虚拟线程", "sublabel": "SKIP LOCKED + 租约", "width": 150 },
+    { "id": "projector", "lane": "async", "col": 5, "type": "backend", "label": "投影与行状态", "sublabel": "完成 / 重试 / 死信", "tag": "incident / run / task", "width": 150 }
+  ],
+  "edges": [
+    { "id": "post", "from": "alertmanager", "to": "endpoint", "label": "JSON / 可选 gzip", "role": "main" },
+    { "id": "authStart", "from": "endpoint", "to": "bearer", "label": "Authorization", "variant": "security", "role": "main" },
+    { "id": "authPass", "from": "bearer", "to": "payloadGate", "label": "通过", "role": "main" },
+    { "id": "authFail", "from": "bearer", "to": "unauthorized", "label": "失败", "variant": "security", "role": "error" },
+    { "id": "validateFail", "from": "payloadGate", "to": "badRequest", "label": "非法 / 超限", "variant": "security", "role": "error" },
+    { "id": "persist", "from": "payloadGate", "to": "inbox", "label": "校验通过：整组 INSERT", "role": "main" },
+    { "id": "dbFail", "from": "inbox", "to": "unavailable", "label": "DataAccessException", "variant": "security", "role": "error" },
+    { "id": "return202", "from": "inbox", "to": "accepted202", "label": "INSERT 成功后立即返回", "variant": "emphasis", "role": "return" },
+    { "id": "claim", "from": "inbox", "to": "worker", "label": "异步 claim", "variant": "dashed", "role": "async" },
+    { "id": "project", "from": "worker", "to": "projector", "label": "拆组、事务投影、更新状态", "role": "main" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "当前已经实现",
+      "items": [
+        "Bearer 鉴权、结构与资源边界校验、PostgreSQL 持久化收件箱、HTTP 202 异步确认",
+        "UUID inboxId 可串联告警事件；后台以数据库租约和 SKIP LOCKED 消费"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "与目标描述的关键差异",
+      "items": [
+        "没有 prompt 注入 / 高危指令语义护栏，也没有为入口拒绝写审计日志",
+        "没有 Redis 滑动窗口或入口 429；没有 MQ，alert_inbox 本身承担持久化削峰队列"
+      ]
+    }
+  ]
+}

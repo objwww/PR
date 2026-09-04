@@ -18,7 +18,7 @@ import com.objwww.pr.control.domain.ai.RouteClientPort;
 import com.objwww.pr.control.domain.ai.RoutedModelResult;
 import com.objwww.pr.control.domain.ai.TokenUsage;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
-import com.objwww.pr.control.support.InMemoryStores;
+import com.objwww.pr.control.support.ExecutionEventsFake;
 import com.objwww.pr.shared.ExecutionEvent;
 import com.objwww.pr.shared.ExecutionEventType;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,14 +57,14 @@ class ModelGatewayTest {
     private ScriptedRouteClient primaryClient;
     private ScriptedRouteClient fallbackClient;
     private FakeLedgerRepository ledger;
-    private InMemoryStores.Events events;
+    private ExecutionEventsFake events;
 
     @BeforeEach
     void setUp() {
         primaryClient = new ScriptedRouteClient();
         fallbackClient = new ScriptedRouteClient();
         ledger = new FakeLedgerRepository();
-        events = new InMemoryStores.Events();
+        events = new ExecutionEventsFake();
     }
 
     private static ModelGatewayParams params() {

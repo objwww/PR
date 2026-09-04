@@ -16,13 +16,11 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>pr-agent</name>
-    <description>AI Code Review Agent — 双进程架构（control-app / publisher-app / shared-kernel）</description>
+    <description>告警 RCA Agent 控制面（AM1 起：control-app 告警控制面 / shared-kernel 通用件；publisher-app 与 sandbox-broker 已删除，历史在 git）</description>
 
     <modules>
         <module>shared-kernel</module>
         <module>control-app</module>
-        <module>publisher-app</module>
-        <module>sandbox-broker</module>
     </modules>
 
     <properties>
@@ -42,11 +40,6 @@
             <dependency>
                 <groupId>com.objwww.pr</groupId>
                 <artifactId>control-app</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.objwww.pr</groupId>
-                <artifactId>publisher-app</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

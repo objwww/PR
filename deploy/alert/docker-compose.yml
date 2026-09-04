@@ -1,0 +1,88 @@
+# AM0 手工配置回收 + G0-10 告警链路接线（docs/告警G0-收口技术方案.md）
+#
+# 来源：195:/opt/projects/alert_agent 下散置的手工 compose/配置（AM0 部署验证期产物）。
+# 本文件聚合 AM0 实测参数（镜像 tag、内存上限、安全项、127.0.0.1 端口绑定），与 195
+# 实机 docker inspect 核对一致；配置文件本体在同级目录（SHA-256 清单见 README.md）。
+#
+# G0-10 接线（相对 AM0 实测形态的变更，均有方案依据）：
+#   - alertmanager webhook 由 echo-receiver 切到 control-app /webhooks/alertmanager
+#     （bearer 走 credentials_file 运行时挂载）；alertmanager 追加挂 alert-net
+#   - holmesgpt 由 sleep 常驻(CLI exec)升级为 server 形态(HOLMES_PORT=8080,
+#     /api/chat + X-API-Key;镜像 local/holmesgpt:am1-http)
+#
+# 网络拓扑：
+#   - prometheus/alertmanager 挂 opentelemetry-demo 外部网（抓 otel-collector:9464 指标；
+#     collector 的 prometheus exporter 由 deploy/alert/otelcol/otelcol-config-extras.yml 加装）
+#   - alert-net 外部共享网：holmes(别名 holmes) / alertmanager / control-app(主栈 compose 挂入)
+#   - 全部端口仅绑 127.0.0.1，公网零暴露（INV-AM0-1）
+
+services:
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.13.1
+    container_name: prometheus-am0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    mem_limit: 300m
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - opentelemetry-demo
+      # G0-10 E2E 修正(BA-14 后续):holmes 的 Prometheus 工具集需要可达的 PROMETHEUS_URL,
+      # prometheus 挂入 alert-net 以便 holmes 以容器名直连
+      - alert-net
+
+  alertmanager:
+    image: prom/alertmanager:latest   # AM0 实测即 latest（G0-10 部署前按需 pin）
+    container_name: alertmanager-am0
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # webhook bearer 只走运行时文件(195 上由 deploy/.env 派生,.gitignore 排除)
+      - ./alertmanager/secrets:/etc/alertmanager/secrets:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - opentelemetry-demo
+      - alert-net
+
+  holmesgpt:
+    build: ./holmesgpt
+    image: local/holmesgpt:am1-http
+    container_name: holmesgpt-am1
+    restart: unless-stopped
+    # G0-10:HTTP /api/chat 服务形态(§6.5;Dockerfile 内 ENTRYPOINT python server.py)
+    environment:
+      HOLMES_PORT: "8080"
+      HOLMES_API_KEY: "${HOLMES_API_KEY:?}"          # server 侧鉴权(control-app 同值外带 X-API-Key)
+      MODEL: "openai/deepseek-v3"                    # 默认模型;control-app 请求显式带同 key
+      OPENAI_API_BASE: "${OPENAI_API_BASE}"
+      OPENAI_API_KEY: "${AGENT_MODEL_API_KEY:?}"     # 百炼兼容端点凭证,只走 .env 永不入 git
+      # G0-10 E2E 修正:不设则 prometheus 工具集被前置检查禁用,模型只能拿 kubectl 瞎撞
+      PROMETHEUS_URL: "http://prometheus-am0:9090"
+      HOME: "/tmp"
+    mem_limit: 1536m
+    mem_reservation: 512m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:exec,size=512m
+    networks:
+      alert-net:
+        aliases:
+          - holmes    # control-app 的 HOLMES_BASE_URL=http://holmes:8080 经此别名解析
+
+networks:
+  opentelemetry-demo:
+    external: true        # otel demo 栈已建网（195 上同名）
+  # alert-net 为跨栈共享网（control-app/告警源都挂）：预先 `docker network create alert-net`
+  # 后按 external 引用，避免多个 compose 项目争建同名网（label 不一致会冲突）
+  alert-net:
+    external: true
+    name: alert-net

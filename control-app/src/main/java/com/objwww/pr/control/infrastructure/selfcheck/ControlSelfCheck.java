@@ -1,62 +1,69 @@
 package com.objwww.pr.control.infrastructure.selfcheck;
 
+import com.objwww.pr.control.alert.infrastructure.selfcheck.AlertSelfCheck;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
- * Control 启动自检的纯判定逻辑（B25 运行时门，§6.5；零 Spring，假探针可单测）。
+ * Control 启动自检的纯判定逻辑（零 Spring，假探针可单测）。
  * 每条违规产出一句人话文案；只出现变量名/表名/权限名，永不出现值。
  *
- * <p>判定清单：
+ * <p>AM1-T00 清障后：PR 域检查项（outbox_command 权限等）随死代码删除；
+ * 告警域检查项（V7 表权限、webhook/Holmes 凭证存在性）由 AM1-T09 AlertSelfCheck 增补。
+ *
+ * <p>当前判定清单：
  * <ol>
- *   <li>无写凭证环境变量：已知危险名单 + 名字模式扫描（DP-02 动态对应，F1-A/I2）；</li>
- *   <li>模型 key（AGENT_MODEL_API_KEY）存在（Control 需要模型访问）；</li>
- *   <li>DB 角色对 outbox_command 无 UPDATE 权（I10/AFT-06 冻结，DP-03）；</li>
- *   <li>DB 角色对 outbox_command 有 INSERT 权（配错早发现）。</li>
+ *   <li>模型 key（AGENT_MODEL_API_KEY）存在（M3 模型治理保留面，AM4 复用）；</li>
+ *   <li>DB 角色对 model_call_ledger 有 INSERT 权（V5 授权配错早发现）；</li>
+ *   <li>告警域自检（AlertSelfCheck，AM1-T09）：webhook token、Holmes 凭证、V7 九表权限。</li>
  * </ol>
  */
 public final class ControlSelfCheck {
 
     public static final String MODEL_KEY_ENV = "AGENT_MODEL_API_KEY";
-    public static final String OUTBOX_TABLE = "outbox_command";
-
-    /** 已知危险变量名单（写凭证/App 私钥/通用 PAT） */
-    static final Set<String> FORBIDDEN_ENV = Set.of(
-            "GITHUB_APP_KEY", "GITHUB_APP_PRIVATE_KEY", "GITHUB_WRITE_TOKEN",
-            "GITHUB_TOKEN", "GH_TOKEN");
-
-    /** 名字模式兜底：任何 GITHUB* 且含私钥/App key/写 token 字样的变量 */
-    static final Pattern WRITE_CREDENTIAL_NAME =
-            Pattern.compile(".*GITHUB.*(PRIVATE_KEY|APP_KEY|WRITE_TOKEN).*");
+    public static final String MODEL_LEDGER_TABLE = "model_call_ledger";
 
     private ControlSelfCheck() {
     }
 
-    public static List<String> violations(Map<String, String> env, DbPrivilegeProbe db) {
+    /**
+     * 完整自检（通用域 + 告警域）。
+     *
+     * @param env 环境变量
+     * @param db DB 权限探针
+     * @param holmesEnabled 是否启用 HolmesGPT
+     * @return 违规列表（空 = 通过）
+     */
+    public static List<String> violations(
+            Map<String, String> env,
+            DbPrivilegeProbe db,
+            boolean holmesEnabled
+    ) {
         List<String> violations = new ArrayList<>();
 
-        for (String name : env.keySet()) {
-            if (FORBIDDEN_ENV.contains(name) || WRITE_CREDENTIAL_NAME.matcher(name).matches()) {
-                violations.add("检测到写凭证环境变量 " + name
-                        + "（F1-A/I2：Control 写凭证零接触，拒绝启动）");
-            }
-        }
+        // 通用域检查
         String modelKey = env.get(MODEL_KEY_ENV);
         if (modelKey == null || modelKey.isBlank()) {
-            violations.add("缺少模型凭证环境变量 " + MODEL_KEY_ENV + "（Control 需要模型访问）");
+            violations.add("缺少模型凭证环境变量 " + MODEL_KEY_ENV + "（M3 模型治理保留面，AM4 复用）");
         }
 
-        if (db.hasTablePrivilege(OUTBOX_TABLE, "UPDATE")) {
-            violations.add("control DB 角色对 " + OUTBOX_TABLE
-                    + " 持有 UPDATE 权限（I10/AFT-06 冻结被破坏，检查 V2 grants/角色配置）");
+        if (!db.hasTablePrivilege(MODEL_LEDGER_TABLE, "INSERT")) {
+            violations.add("control DB 角色对 " + MODEL_LEDGER_TABLE
+                    + " 无 INSERT 权限（DB 授权配错，检查 V5 grants）");
         }
-        if (!db.hasTablePrivilege(OUTBOX_TABLE, "INSERT")) {
-            violations.add("control DB 角色对 " + OUTBOX_TABLE
-                    + " 无 INSERT 权限（DB 授权配错，检查 V2 grants）");
-        }
+
+        // 告警域自检（AM1-T09）
+        violations.addAll(AlertSelfCheck.violations(env, db::hasTablePrivilege, holmesEnabled));
+
         return violations;
+    }
+
+    /**
+     * 兼容性重载（不检查告警域）。
+     */
+    public static List<String> violations(Map<String, String> env, DbPrivilegeProbe db) {
+        return violations(env, db, false);
     }
 }

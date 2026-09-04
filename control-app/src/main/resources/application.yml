@@ -1,5 +1,5 @@
 # 默认 profile：无数据库环境空跑启动。
-# 已引入 spring-jdbc（M0-T03/T04 的 Postgres 实现在 infrastructure，不加组件注解、
+# 已引入 spring-jdbc（Postgres 实现在 infrastructure，不加组件注解、
 # 默认不装配），这里显式排除 DataSource/Flyway 自动配置；docker profile 用空列表覆盖恢复。
 spring:
   application:
@@ -22,24 +22,22 @@ spring:
     retry:
       max-attempts: 1  # M3 INC-42/I34: 关闭 Spring AI 内置重试（官方默认 10 次），由 Gateway 管控；启动自检断言
 
-# CAS（内容寻址存储）根目录：M0-T06 SnapshotService 落盘位置，不写死
+# CAS（内容寻址存储）根目录：报告 artifact 落盘位置，不写死
 app:
   artifact:
     cas-dir: ${APP_CAS_DIR:./var/cas}
-  github:
-    # webhook 验签密钥（M0-T05）：默认 profile 仅占位（该 profile 不暴露 webhook 端点）；
-    # docker profile 必须经 GITHUB_WEBHOOK_SECRET 注入真实值
-    webhook-secret: ${GITHUB_WEBHOOK_SECRET:placeholder-not-configured}
-  review:
-    # run_key 的治理版本组分（变更 = 新 run_key = 重新评审；policy 变化不影响 revision fingerprint）
-    policy-version: ${APP_POLICY_VERSION:m0-policy-v1}
-    prompt-version: ${APP_PROMPT_VERSION:m0-prompt-v1}
-    toolset-version: ${APP_TOOLSET_VERSION:m0-toolset-v1}
-    # M3 checkpoint 契约身份两段（V4 兼容：默认值与 M2 接线一致，主路由不变时旧 checkpoint 可复用）
-    model-provider: ${APP_MODEL_PROVIDER:openai-compatible}
-    model-version: ${APP_MODEL_VERSION:configured}
-  # M3 模型治理配置（§4.9；路由的模型/端点/密钥直接走环境变量 AGENT_MODEL /
-  # AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
+  # AM1 告警 webhook 入口鉴权（键名与 compose/AlertSelfCheck 三方统一，BA-09①/G0-02）
+  alert:
+    webhook:
+      bearer: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:}
+    # Holmes 常驻容器凭证桥接（BA-10①/G0-03）：Spring 不会自动把 HOLMES_API_KEY
+    # 环境变量映射成 app.alert.holmes.api-key 属性，必须在 yml 显式占位。
+    # compose 注入 HOLMES_BASE_URL / HOLMES_API_KEY；AlertFlowConfig 读 app.alert.holmes.*
+    holmes:
+      base-url: ${HOLMES_BASE_URL:http://holmes:8080}
+      api-key: ${HOLMES_API_KEY:}
+  # M3 模型治理配置（AM4 Java 替换 HolmesGPT 时复用；路由的模型/端点/密钥直接走环境变量
+  # AGENT_MODEL / AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
   model:
     route:
       primary-id: ${APP_MODEL_ROUTE_PRIMARY_ID:primary}

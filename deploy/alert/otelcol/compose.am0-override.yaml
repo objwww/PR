@@ -1,0 +1,54 @@
+# AM0 部署验证用 override（告警AM0-部署验证设计.md INV-AM0-1：公网 IP 端口不许裸暴露）
+# 基础 compose.yaml 的单端口简写（如 "${AD_PORT}"）会以随机宿主端口发布到 0.0.0.0，
+# 本文件用 !override 将端口压为：仅 4 个必要服务绑定 127.0.0.1，其余全部取消发布。
+# 服务间通信走 compose 内部网络，不依赖发布端口。
+services:
+  ad:
+    ports: !override []
+  cart:
+    ports: !override []
+  checkout:
+    ports: !override []
+  currency:
+    ports: !override []
+  email:
+    ports: !override []
+  frontend:
+    ports: !override []
+  frontend-proxy:
+    ports: !override
+      # 宿主 18080：127.0.0.1:8080 被存量 deploy-control-app-1 占用（禁区不许动），改映射端口
+      - "127.0.0.1:18080:${ENVOY_PORT}"
+      - "127.0.0.1:${ENVOY_ADMIN_PORT}:${ENVOY_ADMIN_PORT}"
+  image-provider:
+    ports: !override []
+  load-generator:
+    ports: !override []
+  payment:
+    ports: !override []
+  product-catalog:
+    ports: !override []
+  quote:
+    ports: !override []
+  recommendation:
+    ports: !override []
+  shipping:
+    ports: !override []
+  flagd:
+    ports: !override
+      - "127.0.0.1:${FLAGD_PORT}:${FLAGD_PORT}"
+      - "127.0.0.1:${FLAGD_OFREP_PORT}:${FLAGD_OFREP_PORT}"
+  flagd-ui:
+    ports: !override
+      - "127.0.0.1:${FLAGD_UI_PORT}:${FLAGD_UI_PORT}"
+  telemetry-docs:
+    ports: !override []
+  astronomy-db:
+    ports: !override []
+  valkey-cart:
+    ports: !override []
+  otel-collector:
+    ports: !override
+      - "127.0.0.1:${OTEL_COLLECTOR_PORT_GRPC}:${OTEL_COLLECTOR_PORT_GRPC}"
+      - "127.0.0.1:${OTEL_COLLECTOR_PORT_HTTP}:${OTEL_COLLECTOR_PORT_HTTP}"
+      - "127.0.0.1:9464:9464"

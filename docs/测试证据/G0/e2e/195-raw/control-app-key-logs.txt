@@ -1,0 +1,3 @@
+2026-09-04T15:56:31.474Z  INFO 1 --- [control-app] [           main] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-04T15:56:31.485Z  INFO 1 --- [control-app] [           main] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 8.411 seconds (process running for 9.595)
+2026-09-04T15:56:31.571Z  INFO 1 --- [control-app] [           main] c.o.p.c.i.s.StartupSelfCheckRunner       : [control] 启动自检通过（B25 运行时门）

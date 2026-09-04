@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "多 Agent RCA 最终架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [960, 430],
+    "views": [
+      { "id": "request-path", "label": "告警到报告", "focus": ["alertmanager", "ingress", "scheduler", "engine", "report"], "note": "主链由确定性控制面掌握，HolmesGPT 仅作为可替换推理引擎。" },
+      { "id": "tool-boundary", "label": "工具安全边界", "focus": ["engine", "gateway", "policy", "tools", "targets"], "note": "模型只提出 ToolProposal；agentgateway 的 CEL 必须配置拒绝规则并用正反例验收。" },
+      { "id": "evidence-plane", "label": "证据与审计", "focus": ["targets", "tools", "state", "artifacts", "report"], "note": "原始证据、状态、审计与遥测分开保存并通过摘要关联。" }
+    ]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 45],
+    "cols": 4,
+    "gapX": 40,
+    "gapY": 25,
+    "cellW": 180,
+    "cellH": 90
+  },
+  "components": [
+    { "id": "alertmanager", "type": "external", "label": "Alertmanager", "sublabel": "告警分组与 Webhook", "row": 0, "col": 0, "tag": "直接复用" },
+    { "id": "ingress", "type": "security", "label": "告警入口控制面", "sublabel": "认证·规范化·幂等·限流", "row": 0, "col": 1, "tag": "自研薄胶水" },
+    { "id": "scheduler", "type": "messagebus", "label": "持久化调度器", "sublabel": "生命周期·重试·DLQ·恢复", "row": 0, "col": 2, "tag": "确定性核心" },
+    { "id": "report", "type": "frontend", "label": "报告与通知", "sublabel": "验证后发布·人工查看", "row": 0, "col": 3, "tag": "证据引用" },
+
+    { "id": "analyzers", "type": "backend", "label": "确定性分析器", "sublabel": "Prometheus 规则·变更检测", "row": 1, "col": 0, "tag": "程序化优先" },
+    { "id": "engine", "type": "backend", "label": "RcaEngine", "sublabel": "Holmes → Spring AI 1.1", "row": 1, "col": 1, "tag": "可插拔" },
+    { "id": "state", "type": "database", "label": "PostgreSQL", "sublabel": "Execution·Attempt·Approval·DLQ", "row": 1, "col": 2, "tag": "状态真相" },
+    { "id": "artifacts", "type": "database", "label": "证据与审计仓", "sublabel": "MinIO·SHA-256·OTel/Langfuse", "row": 1, "col": 3, "tag": "不可变证据" },
+
+    { "id": "targets", "type": "cloud", "label": "Docker 靶场与观测源", "sublabel": "Metrics·Logs·Traces·Git·DB", "row": 2, "col": 0, "tag": "网络分段" },
+    { "id": "tools", "type": "backend", "label": "Typed Tool Adapters", "sublabel": "观测只读·动作隔离", "row": 2, "col": 1, "tag": "契约版本化" },
+    { "id": "gateway", "type": "security", "label": "agentgateway", "sublabel": "LLM/Tool 路由·CEL·限流", "row": 2, "col": 2, "tag": "可选复用" },
+    { "id": "policy", "type": "security", "label": "策略与审批", "sublabel": "jCasbin/CEL·action digest", "row": 2, "col": 3, "tag": "默认拒绝" }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "确定性控制面", "wraps": ["ingress", "scheduler", "state", "report"], "pad": 16 },
+    { "kind": "security-group", "label": "可替换推理平面", "wraps": ["analyzers", "engine", "gateway"], "pad": 16 },
+    { "kind": "security-group", "label": "Docker 观测/动作网络边界", "wraps": ["policy", "tools", "targets"], "pad": 16 }
+  ],
+  "connections": [
+    { "id": "alert-ingress", "from": "alertmanager", "to": "ingress", "label": "签名 Webhook", "variant": "emphasis" },
+    { "id": "ingress-schedule", "from": "ingress", "to": "scheduler", "label": "幂等 Execution", "variant": "emphasis" },
+    { "id": "schedule-engine", "from": "scheduler", "to": "engine", "label": "租约任务", "variant": "emphasis" },
+    { "id": "schedule-report", "from": "scheduler", "to": "report", "label": "验证通过后发布", "variant": "emphasis" },
+    { "id": "engine-analyzers", "from": "engine", "to": "analyzers", "label": "先确定性诊断", "variant": "default" },
+    { "id": "engine-gateway", "from": "engine", "to": "gateway", "label": "模型与工具请求", "variant": "security", "labelDy": 39 },
+    { "id": "gateway-policy", "from": "gateway", "to": "policy", "label": "身份·工具·参数", "variant": "security" },
+    { "id": "gateway-tools", "from": "gateway", "to": "tools", "label": "获批 ToolCall", "variant": "security", "labelDy": 30 },
+    { "id": "tools-targets", "from": "tools", "to": "targets", "label": "最小权限查询/动作", "variant": "security" },
+    { "id": "scheduler-state", "from": "scheduler", "to": "state", "label": "CAS 状态与重试", "variant": "emphasis", "labelAt": [540, 132] },
+    { "id": "tools-artifacts", "from": "tools", "to": "artifacts", "label": "原始结果+摘要", "variant": "dashed", "fromSide": "bottom", "toSide": "right", "via": [[320, 370], [900, 370], [900, 190]] },
+    { "id": "state-artifacts", "from": "state", "to": "artifacts", "label": "审计事件+引用", "variant": "dashed" },
+    { "id": "artifacts-report", "from": "artifacts", "to": "report", "label": "证据解析与校验", "variant": "dashed", "labelDx": 86 }
+  ]
+}

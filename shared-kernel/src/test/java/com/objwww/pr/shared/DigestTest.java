@@ -114,12 +114,4 @@ class DigestTest {
 
         assertEquals(hex, digest.hex());
     }
-
-    @Test
-    void revisionFingerprintReusesDigestValidation() {
-        // M0 既有用例：RevisionFingerprint 集成验证
-        String validHex = "a".repeat(64);
-        assertDoesNotThrow(() -> new RevisionFingerprint(validHex));
-        assertThrows(IllegalArgumentException.class, () -> new RevisionFingerprint("xyz"));
-    }
 }

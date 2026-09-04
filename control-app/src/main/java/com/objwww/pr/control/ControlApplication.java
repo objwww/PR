@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Control 进程入口。本进程物理上拿不到 GitHub 写凭证（F1-A/F1-B）。
+ * Control 进程入口（AM1 起为告警控制面：Alertmanager webhook 接收 → Incident 聚合 → RCA 调度）。
  * 默认 profile 无数据库可空跑；真实数据源见 application-docker.yml。
  */
 @SpringBootApplication

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "单条告警触发 RCA 的执行时序",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1280, 730],
+    "views": [
+      { "id": "acceptance", "label": "接入与幂等", "focus": ["alert", "ingress", "scheduler", "store"], "note": "ACK 只表示持久化接收成功，不表示 RCA 已完成。" },
+      { "id": "investigation", "label": "调查循环", "focus": ["scheduler", "engine", "gateway", "tools", "store"], "note": "模型提出调用；策略过滤后由工具服务执行并产出证据。" },
+      { "id": "approval-report", "label": "审批与报告", "focus": ["engine", "approval", "store", "report"], "note": "副作用动作绑定摘要审批；报告必须通过证据引用校验。" }
+    ]
+  },
+  "participants": [
+    { "id": "alert", "type": "external", "label": "Alertmanager" },
+    { "id": "ingress", "type": "security", "label": "入口控制面" },
+    { "id": "scheduler", "type": "messagebus", "label": "持久调度器" },
+    { "id": "store", "type": "database", "label": "状态/证据仓" },
+    { "id": "engine", "type": "backend", "label": "RcaEngine" },
+    { "id": "gateway", "type": "security", "label": "agentgateway" },
+    { "id": "tools", "type": "backend", "label": "Tool Adapters" },
+    { "id": "approval", "type": "external", "label": "审批人" },
+    { "id": "report", "type": "frontend", "label": "报告通道" }
+  ],
+  "segments": [
+    { "from": 150, "to": 300, "label": "接入与持久化" },
+    { "from": 310, "to": 520, "label": "调查、工具与审批循环" },
+    { "from": 530, "to": 670, "label": "验证与发布" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "alert", "to": "ingress", "y": 170, "label": "POST 告警组 + 签名", "variant": "emphasis" },
+    { "id": "m2", "from": "ingress", "to": "store", "y": 200, "label": "INSERT 幂等键/告警快照", "variant": "security" },
+    { "id": "m3", "from": "store", "to": "ingress", "y": 230, "label": "新建或返回已有 execution_id", "variant": "return" },
+    { "id": "m4", "from": "ingress", "to": "scheduler", "y": 260, "label": "提交持久任务", "variant": "emphasis" },
+    { "id": "m5", "from": "ingress", "to": "alert", "y": 290, "label": "202 Accepted + execution_id", "variant": "return" },
+
+    { "id": "m6", "from": "scheduler", "to": "engine", "y": 330, "label": "领取租约并开始调查", "variant": "emphasis" },
+    { "id": "m7", "from": "engine", "to": "gateway", "y": 360, "label": "规划下一证据缺口", "variant": "default" },
+    { "id": "m8", "from": "gateway", "to": "tools", "y": 390, "label": "白名单 ToolCall", "variant": "security" },
+    { "id": "m9", "from": "tools", "to": "store", "y": 420, "label": "保存原始结果、摘要与 SHA-256", "variant": "dashed" },
+    { "id": "m10", "from": "tools", "to": "engine", "y": 450, "label": "EvidenceRef 或类型化错误", "variant": "return" },
+    { "id": "m11", "from": "engine", "to": "approval", "y": 480, "label": "高风险 ToolProposal + action_digest", "variant": "security" },
+    { "id": "m12", "from": "approval", "to": "scheduler", "y": 510, "label": "批准/拒绝/超时", "variant": "return" },
+
+    { "id": "m13", "from": "engine", "to": "store", "y": 550, "label": "验证 Claim 引用、窗口和摘要", "variant": "security" },
+    { "id": "m14", "from": "engine", "to": "store", "y": 580, "label": "CAS 写入 VERIFIED/UNRESOLVED", "variant": "emphasis" },
+    { "id": "m15", "from": "scheduler", "to": "report", "y": 610, "label": "发布验证后的 RCA 报告", "variant": "emphasis" },
+    { "id": "m16", "from": "report", "to": "alert", "y": 640, "label": "关联报告链接与最终状态", "variant": "dashed" }
+  ]
+}

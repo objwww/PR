@@ -1,0 +1,2 @@
+=== prometheus page rule firing count ===
+{"status":"success","data":{"resultType":"vector","result":[]}}

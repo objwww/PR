@@ -1,0 +1,18 @@
+# Alertmanager(AM0 建立分组语义;G0-10 webhook 切 control-app)
+# AM0 原版(echo-receiver 钻探态)见 git 历史与 docs/测试证据/G0/g0-09-配置回收与Holmes三修复.md
+route:
+  group_by: ['alertname', 'service', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: zhongtai
+receivers:
+  - name: zhongtai
+    webhook_configs:
+      # G0-10:告警分组投递 control-app(webhook 收口点;bearer 走运行时文件挂载)
+      - url: 'http://control-app:8080/webhooks/alertmanager'
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/secrets/webhook-bearer
+        send_resolved: true

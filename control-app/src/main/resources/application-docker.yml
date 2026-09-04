@@ -1,4 +1,4 @@
-# docker 部署占位（M0-T18 compose 起栈时启用：--spring.profiles.active=docker）
+# docker 部署占位（compose 起栈时启用：--spring.profiles.active=docker）
 # datasource 指向 postgres 容器别名；密码只走环境变量，不落库不落文件。
 spring:
   # 覆盖默认 profile 的排除项，恢复 DataSource/Flyway 自动配置
@@ -8,42 +8,21 @@ spring:
     url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:pr_agent}
     username: control_app
     password: ${CONTROL_DB_PASSWORD}
+    # BA-12④ Hikari 显式预算（§15 连接预算 12）：默认 10 池 + 30s 连接超时在告警洪峰下
+    # 会拖垮 slot/task 领取短事务——快速失败给 5s，拿不到连接立即让出而不是排队挂死
+    hikari:
+      maximum-pool-size: 12
+      connection-timeout: 5000
   flyway:
-    # T18：迁移由 compose 独立 one-shot 服务 migrate（flyway/flyway，owner 身份）执行；
+    # 迁移由 compose 独立 one-shot 服务 migrate（flyway/flyway，owner 身份）执行；
     # control 容器不持 DDL 凭证，compose 以 SPRING_FLYWAY_ENABLED=false 关闭此处自动迁移
     enabled: true
 
-# docker 栈内 CAS 目录挂卷（B16：独立于应用只读 rootfs 的可写卷）
+# docker 栈内 CAS 目录挂卷（独立于应用只读 rootfs 的可写卷）
 app:
   artifact:
     cas-dir: ${APP_CAS_DIR:./var/cas}
-  github:
-    # GitHub API base（stub 模式指向 compose 内网 github-stub；默认真实 api.github.com）
-    api-base: ${GITHUB_API_BASE:https://api.github.com}
-    # webhook 验签密钥：docker 栈必须注入真实值，缺失即启动失败（fail-closed）
-    webhook-secret: ${GITHUB_WEBHOOK_SECRET}
-    # 只读 token 窄接口（T14，评审修正 #6）：Publisher 内网别名 + 共享密钥头，两边一致才放行
-    token-endpoint: ${PUBLISHER_TOKEN_ENDPOINT:http://publisher:8081}
-    internal-token-secret: ${INTERNAL_TOKEN_SECRET}
-  # InboxProcessor（M1-T04，方案 §4.2 worker 段）：worker 身份默认 hostname-pid（配置注入优先）
-  inbox:
-    worker-id: ${INBOX_WORKER_ID:}
-    lease-ttl-seconds: 600      # 10min：租约时长，覆盖单次 dispatch 最坏耗时
-    claim-limit: 10             # 单轮领取批量
-    backoff-base-seconds: 30    # 指数退避基数：next_retry_at = now + base*2^(attempt-1)
-    max-attempts: 5             # 与 webhook_inbox.max_attempts 列默认值一致（取小生效）
-    idle-sleep-ms: 1000
-    error-sleep-ms: 5000
-  # PrStateReconciler（M1-T07，方案 §4.5）：公平扫描 + API 预算 + 速率感知退避
-  reconcile:
-    pr-state:
-      scan-interval-ms: 60000       # 对账轮节奏（应用时钟只驱动节奏，过期比较走 DB now()，I17）
-      api-budget-per-round: 20      # 单轮 API 预算上限（修正 #7，E2E-14 公平扫描）
-      interval-seconds: 1800        # 正常对账周期：成功后 next = now() + 30min
-      backoff-base-seconds: 60      # 失败指数退避基数：next = now() + base*2^(errorCount-1)
-      degraded-threshold: 3         # 连续失败 >= 3 → ReconcilerDegraded 告警（措辞修正 #3）
-      error-sleep-ms: 30000
-  # M3 模型治理（§4.9）：旋钮默认值见 application.yml；这里只留部署期需按需覆盖的面。
+  # M3 模型治理（AM4 复用）：旋钮默认值见 application.yml；这里只留部署期需按需覆盖的面。
   # 路由模型/端点/密钥直接走环境变量（AGENT_MODEL(_FALLBACK) / OPENAI_COMPAT_BASE_URL(_FALLBACK) /
   # AGENT_MODEL_API_KEY(_FALLBACK)），不落 yml。
   model:
@@ -51,10 +30,3 @@ app:
       max-prompt-tokens-per-call: ${APP_MODEL_MAX_PROMPT_TOKENS:100000}
       max-completion-tokens-per-call: ${APP_MODEL_MAX_COMPLETION_TOKENS:16000}
       max-total-tokens-per-step: ${APP_MODEL_MAX_TOTAL_TOKENS:120000}
-    # 单价表（部署时按模型档位填；双单价 0 = 不估算）：示例——
-    # price:
-    #   qwen-plus:
-    #     pricing-version: v2025-01
-    #     currency: CNY
-    #     input-micros-per-1k: 800
-    #     output-micros-per-1k: 2000

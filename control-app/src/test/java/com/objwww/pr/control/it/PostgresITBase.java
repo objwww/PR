@@ -43,12 +43,14 @@ public abstract class PostgresITBase {
     protected static final String CONTROL_PASSWORD = "it-control-pass";
     protected static final String PUBLISHER_PASSWORD = "it-publisher-pass";
 
-    /** V1 的 12 张 + V3/V4/V5/V6 新表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
+    /** V1 的 12 张 + V3/V4/V5/V6 新表 + V7 告警域 9 表 + V8 DAG 预留表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
             "review_finding", "artifact", "webhook_inbox", "step_checkpoint", "repair_request",
-            "model_call_ledger", "tool_call", "sandbox_job", "artifact_grant");
+            "model_call_ledger", "tool_call", "sandbox_job", "artifact_grant",
+            "alert_inbox", "alert_event", "incident", "rca_run", "rca_task", "rca_attempt",
+            "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "RCA E2E 证据流与可追溯链",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 600],
+    "views": [
+      { "id": "alert-lineage", "label": "告警来源链", "focus": ["alert", "snapshot", "validator", "audit", "report"], "note": "原始 Webhook 在规范化前保存摘要，保证输入可追溯。" },
+      { "id": "tool-lineage", "label": "工具证据链", "focus": ["sources", "toolrun", "validator", "rawstore", "claims", "report"], "note": "Docker 工具适配器返回类型化证据；原始结果独立保存并用 SHA-256 关联。" },
+      { "id": "test-proof", "label": "E2E 验收证据", "focus": ["report", "telemetry", "e2e", "audit", "rawstore"], "note": "Playwright、API、数据库断言、Trace 与审计共同证明 Docker 端到端链路。" }
+    ]
+  },
+  "stages": [
+    { "label": "事实来源" },
+    { "label": "采集封装" },
+    { "label": "完整性处理" },
+    { "label": "持久真相" },
+    { "label": "裁决与验收" }
+  ],
+  "nodes": [
+    { "id": "alert", "type": "external", "label": "Alertmanager", "sublabel": "group webhook", "stage": 0, "row": 0, "yOffset": -20, "tag": "source" },
+    { "id": "sources", "type": "cloud", "label": "生产数据源", "sublabel": "Metrics·Logs·Traces·DB", "stage": 0, "row": 2, "yOffset": -105, "tag": "source" },
+    { "id": "human", "type": "external", "label": "人工审批", "sublabel": "身份·决定·理由·有效期", "stage": 0, "row": 4, "yOffset": -150, "tag": "restricted" },
+
+    { "id": "snapshot", "type": "backend", "label": "Alert Snapshot", "sublabel": "原文·规范化值·幂等键", "stage": 1, "row": 0, "yOffset": -20, "tag": "immutable input" },
+    { "id": "toolrun", "type": "backend", "label": "ToolExecution", "sublabel": "参数·窗口·错误·attempt", "stage": 1, "row": 2, "yOffset": -105, "tag": "typed envelope" },
+    { "id": "approval", "type": "security", "label": "Approval Record", "sublabel": "action_digest 绑定", "stage": 1, "row": 4, "yOffset": -150, "tag": "deny by default" },
+
+    { "id": "validator", "type": "security", "label": "Evidence Validator", "sublabel": "Schema·窗口·来源·SHA-256", "stage": 2, "row": 1, "yOffset": -70, "tag": "fail closed" },
+    { "id": "context", "type": "backend", "label": "Context Budget", "sublabel": "去重·摘要·截断清单", "stage": 2, "row": 3, "yOffset": -140, "tag": "LLM-facing" },
+
+    { "id": "audit", "type": "database", "label": "PostgreSQL Audit", "sublabel": "状态·事件·审批·引用", "stage": 3, "row": 0, "yOffset": -20, "tag": "not sampled" },
+    { "id": "rawstore", "type": "database", "label": "Artifact Store", "sublabel": "原始结果·截图·测试产物", "stage": 3, "row": 3, "yOffset": -140, "tag": "content addressed" },
+
+    { "id": "claims", "type": "backend", "label": "Claim Reducer", "sublabel": "冲突裁决·对抗验证", "stage": 4, "row": 1, "yOffset": -70, "tag": "deterministic" },
+    { "id": "report", "type": "frontend", "label": "Verified RCA Report", "sublabel": "结论·证据引用·UNRESOLVED", "stage": 4, "row": 3, "yOffset": -140, "tag": "publishable" },
+    { "id": "telemetry", "type": "external", "label": "OTel / Langfuse", "sublabel": "Trace·成本·质量分数", "stage": 3, "row": 4, "yOffset": -150, "tag": "operational" },
+    { "id": "e2e", "type": "security", "label": "E2E Evidence Pack", "sublabel": "UI·API·DB 断言", "stage": 4, "row": 4, "yOffset": -150, "tag": "CI artifact" }
+  ],
+  "flows": [
+    { "id": "f1", "from": "alert", "to": "snapshot", "label": "原始请求 + 接收时间", "classification": "audit", "variant": "emphasis" },
+    { "id": "f2", "from": "sources", "to": "toolrun", "label": "查询结果或类型化错误", "labelAt": [208, 323], "classification": "evidence", "variant": "emphasis" },
+    { "id": "f3", "from": "human", "to": "approval", "label": "批准/拒绝 + 身份", "classification": "restricted", "variant": "security" },
+    { "id": "f4", "from": "snapshot", "to": "validator", "label": "alert digest", "classification": "integrity", "variant": "security" },
+    { "id": "f5", "from": "toolrun", "to": "validator", "label": "raw digest + provenance", "labelAt": [400, 235], "classification": "integrity", "variant": "security" },
+    { "id": "f6", "from": "approval", "to": "context", "label": "action_digest 决策", "classification": "authorization", "variant": "security" },
+    { "id": "f7", "from": "validator", "to": "audit", "label": "验证结果与拒绝原因", "classification": "immutable audit", "variant": "emphasis" },
+    { "id": "f8", "from": "validator", "to": "context", "label": "有效 EvidenceRef", "labelAt": [580, 270], "classification": "validated", "variant": "emphasis" },
+    { "id": "f9", "from": "context", "to": "rawstore", "label": "原文、摘要与截断清单", "labelAt": [638, 402], "classification": "content addressed", "variant": "dashed" },
+    { "id": "f10", "from": "audit", "to": "claims", "label": "当前 generation 的证据引用", "labelAt": [760, 250], "classification": "relational", "variant": "emphasis" },
+    { "id": "f11", "from": "rawstore", "to": "claims", "label": "按摘要解析原始证据", "labelAt": [845, 300], "classification": "verified read", "variant": "dashed" },
+    { "id": "f12", "from": "claims", "to": "report", "label": "裁决后 Claims", "labelAt": [1025, 280], "classification": "verified/unresolved", "variant": "emphasis", "fromSide": "bottom", "toSide": "top" },
+    { "id": "f14", "from": "report", "to": "telemetry", "label": "运行遥测", "labelAt": [1030, 506], "classification": "sampled telemetry", "variant": "dashed", "fromSide": "right", "toSide": "bottom", "via": [[1040, 359], [1040, 520], [745, 520]] },
+    { "id": "f15", "from": "report", "to": "e2e", "label": "UI 截图与最终 JSON", "labelAt": [980, 411], "classification": "test artifact", "variant": "security", "fromSide": "bottom", "toSide": "top" },
+    { "id": "f16", "from": "rawstore", "to": "e2e", "label": "Trace + 原始产物", "labelAt": [850, 540], "classification": "test artifact", "variant": "security", "fromSide": "right", "toSide": "left", "via": [[835, 359], [835, 463]] }
+  ]
+}
