@@ -37,3 +37,39 @@ AM0（告警链路底座：独立 Prometheus + Alertmanager + HolmesGPT）部署
 - **holmes 容器形态**：AM0 实测为常驻空闲容器（sleep 循环 + docker exec CLI）。
   control-app 走 HTTP `/api/chat`（技术方案 §6.5），G0-10 部署时按方案调整
   启动命令，本骨架先忠实记录实测参数。
+
+## AM3：LiteLLM proxy 收口（M3-24）
+
+模型调用统一收口 `litellm` 容器（§6.6，P-12 账本盲区）：holmes 的
+`OPENAI_API_BASE=http://litellm:4000/v1`，**proxy 不可达即调查失败（fail-closed），
+无直连百炼回退路径**（E2E-M3-06 断言面）。镜像/坑位/预算硬拦证据：
+`docs/测试证据/AM3/spike-holmes-budget/`（holmes 镜像内装 litellm[proxy] 缺 Prisma
+起不来 → 官方镜像 `litellm/litellm:1.89.0`，与 holmes 内 litellm 客户端同版）。
+
+**.env 新增键**（全部仅 env 注入，INV-AM3-3 同纪律）：
+
+| 变量 | 消费方 | 说明 |
+|---|---|---|
+| `LITELLM_MASTER_KEY` | litellm | proxy 管理面（`/key/generate`、`/spend/logs`） |
+| `LITELLM_DB_PASSWORD` | litellm-bootstrap / litellm | litellm 台账库（SpendLogs + 虚拟 key，Prisma 自建表） |
+| `LITELLM_RUN_KEY` | holmesgpt | per-EvalRun 虚拟 key（见下） |
+
+**per-EvalRun 虚拟 key 流程**（对账链② + 预算硬拦；holmes 是常驻单容器，metadata/
+key 都是实例级静态注入——spike §二.3，换 run 必须重灌 key 重启 holmes）：
+
+```bash
+# 1) 以 master key 铸 run key（alias = eval run id；max_budget = 单 run 硬拦预算）
+curl -s -X POST http://127.0.0.1:4000/key/generate \
+  -H "Authorization: Bearer $LITELLM_MASTER_KEY" -H 'Content-Type: application/json' \
+  -d '{"key_alias":"<eval_run_id>","max_budget":0.5,"metadata":{"purpose":"am3-eval-run"}}'
+# 2) .env 更新 LITELLM_RUN_KEY=<上步 key>，然后：
+docker compose up -d --force-recreate holmesgpt
+# 3) 跑批结束后 eval-runner 出三态对账账（配置 app.alert.eval.litellm.*，见 control-app）
+```
+
+**日志卷 600 纪律**：`litellm-logs` 卷（`/app/logs`）可能含请求面痕迹（proxy 日志敏感面，
+AM3 残余风险③）——宿主侧以 `chmod 600` 管控，禁止宽松挂载目录；proxy 保持默认
+INFO 级，**不开 verbose 请求体日志**。
+
+**依赖顺序**：主栈 postgres → alert 栈 `litellm-bootstrap`（幂等 psql 建角色/库）→
+`litellm`（首启 Prisma migrate，start_period 120s）→ `holmesgpt`。

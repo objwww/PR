@@ -193,6 +193,32 @@ public class EvalRunnerConfig {
                 2, systemClock());
     }
 
+    // ---------------- usage 对账（M3-25；未配置 litellm 时诚实降级 UNMATCHED/BEST_EFFORT） ----------------
+
+    /**
+     * master key 仅 env 注入（INV-AM3-3）；base-url 为空 = 未接 proxy，出账按 chain③
+     * 降级（UNMATCHED/BEST_EFFORT），批件不受影响。wait 兜 proxy spend 日志异步 flush
+     * （spike 实测 ~16s）。
+     */
+    @Bean
+    public UsageLedgerService usageLedgerService(EvalRunRepository evalRuns,
+                                                 InvestigationResultRepository investigations,
+                                                 @Value("${app.alert.eval.litellm.base-url:}")
+                                                 String litellmBaseUrl,
+                                                 @Value("${app.alert.eval.litellm.master-key:}")
+                                                 String litellmMasterKey,
+                                                 @Value("${app.alert.eval.litellm.run-key-alias:}")
+                                                 String runKeyAlias,
+                                                 @Value("${app.alert.eval.litellm.reconcile-wait-seconds:0}")
+                                                 long reconcileWaitSeconds) {
+        com.objwww.pr.control.eval.domain.litellm.LiteLlmAdminPort port =
+                litellmBaseUrl.isBlank() ? null
+                        : new com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClient(
+                                litellmBaseUrl, litellmMasterKey);
+        return new UsageLedgerService(evalRuns, investigations, port,
+                runKeyAlias, reconcileWaitSeconds * 1000);
+    }
+
     private static EvalBatchRunner.EvalClock systemClock() {
         return new EvalBatchRunner.EvalClock() {
             @Override
@@ -217,8 +243,9 @@ public class EvalRunnerConfig {
      */
     @Bean
     public EvalRunnerMain evalRunnerMain(EvalBatchRunner runner,
+                                         UsageLedgerService ledger,
                                          ConfigurableApplicationContext context) {
-        return new EvalRunnerMain(runner, context);
+        return new EvalRunnerMain(runner, ledger, context);
     }
 
     /** 元数据来源（十项可复现元数据；M3-24/25 的对账输入在 provider 侧另行回填） */

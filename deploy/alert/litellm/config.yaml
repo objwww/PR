@@ -1,0 +1,24 @@
+# LiteLLM proxy 配置（AM3 M3-24；技术方案 §6.6，落码依据 P1 spike Exp5 实证）
+#
+# 镜像选型与坑位记录：docs/测试证据/AM3/spike-holmes-budget/结论.md
+#   - holmes 镜像内 pip 装 litellm[proxy] 缺 Prisma binaries 起不来（take-1 负结论）；
+#   - 官方镜像 litellm/litellm:1.89.0（与 holmes 内置 litellm 客户端同版本）实证可用；
+#   - 预算硬拦 = per-EvalRun 虚拟 key max_budget（超限 auth 层 429、上游零流量）。
+#
+# 所有敏感值经容器 env 注入（compose environment ← .env），本文件零密钥。
+
+model_list:
+  - model_name: deepseek-v3                  # holmes MODEL=openai/deepseek-v3 的请求名；
+                                             # 与上游实际模型 id 解耦（换上游只改下一行）
+    litellm_params:
+      model: openai/deepseek-v3              # 上游=百炼兼容端点（UPSTREAM_BASE）
+      api_base: os.environ/UPSTREAM_BASE
+      api_key: os.environ/UPSTREAM_KEY
+      input_cost_per_token: 0.0000005        # 成本记账补丁（spike §三.3）：缺失则 holmes 侧 cost 记 0
+      output_cost_per_token: 0.000001
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY  # master key 仅 env 注入（INV-AM3-3 同纪律）
+
+litellm_settings:
+  drop_params: true                          # holmes 透传的未识别参数直接丢弃而非报错

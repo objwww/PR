@@ -19,6 +19,12 @@
 #     AM3 的 eval-runner 届时加入。业务 order-arena 对 eval-mgmt 零成员（C-3 裁定：
 #     "同容器双网监听"不成立，管理面必须拆独立服务/独立容器）
 #   - 全部端口仅绑 127.0.0.1，公网零暴露（INV-AM0-1）；arena-chaos-admin 无宿主端口
+#
+# AM3（M3-24）LiteLLM proxy 收口（§6.6，spike Exp5 实证）：
+#   - litellm 容器 = 模型调用唯一出口（P-12 账本盲区收口 + per-EvalRun 预算硬拦/对账）；
+#     holmes 的 OPENAI_API_BASE 指向 proxy，proxy 不可达即调查失败（fail-closed，
+#     无直连百炼回退路径——E2E-M3-06 断言面）
+#   - litellm-bootstrap 一次性建 litellm 角色/库（SpendLogs + 虚拟 key 台账，Prisma 自建表）
 
 services:
   prometheus:
@@ -63,9 +69,11 @@ services:
     environment:
       HOLMES_PORT: "8080"
       HOLMES_API_KEY: "${HOLMES_API_KEY:?}"          # server 侧鉴权(control-app 同值外带 X-API-Key)
-      MODEL: "openai/deepseek-v3"                    # 默认模型;control-app 请求显式带同 key
-      OPENAI_API_BASE: "${OPENAI_API_BASE}"
-      OPENAI_API_KEY: "${AGENT_MODEL_API_KEY:?}"     # 百炼兼容端点凭证,只走 .env 永不入 git
+      MODEL: "openai/deepseek-v3"                    # 默认模型;须与 litellm config.yaml model_name 对齐
+      # AM3（M3-24）：模型调用全部收口 LiteLLM proxy（§6.6）——原直连百炼的两变量移交 proxy
+      OPENAI_API_BASE: "http://litellm:4000/v1"
+      OPENAI_API_KEY: "${LITELLM_RUN_KEY:?}"         # per-EvalRun 虚拟 key（部署侧铸后写入 .env；
+                                                     # master key 不进 holmes；换 run = 换 key 重启本容器）
       # G0-10 E2E 修正:不设则 prometheus 工具集被前置检查禁用,模型只能拿 kubectl 瞎撞
       PROMETHEUS_URL: "http://prometheus-am0:9090"
       HOME: "/tmp"
@@ -175,6 +183,71 @@ services:
     networks:
       - eval-mgmt     # C-3：管理面只入 eval-mgmt；alert-net/Holmes 不可达（M2-17 195 断言）
 
+  # ---------------------------------------------------------------- AM3 LiteLLM proxy 收口（M3-24，§6.6）
+
+  litellm-bootstrap:
+    # litellm 台账库自举（幂等可重跑）：litellm 角色 + litellm 库（Prisma 自建
+    # LiteLLM_SpendLogs/虚拟 key 表）。只跑 psql 不 initdb → INC-09 seccomp 坑不涉及；
+    # 跨栈 depends_on 不可达，靠 pg_isready 轮询 + proxy 侧重试（arena-migrate 同纪律）
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGPASSWORD: "${POSTGRES_PASSWORD:?}"
+      LITELLM_DB_PASSWORD: "${LITELLM_DB_PASSWORD:?}"
+    entrypoint:
+      - sh
+      - -c
+      - |
+        until pg_isready -h postgres -U postgres >/dev/null 2>&1; do sleep 2; done
+        psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='litellm'" | grep -q 1 \
+          || psql -c "CREATE ROLE litellm LOGIN PASSWORD '$$LITELLM_DB_PASSWORD'"
+        psql -c "ALTER ROLE litellm LOGIN PASSWORD '$$LITELLM_DB_PASSWORD'"
+        psql -tAc "SELECT 1 FROM pg_database WHERE datname='litellm'" | grep -q 1 \
+          || psql -c "CREATE DATABASE litellm OWNER litellm"
+        echo "litellm-bootstrap done"
+    networks:
+      - alert-net
+
+  litellm:
+    # 模型调用唯一出口（P-12 账本盲区收口）。镜像按 spike 结论取官方
+    # docker.io/litellm/litellm:1.89.0（与 holmes 内 litellm 客户端同版，195 镜像加速可拉）；
+    # 方案原文"ghcr + crane 摆渡（BA-01）"保留为兜底。holmes 镜像内 pip 装
+    # litellm[proxy] 缺 Prisma binaries 起不来（P1 spike take-1 负结论，不可走）。
+    image: litellm/litellm:1.89.0
+    container_name: litellm-am3
+    restart: unless-stopped
+    depends_on:
+      - litellm-bootstrap
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:?}@postgres:5432/litellm
+      STORE_MODEL_IN_DB: "true"
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:?}"   # 仅 env 注入（INV-AM3-3 同纪律），永不入 git
+      UPSTREAM_BASE: "${OPENAI_API_BASE}"             # 上游=百炼兼容端点（原 holmes 直连参数移交 proxy）
+      UPSTREAM_KEY: "${AGENT_MODEL_API_KEY:?}"
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+      - litellm-logs:/app/logs                        # 日志卷：卷面 chmod 600 纪律（README）
+    ports:
+      - "127.0.0.1:4000:4000"                         # 仅 loopback：operator 铸 per-EvalRun 虚拟 key 用
+    mem_limit: 512m                                   # §6.8 冻结：LiteLLM proxy 单容器 512M
+    mem_reservation: 256m
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      # 镜像为 python slim（无 curl/wget）；/health/liveliness 为 litellm 内建存活口
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s   # 首启跑 Prisma migrate（spike 实测起得慢）
+    networks:
+      - alert-net          # holmes/eval 面经此可达；上游百炼出网同网
+
 networks:
   opentelemetry-demo:
     external: true        # otel demo 栈已建网（195 上同名）
@@ -188,3 +261,6 @@ networks:
   eval-mgmt:
     external: true
     name: eval-mgmt
+
+volumes:
+  litellm-logs:   # litellm proxy 日志（M3-24）；宿主侧权限纪律见 README「LiteLLM」节
