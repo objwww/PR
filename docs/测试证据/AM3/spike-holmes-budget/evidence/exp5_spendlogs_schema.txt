@@ -1,0 +1,42 @@
+                                Table "public.LiteLLM_SpendLogs"
+          Column          |              Type              | Collation | Nullable |   Default   
+--------------------------+--------------------------------+-----------+----------+-------------
+ request_id               | text                           |           | not null | 
+ call_type                | text                           |           | not null | 
+ api_key                  | text                           |           | not null | ''::text
+ spend                    | double precision               |           | not null | 0.0
+ total_tokens             | integer                        |           | not null | 0
+ prompt_tokens            | integer                        |           | not null | 0
+ completion_tokens        | integer                        |           | not null | 0
+ startTime                | timestamp(3) without time zone |           | not null | 
+ endTime                  | timestamp(3) without time zone |           | not null | 
+ completionStartTime      | timestamp(3) without time zone |           |          | 
+ model                    | text                           |           | not null | ''::text
+ model_id                 | text                           |           |          | ''::text
+ model_group              | text                           |           |          | ''::text
+ custom_llm_provider      | text                           |           |          | ''::text
+ api_base                 | text                           |           |          | ''::text
+ user                     | text                           |           |          | ''::text
+ metadata                 | jsonb                          |           |          | '{}'::jsonb
+ cache_hit                | text                           |           |          | ''::text
+ cache_key                | text                           |           |          | ''::text
+ request_tags             | jsonb                          |           |          | '[]'::jsonb
+ team_id                  | text                           |           |          | 
+ end_user                 | text                           |           |          | 
+ requester_ip_address     | text                           |           |          | 
+ messages                 | jsonb                          |           |          | '{}'::jsonb
+ response                 | jsonb                          |           |          | '{}'::jsonb
+ proxy_server_request     | jsonb                          |           |          | '{}'::jsonb
+ session_id               | text                           |           |          | 
+ status                   | text                           |           |          | 
+ mcp_namespaced_tool_name | text                           |           |          | 
+ organization_id          | text                           |           |          | 
+ agent_id                 | text                           |           |          | 
+ request_duration_ms      | integer                        |           |          | 
+Indexes:
+    "LiteLLM_SpendLogs_pkey" PRIMARY KEY, btree (request_id)
+    "LiteLLM_SpendLogs_end_user_idx" btree (end_user)
+    "LiteLLM_SpendLogs_session_id_idx" btree (session_id)
+    "LiteLLM_SpendLogs_startTime_idx" btree ("startTime")
+    "LiteLLM_SpendLogs_startTime_request_id_idx" btree ("startTime", request_id)
+

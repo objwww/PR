@@ -1,0 +1,6 @@
+    key_alias     | max_budget |  spend   
+------------------+------------+----------
+ spike-run-holmes |     0.0001 | 0.002933
+ spike-run-meta   |            |  2.1e-05
+(2 rows)
+

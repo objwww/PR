@@ -3,7 +3,9 @@
 > 文档信息：2026-09-05 起草；状态 = **待 G1 评审**。
 > 任务编号对齐 `docs/告警Agent-增量实现任务拆解-v1.md` M4-01~38（唯一任务表，已亲自通读原文 §7）。
 > 设计依据：架构 v1.2（FUT-01~55，特别是 FUT-04 任务 DAG/FUT-06 不可变 Snapshot/FUT-07 统一 Tool Gateway/FUT-28 VALIDATE_ONLY/FUT-41 统一 rca_event/FUT-47 Snapshot≠Package）、harness 调研 E-15（Claude Code 权限强制执行/Codex 三态判定/MCP 治理/Holmes 上下文预算/工具宁少勿多）、调度层调研 E-3/E-5。
-> **顺序说明（用户裁定 2026-09-05）**：正常顺序 AM4 依赖 AM3 G2（M3-30）；用户指示提前启动，故本期**只做不依赖 AM3 产物的部分**（数据与状态底盘 M4-01~12 + 工具证据底盘 M4-13~23 的大部分）；Holmes Baseline Adapter（M4-31，依赖 M3-08 落档链）及以后待 AM3 就位。
+> **顺序说明（v1.1 修正，评审 P0-1）**：权威拆解规定 M4-01 依赖 M3-30。用户裁定提前启动的部分**性质降级为"设计预研/纯函数备料"**——已落码的纯 domain 批（DAG/预算/裁决/摘要纯函数）不计入 M4 任务完成登记，正式任务完成登记从 M3-30 达成后按 M4-01→38 顺序开始。
+> **迁移编号（v1.1 修正，评审 P0-2/4，已核实仓库现状）**：`V8__am1_dag_reserve.sql` 已存在（AM1/G0 建，**含 rca_task_edge**——M4-04 不得重建，只补强约束与仓储；且现有边表需补"from/to 同属一个 run_id"约束——组合外键或触发器）。重排冻结：**V9=AM3 eval/notify、V10=AM3 eval_run、V11=AM4 状态扩容、V12=AM4 Run/IncidentBudget、V13=AM4 rca_event、V14=AM4 工具调用账本、V15=AM4 Evidence/Snapshot、V16=AM4 Claim**——一个迁移编号只承载一个任务的 DDL，已发布迁移不得追加。
+> **状态全集（v1.1 修正，评审 P0-5，对齐架构冻结表）**：M4 Task 新增 `BLOCKED/RUNNING/SKIPPED/FAILED_TERMINAL/STALE`；Run 新增 `REPORTING/PARTIAL/EXPIRED`；**WAITING_APPROVAL 属 AM5，AM4 不引入**（R2/R3 意图仅记 VALIDATE_ONLY）。
 > **分层铁律（用户 2026-09-05 指示，本期头号约束）**：关注点分离——上层依赖下层，下层不感知上层；ArchUnit 强制，见 §3.0。
 
 ---
@@ -198,20 +200,24 @@ flowchart LR
 
 - **L0**：分层铁律 R1~R5 的 ArchUnit 套件（红绿留证）；domain 零框架断言；状态机接线行为化断言
 - **L1**：DagCycleDetector（空图/菱形/环/断点）、DagPromoter（并发前驱/可选前驱失败矩阵）、CanonicalJson（字段序无关）、ClaimReducer 矩阵、ReportAssembler（无证据不产根因/PARTIAL/UNRESOLVED）、预算扣减纯函数、状态迁移穷举
-- **L2**（Testcontainers PG）：V10 迁移契约；edge 自环/重复边；rca_event 分段 seq 并发无重复无倒退；generation 栅栏写入拒绝；预算并发扣减；旧 fixture 回放（M4-01 双读）
-- **L3**：计划编译全链（合法/环/未注册任务/超深/超预算）；SIGKILL 恢复（各提交点）；replay 精确匹配三态
+- **L2**（Testcontainers PG）：V11~V16 迁移契约（一迁移一任务）；edge 自环/重复边/**跨 run 连边拒绝（组合 FK 或触发器）**；rca_event 分段 seq 并发无重复无倒退；generation 栅栏写入拒绝；预算并发扣减（DB 原子预留→提交/释放）；旧 fixture 回放（M4-01 双读）
+- **L3**：计划编译全链（合法/环/未注册任务/超深/超预算/**同节点对 REQUIRED+OPTIONAL 冲突边拒绝**）；SIGKILL 恢复（各提交点）；replay 精确匹配三态
 - **L4**：工具超时/取消/超大结果；429/401/5xx 分类；迟到结果拒收
-- **L5**（195 部署门）：DAG 全链真跑（PLAN→调查→REDUCE→ASSEMBLE→报告）；崩溃恢复；Holmes 隔离（Native 失败不影响 Holmes 基线）
+- **L5**（195 部署门）：DAG 全链真跑（PLAN→调查→REDUCE→ASSEMBLE→报告）；崩溃恢复
+- **E2E-M4 业务端到端套件**（评审增补，v1.1）：E2E-M4-00 无故障不制造 RCA/候选通知；01 F1 两证据源同 generation+根因命中 GT+证据可回查；02 F2 变更证据缺失只能 PARTIAL 不许猜；03 F3 对账未完成必 UNKNOWN/PARTIAL，迟到成功不补旧 Snapshot；04 Metrics/Logs Claim 冲突 → NEEDS_REVIEW 保留双方证据（禁数量/置信度投票）；05 generation N 期间产生 N+1：N 的产出全 STALE 不污染新报告；06 四杀点 SIGKILL（plan 落库/ledger PENDING/CAS 写后索引前/finish 事务前后）→ 无重复执行/无预算透支/无永久 BLOCKED；07 prompt injection（日志/annotation/工具结果）→ 未注册或 R2/R3 工具被 Gateway 拒绝；08/09（Replay 精确匹配无回退实时查询 / Shadow 同 snapshot 独立预算）**待 M4-32~38**。**数据源限制（评审 P0-7）**：Logs/Change Agent 当前无冻结的实时日志/变更数据源——本期只做 replay fixture，**不得宣称 Live E2E**；启用 Live 前必须冻结数据源清单 + 只读凭证 + ToolDefinition + 部署契约
+- 每 E2E 证据包必含：scenario_id/run/generation/DAG digest/input snapshot digest/tool ledger/事件序列/Claim/Verdict/报告 digest/预算对账 + "Candidate 未发布"DB 断言
 
 ## 13. 验收标准（DoD）
 
-1. M4-01~30 单项验收全过（拆解原文验收列）；L0~L5 全绿（195 真栈）
+1. M4-01~30 单项验收全过（拆解原文验收列）；L0~L5 全绿（195 真栈）；E2E-M4-00~07 全绿（08/09 除外，属 M4-31+）
 2. 分层铁律 ArchUnit 红绿留证（INV-AM4-1 硬指标）
-3. DAG 固定链真栈跑通 + 崩溃恢复证据；replay 三态实证
+3. DAG 固定链真栈跑通 + 崩溃恢复证据
 4. 证据归档（AA-26 契约）；台账三件套同步
+5. **（v1.1 修正，评审 P0-6）本期 DoD 不含 Replay/Shadow/Holmes 隔离**（属 M4-32~38，待 AM3 后）；已落码纯函数批按"设计预研/备料"登记，不计 M4 任务完成（评审 P0-1）
 
 ## 14. 修订记录
 
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-09-05 | v1.0 | 初稿：亲自读任务拆分 M4 原文后出具；范围 = M4-01~30（M4-31~38 待 AM3）；分层铁律 R1~R5 为用户指示的头号约束；迁移自 V10 起 |
+| 2026-09-05 | v1.1 | 评审 7 P0 全部采纳：① 提前实施部分降级为"设计预研/备料"不计任务完成；② 迁移重排（V8 已存在含 rca_task_edge 实锤；AM3=V9/V10，AM4=V11~V16 一迁移一任务）；③ M4-04 改"复用+补强约束+仓储"不重建表，且补同 run 连边约束；④ 状态全集对齐冻结表（WAITING_APPROVAL 移出 AM4）；⑤ DoD 删除 Replay/Shadow/Holmes 隔离；⑥ Logs/Change 无实时数据源约束（replay fixture 不宣称 Live）；⑦ 第一批代码问题移交修正（ClaimReducer 分组键/平局裁决、Claim 校验、RunBudget 缺口、ActionDigest envelope + CanonicalJson 更名 InternalCanonicalJsonV1、DagPromoter 终局收敛）——见落码方案 v1.1；L2/L3/L5 与 E2E-M4-00~09 套件并入 §12 |

@@ -29,7 +29,15 @@ docker network create "$NET" >/dev/null 2>&1 || true
 docker rm -f spike-pg spike-litellm spike-holmes-run >/dev/null 2>&1 || true
 
 echo "===== [setup] postgres ====="
+# seccomp=unconfined is required on this host: CentOS 7 kernel 3.10 does not
+# know the fchmodat2 syscall used by the musl in postgres:16-alpine, and
+# docker's default seccomp profile answers unknown syscalls with EPERM, which
+# breaks initdb file writes ("could not write to file postmaster.pid:
+# Operation not permitted"). With unconfined the kernel returns ENOSYS and
+# musl falls back. Acceptable here: throwaway container, throwaway bridge
+# network, no published ports, memory-limited, deleted at the end.
 docker run -d --name spike-pg --network "$NET" --memory 256m \
+  --security-opt seccomp=unconfined \
   -e POSTGRES_USER=spike -e POSTGRES_PASSWORD=spikepw -e POSTGRES_DB=litellm \
   postgres:16-alpine >/dev/null
 for i in $(seq 1 30); do
@@ -127,8 +135,10 @@ for n in 1 2 3 4; do
   fi
 done
 echo "--- proxy log: budget/reject lines ---"
-docker logs spike-litellm 2>&1 | grep -i -m8 -e budget -e exceeded | sed -E 's/sk-[A-Za-z0-9]{6,}/sk-REDACTED/g' | tee "$OUT/exp5_proxy_budget_lines.log" || true
-echo "--- key state after rejection (key column NOT selected) ---"
+docker logs spike-litellm 2>&1 | grep -iE "(budget|exceeded)" | grep -viE "migration" | head -8 | sed -E 's/sk-[A-Za-z0-9]{6,}/sk-REDACTED/g' | tee "$OUT/exp5_proxy_budget_lines.log" || true
+echo "--- proxy access log: completion routes (429 vs 200) ---"
+docker logs spike-litellm 2>&1 | grep "POST /chat/completions" | tail -10 | tee "$OUT/exp5_proxy_access_log.txt" || true
+echo "--- key state after rejection (key column NOT selected; spend flushes async) ---"
 docker exec spike-pg psql -U spike -d litellm -c \
   'SELECT key_alias, max_budget, spend FROM "LiteLLM_VerificationToken" ORDER BY key_alias;' \
   | tee "$OUT/exp5_key_state.txt"
@@ -147,9 +157,15 @@ echo "waiting for spend-log flush..."
 sleep 16
 
 echo "===== spend log rows ====="
+docker exec spike-pg psql -U spike -d litellm -c '\d "LiteLLM_SpendLogs"' \
+  | tee "$OUT/exp5_spendlogs_schema.txt" | grep -m20 -e column -e character -e timestamp | head -20
+docker exec spike-pg psql -U spike -d litellm -P pager=off -x -c \
+  'SELECT request_id, model, spend, prompt_tokens, completion_tokens, "user", metadata FROM "LiteLLM_SpendLogs" ORDER BY request_id;' \
+  | sed -E 's/sk-[A-Za-z0-9]{6,}/sk-REDACTED/g' | tee "$OUT/exp5_spendlogs.txt"
+echo "--- key state after flush (spend now persisted) ---"
 docker exec spike-pg psql -U spike -d litellm -c \
-  'SELECT api_key_alias, model, spend, prompt_tokens, completion_tokens, metadata FROM "LiteLLM_SpendLogs" ORDER BY request_id;' \
-  | tee "$OUT/exp5_spendlogs.txt"
+  'SELECT key_alias, max_budget, spend FROM "LiteLLM_VerificationToken" ORDER BY key_alias;' \
+  | tee "$OUT/exp5_key_state_after_flush.txt"
 
 echo "===== [C] header / body / e2e checks ====="
 if grep -q "run-HEADER-002" "$OUT/exp5_spendlogs.txt"; then
