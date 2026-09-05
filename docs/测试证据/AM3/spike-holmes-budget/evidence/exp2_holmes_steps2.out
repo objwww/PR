@@ -1,0 +1,134 @@
+[92m17:50:34 - LiteLLM:WARNING[0m: get_model_cost_map.py:271 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: The read operation timed out. Falling back to local backup.
+Interactive mode disabled when reading piped input
+Model 'openai/deepseek-v3' has no entry in litellm's cost map and no            
+input/output_cost_per_token configured. Usage event costs for this model will be
+0. Add input_cost_per_token and output_cost_per_token to its model_list.yaml    
+entry to enable cost tracking.                                                  
+Loaded models: ['spike-plain', 'spike-capped', 'spike-probe']                   
+User: what is breaking?
+Using selected model: spike-plain                                               
+Couldn't find model openai/deepseek-v3 in litellm's model list (tried:          
+openai/deepseek-v3, deepseek-v3), using default 200000 tokens for               
+max_input_tokens. To override, set OVERRIDE_MAX_CONTENT_SIZE environment        
+variable to the correct value for your model.                                   
+Couldn't find model openai/deepseek-v3 in litellm's model list (tried:          
+openai/deepseek-v3, deepseek-v3), using 64000 tokens for max_output_tokens. To  
+override, set OVERRIDE_MAX_OUTPUT_TOKEN environment variable to the correct     
+value for your model.                                                           
+Model: spike-plain, 200K context, 64K max response (default, change with        
+--model, for all options see https://holmesgpt.dev/ai-providers)                
+Refreshing available datasources (toolsets)                                     
+Running without kube-config! e=Invalid kube-config file. No configuration found.
+Toolset 'kubernetes/kube-lineage-extras' is enabled but was excluded because its
+tags ['cluster'] don't match the current mode's tags ['core', 'cli']            
+❌ Toolset hubble/observability: `hubble version` failed with exit code 127:    
+/bin/sh: 1: hubble: not found                                                   
+❌ Toolset openshift/core: `oc version --client` failed with exit code 127:     
+/bin/sh: 1: oc: not found                                                       
+❌ Toolset slab: Environment variable SLAB_API_KEY was not set                  
+❌ Toolset openshift/logs: `oc version --client` failed with exit code 127:     
+/bin/sh: 1: oc: not found                                                       
+❌ Toolset inspektor-gadget/node: Environment variable ENABLE_INSPEKTOR_GADGET  
+was not set                                                                     
+❌ Toolset cilium/core: `cilium status` failed with exit code 127: /bin/sh: 1:  
+cilium: not found                                                               
+❌ Toolset openshift/live-metrics: `oc adm top nodes` failed with exit code 127:
+/bin/sh: 1: oc: not found                                                       
+❌ Toolset argocd/core: Environment variable ARGOCD_AUTH_TOKEN was not set      
+❌ Toolset openshift/security: `oc version --client` failed with exit code 127: 
+/bin/sh: 1: oc: not found                                                       
+❌ Toolset inspektor-gadget/tcpdump: Environment variable                       
+ENABLE_INSPEKTOR_GADGET was not set                                             
+❌ Toolset crossplane/core: `kubectl api-resources --api-group=pkg.crossplane.io
+--no-headers 2>/dev/null | grep -q providers` failed with exit code 1           
+✅ Toolset kubernetes/kube-prometheus-stack                                     
+❌ Toolset aks/node-health: `az account show` failed with exit code 127:        
+/bin/sh: 1: az: not found                                                       
+❌ Toolset aks/core: `az account show` failed with exit code 127: /bin/sh: 1:   
+az: not found                                                                   
+❌ Toolset helm/core: `helm version` failed with exit code 127: /bin/sh: 1:     
+helm: not found                                                                 
+✅ Toolset core_investigation                                                   
+✅ Toolset internet                                                             
+✅ Toolset connectivity_check                                                   
+❌ Toolset robusta: Integration with Robusta cloud is disabled                  
+❌ Toolset kubernetes/live-metrics: `kubectl top nodes` failed with exit code   
+127: /bin/sh: 1: kubectl: not found                                             
+❌ Toolset notion: Notion toolset is misconfigured. Authorization header is     
+required.                                                                       
+❌ Toolset opensearch/query_assist: Environment variable OPENSEARCH_URL was not 
+set                                                                             
+❌ Toolset docker/core: `docker version` failed with exit code 127: /bin/sh: 1: 
+docker: not found                                                               
+❌ Toolset kubernetes/krew-extras: `kubectl version --client && kubectl lineage 
+--version` failed with exit code 127: /bin/sh: 1: kubectl: not found            
+✅ Toolset kubectl-run                                                          
+❌ Toolset kubernetes/core: `kubectl version --client` failed with exit code    
+127: /bin/sh: 1: kubectl: not found                                             
+✅ Toolset skills                                                               
+❌ Toolset kubernetes/logs: kubectl command not found (ensure kubectl is        
+installed and in PATH)                                                          
+❌ Toolset kubevela/core: `vela version` failed with exit code 127: /bin/sh: 1: 
+vela: not found                                                                 
+✅ Toolset bash                                                                 
+Toolset statuses are cached to /tmp/.holmes/toolsets_status.json                
+✅ Toolset kubernetes/kube-prometheus-stack                                     
+✅ Toolset core_investigation                                                   
+✅ Toolset internet                                                             
+✅ Toolset connectivity_check                                                   
+✅ Toolset kubectl-run                                                          
+✅ Toolset skills                                                               
+✅ Toolset bash                                                                 
+could not find tool no_such_tool_spike. skipping                                
+could not find tool no_such_tool_spike. skipping                                
+Skipping tool execution for no_such_tool_spike: args: {'fake_param': 'x'}       
+The AI requested 1 tool call(s).                                                
+                                                                                
+could not find tool no_such_tool_spike. skipping                                
+The AI requested 1 tool call(s).                                                
+                                                                                
+╭───────────────────── Traceback (most recent call last) ──────────────────────╮
+│ /usr/local/lib/python3.12/site-packages/holmes/main.py:412 in ask            │
+│                                                                              │
+│    409 │   │   │   f'holmes ask "{prompt}"', span_type=SpanType.TASK         │
+│    410 │   │   ) as trace_span:                                              │
+│    411 │   │   │   trace_span.log(input=prompt, metadata={"type": "user_ques │
+│ ❱  412 │   │   │   response = ai.call(messages, trace_span=trace_span, reque │
+│    413 │   │   │   trace_span.log(                                           │
+│    414 │   │   │   │   output=response.result,                               │
+│    415 │   │   │   )                                                         │
+│                                                                              │
+│ /usr/local/lib/python3.12/site-packages/sentry_sdk/tracing_utils.py:1101 in  │
+│ sync_wrapper                                                                 │
+│                                                                              │
+│   1098 │   │   │   │   │   "Please start a Sentry transaction before calling │
+│   1099 │   │   │   │   │   qualname_from_function(f),                        │
+│   1100 │   │   │   │   )                                                     │
+│ ❱ 1101 │   │   │   │   return f(*args, **kwargs)                             │
+│   1102 │   │   │                                                             │
+│   1103 │   │   │   if isinstance(current_span, StreamedSpan):                │
+│   1104 │   │   │   │   warnings.warn(                                        │
+│                                                                              │
+│ /usr/local/lib/python3.12/site-packages/holmes/core/tool_calling_llm.py:657  │
+│ in call                                                                      │
+│                                                                              │
+│    654 │   │   │   start_tool_count = 0                                      │
+│    655 │   │   │   saw_tool_results = False                                  │
+│    656 │   │   │                                                             │
+│ ❱  657 │   │   │   for event in stream:                                      │
+│    658 │   │   │   │   # Log blank line when a tool batch ends (transition a │
+│    659 │   │   │   │   if saw_tool_results and event.event != StreamEvents.T │
+│    660 │   │   │   │   │   display_logger.info("")                           │
+│                                                                              │
+│ /usr/local/lib/python3.12/site-packages/holmes/core/tool_calling_llm.py:1533 │
+│ in call_stream                                                               │
+│                                                                              │
+│   1530 │   │   │   │   │   │   )                                             │
+│   1531 │   │   │   │   │   │   tools = new_tools                             │
+│   1532 │   │                                                                 │
+│ ❱ 1533 │   │   raise Exception(                                              │
+│   1534 │   │   │   f"Too many LLM calls - exceeded max_steps: {i}/{self.max_ │
+│   1535 │   │   )                                                             │
+│   1536                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Exception: Too many LLM calls - exceeded max_steps: 2/2

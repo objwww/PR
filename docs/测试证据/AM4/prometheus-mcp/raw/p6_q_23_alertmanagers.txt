@@ -1,0 +1,3 @@
+event: message
+data: {"jsonrpc":"2.0","id":23,"result":{"content":[{"type":"text","text":"{\"activeAlertManagers\":[{\"url\":\"http://alertmanager-am0:9093/api/v2/alerts\"}],\"droppedAlertManagers\":[]}"}]}}
+

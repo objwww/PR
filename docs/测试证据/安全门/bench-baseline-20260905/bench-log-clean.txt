@@ -1,0 +1,603 @@
+Initializing 2026-09-04T19:07:45
+
+
+Section A - Check results
+
+[INFO] 1 - Host Configuration
+[INFO] 1.1 - Linux Hosts Specific Configuration
+[WARN] 1.1.1 - Ensure a separate partition for containers has been created (Automated)
+[INFO] 1.1.2 - Ensure only trusted users are allowed to control Docker daemon (Automated)
+[INFO]       * Users: 
+[WARN] 1.1.3 - Ensure auditing is configured for the Docker daemon (Automated)
+[WARN] 1.1.4 - Ensure auditing is configured for Docker files and directories -/run/containerd (Automated)
+[WARN] 1.1.5 - Ensure auditing is configured for Docker files and directories - /var/lib/docker (Automated)
+[WARN] 1.1.6 - Ensure auditing is configured for Docker files and directories - /etc/docker (Automated)
+[INFO] 1.1.7 - Ensure auditing is configured for Docker files and directories - docker.service (Automated)
+[INFO]        * File not found
+[INFO] 1.1.8 - Ensure auditing is configured for Docker files and directories - containerd.sock (Automated)
+[INFO]        * File not found
+[INFO] 1.1.9 - Ensure auditing is configured for Docker files and directories - docker.socket (Automated)
+[INFO]        * File not found
+[INFO] 1.1.10 - Ensure auditing is configured for Docker files and directories - /etc/default/docker (Automated)
+[INFO]        * File not found
+[WARN] 1.1.11 - Ensure auditing is configured for Dockerfiles and directories - /etc/docker/daemon.json (Automated)
+[WARN] 1.1.12 - 1.1.12 Ensure auditing is configured for Dockerfiles and directories - /etc/containerd/config.toml (Automated)
+[INFO] 1.1.13 - Ensure auditing is configured for Docker files and directories - /etc/sysconfig/docker (Automated)
+[INFO]        * File not found
+[INFO] 1.1.14 - Ensure auditing is configured for Docker files and directories - /usr/bin/containerd (Automated)
+[INFO]         * File not found
+[INFO] 1.1.15 - Ensure auditing is configured for Docker files and directories - /usr/bin/containerd-shim (Automated)
+[INFO]         * File not found
+[INFO] 1.1.16 - Ensure auditing is configured for Docker files and directories - /usr/bin/containerd-shim-runc-v1 (Automated)
+[INFO]         * File not found
+[INFO] 1.1.17 - Ensure auditing is configured for Docker files and directories - /usr/bin/containerd-shim-runc-v2 (Automated)
+[INFO]         * File not found
+[INFO] 1.1.18 - Ensure auditing is configured for Docker files and directories - /usr/bin/runc (Automated)
+[INFO]         * File not found
+[INFO] 1.2 - General Configuration
+[NOTE] 1.2.1 - Ensure the container host has been Hardened (Manual)
+[PASS] 1.2.2 - Ensure that the version of Docker is up to date (Manual)
+[INFO]        * Using 26.1.4, verify is it up to date as deemed necessary
+
+[INFO] 2 - Docker daemon configuration
+[NOTE] 2.1 - Run the Docker daemon as a non-root user, if possible (Manual)
+[WARN] 2.2 - Ensure network traffic is restricted between containers on the default bridge (Scored)
+[PASS] 2.3 - Ensure the logging level is set to 'info' (Scored)
+[PASS] 2.4 - Ensure Docker is allowed to make changes to iptables (Scored)
+[PASS] 2.5 - Ensure insecure registries are not used (Scored)
+[PASS] 2.6 - Ensure aufs storage driver is not used (Scored)
+[INFO] 2.7 - Ensure TLS authentication for Docker daemon is configured (Scored)
+[INFO]      * Docker daemon not listening on TCP
+[INFO] 2.8 - Ensure the default ulimit is configured appropriately (Manual)
+[INFO]      * Default ulimit doesn't appear to be set
+[WARN] 2.9 - Enable user namespace support (Scored)
+[PASS] 2.10 - Ensure the default cgroup usage has been confirmed (Scored)
+[PASS] 2.11 - Ensure base device size is not changed until needed (Scored)
+[WARN] 2.12 - Ensure that authorization for Docker client commands is enabled (Scored)
+[WARN] 2.13 - Ensure centralized and remote logging is configured (Scored)
+[WARN] 2.14 - Ensure containers are restricted from acquiring new privileges (Scored)
+[WARN] 2.15 - Ensure live restore is enabled (Scored)
+[WARN] 2.16 - Ensure Userland Proxy is Disabled (Scored)
+[INFO] 2.17 - Ensure that a daemon-wide custom seccomp profile is applied if appropriate (Manual)
+[INFO] Ensure that experimental features are not implemented in production (Scored) (Deprecated)
+
+[INFO] 3 - Docker daemon configuration files
+[INFO] 3.1 - Ensure that the docker.service file ownership is set to root:root (Automated)
+[INFO]      * File not found
+[INFO] 3.2 - Ensure that docker.service file permissions are appropriately set (Automated)
+[INFO]      * File not found
+[INFO] 3.3 - Ensure that docker.socket file ownership is set to root:root (Automated)
+[INFO]      * File not found
+[INFO] 3.4 - Ensure that docker.socket file permissions are set to 644 or more restrictive (Automated)
+[INFO]      * File not found
+[PASS] 3.5 - Ensure that the /etc/docker directory ownership is set to root:root (Automated)
+[PASS] 3.6 - Ensure that /etc/docker directory permissions are set to 755 or more restrictively (Automated)
+[INFO] 3.7 - Ensure that registry certificate file ownership is set to root:root (Automated)
+[INFO]      * Directory not found
+[INFO] 3.8 - Ensure that registry certificate file permissions are set to 444 or more restrictively (Automated)
+[INFO]      * Directory not found
+[INFO] 3.9 - Ensure that TLS CA certificate file ownership is set to root:root (Automated)
+[INFO]      * No TLS CA certificate found
+[INFO] 3.10 - Ensure that TLS CA certificate file permissions are set to 444 or more restrictively (Automated)
+[INFO]       * No TLS CA certificate found
+[INFO] 3.11 - Ensure that Docker server certificate file ownership is set to root:root (Automated)
+[INFO]       * No TLS Server certificate found
+[INFO] 3.12 - Ensure that the Docker server certificate file permissions are set to 444 or more restrictively (Automated)
+[INFO]       * No TLS Server certificate found
+[INFO] 3.13 - Ensure that the Docker server certificate key file ownership is set to root:root (Automated)
+[INFO]       * No TLS Key found
+[INFO] 3.14 - Ensure that the Docker server certificate key file permissions are set to 400 (Automated)
+[INFO]       * No TLS Key found
+[PASS] 3.15 - Ensure that the Docker socket file ownership is set to root:docker (Automated)
+[PASS] 3.16 - Ensure that the Docker socket file permissions are set to 660 or more restrictively (Automated)
+[PASS] 3.17 - Ensure that the daemon.json file ownership is set to root:root (Automated)
+[PASS] 3.18 - Ensure that daemon.json file permissions are set to 644 or more restrictive (Automated)
+[INFO] 3.19 - Ensure that the /etc/default/docker file ownership is set to root:root (Automated)
+[INFO]       * File not found
+[INFO] 3.20 - Ensure that the /etc/default/docker file permissions are set to 644 or more restrictively (Automated)
+[INFO]       * File not found
+[INFO] 3.21 - Ensure that the /etc/sysconfig/docker file permissions are set to 644 or more restrictively (Automated)
+[INFO]       * File not found
+[INFO] 3.22 - Ensure that the /etc/sysconfig/docker file ownership is set to root:root (Automated)
+[INFO]       * File not found
+[INFO] 3.23 - Ensure that the Containerd socket file ownership is set to root:root (Automated)
+[INFO]       * File not found
+[INFO] 3.24 - Ensure that the Containerd socket file permissions are set to 660 or more restrictively (Automated)
+[INFO]       * File not found
+
+[INFO] 4 - Container Images and Build File
+[WARN] 4.1 - Ensure that a user for the container has been created (Automated)
+[WARN]      * Running as root: infallible_saha
+[WARN]      * Running as root: holmesgpt-am1
+[WARN]      * Running as root: deploy-postgres-1
+[WARN]      * Running as root: load-generator
+[WARN]      * Running as root: recommendation
+[WARN]      * Running as root: cart
+[WARN]      * Running as root: ad
+[WARN]      * Running as root: flagd-ui
+[WARN]      * Running as root: currency
+[WARN]      * Running as root: email
+[WARN]      * Running as root: astronomy-db
+[WARN]      * Running as root: echo-receiver
+[NOTE] 4.2 - Ensure that containers use only trusted base images (Manual)
+[NOTE] 4.3 - Ensure that unnecessary packages are not installed in the container (Manual)
+[NOTE] 4.4 - Ensure images are scanned and rebuilt to include security patches (Manual)
+[WARN] 4.5 - Ensure Content trust for Docker is Enabled (Automated)
+[WARN] 4.6 - Ensure that HEALTHCHECK instructions have been added to container images (Automated)
+[WARN]      * No Healthcheck found: [pr-agent/control-app:0.0.1-SNAPSHOT]
+[WARN]      * No Healthcheck found: 7f089a6ba5c8
+[WARN]      * No Healthcheck found: 497b45a831e4
+[WARN]      * No Healthcheck found: b7cffc1f6b2c
+[WARN]      * No Healthcheck found: 6ca0d97dfcc7
+[WARN]      * No Healthcheck found: ebcb624d2b18
+[WARN]      * No Healthcheck found: [local/holmesgpt:am1-http]
+[WARN]      * No Healthcheck found: [local/holmesgpt:am0]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-currency]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-frontend]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-load-generator]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-email]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-frontend-proxy]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-shipping]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-flagd-ui]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-quote]
+[WARN]      * No Healthcheck found: 2c90258073e0
+[WARN]      * No Healthcheck found: 488a53aafc3e
+[WARN]      * No Healthcheck found: [pr-agent/publisher-app:0.0.1-SNAPSHOT]
+[WARN]      * No Healthcheck found: e17ba6bf6104
+[WARN]      * No Healthcheck found: 6365f2ddc339
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-checkout]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-product-catalog]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-ad]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-payment]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-recommendation]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-image-provider]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-cart]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/demo:latest-telemetry-docs]
+[WARN]      * No Healthcheck found: b74e892e5d94
+[WARN]      * No Healthcheck found: [python:3.12-alpine]
+[WARN]      * No Healthcheck found: 1e9d816584e6
+[WARN]      * No Healthcheck found: a66007d84f78
+[WARN]      * No Healthcheck found: 8d21ec7c74ad
+[WARN]      * No Healthcheck found: [docker:cli]
+[WARN]      * No Healthcheck found: 2995271c8b78
+[WARN]      * No Healthcheck found: 4bc354e00ed9
+[WARN]      * No Healthcheck found: c8f6fc886cd5
+[WARN]      * No Healthcheck found: 32754da2fa90
+[WARN]      * No Healthcheck found: 7d1742997453
+[WARN]      * No Healthcheck found: c2026199effa
+[WARN]      * No Healthcheck found: 2ac7a26f1e6f
+[WARN]      * No Healthcheck found: 5d956e4ec66d
+[WARN]      * No Healthcheck found: 45ae1f981f2d
+[WARN]      * No Healthcheck found: c66edf819912
+[WARN]      * No Healthcheck found: 93aface1293c
+[WARN]      * No Healthcheck found: cf9e7f3c25f8
+[WARN]      * No Healthcheck found: e5565d89e7f5
+[WARN]      * No Healthcheck found: 7d7b70db29fe
+[WARN]      * No Healthcheck found: 3fbcf6a5ba57
+[WARN]      * No Healthcheck found: bae57e5d405b
+[WARN]      * No Healthcheck found: 890daffde939
+[WARN]      * No Healthcheck found: 476a8efcf122
+[WARN]      * No Healthcheck found: 3d82117de1d4
+[WARN]      * No Healthcheck found: 68a56b055e70
+[WARN]      * No Healthcheck found: dfcb880e6982
+[WARN]      * No Healthcheck found: ab9f7a48ab70
+[WARN]      * No Healthcheck found: ef1dc140e266
+[WARN]      * No Healthcheck found: 0db8dea8f572
+[WARN]      * No Healthcheck found: dd672a5e5d49
+[WARN]      * No Healthcheck found: f2e33e9b29fa
+[WARN]      * No Healthcheck found: [maven:3.9-eclipse-temurin-21]
+[WARN]      * No Healthcheck found: [eclipse-temurin:21-jre]
+[WARN]      * No Healthcheck found: [ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.159.0]
+[WARN]      * No Healthcheck found: [prom/alertmanager:latest]
+[WARN]      * No Healthcheck found: [postgres:16-alpine]
+[WARN]      * No Healthcheck found: [postgres:18.4]
+[WARN]      * No Healthcheck found: [redis:7-alpine]
+[WARN]      * No Healthcheck found: [ghcr.io/valkey-io/valkey:9.0.4-alpine3.23]
+[WARN]      * No Healthcheck found: [quay.io/prometheus/prometheus:v3.13.1]
+[WARN]      * No Healthcheck found: [alpine:latest]
+[WARN]      * No Healthcheck found: [ghcr.io/open-feature/flagd:v0.16.0]
+[WARN]      * No Healthcheck found: [mongo:5.0]
+[WARN]      * No Healthcheck found: [alerta/alerta-web:latest]
+[WARN]      * No Healthcheck found: [apache/hertzbeat:latest]
+[WARN]      * No Healthcheck found: [maven:3.9.9-eclipse-temurin-17]
+[WARN]      * No Healthcheck found: [curlimages/curl:8.12.1]
+[WARN]      * No Healthcheck found: [minio/minio:RELEASE.2024-12-18T13-15-44Z]
+[WARN]      * No Healthcheck found: [flyway/flyway:10-alpine]
+[WARN]      * No Healthcheck found: [testcontainers/ryuk:0.11.0]
+[WARN]      * No Healthcheck found: [mysql:5.7]
+[WARN]      * No Healthcheck found: [rabbitmq:3.10-management]
+[WARN]      * No Healthcheck found: [nacos/nacos-server:v2.1.0]
+[INFO] 4.7 - Ensure update instructions are not used alone in the Dockerfile (Manual)
+[INFO]      * Update instruction found: [pr-agent/control-app:0.0.1-SNAPSHOT]
+[INFO]      * Update instruction found: [local/holmesgpt:am1-http]
+[INFO]      * Update instruction found: [local/holmesgpt:am0]
+[INFO]      * Update instruction found: [ghcr.io/open-telemetry/demo:latest-currency]
+[INFO]      * Update instruction found: [ghcr.io/open-telemetry/demo:latest-load-generator]
+[INFO]      * Update instruction found: [ghcr.io/open-telemetry/demo:latest-frontend-proxy]
+[INFO]      * Update instruction found: [ghcr.io/open-telemetry/demo:latest-flagd-ui]
+[INFO]      * Update instruction found: [pr-agent/publisher-app:0.0.1-SNAPSHOT]
+[INFO]      * Update instruction found: [ghcr.io/open-telemetry/demo:latest-ad]
+[INFO]      * Update instruction found: [maven:3.9-eclipse-temurin-21]
+[INFO]      * Update instruction found: [eclipse-temurin:21-jre]
+[INFO]      * Update instruction found: [postgres:18.4]
+[INFO]      * Update instruction found: [mongo:5.0]
+[INFO]      * Update instruction found: [alerta/alerta-web:latest]
+[INFO]      * Update instruction found: [apache/hertzbeat:latest]
+[INFO]      * Update instruction found: [wiremock/wiremock:3.13.1]
+[INFO]      * Update instruction found: [maven:3.9.9-eclipse-temurin-17]
+[INFO]      * Update instruction found: [wiremock/wiremock:3.9.1]
+[NOTE] 4.8 - Ensure setuid and setgid permissions are removed (Manual)
+[INFO] 4.9 - Ensure that COPY is used instead of ADD in Dockerfiles (Manual)
+[INFO]      * ADD in image history: [ghcr.io/open-telemetry/demo:latest-frontend-proxy]
+[INFO]      * ADD in image history: [ghcr.io/open-telemetry/demo:latest-ad]
+[INFO]      * ADD in image history: [maven:3.9-eclipse-temurin-21]
+[INFO]      * ADD in image history: [mongo:5.0]
+[INFO]      * ADD in image history: [alerta/alerta-web:latest]
+[INFO]      * ADD in image history: [apache/hertzbeat:latest]
+[INFO]      * ADD in image history: [wiremock/wiremock:3.13.1]
+[INFO]      * ADD in image history: [maven:3.9.9-eclipse-temurin-17]
+[INFO]      * ADD in image history: [wiremock/wiremock:3.9.1]
+[INFO]      * ADD in image history: [rabbitmq:3.10-management]
+[INFO]      * ADD in image history: [nacos/nacos-server:v2.1.0]
+[NOTE] 4.10 - Ensure secrets are not stored in Dockerfiles (Manual)
+[NOTE] 4.11 - Ensure only verified packages are installed (Manual)
+[NOTE] 4.12 - Ensure all signed artifacts are validated (Manual)
+
+[INFO] 5 - Container Runtime
+[PASS] 5.1 - Ensure swarm mode is not Enabled, if not needed (Automated)
+[WARN] 5.2 - Ensure that, if applicable, an AppArmor Profile is enabled (Automated)
+[WARN]      * No AppArmorProfile Found: infallible_saha
+[WARN]      * No AppArmorProfile Found: deploy-control-app-1
+[WARN]      * No AppArmorProfile Found: alertmanager-am0
+[WARN]      * No AppArmorProfile Found: holmesgpt-am1
+[WARN]      * No AppArmorProfile Found: deploy-postgres-1
+[WARN]      * No AppArmorProfile Found: prometheus-am0
+[WARN]      * No AppArmorProfile Found: otel-collector
+[WARN]      * No AppArmorProfile Found: frontend-proxy
+[WARN]      * No AppArmorProfile Found: load-generator
+[WARN]      * No AppArmorProfile Found: frontend
+[WARN]      * No AppArmorProfile Found: recommendation
+[WARN]      * No AppArmorProfile Found: checkout
+[WARN]      * No AppArmorProfile Found: product-catalog
+[WARN]      * No AppArmorProfile Found: cart
+[WARN]      * No AppArmorProfile Found: shipping
+[WARN]      * No AppArmorProfile Found: ad
+[WARN]      * No AppArmorProfile Found: payment
+[WARN]      * No AppArmorProfile Found: flagd-ui
+[WARN]      * No AppArmorProfile Found: currency
+[WARN]      * No AppArmorProfile Found: quote
+[WARN]      * No AppArmorProfile Found: email
+[WARN]      * No AppArmorProfile Found: image-provider
+[WARN]      * No AppArmorProfile Found: astronomy-db
+[WARN]      * No AppArmorProfile Found: flagd
+[WARN]      * No AppArmorProfile Found: telemetry-docs
+[WARN]      * No AppArmorProfile Found: valkey-cart
+[WARN]      * No AppArmorProfile Found: echo-receiver
+[WARN] 5.3 - Ensure that, if applicable, SELinux security options are set (Automated)
+[WARN]      * No SecurityOptions Found: infallible_saha
+[WARN]      * No SecurityOptions Found: alertmanager-am0
+[WARN]      * No SecurityOptions Found: prometheus-am0
+[WARN]      * No SecurityOptions Found: otel-collector
+[WARN]      * No SecurityOptions Found: frontend-proxy
+[WARN]      * No SecurityOptions Found: load-generator
+[WARN]      * No SecurityOptions Found: frontend
+[WARN]      * No SecurityOptions Found: recommendation
+[WARN]      * No SecurityOptions Found: checkout
+[WARN]      * No SecurityOptions Found: product-catalog
+[WARN]      * No SecurityOptions Found: cart
+[WARN]      * No SecurityOptions Found: shipping
+[WARN]      * No SecurityOptions Found: ad
+[WARN]      * No SecurityOptions Found: payment
+[WARN]      * No SecurityOptions Found: flagd-ui
+[WARN]      * No SecurityOptions Found: currency
+[WARN]      * No SecurityOptions Found: quote
+[WARN]      * No SecurityOptions Found: email
+[WARN]      * No SecurityOptions Found: image-provider
+[WARN]      * No SecurityOptions Found: astronomy-db
+[WARN]      * No SecurityOptions Found: flagd
+[WARN]      * No SecurityOptions Found: telemetry-docs
+[WARN]      * No SecurityOptions Found: valkey-cart
+[WARN]      * No SecurityOptions Found: echo-receiver
+[PASS] 5.4 - Ensure that Linux kernel capabilities are restricted within containers (Automated)
+[PASS] 5.5 - Ensure that privileged containers are not used (Automated)
+[WARN] 5.6 - Ensure sensitive host system directories are not mounted on containers (Automated)
+[WARN]      * Sensitive directory / mounted in: otel-collector
+[PASS] 5.7 - Ensure sshd is not run within containers (Automated)
+[PASS] 5.8 - Ensure privileged ports are not mapped within containers (Automated)
+[WARN] 5.9 - Ensure that only needed ports are open on the container (Manual)
+[WARN]      * Port in use: 8080 in deploy-control-app-1
+[WARN]      * Port in use: 9093 in alertmanager-am0
+[WARN]      * Port in use: 9090 in prometheus-am0
+[WARN]      * Port in use: 4317 in otel-collector
+[WARN]      * Port in use: 4318 in otel-collector
+[WARN]      * Port in use: 9464 in otel-collector
+[WARN]      * Port in use: 18080 in frontend-proxy
+[WARN]      * Port in use: 10000 in frontend-proxy
+[WARN]      * Port in use: 4000 in flagd-ui
+[WARN]      * Port in use: 8013 in flagd
+[WARN]      * Port in use: 8016 in flagd
+[WARN]      * Port in use: 9199 in echo-receiver
+[PASS] 5.10 - Ensure that the host's network namespace is not shared (Automated)
+[WARN] 5.11 - Ensure that the memory usage for containers is limited (Automated)
+[WARN]       * Container running without memory restrictions: alertmanager-am0
+[WARN]       * Container running without memory restrictions: echo-receiver
+[WARN] 5.12 - Ensure that CPU priority is set appropriately on containers (Automated)
+[WARN]       * Container running without CPU restrictions: infallible_saha
+[WARN]       * Container running without CPU restrictions: alertmanager-am0
+[WARN]       * Container running without CPU restrictions: holmesgpt-am1
+[WARN]       * Container running without CPU restrictions: prometheus-am0
+[WARN]       * Container running without CPU restrictions: otel-collector
+[WARN]       * Container running without CPU restrictions: frontend-proxy
+[WARN]       * Container running without CPU restrictions: load-generator
+[WARN]       * Container running without CPU restrictions: frontend
+[WARN]       * Container running without CPU restrictions: recommendation
+[WARN]       * Container running without CPU restrictions: checkout
+[WARN]       * Container running without CPU restrictions: product-catalog
+[WARN]       * Container running without CPU restrictions: cart
+[WARN]       * Container running without CPU restrictions: shipping
+[WARN]       * Container running without CPU restrictions: ad
+[WARN]       * Container running without CPU restrictions: payment
+[WARN]       * Container running without CPU restrictions: flagd-ui
+[WARN]       * Container running without CPU restrictions: currency
+[WARN]       * Container running without CPU restrictions: quote
+[WARN]       * Container running without CPU restrictions: email
+[WARN]       * Container running without CPU restrictions: image-provider
+[WARN]       * Container running without CPU restrictions: astronomy-db
+[WARN]       * Container running without CPU restrictions: flagd
+[WARN]       * Container running without CPU restrictions: telemetry-docs
+[WARN]       * Container running without CPU restrictions: valkey-cart
+[WARN]       * Container running without CPU restrictions: echo-receiver
+[WARN] 5.13 - Ensure that the container's root filesystem is mounted as read only (Automated)
+[WARN]       * Container running with root FS mounted R/W: infallible_saha
+[WARN]       * Container running with root FS mounted R/W: alertmanager-am0
+[WARN]       * Container running with root FS mounted R/W: holmesgpt-am1
+[WARN]       * Container running with root FS mounted R/W: deploy-postgres-1
+[WARN]       * Container running with root FS mounted R/W: prometheus-am0
+[WARN]       * Container running with root FS mounted R/W: otel-collector
+[WARN]       * Container running with root FS mounted R/W: frontend-proxy
+[WARN]       * Container running with root FS mounted R/W: load-generator
+[WARN]       * Container running with root FS mounted R/W: frontend
+[WARN]       * Container running with root FS mounted R/W: recommendation
+[WARN]       * Container running with root FS mounted R/W: cart
+[WARN]       * Container running with root FS mounted R/W: ad
+[WARN]       * Container running with root FS mounted R/W: payment
+[WARN]       * Container running with root FS mounted R/W: flagd-ui
+[WARN]       * Container running with root FS mounted R/W: currency
+[WARN]       * Container running with root FS mounted R/W: quote
+[WARN]       * Container running with root FS mounted R/W: email
+[WARN]       * Container running with root FS mounted R/W: image-provider
+[WARN]       * Container running with root FS mounted R/W: astronomy-db
+[WARN]       * Container running with root FS mounted R/W: flagd
+[WARN]       * Container running with root FS mounted R/W: telemetry-docs
+[WARN]       * Container running with root FS mounted R/W: valkey-cart
+[WARN]       * Container running with root FS mounted R/W: echo-receiver
+[PASS] 5.14 - Ensure that incoming container traffic is bound to a specific host interface (Automated)
+[PASS] 5.15 - Ensure that the 'on-failure' container restart policy is set to '5' (Automated)
+[PASS] 5.16 - Ensure that the host's process namespace is not shared (Automated)
+[PASS] 5.17 - Ensure that the host's IPC namespace is not shared (Automated)
+[PASS] 5.18 - Ensure that host devices are not directly exposed to containers (Manual)
+[INFO] 5.19 - Ensure that the default ulimit is overwritten at runtime if needed (Manual)
+[INFO]       * Container no default ulimit override: infallible_saha
+[INFO]       * Container no default ulimit override: deploy-control-app-1
+[INFO]       * Container no default ulimit override: alertmanager-am0
+[INFO]       * Container no default ulimit override: holmesgpt-am1
+[INFO]       * Container no default ulimit override: deploy-postgres-1
+[INFO]       * Container no default ulimit override: prometheus-am0
+[INFO]       * Container no default ulimit override: otel-collector
+[INFO]       * Container no default ulimit override: frontend-proxy
+[INFO]       * Container no default ulimit override: load-generator
+[INFO]       * Container no default ulimit override: frontend
+[INFO]       * Container no default ulimit override: recommendation
+[INFO]       * Container no default ulimit override: checkout
+[INFO]       * Container no default ulimit override: product-catalog
+[INFO]       * Container no default ulimit override: cart
+[INFO]       * Container no default ulimit override: shipping
+[INFO]       * Container no default ulimit override: ad
+[INFO]       * Container no default ulimit override: payment
+[INFO]       * Container no default ulimit override: flagd-ui
+[INFO]       * Container no default ulimit override: currency
+[INFO]       * Container no default ulimit override: quote
+[INFO]       * Container no default ulimit override: email
+[INFO]       * Container no default ulimit override: image-provider
+[INFO]       * Container no default ulimit override: astronomy-db
+[INFO]       * Container no default ulimit override: flagd
+[INFO]       * Container no default ulimit override: telemetry-docs
+[INFO]       * Container no default ulimit override: valkey-cart
+[INFO]       * Container no default ulimit override: echo-receiver
+[PASS] 5.20 - Ensure mount propagation mode is not set to shared (Automated)
+[PASS] 5.21 - Ensure that the host's UTS namespace is not shared (Automated)
+[WARN] 5.22 - Ensure the default seccomp profile is not Disabled (Automated)
+[WARN]       * Default seccomp profile disabled: deploy-postgres-1
+[NOTE] 5.23 - Ensure that docker exec commands are not used with the privileged option (Automated)
+[NOTE] 5.24 - Ensure that docker exec commands are not used with the user=root option (Manual)
+[PASS] 5.25 - Ensure that cgroup usage is confirmed (Automated)
+[WARN] 5.26 - Ensure that the container is restricted from acquiring additional privileges (Automated)
+[WARN]       * Privileges not restricted: infallible_saha
+[WARN]       * Privileges not restricted: alertmanager-am0
+[WARN]       * Privileges not restricted: deploy-postgres-1
+[WARN]       * Privileges not restricted: prometheus-am0
+[WARN]       * Privileges not restricted: otel-collector
+[WARN]       * Privileges not restricted: frontend-proxy
+[WARN]       * Privileges not restricted: load-generator
+[WARN]       * Privileges not restricted: frontend
+[WARN]       * Privileges not restricted: recommendation
+[WARN]       * Privileges not restricted: checkout
+[WARN]       * Privileges not restricted: product-catalog
+[WARN]       * Privileges not restricted: cart
+[WARN]       * Privileges not restricted: shipping
+[WARN]       * Privileges not restricted: ad
+[WARN]       * Privileges not restricted: payment
+[WARN]       * Privileges not restricted: flagd-ui
+[WARN]       * Privileges not restricted: currency
+[WARN]       * Privileges not restricted: quote
+[WARN]       * Privileges not restricted: email
+[WARN]       * Privileges not restricted: image-provider
+[WARN]       * Privileges not restricted: astronomy-db
+[WARN]       * Privileges not restricted: flagd
+[WARN]       * Privileges not restricted: telemetry-docs
+[WARN]       * Privileges not restricted: valkey-cart
+[WARN]       * Privileges not restricted: echo-receiver
+[WARN] 5.27 - Ensure that container health is checked at runtime (Automated)
+[WARN]       * Health check not set: infallible_saha
+[WARN]       * Health check not set: deploy-control-app-1
+[WARN]       * Health check not set: alertmanager-am0
+[WARN]       * Health check not set: holmesgpt-am1
+[WARN]       * Health check not set: prometheus-am0
+[WARN]       * Health check not set: otel-collector
+[WARN]       * Health check not set: cart
+[WARN]       * Health check not set: flagd
+[INFO] 5.28 - Ensure that Docker commands always make use of the latest version of their image (Manual)
+[WARN] 5.29 - Ensure that the PIDs cgroup limit is used (Automated)
+[WARN]       * PIDs limit not set: infallible_saha
+[WARN]       * PIDs limit not set: deploy-control-app-1
+[WARN]       * PIDs limit not set: alertmanager-am0
+[WARN]       * PIDs limit not set: holmesgpt-am1
+[WARN]       * PIDs limit not set: deploy-postgres-1
+[WARN]       * PIDs limit not set: prometheus-am0
+[WARN]       * PIDs limit not set: otel-collector
+[WARN]       * PIDs limit not set: frontend-proxy
+[WARN]       * PIDs limit not set: load-generator
+[WARN]       * PIDs limit not set: frontend
+[WARN]       * PIDs limit not set: recommendation
+[WARN]       * PIDs limit not set: checkout
+[WARN]       * PIDs limit not set: product-catalog
+[WARN]       * PIDs limit not set: cart
+[WARN]       * PIDs limit not set: shipping
+[WARN]       * PIDs limit not set: ad
+[WARN]       * PIDs limit not set: payment
+[WARN]       * PIDs limit not set: flagd-ui
+[WARN]       * PIDs limit not set: currency
+[WARN]       * PIDs limit not set: quote
+[WARN]       * PIDs limit not set: email
+[WARN]       * PIDs limit not set: image-provider
+[WARN]       * PIDs limit not set: astronomy-db
+[WARN]       * PIDs limit not set: flagd
+[WARN]       * PIDs limit not set: telemetry-docs
+[WARN]       * PIDs limit not set: valkey-cart
+[WARN]       * PIDs limit not set: echo-receiver
+[INFO] 5.30 - Ensure that Docker's default bridge 'docker0' is not used (Manual)
+[INFO]       * Container in docker0 network: infallible_saha
+[PASS] 5.31 - Ensure that the host's user namespaces are not shared (Automated)
+[WARN] 5.32 - Ensure that the Docker socket is not mounted inside any containers (Automated)
+[WARN]       * Docker socket shared: otel-collector
+
+[INFO] 6 - Docker Security Operations
+[INFO] 6.1 - Ensure that image sprawl is avoided (Manual)
+[INFO]      * There are currently: 87 images
+[INFO]      * Only 29 out of 87 are in use
+[INFO] 6.2 - Ensure that container sprawl is avoided (Manual)
+[INFO]      * There are currently a total of 29 containers, with 28 of them currently running
+
+[INFO] 7 - Docker Swarm Configuration
+[PASS] 7.1 - Ensure that the minimum number of manager nodes have been created in a swarm (Automated) (Swarm mode not enabled)
+[PASS] 7.2 - Ensure that swarm services are bound to a specific host interface (Automated) (Swarm mode not enabled)
+[PASS] 7.3 - Ensure that all Docker swarm overlay networks are encrypted (Automated)
+[PASS] 7.4 - Ensure that Docker's secret management commands are used for managing secrets in a swarm cluster (Manual) (Swarm mode not enabled)
+[PASS] 7.5 - Ensure that swarm manager is run in auto-lock mode (Automated) (Swarm mode not enabled)
+[PASS] 7.6 - Ensure that the swarm manager auto-lock key is rotated periodically (Manual) (Swarm mode not enabled)
+[PASS] 7.7 - Ensure that node certificates are rotated as appropriate (Manual) (Swarm mode not enabled)
+[PASS] 7.8 - Ensure that CA certificates are rotated as appropriate (Manual) (Swarm mode not enabled)
+[PASS] 7.9 - Ensure that management plane traffic is separated from data plane traffic (Manual) (Swarm mode not enabled)
+
+
+Section B - Remediation measures
+
+[INFO] 1 - Host Configuration
+[INFO] 1.1.1 - For new installations, you should create a separate partition for the /var/lib/docker mount point. For systems that have already been installed, you should use the Logical Volume Manager (LVM) within Linux to create a new partition. Remediation Impact: None.
+[INFO] 1.1.2 - You should remove any untrusted users from the docker group using command sudo gpasswd -d <your-user> docker or add trusted users to the docker group using command sudo usermod -aG docker <your-user>. You should not create a mapping of sensitive directories from the host to container volumes. Remediation Impact: Only trust user are allow to build and execute containers as normal user.
+[INFO] 1.1.3 - Install auditd. Add -w /usr/bin/dockerd -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.4 - Install auditd. Add -a exit,always -F path=/run/containerd -F perm=war -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.5 - Install auditd. Add -w /var/lib/docker -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.6 - Install auditd. Add -w /etc/docker -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.7 - Install auditd. Add -w  -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.8 - Install auditd. Add -w  -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.9 - Install auditd. Add -w  -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.10 - Install auditd. Add -w /etc/default/docker -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.11 - Install auditd. Add -w /etc/docker/daemon.json -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.12 - Install auditd. Add -w /etc/containerd/config.toml -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.13 - Install auditd. Add -w /etc/sysconfig/docker -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.14 - Install auditd. Add -w /usr/bin/containerd -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.15 - Install auditd. Add -w /usr/bin/containerd-shim -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.16 - Install auditd. Add -w /usr/bin/containerd-shim-runc-v1 -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.17 - Install auditd. Add -w /usr/bin/containerd-shim-runc-v2 -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.1.18 - Install auditd. Add -w /usr/bin/runc -k docker to the /etc/audit/rules.d/audit.rules file. Then restart the audit daemon using command service auditd restart. Remediation Impact: Audit can generate large log files. So you need to make sure that they are rotated and archived periodically. Create a separate partition for audit logs to avoid filling up other critical partitions.
+[INFO] 1.2.1 - You may consider various Security Benchmarks for your container host. Remediation Impact: None.
+[INFO] 1.2.2 - You should monitor versions of Docker releases and make sure your software is updated as required. Remediation Impact: You should perform a risk assessment regarding Docker version updates and review how they may impact your operations.
+
+[INFO] 2 - Docker daemon configuration
+[INFO] 2.1 - Follow the current Dockerdocumentation on how to install the Docker daemon as a non-root user. Remediation Impact: There are multiple prerequisites depending on which distribution that is in use, and also known limitations regarding networking and resource limitation. Running in rootless mode also changes the location of any configuration files in use, including all containers using the daemon.
+[INFO] 2.2 - Edit the Docker daemon configuration file to ensure that inter-container communication is disabled: icc: false. Remediation Impact: Inter-container communication is disabled on the default network bridge. If any communication between containers on the same host is desired, it needs to be explicitly defined using container linking or custom networks.
+[INFO] 2.7 - Follow the steps mentioned in the Docker documentation or other references. By default, TLS authentication is not configured. Remediation Impact: You would need to manage and guard certificates and keys for the Docker daemon and Docker clients.
+[INFO] 2.8 - Run Docker in daemon mode and pass --default-ulimit as option with respective ulimits as appropriate in your environment and in line with your security policy. Example: dockerd --default-ulimit nproc=1024:2048 --default-ulimit nofile=100:200 Remediation Impact: If ulimits are set incorrectly this could cause issues with system resources, possibly causing a denial of service condition.
+[INFO] 2.9 - Please consult the Docker documentation for various ways in which this can be configured depending upon your requirements. The high-level steps are: Ensure that the files /etc/subuid and /etc/subgid exist. Start the docker daemon with --userns-remap flag. Remediation Impact: User namespace remapping is incompatible with a number of Docker features and also currently breaks some of its functionalities.
+[INFO] 2.12 - Install/Create an authorization plugin. Configure the authorization policy as desired. Start the docker daemon using command dockerd --authorization-plugin=<PLUGIN_ID> Remediation Impact: Each Docker command needs to pass through the authorization plugin mechanism. This may have a performance impact
+[INFO] 2.13 - Set up the desired log driver following its documentation. Start the docker daemon using that logging driver. Example: dockerd --log-driver=syslog --log-opt syslog-address=tcp://192.xxx.xxx.xxx Remediation Impact: None.
+[INFO] 2.14 - You should run the Docker daemon using command: dockerd --no-new-privileges Remediation Impact: no_new_priv prevents LSMs such as SELinux from escalating the privileges of individual containers.
+[INFO] 2.15 - Run Docker in daemon mode and pass --live-restore option. Remediation Impact: None.
+[INFO] 2.16 - You should run the Docker daemon using command: dockerd --userland-proxy=false Remediation Impact: Some systems with older Linux kernels may not be able to support hairpin NAT and therefore require the userland proxy service. Also, some networking setups can be impacted by the removal of the userland proxy.
+[INFO] 2.17 - By default, Docker's default seccomp profile is applied. If this is adequate for your environment, no action is necessary. Remediation Impact: A misconfigured seccomp profile could possibly interrupt your container environment. You should therefore exercise extreme care if you choose to override the default settings.
+[INFO] 2.18 - You should not pass --experimental as a runtime parameter to the Docker daemon on production systems. Remediation Impact: None.
+
+[INFO] 3 - Docker daemon configuration files
+[INFO] 3.1 - Find out the file location: systemctl show -p FragmentPath docker.service. If the file does not exist, this recommendation is not applicable. If the file does exist, you should run the command chown root:root <path>, in order to set the ownership and group ownership for the file to root. Remediation Impact: None.
+[INFO] 3.2 - Find out the file location: systemctl show -p FragmentPath docker.service. If the file does not exist, this recommendation is not applicable. If the file exists, run the command chmod 644 <path> to set the file permissions to 644. Remediation Impact: None.
+[INFO] 3.3 - Find out the file location: systemctl show -p FragmentPath docker.socket. If the file does not exist, this recommendation is not applicable. If the file exists, run the command chown root:root <path> to set the ownership and group ownership for the file to root. Remediation Impact: None.
+[INFO] 3.4 - Find out the file location: systemctl show -p FragmentPath docker.socket. If the file does not exist, this recommendation is not applicable. If the file does exist, you should run the command chmod 644 <path> to set the file permissions to 644. Remediation Impact: None.
+[INFO] 3.7 - You should run the following command: chown root:root /etc/docker/certs.d/<registry-name>/*. This would set the individual ownership and group ownership for the registry certificate files to root. Remediation Impact: None.
+[INFO] 3.8 - You should run the following command: chmod 444 /etc/docker/certs.d/<registry-name>/*. This would set the permissions for the registry certificate files to 444. Remediation Impact: None.
+[INFO] 3.9 - You should run the following command: chown root:root <path to TLS CA certificate file>. This sets the individual ownership and group ownership for the TLS CA certificate file to root. Remediation Impact: None.
+[INFO] 3.10 - You should run the following command: chmod 444 <path to TLS CA certificate file>. This sets the file permissions on the TLS CA file to 444. Remediation Impact: None.
+[INFO] 3.11 - You should run the following command: chown root:root <path to Docker server certificate file>. This sets the individual ownership and the group ownership for the Docker server certificate file to root. Remediation Impact: None.
+[INFO] 3.12 - You should run the following command: chmod 444 <path to Docker server certificate file>. This sets the file permissions of the Docker server certificate file to 444. Remediation Impact: None.
+[INFO] 3.13 - You should run the following command: chown root:root <path to Docker server certificate key file>. This sets the individual ownership and group ownership for the Docker server certificate key file to root. Remediation Impact: None.
+[INFO] 3.14 - You should run the following command: chmod 400 <path to Docker server certificate key file>. This sets the Docker server certificate key file permissions to 400. Remediation Impact: None.
+[INFO] 3.19 - You should run the following command: chown root:root /etc/default/docker. This sets the ownership and group ownership of the file to root. Remediation Impact: None.
+[INFO] 3.20 - You should run the following command: chmod 644 /etc/default/docker. This sets the file permissions for this file to 644. Remediation Impact: None.
+[INFO] 3.21 - You should run the following command: chmod 644 /etc/sysconfig/docker. This sets the file permissions for this file to 644. Remediation Impact: None.
+[INFO] 3.22 - You should run the following command: chown root:root /etc/sysconfig/docker. This sets the ownership and group ownership for the file to root. Remediation Impact: None.
+[INFO] 3.23 - You should run the following command: chown root:root /run/containerd/containerd.sock. This sets the ownership and group ownership for the file to root. Remediation Impact: None.
+[INFO] 3.24 - You should run the following command: chmod 660 /run/containerd/containerd.sock. This sets the file permissions for this file to 660. Remediation Impact: None.
+
+[INFO] 4 - Container Images and Build File
+[INFO] 4.1 - You should ensure that the Dockerfile for each container image contains the information: USER <username or ID>. If there is no specific user created in the container base image, then make use of the useradd command to add a specific user before the USER instruction in the Dockerfile. Remediation Impact: Running as a non-root user can present challenges where you wish to bind mount volumes from the underlying host. In this case, care should be taken to ensure that the user running the contained process can read and write to the bound directory, according to their requirements.
+[INFO] 4.2 - Configure and use Docker Content trust. View the history of each Docker image to evaluate its risk, dependent on the sensitivity of the application you wish to deploy using it. Scan Docker images for vulnerabilities at regular intervals. Remediation Impact: None.
+[INFO] 4.3 - You should not install anything within the container that is not required. You should consider using a minimal base image if you can. Some of the options available include BusyBox and Alpine. Not only can this trim your image size considerably, but there would also be fewer pieces of software which could contain vectors for attack. Remediation Impact: None.
+[INFO] 4.4 - Images should be re-built ensuring that the latest version of the base images are used, to keep the operating system patch level at an appropriate level. Once the images have been re-built, containers should be re-started making use of the updated images. Remediation Impact: None.
+[INFO] 4.5 - Add DOCKER_CONTENT_TRUST variable to the /etc/environment file using command echo DOCKER_CONTENT_TRUST=1 | sudo tee -a /etc/environment. Remediation Impact: This prevents users from working with tagged images unless they contain a signature.
+[INFO] 4.6 - You should follow the Docker documentation and rebuild your container images to include the HEALTHCHECK instruction. Remediation Impact: None.
+[INFO] 4.7 - You should use update instructions together with install instructions and version pinning for packages while installing them. This prevent caching and force the extraction of the required versions. Alternatively, you could use the --no-cache flag during the docker build process to avoid using cached layers. Remediation Impact: None.
+[INFO] 4.8 - You should allow setuid and setgid permissions only on executables which require them. You could remove these permissions at build time by adding the following command in your Dockerfile, preferably towards the end of the Dockerfile: RUN find / -perm /6000 -type f -exec chmod a-s {} ; || true Remediation Impact: The above command would break all executables that depend on setuid or setgid permissions including legitimate ones. You should therefore be careful to modify the command to suit your requirements so that it does not reduce the permissions of legitimate programs excessively. Because of this, you should exercise a degree of caution and examine all processes carefully before making this type of modification in order to avoid outages.
+[INFO] 4.9 - You should use COPY rather than ADD instructions in Dockerfiles. Remediation Impact: Care needs to be taken in implementing this control if the application requires functionality that is part of the ADD instruction, for example, if you need to retrieve files from remote URLS.
+[INFO] 4.10 - Do not store any kind of secrets within Dockerfiles. Where secrets are required during the build process, make use of a secrets management tool, such as the buildkit builder included with Docker. Remediation Impact: A proper secrets management process will be required for Docker image building.
+[INFO] 4.11 - You should use a secure package distribution mechanism of your choice to ensure the authenticity of software packages. Remediation Impact: None.
+[INFO] 4.12 - Validate artifacts signatures before uploading to the package registry. Remediation Impact: None.
+
+[INFO] 5 - Container Runtime
+[INFO] 5.2 - If AppArmor is applicable for your Linux OS, you should enable it. Alternatively, Docker's default AppArmor policy can be used. Remediation Impact: The container will have the security controls defined in the AppArmor profile. It should be noted that if the AppArmor profile is misconfigured, this may cause issues with the operation of the container.
+[INFO] 5.3 - Set the SELinux State. Set the SELinux Policy. Create or import a SELinux policy template for Docker containers. Start Docker in daemon mode with SELinux enabled. Start your Docker container using the security options. Remediation Impact: Any restrictions defined in the SELinux policy will be applied to your containers. It should be noted that if your SELinux policy is misconfigured, this may have an impact on the correct operation of the affected containers.
+[INFO] 5.6 - You should not mount directories which are security sensitive on the host within containers, especially in read-write mode. Remediation Impact: None.
+[INFO] 5.9 - You should ensure that the Dockerfile for each container image only exposes needed ports. Remediation Impact: None.
+[INFO] 5.11 - You should run the container with only as much memory as it requires by using the --memory argument. Remediation Impact: If correct memory limits are not set on each container, one process can expand its usage and cause other containers to run out of resources.
+[INFO] 5.12 - You should manage the CPU runtime between your containers dependent on their priority within your organization. To do so start the container using the --cpu-shares argument. Remediation Impact: If you do not correctly assign CPU thresholds, the container process may run out of resources and become unresponsive. If CPU resources on the host are not constrainted, CPU shares do not place any restrictions on individual resources.
+[INFO] 5.13 - You should add a --read-only flag at a container's runtime to enforce the container's root filesystem being mounted as read only. Remediation Impact: Enabling --read-only at container runtime may break some container OS packages if a data writing strategy is not defined. You should define what the container's data should and should not persist at runtime in order to decide which strategy to use.
+[INFO] 5.19 - You should only override the default ulimit settings if needed in a specific case. Remediation Impact: If ulimits are not set correctly, overutilization by individual containers could make the host system unusable.
+[INFO] 5.22 - By default, seccomp profiles are enabled. You do not need to do anything unless you want to modify and use a modified seccomp profile. Remediation Impact: With Docker 1.10 and greater, the default seccomp profile blocks syscalls, regardless of -- cap-add passed to the container.
+[INFO] 5.23 - You should not use the --privileged option in docker exec commands. Remediation Impact: If you need enhanced capabilities within a container, then run it with all the permissions it requires. These should be specified individually.
+[INFO] 5.24 - You should not use the --user=root option in docker exec commands. Remediation Impact: None.
+[INFO] 5.26 - You should start your container with the options: docker run --rm -it --security-opt=no-new-privileges ubuntu bash Remediation Impact: The no_new_priv option prevents LSMs like SELinux from allowing processes to acquire new privileges.
+[INFO] 5.27 - You should run the container using the --health-cmd parameter. Remediation Impact: None.
+[INFO] 5.28 - You should use proper version pinning mechanisms (the <latest> tag which is assigned by default is still vulnerable to caching attacks) to avoid extracting cached older versions. Version pinning mechanisms should be used for base images, packages, and entire images. You can customize version pinning rules according to your requirements. Remediation Impact: None.
+[INFO] 5.29 - Use --pids-limit flag with an appropriate value when launching the container. Remediation Impact: Set the PIDs limit value as appropriate. Incorrect values might leave containers unusable.
+[INFO] 5.30 - You should follow the Docker documentation and set up a user-defined network. All the containers should be run in this network. Remediation Impact: User-defined networks need to be configured and managed in line with organizational security policy.
+[INFO] 5.32 - You should ensure that no containers mount docker.sock as a volume. Remediation Impact: None.
+
+[INFO] 6 - Docker Security Operations
+[INFO] 6.1 - You should keep only the images that you actually need and establish a workflow to remove old or stale images from the host. Additionally, you should use features such as pull-by-digest to get specific images from the registry. Remediation Impact: docker system prune -a removes all exited containers as well as all images and volumes that are not referenced by running containers, including for UCP and DTR.
+[INFO] 6.2 - You should periodically check your container inventory on each host and clean up containers which are not in active use with the command: docker container prune Remediation Impact: You should retain containers that are actively in use, and delete ones which are no longer needed.
+
+
+Section C - Score
+
+[INFO] Checks: 117
+[INFO] Score: 1
+

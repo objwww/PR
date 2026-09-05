@@ -1,0 +1,2 @@
+time=2026-09-04T21:00:56.116Z level=ERROR source=server.go:967 msg="server session ended with error" go_sdk_logger.error="server is closing: EOF"
+time=2026-09-04T21:00:56.116Z level=ERROR source=main.go:330 msg="Failed to run daemon goroutines" err="MCP server failed: server is closing: EOF"

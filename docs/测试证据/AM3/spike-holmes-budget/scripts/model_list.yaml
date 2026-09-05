@@ -1,0 +1,24 @@
+# spike P1: model_list.yaml injected into the throwaway holmes runner container.
+# Every extra key on an entry becomes a kwarg of litellm.completion()
+# (holmes config.py _get_llm -> DefaultLLM(args=model_params) -> completion(**self.args)).
+spike-plain:
+  model: openai/deepseek-v3
+  api_key: dummy-key-for-echo
+  base_url: http://spike-echo:8000/v1
+
+spike-capped:
+  model: openai/deepseek-v3
+  api_key: dummy-key-for-echo
+  base_url: http://spike-echo:8000/v1
+  max_tokens: 64
+
+spike-probe:
+  model: openai/deepseek-v3
+  api_key: dummy-key-for-echo
+  base_url: http://spike-echo:8000/v1
+  user: spike-user-001
+  metadata:
+    spend_logs_metadata:
+      run_id: FROM-MODEL-LIST
+  litellm_metadata:
+    run_id: FROM-MODEL-LIST-LM

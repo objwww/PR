@@ -1,0 +1,72 @@
+# P2 跑分副作用核验（195，2026-09-05）
+#
+# 核验方法：跑分开始前与全部清理结束后各取一次 docker ps -a 全量快照，逐一比对。
+# 结论：容器清单 28 个，名称集合与运行状态完全一致（仅自然流逝的 Up 时长变化），
+#       零新增、零退出、零重启、零删除；未改动任何 daemon/compose 配置；
+#       跑分容器 p2-docker-bench 经 --rm 自动清除；构建镜像与官方镜像均已 docker rmi；
+#       /root/p2-bench 源码目录已删除。195 零残留。
+
+## BEFORE（跑分前快照，02:17 CST 前后）
+ad|Up 31 hours (healthy)
+alertmanager-am0|Up 4 hours
+astronomy-db|Up 31 hours (healthy)
+cart|Up 31 hours
+checkout|Up 3 hours (healthy)
+currency|Up 31 hours (healthy)
+deploy-control-app-1|Up 2 hours
+deploy-migrate-1|Exited (0) 2 hours ago
+deploy-postgres-1|Up 4 hours (healthy)
+echo-receiver|Up 33 hours (healthy)
+email|Up 31 hours (healthy)
+flagd|Up 3 hours
+flagd-ui|Up 31 hours (healthy)
+frontend|Up 3 hours (healthy)
+frontend-proxy|Up 31 hours (healthy)
+holmesgpt-am1|Up 4 hours
+image-provider|Up 31 hours (healthy)
+infallible_saha|Up 34 minutes
+load-generator|Up 5 hours (healthy)
+otel-collector|Up 30 hours
+payment|Up 30 hours (healthy)
+product-catalog|Up 31 hours (healthy)
+prometheus-am0|Up 30 hours
+quote|Up 31 hours (healthy)
+recommendation|Up 5 hours (healthy)
+shipping|Up 31 hours (healthy)
+telemetry-docs|Up 31 hours (healthy)
+valkey-cart|Up 31 hours (healthy)
+
+## AFTER（清理后快照，02:5x CST）
+ad|Up 32 hours (healthy)
+alertmanager-am0|Up 5 hours
+astronomy-db|Up 32 hours (healthy)
+cart|Up 32 hours
+checkout|Up 4 hours (healthy)
+currency|Up 32 hours (healthy)
+deploy-control-app-1|Up 3 hours
+deploy-migrate-1|Exited (0) 3 hours ago
+deploy-postgres-1|Up 5 hours (healthy)
+echo-receiver|Up 34 hours (healthy)
+email|Up 32 hours (healthy)
+flagd-ui|Up 32 hours (healthy)
+flagd|Up 4 hours
+frontend-proxy|Up 32 hours (healthy)
+frontend|Up 4 hours (healthy)
+holmesgpt-am1|Up 5 hours
+image-provider|Up 32 hours (healthy)
+infallible_saha|Up 2 hours
+load-generator|Up 6 hours (healthy)
+otel-collector|Up 32 hours
+payment|Up 31 hours (healthy)
+product-catalog|Up 32 hours (healthy)
+prometheus-am0|Up 31 hours
+quote|Up 32 hours (healthy)
+recommendation|Up 7 hours (healthy)
+shipping|Up 32 hours (healthy)
+telemetry-docs|Up 32 hours (healthy)
+valkey-cart|Up 32 hours (healthy)
+
+## DIFF
+容器名集合：BEFORE(28) == AFTER(28)，逐一比对一致。
+状态变化：仅自然时长演进；无容器创建/销毁/重启/状态翻转。
+备注：infallible_saha（非本任务产物，疑似并行 P1 遗留）保持运行未动，已按纪律上报主会话。

@@ -1,0 +1,291 @@
+# =====================================================================================
+# 批量评测场景清单 v1（并行备料任务 P5 —— AM3 评测输入备料）
+# =====================================================================================
+# 用途：AM3 首批 5×2 批量评测（M3-17）的场景注册表——"枚举写死"（AM3 v3.0 §6.7）：
+#       每场景给出注入参数 / 期望症状 / 期望根因 / 复原判据 / 评测时间参数的预登记面。
+# 字段对齐：expected_root_cause / expected_symptom_codes / scenario_id / fault_type / target
+#       与 AM2 M2-24 ScenarioMapExportV1 同名同义（对齐关系见文末 scenario_map_export_mapping）。
+# 期望根因取值域 = 同目录 synonym-lexicon-v1.yml 的枚举（评分侧唯一匹配依据）。
+# 期望症状编码规则：symptom code = 期望 firing 的 Prometheus 规则 alertname（取值面 =
+#       deploy/alert/prometheus/rules/*.yml 落码规则），使 claims[].symptom_codes 可确定性对照。
+# 纪律：本文件只增不改；场景迭代 = 递增 registry_version + 更新 lexicon 版本绑定。
+# 提案分级标注：[文档已定] = 技术方案/落码方案明示；[P5 提案] = 本文件新定，待主会话确认。
+# =====================================================================================
+
+registry_version: 1
+schema_version: 1
+status: DRAFT_PENDING_FIRST_BATCH_REVIEW
+lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 1)"
+
+authority_refs:
+  - docs/告警AM3-技术方案.md §6.4（三指标冻结公式）/ §6.7（五场景枚举写死）
+  - docs/告警AM2-落码技术方案.md M2-24（ScenarioMapExportV1 交接契约）/ C-4（恢复算法）/ C-6（归属算法）
+  - docs/告警AM3-落码技术方案.md M3-17（统一 ScenarioDriver + 评测时间参数显式化 + 上轮 resolved 未归并禁入下轮）
+  - deploy/alert/prometheus/rules/arena.yml（AM2 症状规则落码面：告警名/标签/指标名）
+  - deploy/alert/prometheus/rules/prometheus-rules-checkout.yml（AM0 Sloth 烧损率规则落码面）
+
+# -------------------------------------------------------------------------------------
+# 执行契约（全场景共有，冻结面）
+# -------------------------------------------------------------------------------------
+execution_contract:
+  order: [S1, S2, S3, S4, S5]        # 串行执行（§6.7）；[P5 提案] 顺序 = AM0 两个在前、靶场三个在后
+  scenario_concurrency: 1            # eval 场景并发=1（§6.8）；全局 Live E2E slot=1（AM2 C-6）
+  rounds_per_scenario: 2             # 每场景 2 轮取稳定性（§6.7）；每轮独立 scenario_id/eval_case_result（E2E-M3-02）
+  next_round_gate: >-                # M3-17 冻结：上轮复原确认 + resolved 归并前禁止进入下一轮/下一场景
+    上一轮 recovery.criteria 全部满足 且 告警 resolved 无残留 firing
+  on_failure: 失败不中断且落档，任何失败都执行 finally 清理（M3-17）
+  traffic_isolation: 评测流量全 chaos- 前缀，不污染正常告警链（INV-AM2-1 / INV-AM3-4）
+
+# -------------------------------------------------------------------------------------
+# 场景注册表（首批 5 个，枚举写死）
+# -------------------------------------------------------------------------------------
+scenarios:
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S1                        # [文档已定] §6.7 场景编号
+    name: paymentFailure=50%
+    fault_source: AM0 flagd                # [文档已定] §6.7 故障源
+    scenario_type: 业务链路错误率           # [文档已定] §6.7 类型列
+    driver: FlagdScenarioDriver            # [文档已定] M3-17 统一 ScenarioDriver 三实现
+    chaos_family: null                     # AM0 场景无靶场故障族
+    target: payment                        # 根因组件（同 lexicon components.payment）
+    injection:
+      mechanism: >-
+        flagd feature flag 的 defaultVariant 切换（AM0 调研 v1：改 demo.flagd.json 后重启 flagd，
+        或 flagd configurator UI）；具体执行由 M3-17 FlagdScenarioDriver 落实
+      flag: paymentFailure
+      variant: "0.5"                       # = 50% 失败比例（§6.7 S1 参数）
+      variant_space: ["0", "0.1", "0.25", "0.5", "0.75", "0.95", "1"]
+      baseline_variant: "0"
+      caution: >-
+        BA-19：flagd JSON 只许精确改写（目标 flag 的 defaultVariant 单键），
+        禁 sed 正则批量替换（曾误伤 paymentServiceFailure 致整栈 500）
+    expected_root_cause:                   # 取值域 = synonym-lexicon-v1.yml
+      component: payment
+      fault_type: BUSINESS_ERROR_RATE      # [P5 提案]（备料单"…"扩展位）
+      reason_code: PAYMENT_CHARGE_FAILURE  # [P5 提案]
+    expected_symptom_codes:
+      - checkout                           # Sloth 烧损率告警（page/ticket 同名）
+    expected_alerts:
+      - alertname: checkout
+        severity: page
+        basis: 双窗（5m+1h）烧损率 > 14.4x 预算消耗速率
+        labels_frozen: {service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
+      - alertname: checkout
+        severity: ticket
+        basis: 双窗（2h+1d）烧损率 > 3x（慢烧档，可能同批 firing）
+        labels_frozen: {service: checkout, sloth_severity: ticket, sloth_slo: availability, owner: am0}
+    recovery:
+      criteria:                            # [文档已定] S1/S2 不复用 AM2 *_current==0（M3-17）
+        - injection.flag 的 defaultVariant 归位 baseline_variant "0"
+        - checkout page/ticket 全部 resolved，无残留 firing
+        - checkout 可用性错误率回落预算内（slo:sli_error:ratio_rate5m 回落至阈值下）
+      restore_probe: PromQL 查询 checkout 烧损率记录规则（场景专属恢复探针，M3-17）
+    timing:                                # [P5 提案] v1 初值——首批评测前人工校准（M3-17 显式化要求）
+      preheat_seconds: 60                  # 注入后流量爬坡预热
+      hold_seconds: 600                    # 故障持续时间（for）
+      max_firing_wait_seconds: 600         # 实测参照：G4 演练 3m17s firing；AM1 DP-B03 预算 10min
+      max_resolved_wait_seconds: 600       # 复位后 5m 窗稀释 ≤5m + 余量
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S2
+    name: flagd paymentUnreachable
+    fault_source: AM0 flagd
+    scenario_type: 依赖不可达
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment
+    injection:
+      mechanism: >-
+        flagd feature flag defaultVariant 切换，同 S1；由 FlagdScenarioDriver 落实。
+        v3.0r1 冻结：S2 不再使用 docker kill payment——eval-runner 不持 docker socket（权限边界）
+      flag: paymentUnreachable
+      variant: "on"
+      variant_space: ["on", "off"]
+      baseline_variant: "off"
+      caution: 同 S1（BA-19 精确改写纪律）
+    expected_root_cause:
+      component: payment
+      fault_type: DEPENDENCY_UNREACHABLE   # [P5 提案]
+      reason_code: PAYMENT_SERVICE_UNREACHABLE  # [P5 提案]
+    expected_symptom_codes:
+      - checkout
+    expected_alerts:
+      - alertname: checkout
+        severity: page
+        basis: payment 整体不可达 → checkout RPC 错误率抬升 → 同 S1 烧损率链路
+        labels_frozen: {service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
+      - alertname: checkout
+        severity: ticket
+        basis: 慢烧档可能同批 firing
+        labels_frozen: {service: checkout, sloth_severity: ticket, sloth_slo: availability, owner: am0}
+    recovery:
+      criteria:
+        - injection.flag 的 defaultVariant 归位 baseline_variant "off"
+        - checkout page/ticket 全部 resolved，无残留 firing
+        - checkout 可用性错误率回落预算内
+      restore_probe: 同 S1（PromQL 烧损率回落）
+    timing:                                # [P5 提案] 初值同 S1，待校准
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 600
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S3
+    name: F1 幂等失效
+    fault_source: AM2 靶场
+    scenario_type: 业务完整性
+    driver: ArenaChaosScenarioDriver       # [文档已定] M3-17
+    chaos_family: F1                       # [文档已定] arena.yml 告警标签 fault_type=F1（C-6 指纹输入面）
+    target: order-arena chaos- 前缀评测流量
+    injection:
+      mechanism: >-
+        chaos on(F1, scenario_id, config_digest, generation, TTL) + CHAOS_ADMIN_TOKEN，经 eval-mgmt
+        私网调 ChaosController；激活事务三写（ground_truth + chaos_session(ACTIVE) + chaos_event），
+        四 DB 约束生效（scenario_id 唯一 / 同 fault_type+target 唯一 ACTIVE / TTL 上下界 /
+        ACTIVE 必有 GT）——AM2 §4.2 / M2-06 / M2-16
+      effect: 对 chaos- 前缀流量跳过幂等机制（AM2 §6.2：F1 注入 = 幂等失效）
+      selector_semantics: 仅命中 chaos- 前缀 intent 的流量，live 流量零污染（M2-18 live 零污染验收）
+      ttl: 由 eval-runner 按本轮 timing 显式给定（不硬编码于此，须落 DB TTL 上下界内）
+      token_discipline: CHAOS_ADMIN_TOKEN 仅 env 注入（INV-AM3-3），本文件不得携带
+    expected_root_cause:
+      component: order-arena
+      fault_type: IDEMPOTENCY_BYPASS       # [文档已定] 备料单 P5 明示
+      reason_code: DUPLICATE_CREATE_SAME_INTENT  # [P5 提案]
+    expected_symptom_codes:
+      - ArenaDuplicateOrders               # [文档已定] arena.yml 落码规则
+    expected_alerts:
+      - alertname: ArenaDuplicateOrders
+        severity: page
+        basis: oa_duplicate_orders_current > 0（同 intent 多个未废订单）
+        labels_frozen: {service: order-arena, fault_type: F1}   # C-6 冻结标签集（arena.yml 头注）
+    recovery:
+      criteria:                            # [文档已定] AM2 §6.7 恢复确认三条件 + C-4
+        - chaos off → CAS ACTIVE→RECOVERING→CLOSED，F1 恢复算法执行（canonical 保留、其余废单、资源按台账反向补偿）
+        - oa_duplicate_orders_current == 0
+        - 无残留 firing + 补偿台账清平
+      restore_probe: oa_duplicate_orders_current 归零（Gauge 真值，M2-21）
+    timing:                                # [P5 提案] 初值——靶场 Gauge 面 15s 评估间隔，firing 应快于 AM0
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600       # off 后修复算法执行 + Gauge 归零 + 台账清平
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S4
+    name: F2 状态回跳
+    fault_source: AM2 靶场
+    scenario_type: 状态机非法迁移
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F2
+    target: order-arena 指定目标订单（精确目标、非目标不变）
+    injection:
+      mechanism: 同 S3（chaos on 激活事务 + 四约束 + TTL）
+      effect: >-
+        chaos 流量上绕过状态机直接 UPDATE 状态字段（状态回跳，模拟"setter 直改状态"事故源）——
+        AM2 §6.4；DomainProbe 独立校验"状态 × 台账事实"合法性（不用状态机验证状态机）
+      selector_semantics: 精确目标订单回跳、非目标订单不变（M2-19 验收）
+      ttl: 同 S3（eval-runner 显式给定）
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: ILLEGAL_STATE_TRANSITION # [文档已定] 备料单 P5 明示
+      reason_code: STATE_ROLLBACK_DIRECT_WRITE   # [P5 提案]
+    expected_symptom_codes:
+      - ArenaIllegalTransitions            # [文档已定] arena.yml 落码规则
+    expected_alerts:
+      - alertname: ArenaIllegalTransitions
+        severity: page
+        basis: oa_state_violations_current > 0（回跳签名 / PAID 无支付事实）
+        labels_frozen: {service: order-arena, fault_type: F2}
+    recovery:
+      criteria:
+        - chaos off → F2 恢复算法执行：按支付/履约/资源事实恢复合法状态组合；无法确定 → 废单终态（C-4）
+        - oa_state_violations_current == 0
+        - 无残留 firing + 补偿台账清平
+      restore_probe: oa_state_violations_current 归零
+      note: >-
+        指标名以 arena.yml 落码为准（oa_state_violations_current）；AM2 技术方案 §6.6 行 202 写
+        oa_illegal_transitions_current，属文档-落码分歧，已提请主会话核对（README §7）
+    timing:                                # [P5 提案] 初值同 S3
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S5
+    name: F3 超时结果未知
+    fault_source: AM2 靶场
+    scenario_type: 中间态悬挂
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F3
+    target: order-arena chaos- 前缀评测流量的支付路径
+    injection:
+      mechanism: 同 S3（chaos on 激活事务 + 四约束 + TTL）
+      effect: >-
+        pay 路径超时挂起：订单停留 CREATED、资源悬挂，进入 UNKNOWN→RECONCILING→ENABLED/DISCARDED
+        持久化状态机（SIGKILL 后续跑，禁固定 sleep 表达状态）——M2-20 / AM2 §4.2
+      selector_semantics: 仅 chaos- 前缀流量命中，ENABLE 前挂起（AM2 §4.2 时序）
+      ttl: 同 S3（eval-runner 显式给定）
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: UNCERTAIN_TIMEOUT        # [文档已定] 备料单 P5 明示
+      reason_code: PAYMENT_OUTCOME_UNKNOWN # [P5 提案]
+    expected_symptom_codes:
+      - ArenaOrderStuck                    # [文档已定] arena.yml 落码规则
+    expected_alerts:
+      - alertname: ArenaOrderStuck
+        severity: page
+        basis: oa_stuck_orders_current > 0（CREATED 停留超阈值）
+        labels_frozen: {service: order-arena, fault_type: F3}
+    recovery:
+      criteria:
+        - chaos off → F3ReconcileService 对账收敛（UNKNOWN→RECONCILING→ENABLED/DISCARDED），悬挂台账清平（C-4）
+        - oa_stuck_orders_current == 0
+        - 无残留 firing + 补偿台账清平
+      restore_probe: oa_stuck_orders_current 归零
+      note: 辅助规则 ArenaDomainProbeDown（探针失明）不属于任何场景的期望症状；
+            其 firing = 探测面故障/场景配置错误信号，不得计入 symptom_coverage
+    timing:                                # [P5 提案] 初值同 S3
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+# -------------------------------------------------------------------------------------
+# 与 ScenarioMapExportV1（AM2 M2-24）的字段对齐（消费方 AM3 M3-10）
+# 本文件 = 激活前的"预登记面"；ExportV1 = 激活后按 C-6 归属算法回填的"运行时面"。
+# digest 纪律（M2-24 契约测试）：digest 稳定、字段顺序不影响 canonical digest、未知 fault_type/reason_code 拒绝
+# -------------------------------------------------------------------------------------
+scenario_map_export_mapping:
+  schema_version: ExportV1.schema_version（导出时写 1）
+  provided_by_this_registry:              # 激活前即确定，来自上方 scenarios[]
+    - scenario_id
+    - target
+    - expected_root_cause{component, fault_type, reason_code}
+    - expected_symptom_codes[]
+  filled_at_activation:                   # 激活事务/激活回执产生（C-5/C-6，M3-17 ActivationReceipt）
+    - activation_generation
+    - payload_digest
+    - created_at
+    - alert_identity_digest               # 按 expected_alerts.labels_frozen + metric 携带 job/instance 预计算
+    - alert_fingerprint                   # 与 Alertmanager 同算法（C-6）
+  backfilled_by_am2_pipeline:             # 事件游标 + generation CAS 回填（C-6）
+    - incident_id
+    - incident_generation
+  am2_nullable:                           # M2-24 原文：AM2 可为空
+    - run_id
+    - report_id
+  fault_type_vocabulary_note: >-
+    [P5 提案，待主会话确认] 本注册表顶层 fault_type 一律取语义枚举（= lexicon.fault_types，
+    与 expected_root_cause.fault_type 同值域），保证 S1/S2（无靶场故障族）与 S3~S5 同构；
+    靶场告警标签面上的 fault_type=F1/F2/F3 单列于 chaos_family 与 expected_alerts.labels_frozen，
+    两者是不同值域（语义枚举 vs 故障族代号），C-6 指纹消费的是后者。

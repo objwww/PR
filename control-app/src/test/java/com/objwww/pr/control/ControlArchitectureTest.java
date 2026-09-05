@@ -70,6 +70,36 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * INV-AM4-1（AM4 §3.0 R3）：AM4 新增 domain 子包（dag/tool/budget/claim）零框架——
+     * Spring/Jackson/JDBC/HTTP 一律禁入（CanonicalJson 自实现规范化正是为了不引 Jackson）。
+     *
+     * <p>方法名说明：任务原拟名 alertDomainHasNoFrameworkDependency 与既有 AFT-A01 方法重名，
+     * 故命名 am4AlertDomainZeroFrameworkDependency。
+     *
+     * <p>红绿留证（2026-09-05，mvn -pl control-app -am test -Dtest=... 本方法）：
+     * <ul>
+     *   <li>红：把 resideInAnyPackage 放宽为 "..control.alert.domain.." 后运行——
+     *       因既有 EvidencePackageValidator 调用 com.fasterxml.jackson.databind.*
+     *       而失败（ArchUnit 报 25 处违规，Tests run: 1, Failures: 1），
+     *       证明规则对 Jackson 依赖有判别力；</li>
+     *   <li>绿：收窄到 AM4 四子包后通过；既有 AFT-A01（允许 jackson）保持原状不动。</li>
+     * </ul>
+     * 遗留冲突：EvidencePackageValidator 为 AM1 既有类、本批次禁改既有文件，故暂不在
+     * 本规则覆盖面内；待其迁移到 CanonicalJson 后可将本规则扩至整个 alert.domain。
+     */
+    @Test
+    void am4AlertDomainZeroFrameworkDependency() {
+        noClasses().that().resideInAnyPackage(
+                        "..control.alert.domain.dag..", "..control.alert.domain.tool..",
+                        "..control.alert.domain.budget..", "..control.alert.domain.claim..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

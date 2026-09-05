@@ -1,0 +1,345 @@
+# =====================================================================================
+# 评测同义词白名单 v1（并行备料任务 P5 —— AM3 评测输入备料）
+# =====================================================================================
+# 用途：确定性评分器（root_cause_hit）对 EvidencePackage v2 类型化字段做
+#       "枚举等值 + 版本化同义词白名单"匹配（AM3 v3.0 §6.4 冻结公式；拒绝 LLM-as-judge）。
+# 评分输入面：仅 EvidencePackage v2 类型化字段 root_cause{component, fault_type, reason_code}
+#       （AM3 v3.0 §6.3：v1 自由文本一律不做评分输入）。
+# 枚举写死原则：首批 5 场景枚举写死（AM3 v3.0 §6.7）；白名单外取值 = NO_MATCH，
+#       评分器记 miss 并把原值留入失败样本清单，不得抛错、不得猜测归类（INV-AM3-1 评分确定性）。
+# 版本纪律：本文件只增不改；规则迭代 = 递增 lexicon_version 出新版本（版本化同义词白名单，
+#       M2-24 契约测试要求"未知 fault_type/reason_code 拒绝"按白名单当前版本判定）。
+# 校准纪律：首批评测全量人工复核校准本表（§6.4），规则迭代稳定前机器分不作为结论依据。
+# 提案分级标注：[文档已定] = 备料单/技术方案明示；[P5 提案] = 本文件新定、依据随条目注明，
+#       待首批评测人工复核与主会话确认。
+# =====================================================================================
+
+lexicon_version: 1
+schema_version: 1
+status: DRAFT_PENDING_FIRST_BATCH_REVIEW
+applies_to:
+  scoring_dimension: root_cause_hit
+  input_contract: EvidencePackageV2.root_cause
+  consumers:
+    - AM3 M3-16（单案例评分，ScenarioEvaluator 纯函数）
+    - AM3 M3-10（GoldenCase 适配器 / GT security-barrier 释放后的对照侧）
+    - AM2 M2-24（ground_truth expected_root_cause 的同义词白名单登记面）
+
+# -------------------------------------------------------------------------------------
+# 匹配语义（确定性规则，冻结；评分器实现必须与本节逐条一致）
+# -------------------------------------------------------------------------------------
+matching_rules:
+  - id: M-01
+    rule: 评分输入仅限 EvidencePackage v2 类型化字段（root_cause.component / fault_type / reason_code）；claims[].* 与 v1 自由文本不参与 root_cause_hit 判定
+    basis: AM3 v3.0 §6.3"v1 自由文本不做评分输入"
+  - id: M-02
+    rule: 匹配语义 = 规范化后与 {canonical 码} ∪ synonyms 的"全串精确等值"；禁止子串、正则、词干化、编辑距离等任何模糊匹配
+    basis: INV-AM3-1 评分确定性（同输入同分数）
+  - id: M-03
+    rule: 规范化 = 去首尾空白 + casefold（仅 ASCII 大小写折叠；中文原样）
+    basis: P5 提案——最小规范化，避免引入语言相关歧义
+  - id: M-04
+    rule: 白名单外取值 = NO_MATCH：该维度记 false，原值原样进入失败样本清单供人工复核校准；评分器不得抛错、不得跨类猜测
+    basis: §6.4"首批评测全量人工复核校准同义词表"
+  - id: M-05
+    rule: 每场景的期望真值以 eval-scenarios.yml 的 expected_root_cause 为准，按 scenario_id 绑定，不按场景名/顺序猜测
+    basis: M2-24"未知 scenario 拒绝"
+  - id: M-06
+    rule: 本表只判"是否命中白名单"；是否计入分子分母（coverage/conditional_accuracy/end_to_end_hit_rate、UNRESOLVED 单列）由评分公式层决定，与本表无关
+    basis: AM3 v3.0 §6.4 三指标冻结公式
+
+# -------------------------------------------------------------------------------------
+# fault_type 枚举（首批 5 值，枚举写死；扩容政策见 README §8 / AM3 P-33）
+# chaos_family = AM2 靶场故障族代号（arena.yml 告警标签 fault_type 面）；AM0 场景为 null
+# -------------------------------------------------------------------------------------
+fault_types:
+  - code: BUSINESS_ERROR_RATE            # [P5 提案]（命名对齐 §6.7 S1 类型"业务链路错误率"）
+    chaos_family: null
+    bound_scenario: S1
+    description: 依赖自身可达、无基础设施故障，业务调用结果错误率按比例异常升高（payment 扣款按比例失败）
+    source_refs:
+      - docs/告警AM3-技术方案.md §6.7 S1（paymentFailure=50%，类型=业务链路错误率）
+      - docs/告警-调研-快速部署-v1.md（flagd 清单：paymentFailure 变体 0/0.1/0.25/0.5/0.75/0.95/1）
+    synonyms:
+      - business error rate
+      - business_error_rate
+      - 业务错误率
+      - 业务错误率升高
+      - 业务链路错误
+      - 错误率升高
+      - 错误率激增
+      - error rate spike
+      - high error rate
+      - elevated error rate
+      - 支付失败率升高
+      - 支付失败率激增
+      - payment failure
+      - payment failures
+      - payment failure rate
+      - 按比例失败
+      - 部分失败
+      - partial failure
+    negative_examples:                  # 仅供评分器单测断言 NO_MATCH，不参与匹配
+      - dependency unreachable
+      - connection refused
+
+  - code: DEPENDENCY_UNREACHABLE         # [P5 提案]（命名对齐 §6.7 S2 类型"依赖不可达"）
+    chaos_family: null
+    bound_scenario: S2
+    description: 对下游依赖的连接建立失败/服务不可达（payment 服务不可用），上游调用成批报错
+    source_refs:
+      - docs/告警AM3-技术方案.md §6.7 S2（v3.0r1 修正：flagd paymentUnreachable，类型=依赖不可达）
+      - docs/告警-调研-快速部署-v1.md（flagd 清单：paymentUnreachable 变体 on/off）
+    synonyms:
+      - dependency unreachable
+      - dependency_unreachable
+      - 依赖不可达
+      - 依赖不可用
+      - 依赖服务不可用
+      - 下游不可达
+      - 服务不可用
+      - 服务不可达
+      - service unreachable
+      - service unavailable
+      - payment unreachable
+      - payment unavailable
+      - payment service down
+      - 支付服务不可用
+      - connection refused
+      - dial error
+      - no such host
+      - host unreachable
+    negative_examples:
+      - 按比例失败
+      - read timeout
+
+  - code: IDEMPOTENCY_BYPASS             # [文档已定]（备料单 P5 明示；对应 AM2 F1 幂等失效）
+    chaos_family: F1
+    bound_scenario: S3
+    description: 幂等机制被绕过/失效，同 intent 重复执行创单，产生多笔未废重复订单
+    source_refs:
+      - docs/告警-并行任务-七项备料.md P5（fault_type 枚举明示值）
+      - docs/告警AM2-落码技术方案.md M2-18（同 intent 并发重放确定性产生重复）
+      - docs/告警AM2-技术方案.md §6.2（F1 注入 = 对 chaos- 流量跳过幂等机制）
+    synonyms:
+      - idempotency bypass
+      - idempotency_bypass
+      - idempotency bypassed
+      - idempotency disabled
+      - idempotency failure
+      - idempotency lost
+      - 幂等失效
+      - 幂等被绕过
+      - 幂等机制失效
+      - 幂等丢失
+      - 重复创单
+      - 重复建单
+      - 重复订单
+      - 同一意图重复下单
+      - duplicate order creation
+      - duplicate orders
+      - duplicate creation on same intent
+      - repeated order creation
+    negative_examples:
+      - 状态回跳
+      - 订单卡在中间态
+
+  - code: ILLEGAL_STATE_TRANSITION       # [文档已定]（备料单 P5 明示；对应 AM2 F2 状态回跳）
+    chaos_family: F2
+    bound_scenario: S4
+    description: 绕过状态机的非法状态写（状态回跳/回退），或状态 × 台账事实矛盾（如 PAID 无支付事实）
+    source_refs:
+      - docs/告警-并行任务-七项备料.md P5（fault_type 枚举明示值）
+      - docs/告警AM2-落码技术方案.md M2-19（精确目标订单回跳、非目标不变）
+      - docs/告警AM2-技术方案.md §6.4（F2 注入 = chaos 流量绕过状态机直接 UPDATE 状态字段）
+    synonyms:
+      - illegal state transition
+      - illegal_state_transition
+      - illegal transition
+      - invalid state transition
+      - 非法状态迁移
+      - 非法状态转移
+      - 状态回跳
+      - 状态回退
+      - 状态违规
+      - 状态机被绕过
+      - 绕过状态机
+      - 直接改状态
+      - state rollback
+      - state regression
+      - state machine bypassed
+      - paid without payment record
+      - paid 无支付事实
+      - 状态与事实不一致
+    negative_examples:
+      - 幂等失效
+      - 超时未知
+
+  - code: UNCERTAIN_TIMEOUT              # [文档已定]（备料单 P5 明示；对应 AM2 F3 超时结果未知）
+    chaos_family: F3
+    bound_scenario: S5
+    description: 调用超时且结果未知，事务悬挂在中间态（订单停留 CREATED、资源悬挂待对账）
+    source_refs:
+      - docs/告警-并行任务-七项备料.md P5（fault_type 枚举明示值）
+      - docs/告警AM2-落码技术方案.md M2-20（UNKNOWN→RECONCILING→ENABLED/DISCARDED）
+      - docs/告警AM2-技术方案.md §4.2（订单留 CREATED、资源悬挂）
+    synonyms:
+      - uncertain timeout
+      - uncertain_timeout
+      - timeout with unknown outcome
+      - unknown outcome
+      - uncertain outcome
+      - 超时未知
+      - 超时结果未知
+      - 结果未知
+      - 下落不明
+      - 中间态悬挂
+      - 事务悬挂
+      - 订单卡住
+      - 卡单
+      - hung order
+      - stuck order
+      - stuck in pending
+      - pending state stuck
+    negative_examples:
+      - 状态回跳
+      - 依赖不可达
+
+# -------------------------------------------------------------------------------------
+# reason_code 枚举（首批 5 值，一 fault_type 一码；[P5 提案]：文档未钉 reason_code 取值，
+# 以下按各场景注入机制的"机制级命名"拟定，待首批评测人工复核校准）
+# -------------------------------------------------------------------------------------
+reason_codes:
+  - code: PAYMENT_CHARGE_FAILURE
+    fault_type: BUSINESS_ERROR_RATE
+    bound_scenario: S1
+    description: payment 服务扣款（charge）请求按比例返回失败，收单环节业务出错
+    source_refs:
+      - docs/告警-调研-快速部署-v1.md（paymentFailure = payment 扣款按比例失败）
+    synonyms:
+      - payment charge failure
+      - payment_charge_failure
+      - charge failure
+      - 扣款失败
+      - 支付扣款失败
+      - 收单失败
+      - charge requests failing
+    negative_examples:
+      - payment unreachable
+
+  - code: PAYMENT_SERVICE_UNREACHABLE
+    fault_type: DEPENDENCY_UNREACHABLE
+    bound_scenario: S2
+    description: payment 服务整体不可达/不可用，上游 checkout 调用连接失败
+    source_refs:
+      - docs/告警AM3-技术方案.md §6.7 S2（flagd paymentUnreachable）
+    synonyms:
+      - payment service unreachable
+      - payment_service_unreachable
+      - payment unreachable
+      - payment service unavailable
+      - payment down
+      - 支付服务不可达
+      - 支付服务不可用
+      - 支付服务宕机
+    negative_examples:
+      - 扣款失败
+
+  - code: DUPLICATE_CREATE_SAME_INTENT
+    fault_type: IDEMPOTENCY_BYPASS
+    bound_scenario: S3
+    description: 同一 intent_id 的创单请求被重复执行（幂等 claim 未生效），生成多笔重复订单
+    source_refs:
+      - docs/告警AM2-落码技术方案.md M2-18（同 intent 并发重放确定性产生重复）
+    synonyms:
+      - duplicate create same intent
+      - duplicate_create_same_intent
+      - same intent duplicate creation
+      - duplicate orders on same intent
+      - 同一意图重复创单
+      - 同 intent 重复创单
+      - 幂等键未生效导致重复
+      - repeated create with same intent id
+    negative_examples:
+      - state rollback
+
+  - code: STATE_ROLLBACK_DIRECT_WRITE
+    fault_type: ILLEGAL_STATE_TRANSITION
+    bound_scenario: S4
+    description: 绕过状态机直接 UPDATE 状态字段造成状态回跳（模拟"setter 直改状态"事故源）
+    source_refs:
+      - docs/告警AM2-技术方案.md §6.4（F2 注入机制原文）
+    synonyms:
+      - state rollback direct write
+      - state_rollback_direct_write
+      - direct state write
+      - direct status update bypassing state machine
+      - state regression via direct write
+      - 直改状态回跳
+      - 绕过状态机直写状态
+      - 状态字段被直接改写
+    negative_examples:
+      - duplicate creation
+
+  - code: PAYMENT_OUTCOME_UNKNOWN
+    fault_type: UNCERTAIN_TIMEOUT
+    bound_scenario: S5
+    description: 支付路径调用超时、成功或拒绝结果未知，订单停留 CREATED、资源悬挂进入 UNKNOWN 待对账
+    source_refs:
+      - docs/告警AM2-落码技术方案.md M2-10（支付结果映射：成功/拒绝/未知/迟到成功）/ M2-20
+    synonyms:
+      - payment outcome unknown
+      - payment_outcome_unknown
+      - payment result unknown
+      - unknown payment result
+      - 支付结果未知
+      - 支付超时结果未知
+      - 支付超时悬挂
+      - timeout before outcome known
+    negative_examples:
+      - charge failure
+
+# -------------------------------------------------------------------------------------
+# component 枚举（首批 2 值；root_cause.component 匹配面）
+# component 语义 = 根因所在组件；与告警面上的 service 标签（checkout/order-arena）区分：
+#   S1/S2 的根因组件是 payment（checkout 只是症状面），见 eval-scenarios.yml expected_root_cause
+# -------------------------------------------------------------------------------------
+components:
+  - code: payment
+    bound_scenarios: [S1, S2]
+    description: AM0 OTel demo 支付服务（compose 服务名 payment）
+    source_refs:
+      - docs/告警-调研-快速部署-v1.md（demo 服务清单/flagd 清单）
+    synonyms:
+      - payment-svc
+      - payment service
+      - payments
+      - 支付服务
+    negative_examples:
+      - checkout
+
+  - code: order-arena
+    bound_scenarios: [S3, S4, S5]
+    description: AM2 订单靶场服务（compose 服务名 order-arena）
+    source_refs:
+      - docs/告警AM2-落码技术方案.md M2-01
+    synonyms:
+      - order arena
+      - arena
+      - 靶场
+      - 订单靶场
+    negative_examples:
+      - checkout
+
+# -------------------------------------------------------------------------------------
+# 全局负样本（任意维度都必须 NO_MATCH——评分器单测的回归面；防止"噪音表述"跨类误收）
+# -------------------------------------------------------------------------------------
+negative_samples:
+  - disk full
+  - memory leak
+  - cpu saturation
+  - kafka consumer lag
+  - network partition
+  - 磁盘写满
+  - 内存泄漏
+  - 网络分区

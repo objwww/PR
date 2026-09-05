@@ -142,7 +142,8 @@ flowchart LR
 ### 6.1 部署形态与迁移所有权
 
 - compose：notify-app 入 `deploy/docker-compose.yml`（控制面栈）；eval-runner 入 `deploy/alert/docker-compose.yml`（AM2 冻结的告警栈）并加入 eval-mgmt 私网
-- **V8 迁移**（control-app `db/migration/V8__am3_eval_notify.sql`）：`rca_investigation_result` + `rca_tool_call` + `report_publication` + `notify_outbox` + 授权（角色矩阵见 AM2 §6.1；eval_app/notify_app 角色由 AM2-T01 的 01-roles.sh 扩展先行创建）
+- **V8 迁移**（control-app `db/migration/V8__am3_eval_notify.sql`）：`rca_investigation_result` + `rca_tool_call` + `report_publication` + `notify_outbox` + 授权（角色矩阵见 AM2 v3.0 §6.1）。**角色创建分工（评审纠正）**：`arena_app`/`chaos_admin_app`/`eval_app` 由 AM2 M2-03 创建；**`notify_app` 由本里程碑 M3-03（V8）创建并授权**——不得提前
+- **编号说明（评审纠正）**：本文档 §2 的 T01~T07 是**设计工作包**编号；执行编号一律以任务拆分 M3-01~30 为准，施工图见 `docs/告警AM3-落码技术方案.md`
 
 ### 6.2 调查记录契约（冻结 DDL 语义——评分器与对账的稳定数据源）
 
@@ -198,6 +199,7 @@ end_to_end_hit_rate  = 根因正确的场景数 / 总场景数
 - **结构失败（REJECTED_*）**：计 0 分入总场景分母（明确失败，非超时）；**缺席报告/轮询超时**：单独标注，不混入结构失败
 - 维度（单场景内）：root_cause_hit（类型化字段等值 + 版本化同义词白名单）、symptom_coverage、latency_ms、silence_penalty（**tool_calls 为空且 claims 非空** = 无证据出结论，数据源 = rca_tool_call + package）
 - 首批评测**全量人工复核**校准同义词表，规则迭代稳定后才信机器分
+- **评分对象选择规则（v3.0r1 冻结，评审 P0-7）**：`selection_policy_version` + `scored_attempt_id` + `scored_report_id`——评分绑定该 Run 状态机**最终选定的唯一报告**，禁止 evaluator 从多 attempt 挑最优（防准确率虚高）
 
 ### 6.5 通知出口（at-least-once 诚实语义）
 
@@ -221,7 +223,7 @@ end_to_end_hit_rate  = 根因正确的场景数 / 总场景数
 | # | 场景 | 故障源 | 类型 |
 |---|---|---|---|
 | S1 | paymentFailure=50% | AM0 flagd | 业务链路错误率 |
-| S2 | docker kill payment | AM0 基础设施 | 依赖不可达 |
+| S2 | flagd `paymentUnreachable`（v3.0r1 修正：原为 docker kill payment——eval-runner 不持 docker socket，kill 越权；flagd 同样表达依赖不可达） | AM0 基础设施 | 依赖不可达 |
 | S3 | F1 幂等失效 | AM2 靶场 | 业务完整性 |
 | S4 | F2 状态回跳 | AM2 靶场 | 状态机非法迁移 |
 | S5 | F3 超时结果未知 | AM2 靶场 | 中间态悬挂 |
@@ -254,7 +256,7 @@ end_to_end_hit_rate  = 根因正确的场景数 / 总场景数
 | INV-AM3-7 | 每次 Holmes attempt 必落 rca_investigation_result（含失败）；只有结构验证通过才进可发布报告 | L2/L3 |
 | INV-AM3-8 | rca_report 不可变（INSERT/SELECT）；发布状态只在 report_publication；notify-app 不改报告正文 | IT 权限断言 |
 
-残余风险：① 同义词表误判（人工复核校准期）；② 通知频率限制；③ proxy 日志敏感面；④ 首批 5 场景统计意义有限（结论表述克制）；⑤ Holmes metadata 透传 spike 若不成立，对账降级为"时间窗聚合"并在报告标注精度下降。
+残余风险：① 同义词表误判（人工复核校准期）；② 通知频率限制；③ proxy 日志敏感面；④ 首批 5 场景统计意义有限（结论表述克制）；⑤ Holmes metadata 透传 spike 若不成立——**v3.0r1 修正对账降级链（评审 P0-8）**：优先 metadata 关联 → 次选每 EvalRun 独立 LiteLLM virtual key → 都没有记 UNMATCHED/BEST_EFFORT；**禁止时间窗强行归因**（评测期正常 RCA 共用 proxy 会误归）；⑥ GT 延迟授权（评审 P0-6）：eval_app 撤销基表直接 SELECT，改 security-barrier 视图——绑定 Run 终态 + 输出快照冻结后才释放 GT，"提前读取必败"有 IT。
 
 ---
 
@@ -302,7 +304,20 @@ end_to_end_hit_rate  = 根因正确的场景数 / 总场景数
 - **L2**：V8 迁移契约（两表唯一键/权限矩阵）；每次 attempt 必落档（成功+REJECTED 各一）；rca_tool_call 提取与唯一键；notify_outbox 并发领取互斥；账本 × proxy 对账逻辑（一对多假数据三态）
 - **L3**：报告触发 → outbox → 发送全链（WireMock 渠道）；崩溃重发可检测（同 operation_id 两消息但账本会话可对）；v1/v2 双版本报告共存处理；proxy 故障 fail-closed + break-glass
 - **L4**：渠道 401/429/5xx/超时分类；proxy 日志缺行的对账容错（PARTIAL）；场景注入失败的中止与清理；eval-runner 无权限调 control 管理面 → 拒绝
-- **L5**（195 DP-D）：D01 notify dry-run 真实到达测试机器人 + 崩溃重发审计断言；D02 5 场景 × 2 轮一键跑通出三指标报告；D03 账本 × proxy 一对多对账出账（三态）；D04 内存水位；D05 评测期间正常告警链不受干扰；D06 eval-report 含配置版本 + 失败案例原文 + UNRESOLVED 单列；D07 eval-mgmt 网络隔离断言（control/Holmes 不可达 ChaosController）
+- **L5**（195 DP-D）：D01 notify **TEST_CHANNEL** 真实到达测试机器人 + 崩溃重发审计断言（v3.0r1 改名，原"dry-run"表述自相矛盾）；D02 5 场景 × 2 轮一键跑通出三指标报告；D03 账本 × proxy 一对多对账出账（三态）；D04 内存水位；D05 评测期间正常告警链不受干扰；D06 eval-report 含配置版本 + 失败案例原文 + UNRESOLVED 单列；D07 eval-mgmt 网络隔离断言（control/Holmes 不可达 ChaosController）
+
+- **端到端测试矩阵（v3.0r1 新增，评审提供）**：M3-17 = 批量功能 E2E，M3-30 = 最终部署门（覆盖以下全部链路）。逐点保存主键与 digest，证明同一 scenario，不靠时间接近判断：
+
+| 编号 | 链路 | 关键断言 |
+|---|---|---|
+| E2E-M3-01 | **单场景黄金链**（F1）：激活→GT 写入→指标异常→firing→AM webhook→Incident/generation→Run/Attempt→Holmes 经 LiteLLM→InvestigationResult+ToolCall 落档→报告 STRUCTURE_VALIDATED→Publication+NotifyOutbox→TEST_CHANNEL 收到→冻结输出→eval_app 获准读 GT→评分→chaos off→Gauge 归零→alert resolved→Incident RESOLVED→证据包归档 | 逐点主键/digest 链式对应 |
+| E2E-M3-02 | **五场景 × 两轮批量链**：S1~S5 各两轮、每轮独立 scenario_id/eval_case_result；上轮恢复与 resolved 未完成不得启动下轮；十次记录全存在（失败不丢批）；输出原始计数/三指标/UNRESOLVED/失败分类/版本 | M3-17 对应 |
+| E2E-M3-03 | **Holmes 结构失败链**：散文/坏 JSON/未知 schema → Attempt→InvestigationResult(REJECTED_STRUCTURE)→ToolCall 按实落档→不出可发布报告→不发通知→进入分母→报告显示结构失败 | 失败不漏的关键链 |
+| E2E-M3-04 | **崩溃恢复链**（四个杀点：调 Holmes 前/Holmes 已返回 Result 未提交/Result 已提交 ToolCall 未全提交/Report 已写 Outbox 未确认） | STARTED 终态 UNKNOWN 或重收敛；同 attempt 不产生两个 Result；最终报告唯一；outbox 不丢；旧 generation/epoch 晚到不可覆盖 |
+| E2E-M3-05 | **通知至少一次链**：测试机器人已收到、notify-app 未 ACK 时杀进程 | 重启允许重发；两条消息同 operation_id；publication 终入 SENT；重复被明确记录，不声称 exactly-once |
+| E2E-M3-06 | **LiteLLM 故障链**：proxy 不可达/usage 缺失/一次 Holmes 对应多次模型调用/metadata 无法透传/人工 break-glass 过期 | 不得错误产生 MATCHED；无法精确关联时必须 PARTIAL/UNMATCHED/BEST_EFFORT |
+| E2E-M3-07 | **权限与答案泄漏链**（真实容器逐个验）：Holmes 不能访问 GT/Chaos Admin/PG；control-app 不能读 GT；eval-runner 输出冻结前不能读 GT；notify-app 不能读 GT 不能改报告；eval-runner 无 docker socket；Chaos 管理端口在业务网与宿主机不可达 | 全部反向断言 |
+| E2E-M3-08 | **正常业务共存与资源链**：批量评测期间持续正常流量 | 正常业务零污染；正常 Incident 不串入评测；DB 池/Holmes slot/notify worker 无超卖；195 无 OOM 保水位；停止后线程/租约/场景全释放 |
 
 ## 13. 验收标准（DoD）
 
@@ -320,3 +335,5 @@ end_to_end_hit_rate  = 根因正确的场景数 / 总场景数
 | 2026-09-04 | v2.0 | 详细版（每点带参照/思路/弊端/注意） | 待 G1 |
 | 2026-09-04 | v2.1 | 对照代码基线评审采纳（§15 补丁形式） | 评审：补丁与正文双轨不可接受 |
 | 2026-09-04 | v3.0 | **规范归一**：v2.1 §15 全部合入正文——EvidencePackage v2（含"v1 全自由文本"校正：实为六段式结构缺类型化字段）、InvestigationResult/rca_tool_call 冻结 DDL（每次 attempt 必落档）、at-least-once 通知语义 + 触发点冻结（结构验证+候选标记）、LiteLLM 一对多三态对账 + T04 spike + fail-closed、报告不可变 + report_publication（BA-10② 消解）、渲染白名单、429 持久退避、dry-run 批量、eval-runner 独立身份、5 场景枚举、**三指标评分公式**（coverage/conditional_accuracy/end_to_end_hit_rate + UNRESOLVED 单列）、V8 迁移与角色矩阵落点、线程预算；测试与 DoD 同步改写 | 待 AM2 G2 后送 G1 |
+| 2026-09-05 | v3.0r1 | 第三轮评审采纳（落码方案 v1.1 同步）：S2 场景 docker kill → flagd paymentUnreachable（权限边界）；对账降级链修正（metadata→virtual key→BEST_EFFORT，禁时间窗归因）；GT 延迟授权（冻结输出后才释放）；评分对象选择规则冻结（selection_policy_version，禁挑最优）；迁移拆 V8/V9；角色创建分工（notify_app 归 M3-03） | 全部采纳 |
+| 2026-09-05 | v3.0r2 | 评审第四轮（E2E 太粗）：§12 新增 E2E-M3-01~08 端到端测试矩阵（逐点主键+digest 链式断言）；M3-17=批量功能 E2E、M3-30=八链全覆盖最终部署门；D01 改名 TEST_CHANNEL；S2 已换 paymentUnreachable（v3.0r1） | 全部采纳 |

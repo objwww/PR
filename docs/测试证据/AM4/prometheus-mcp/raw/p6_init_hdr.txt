@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Cache-Control: no-cache, no-transform
+Connection: keep-alive
+Content-Type: text/event-stream
+Mcp-Session-Id: ZS6VNSDERGNYDHS2AYCQUSCSWF
+Date: Fri, 04 Sep 2026 20:56:55 GMT
+Transfer-Encoding: chunked
+

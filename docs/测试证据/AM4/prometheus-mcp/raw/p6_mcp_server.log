@@ -1,0 +1,24 @@
+time=2026-09-04T20:56:49.169Z level=INFO source=main.go:175 msg="Starting prometheus-mcp-server" version=0.18.0 build_date=2026-04-25T05:01:51Z commit=924e43dbea816b92c3e79e73c1568af417e8e30e docs_commit=37db7273b5471dae8343e92ba117069c2ccc95c3 go_version=go1.26.2
+time=2026-09-04T20:56:51.962Z level=INFO source=registration.go:310 msg="Setting tools based on provided toolset" toolset="[alertmanagers build_info core docs_list docs_read docs_search exemplar_query flags healthy label_names label_values list_alerts list_rules list_targets metric_metadata query range_query ready runtime_info series targets_metadata tsdb_stats wal_replay_status]"
+time=2026-09-04T20:56:51.962Z level=WARN source=registration.go:315 msg="Failed to find tool to register" tool_name=core
+time=2026-09-04T20:56:51.964Z level=INFO source=server.go:161 msg="MCP server created" prometheus_url=http://prometheus:9090 tool_count=22
+time=2026-09-04T20:56:51.965Z level=INFO source=tls_config.go:354 msg="Listening on" address=[::]:8080
+time=2026-09-04T20:56:51.965Z level=INFO source=tls_config.go:357 msg="TLS is disabled." http2=false address=[::]:8080
+time=2026-09-04T20:56:55.739Z level=INFO source=server.go:1028 msg="server connecting"
+time=2026-09-04T20:56:55.739Z level=INFO source=server.go:986 msg="server session connected" go_sdk_logger.session_id=ZS6VNSDERGNYDHS2AYCQUSCSWF
+time=2026-09-04T20:56:55.746Z level=INFO source=server.go:1067 msg="session initialized"
+time=2026-09-04T20:57:25.776Z level=INFO source=server.go:1002 msg="server session disconnected" go_sdk_logger.session_id=ZS6VNSDERGNYDHS2AYCQUSCSWF
+time=2026-09-04T20:59:09.250Z level=INFO source=server.go:1028 msg="server connecting"
+time=2026-09-04T20:59:09.250Z level=INFO source=server.go:986 msg="server session connected" go_sdk_logger.session_id=XUNTA4YUHYOB2ZEZ5FT4FUPFVB
+time=2026-09-04T20:59:09.258Z level=INFO source=server.go:1067 msg="session initialized"
+time=2026-09-04T20:59:25.483Z level=INFO source=server.go:1028 msg="server connecting"
+time=2026-09-04T20:59:25.483Z level=INFO source=server.go:986 msg="server session connected" go_sdk_logger.session_id=KDSVJGLZW52IYHQVJ7TOGPU2BL
+time=2026-09-04T20:59:25.489Z level=INFO source=server.go:1067 msg="session initialized"
+time=2026-09-04T20:59:25.622Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=quit request_arguments="{}" result=<nil> error="unknown tool \"quit\""
+time=2026-09-04T20:59:25.627Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=reload request_arguments="{}" result=<nil> error="unknown tool \"reload\""
+time=2026-09-04T20:59:25.632Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=delete_series request_arguments="{}" result=<nil> error="unknown tool \"delete_series\""
+time=2026-09-04T20:59:25.638Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=snapshot request_arguments="{}" result=<nil> error="unknown tool \"snapshot\""
+time=2026-09-04T20:59:25.643Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=clean_tombstones request_arguments="{}" result=<nil> error="unknown tool \"clean_tombstones\""
+time=2026-09-04T20:59:25.648Z level=ERROR source=middleware.go:114 msg="Failed calling tool" tool_name=config request_arguments="{}" result=<nil> error="unknown tool \"config\""
+time=2026-09-04T20:59:39.267Z level=INFO source=server.go:1002 msg="server session disconnected" go_sdk_logger.session_id=XUNTA4YUHYOB2ZEZ5FT4FUPFVB
+time=2026-09-04T20:59:55.490Z level=INFO source=server.go:1002 msg="server session disconnected" go_sdk_logger.session_id=KDSVJGLZW52IYHQVJ7TOGPU2BL

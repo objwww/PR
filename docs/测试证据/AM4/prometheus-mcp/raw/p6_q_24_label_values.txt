@@ -1,0 +1,3 @@
+event: message
+data: {"jsonrpc":"2.0","id":24,"result":{"content":[{"type":"text","text":"{\"result\":\"order-arena\\notel-collector\",\"warnings\":null}"}]}}
+

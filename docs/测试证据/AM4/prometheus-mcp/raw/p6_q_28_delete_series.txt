@@ -1,0 +1,3 @@
+event: message
+data: {"jsonrpc":"2.0","id":28,"error":{"code":-32602,"message":"unknown tool \"delete_series\""}}
+
