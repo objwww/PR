@@ -59,6 +59,11 @@ public final class AlertInMemoryStores {
     public final Reports reports = new Reports();
     public final Invocations invocations = new Invocations();
     public final Slots slots = new Slots(2);
+    public final Investigations investigations = new Investigations();
+    public final ToolCalls toolCalls = new ToolCalls();
+    public final Publications publications = new Publications();
+    public final Outboxes outboxes = new Outboxes();
+    public final Cas cas = new Cas();
 
     // ------------------------------------------------------------------ alert_inbox
 
@@ -560,6 +565,187 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized int totalSlots(String scope) {
             return slots.size();
+        }
+    }
+
+    // ------------------------------------------------------------------ rca_investigation_result（M3-04）
+
+    /**
+     * attempt_id 幂等锚 + STARTED→终态 CAS 模拟。generation 栅栏（SQL 内 EXISTS 判定）
+     * 不在此模拟——栅栏语义由 PostgresIT 对真 PG 验证（M3-07/30）。
+     */
+    public static final class Investigations implements com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.model.InvestigationResult> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.model.InvestigationResult insertStartedIfAbsent(
+                com.objwww.pr.control.alert.domain.model.InvestigationResult started) {
+            com.objwww.pr.control.alert.domain.model.InvestigationResult existing = findByAttemptId(started.attemptId()).orElse(null);
+            if (existing != null) {
+                return existing;
+            }
+            rows.put(started.id(), started);
+            return started;
+        }
+
+        @Override
+        public synchronized boolean finishTerminal(
+                com.objwww.pr.control.alert.domain.model.InvestigationResult terminal) {
+            com.objwww.pr.control.alert.domain.model.InvestigationResult cur = rows.get(terminal.id());
+            if (cur == null
+                    || cur.executionStatus() != com.objwww.pr.control.alert.domain.model.ExecutionStatus.STARTED) {
+                return false;
+            }
+            rows.put(terminal.id(), terminal);
+            return true;
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.InvestigationResult> findHangingStarted(
+                Instant olderThan) {
+            return rows.values().stream()
+                    .filter(r -> r.executionStatus() == com.objwww.pr.control.alert.domain.model.ExecutionStatus.STARTED
+                            && r.createdAt().isBefore(olderThan))
+                    .toList();
+        }
+
+        @Override
+        public synchronized Optional<com.objwww.pr.control.alert.domain.model.InvestigationResult> findByAttemptId(
+                UUID attemptId) {
+            return rows.values().stream()
+                    .filter(r -> r.attemptId().equals(attemptId)).findFirst();
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.InvestigationResult> findByRunId(UUID runId) {
+            return rows.values().stream().filter(r -> r.runId().equals(runId)).toList();
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.model.InvestigationResult> all() {
+            return List.copyOf(rows.values());
+        }
+    }
+
+    // ------------------------------------------------------------------ rca_tool_call（M3-07）
+
+    /** PK (investigation_result_id, tool_call_id) 去重；栅栏语义由 Postgres IT 覆盖 */
+    public static final class ToolCalls implements com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository {
+        private final List<com.objwww.pr.control.alert.domain.model.RcaToolCall> rows = new ArrayList<>();
+
+        @Override
+        public synchronized int insertAll(List<com.objwww.pr.control.alert.domain.model.RcaToolCall> toolCalls) {
+            int written = 0;
+            for (com.objwww.pr.control.alert.domain.model.RcaToolCall call : toolCalls) {
+                boolean dup = rows.stream().anyMatch(r ->
+                        r.investigationResultId().equals(call.investigationResultId())
+                                && r.toolCallId().equals(call.toolCallId()));
+                if (!dup) {
+                    rows.add(call);
+                    written++;
+                }
+            }
+            return written;
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.RcaToolCall> findByResultId(
+                UUID investigationResultId) {
+            return rows.stream().filter(r -> r.investigationResultId().equals(investigationResultId)).toList();
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.RcaToolCall> findByRunId(UUID runId) {
+            return rows.stream().filter(r -> r.runId().equals(runId)).toList();
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.model.RcaToolCall> all() {
+            return List.copyOf(rows);
+        }
+    }
+
+    // ------------------------------------------------------------------ report_publication（M3-09）
+
+    public static final class Publications implements com.objwww.pr.control.alert.domain.repository.ReportPublicationRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.model.ReportPublication> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insert(com.objwww.pr.control.alert.domain.model.ReportPublication publication) {
+            boolean dup = rows.values().stream()
+                    .anyMatch(p -> p.reportId().equals(publication.reportId()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_report_publication_report 模拟");
+            }
+            rows.put(publication.id(), publication);
+        }
+
+        @Override
+        public synchronized Optional<com.objwww.pr.control.alert.domain.model.ReportPublication> findByReportId(
+                UUID reportId) {
+            return rows.values().stream()
+                    .filter(p -> p.reportId().equals(reportId)).findFirst();
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.model.ReportPublication> all() {
+            return List.copyOf(rows.values());
+        }
+    }
+
+    // ------------------------------------------------------------------ CAS（M3-07 落档）
+
+    /** 内容寻址内存 CAS：同 digest 幂等，put 返回与 LocalCasArtifactStore 同构的相对路径 */
+    public static final class Cas implements com.objwww.pr.control.domain.port.ArtifactStore {
+        private final Map<String, byte[]> blobs = new LinkedHashMap<>();
+
+        @Override
+        public synchronized String putIfAbsent(Digest digest, byte[] content) {
+            blobs.putIfAbsent(digest.value(), content.clone());
+            return digest.value().substring(0, 2) + "/" + digest.value();
+        }
+
+        @Override
+        public synchronized boolean exists(Digest digest) {
+            return blobs.containsKey(digest.value());
+        }
+
+        @Override
+        public synchronized Optional<byte[]> get(Digest digest) {
+            byte[] blob = blobs.get(digest.value());
+            return blob == null ? Optional.empty() : Optional.of(blob.clone());
+        }
+
+        public synchronized int size() {
+            return blobs.size();
+        }
+    }
+
+    // ------------------------------------------------------------------ notify_outbox（M3-19 生产者面）
+
+    /** 唯一键 (report_id, channel, template_version) → DuplicateKeyException（at-least-once 防重锚） */
+    public static final class Outboxes implements com.objwww.pr.control.alert.domain.repository.NotifyOutboxRepository {
+        private final List<com.objwww.pr.control.alert.domain.model.NotifyOutboxEntry> rows = new ArrayList<>();
+
+        @Override
+        public synchronized void insert(com.objwww.pr.control.alert.domain.model.NotifyOutboxEntry entry) {
+            boolean dup = rows.stream().anyMatch(r ->
+                    r.reportId().equals(entry.reportId())
+                            && r.channel().equals(entry.channel())
+                            && r.templateVersion().equals(entry.templateVersion()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_notify_outbox_delivery 模拟");
+            }
+            rows.add(entry);
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.NotifyOutboxEntry> findByPublicationId(
+                UUID publicationId) {
+            return rows.stream().filter(r -> r.publicationId().equals(publicationId)).toList();
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.model.NotifyOutboxEntry> all() {
+            return List.copyOf(rows);
         }
     }
 }

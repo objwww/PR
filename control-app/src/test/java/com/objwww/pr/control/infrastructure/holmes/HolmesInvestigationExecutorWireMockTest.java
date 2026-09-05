@@ -19,6 +19,7 @@ import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
+import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
@@ -185,15 +186,15 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.outcome()).isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED);
-        var report = result.report().orElseThrow();
-        assertThat(report.validationStatus().name()).isEqualTo("STRUCTURE_VALIDATED");
-        assertThat(report.schemaVersion()).isEqualTo(1);
-        assertThat(report.packageJson()).contains("root_cause");
-        assertThat(report.promptTokens()).isEqualTo(1200);
-        assertThat(report.completionTokens()).isEqualTo(340);
-        assertThat(report.totalTokens()).isEqualTo(1540);
-        assertThat(report.usageMissing()).isFalse();
-        assertThat(report.model()).isEqualTo("deepseek-v3");
+        var artifact = result.artifact().orElseThrow();
+        assertThat(artifact.validationStatus().name()).isEqualTo("STRUCTURE_VALIDATED");
+        assertThat(artifact.schemaVersion()).isEqualTo(1);
+        assertThat(artifact.packageJson()).contains("root_cause");
+        assertThat(artifact.promptTokens()).isEqualTo(1200);
+        assertThat(artifact.completionTokens()).isEqualTo(340);
+        assertThat(artifact.totalTokens()).isEqualTo(1540);
+        assertThat(artifact.usageMissing()).isFalse();
+        assertThat(artifact.model()).isEqualTo("deepseek-v3");
 
         ExternalInvocation row = soleLedgerRow();
         assertThat(row.state()).isEqualTo(ExternalInvocationState.SUCCEEDED);
@@ -223,9 +224,9 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.outcome()).isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED);
-        var report = result.report().orElseThrow();
-        assertThat(report.usageMissing()).isTrue();
-        assertThat(report.totalTokens()).isNull();
+        var artifact = result.artifact().orElseThrow();
+        assertThat(artifact.usageMissing()).isTrue();
+        assertThat(artifact.totalTokens()).isNull();
         ExternalInvocation row = soleLedgerRow();
         assertThat(row.state()).isEqualTo(ExternalInvocationState.SUCCEEDED);
         assertThat(row.usageMissing()).isTrue();
@@ -305,7 +306,7 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.outcome()).isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED);
-        assertThat(result.report().orElseThrow().validationStatus().name())
+        assertThat(result.artifact().orElseThrow().validationStatus().name())
                 .isEqualTo("STRUCTURE_VALIDATED");
     }
 
@@ -333,7 +334,11 @@ class HolmesInvestigationExecutorWireMockTest {
 
         assertThat(result.outcome()).isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.FAILED_TERMINAL);
         assertThat(result.errorClass()).isEqualTo("REJECTED_MALFORMED");
-        assertThat(result.report()).isEmpty();
+        // INV-AM3-7：拒绝同权落档——artifact 携 REJECTED 决策与脱敏原文，只是没有包
+        assertThat(result.artifact()).isPresent();
+        assertThat(result.artifact().orElseThrow().validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_MALFORMED);
+        assertThat(result.artifact().orElseThrow().packageJson()).isNull();
         // 调用本身成功——账本记 SUCCEEDED（验证是决策不是调用失败）
         assertThat(soleLedgerRow().state()).isEqualTo(ExternalInvocationState.SUCCEEDED);
     }
@@ -357,7 +362,8 @@ class HolmesInvestigationExecutorWireMockTest {
 
         assertThat(result.outcome()).isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.FAILED_TERMINAL);
         assertThat(result.errorClass()).isEqualTo("REJECTED_OVERSIZE");
-        assertThat(result.report()).isEmpty();
+        assertThat(result.artifact().orElseThrow().validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_OVERSIZE);
         List<ExternalInvocation> rows = stores.invocations.all();
         assertThat(rows.get(rows.size() - 1).state()).isEqualTo(ExternalInvocationState.SUCCEEDED);
         holmes.verify(1, postRequestedFor(urlPathEqualTo("/api/chat")));
@@ -412,7 +418,8 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.errorClass()).isEqualTo("REJECTED_SCHEMA_MISMATCH");
-        assertThat(result.report()).isEmpty();
+        assertThat(result.artifact().orElseThrow().validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_SCHEMA_MISMATCH);
     }
 
     @Test
@@ -425,7 +432,8 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.errorClass()).isEqualTo("REJECTED_SCHEMA_VERSION");
-        assertThat(result.report()).isEmpty();
+        assertThat(result.artifact().orElseThrow().validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_SCHEMA_VERSION);
     }
 
     @Test
@@ -437,7 +445,8 @@ class HolmesInvestigationExecutorWireMockTest {
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.errorClass()).isEqualTo("REJECTED_SCHEMA_MISMATCH");
-        assertThat(result.report()).isEmpty();
+        assertThat(result.artifact().orElseThrow().validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_SCHEMA_MISMATCH);
     }
 
     // ------------------------------------------------------------------ 安全面（EX-A12/A13 + 账本前置）
@@ -469,8 +478,8 @@ class HolmesInvestigationExecutorWireMockTest {
 
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
-        var report = result.report().orElseThrow();
-        assertThat(report.rawText()).doesNotContain("sk-AbCdEf1234567890")
+        var artifact = result.artifact().orElseThrow();
+        assertThat(artifact.rawText()).doesNotContain("sk-AbCdEf1234567890")
                 .doesNotContain("Bearer eyJhbGciOi")
                 .contains("****");
 

@@ -1,26 +1,36 @@
 package com.objwww.pr.control.alert.application;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.domain.model.ExecutionStatus;
 import com.objwww.pr.control.alert.domain.model.Incident;
+import com.objwww.pr.control.alert.domain.model.InvestigationResult;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
+import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.model.RcaAttemptStatus;
+import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
+import com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.alert.domain.statemachine.RcaRunStateMachine;
 import com.objwww.pr.control.alert.domain.statemachine.RcaTaskStateMachine;
+import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
@@ -67,9 +77,14 @@ public class RcaRunOrchestrator {
     private final RcaReportRepository reports;
     private final IncidentRepository incidents;
     private final SchedulerSlotRepository slots;
+    private final InvestigationResultRepository investigationResults;
+    private final RcaToolCallRepository toolCalls;
+    private final ReportCompletedNotifier notifier;
+    private final ArtifactStore artifacts;
     private final SlaPolicy sla;
     private final AlertClock clock;
     private final String slotScope;
+    private final ObjectMapper mapper = new ObjectMapper();
 
     public RcaRunOrchestrator(RcaTaskRepository tasks,
                               RcaRunRepository runs,
@@ -77,6 +92,10 @@ public class RcaRunOrchestrator {
                               RcaReportRepository reports,
                               IncidentRepository incidents,
                               SchedulerSlotRepository slots,
+                              InvestigationResultRepository investigationResults,
+                              RcaToolCallRepository toolCalls,
+                              ReportCompletedNotifier notifier,
+                              ArtifactStore artifacts,
                               SlaPolicy sla,
                               AlertClock clock,
                               String slotScope) {
@@ -86,6 +105,10 @@ public class RcaRunOrchestrator {
         this.reports = Objects.requireNonNull(reports);
         this.incidents = Objects.requireNonNull(incidents);
         this.slots = Objects.requireNonNull(slots);
+        this.investigationResults = Objects.requireNonNull(investigationResults);
+        this.toolCalls = Objects.requireNonNull(toolCalls);
+        this.notifier = Objects.requireNonNull(notifier);
+        this.artifacts = Objects.requireNonNull(artifacts);
         this.sla = Objects.requireNonNull(sla);
         this.clock = Objects.requireNonNull(clock);
         this.slotScope = Objects.requireNonNull(slotScope);
@@ -107,9 +130,14 @@ public class RcaRunOrchestrator {
             return FinishOutcome.LEASE_REJECTED;
         }
         RcaTask fresh = tasks.findById(task.id()).orElseThrow();
+        RcaRun run = runs.findByIdForUpdate(fresh.runId()).orElseThrow();
 
         // 1) attempt 终态
         attempts.update(finishAttempt(startedAttempt, result, now));
+
+        // 1.5) M3-08 调查落档：Result 终态 CAS + tool_calls +（验证通过时）报告 +
+        //      publication + outbox——同一收尾事务，验证失败同权落档（INV-AM3-7）
+        result.artifact().ifPresent(a -> archiveArtifact(fresh, run, startedAttempt, result, a, now));
 
         // 2) task 终态 + slot 归还（INV-AM1-7 同收尾周期）
         boolean success = result.outcome() == RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED;
@@ -138,16 +166,7 @@ public class RcaRunOrchestrator {
             slots.release(slotScope, slotNo, owner, slotEpoch);
         }
 
-        // 3) 报告落库（成功且报告在场；runId/attemptId 以收尾事务内真实值铸造）
-        result.report().ifPresent(content -> reports.insert(new com.objwww.pr.control.alert.domain.model.RcaReport(
-                UUID.randomUUID(), fresh.runId(), startedAttempt.id(), content.schemaVersion(),
-                content.validationStatus(), content.validationErrors(),
-                content.packageJson(), content.rawText(), content.model(),
-                content.promptTokens(), content.completionTokens(), content.totalTokens(),
-                content.usageMissing(), now)));
-
-        // 4) run 收尾 + rerun 判定（§6.7）
-        RcaRun run = runs.findByIdForUpdate(fresh.runId()).orElseThrow();
+        // 3) run 收尾 + rerun 判定（§6.7）——run 行已在收尾事务开头锁定
         if (run.state() != RcaRunState.QUEUED && run.state() != RcaRunState.RUNNING) {
             log.warn("run {} 已非活跃，跳过收尾 state={}", run.id(), run.state());
             return outcome;
@@ -208,6 +227,92 @@ public class RcaRunOrchestrator {
     }
 
     // ------------------------------------------------------------------ 行构造辅助
+
+    /**
+     * 调查落档（M3-08，收尾事务内）：Result 终态 CAS + tool_calls 落表（栅栏直挂）+
+     * 结构验证通过时报告 + publication(READY) + outbox 原子写入。
+     * 执行失败与结构失败同权落档——验证失败不再是"零落档误判超时"（INV-AM3-7）。
+     */
+    private void archiveArtifact(RcaTask task, RcaRun run, RcaAttempt attempt,
+                                 RcaTaskExecutor.ExecutionResult result,
+                                 RcaTaskExecutor.AttemptArtifact artifact, Instant now) {
+        ExecutionStatus execution = result.outcome() == RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED
+                ? ExecutionStatus.SUCCEEDED
+                : "TIMEOUT".equals(result.errorClass()) ? ExecutionStatus.TIMEOUT
+                : ExecutionStatus.FAILED;
+        boolean validated = artifact.validationStatus() == ValidationStatus.STRUCTURE_VALIDATED;
+
+        // CAS 落档脱敏原文（内容寻址以脱敏文本自身 digest；失败不阻断——digest 已在行上）
+        String rawRef = null;
+        if (artifact.rawText() != null && !artifact.rawText().isEmpty()) {
+            Digest redactedDigest = Digest.sha256Of(artifact.rawText());
+            try {
+                rawRef = artifacts.putIfAbsent(redactedDigest,
+                        artifact.rawText().getBytes(StandardCharsets.UTF_8));
+            } catch (RuntimeException e) {
+                log.warn("raw 落 CAS 失败（digest 仍可对账）attempt={}", attempt.id(), e);
+            }
+        }
+
+        investigationResults.finishTerminal(new InvestigationResult(
+                attempt.id(), attempt.id(), run.id(), run.generation(), artifact.schemaVersion(),
+                execution, artifact.validationStatus(),
+                artifact.validationErrors().isEmpty() ? null : artifact.validationErrors(),
+                validated ? artifact.packageJson() : null,
+                rawRef, artifact.rawDigest(), artifact.payloadDigest(), artifact.model(),
+                usageJson(artifact), null, now));
+
+        if (!artifact.toolCalls().isEmpty()) {
+            toolCalls.insertAll(artifact.toolCalls());
+        }
+
+        if (validated) {
+            UUID reportId = UUID.randomUUID();
+            reports.insert(new RcaReport(reportId, run.id(), attempt.id(), artifact.schemaVersion(),
+                    artifact.validationStatus(), artifact.validationErrors(),
+                    artifact.packageJson(), artifact.rawText(), artifact.model(),
+                    artifact.promptTokens(), artifact.completionTokens(), artifact.totalTokens(),
+                    artifact.usageMissing(), now));
+            PayloadFields fields = payloadFields(artifact);
+            notifier.onReportValidated(reportId, run.id(), attempt.id(),
+                    fields.summary(), fields.component(), fields.faultType(), fields.reasonCode(),
+                    fields.impact(), fields.remediation(), now);
+        }
+    }
+
+    /** usage → jsonb 文本（usage_missing 时为空，§6.2 冻结语义） */
+    private static String usageJson(RcaTaskExecutor.AttemptArtifact artifact) {
+        if (artifact.usageMissing()) {
+            return null;
+        }
+        return "{\"prompt_tokens\":" + artifact.promptTokens()
+                + ",\"completion_tokens\":" + artifact.completionTokens()
+                + ",\"total_tokens\":" + artifact.totalTokens() + "}";
+    }
+
+    /** 通知白名单字段提取：v2 取类型化三元组；v1 自由文本根因并入 summary（legacy 路径） */
+    private PayloadFields payloadFields(RcaTaskExecutor.AttemptArtifact artifact) {
+        try {
+            JsonNode pkg = mapper.readTree(artifact.packageJson());
+            String summary = pkg.path("summary").asText("");
+            JsonNode rootCause = pkg.path("root_cause");
+            if (rootCause.isObject()) {
+                return new PayloadFields(summary,
+                        rootCause.path("component").asText(""),
+                        rootCause.path("fault_type").asText(""),
+                        rootCause.path("reason_code").asText(""),
+                        pkg.path("impact").asText(""), pkg.path("remediation").asText(""));
+            }
+            return new PayloadFields(summary + " 根因: " + rootCause.asText(""),
+                    "", "", "", pkg.path("impact").asText(""), pkg.path("remediation").asText(""));
+        } catch (Exception e) {
+            return new PayloadFields("", "", "", "", "", "");
+        }
+    }
+
+    private record PayloadFields(String summary, String component, String faultType,
+                                 String reasonCode, String impact, String remediation) {
+    }
 
     private RcaAttempt finishAttempt(RcaAttempt started, RcaTaskExecutor.ExecutionResult result,
                                      Instant now) {

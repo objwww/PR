@@ -110,4 +110,30 @@ public class PersistenceConfig {
             JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository(jdbc);
     }
+
+    // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository investigationResultRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresInvestigationResultRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository rcaToolCallRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaToolCallRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.ReportPublicationRepository reportPublicationRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresReportPublicationRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.NotifyOutboxRepository notifyOutboxRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository(jdbc);
+    }
 }

@@ -13,6 +13,7 @@ import com.objwww.pr.control.alert.domain.model.Incident;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
+import com.objwww.pr.control.alert.domain.model.RcaToolCall;
 import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
@@ -47,19 +48,37 @@ import java.util.concurrent.TimeUnit;
  */
 public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
 
-    /** 官方 response_format：strict json_schema 强约束六段式（不靠 prompt 乞求 JSON） */
+    /**
+     * 官方 response_format：strict json_schema 强约束 v2 类型化包（AM3 §6.3；M3-08 升版）——
+     * root_cause 对象 {component, fault_type, reason_code} + claims[] 类型化断言，
+     * 评分器"枚举等值 + 同义词表"的输入前提（不靠 prompt 乞求 JSON）。
+     */
     private static final String RESPONSE_FORMAT = """
             {"type":"json_schema","json_schema":{"name":"RcaEvidencePackage","strict":true,"schema":{"type":"object","properties":\
-            {"schema_version":{"type":"integer","description":"报告 schema 版本,当前为 1"},\
+            {"schema_version":{"type":"integer","description":"报告 schema 版本,当前为 2"},\
             "summary":{"type":"string","description":"一两句话概括发生了什么"},\
-            "root_cause":{"type":"string","description":"根因结论"},\
+            "root_cause":{"type":"object","description":"类型化根因(可判定根因三要素缺一不可)",\
+            "properties":{"component":{"type":"string","description":"出问题组件,如 payment"},\
+            "fault_type":{"type":"string","description":"故障类型,如 business_error_rate / dependency_unreachable"},\
+            "reason_code":{"type":"string","description":"根因代码,如 paymentFailure=50%"}},\
+            "required":["component","fault_type","reason_code"],"additionalProperties":false},\
+            "claims":{"type":"array","description":"类型化断言列表(可为空数组)",\
+            "items":{"type":"object","properties":\
+            {"claim_type":{"type":"string","description":"断言类型,如 root_cause/symptom/impact"},\
+            "status":{"type":"string","enum":["TRUE","FALSE","UNKNOWN"],"description":"断言三态"},\
+            "component":{"type":"string","description":"断言所属组件"},\
+            "fault_type":{"type":"string","description":"断言相关故障类型"},\
+            "symptom_codes":{"type":"array","items":{"type":"string"},"description":"症状码,如 PAYMENT_5XX_HIGH"},\
+            "evidence_refs":{"type":"array","items":{"type":"string"},"description":"证据引用"}},\
+            "required":["claim_type","status","component","fault_type","symptom_codes","evidence_refs"],\
+            "additionalProperties":false}},\
             "evidence":{"type":"array","items":{"type":"string"},"description":"支撑结论的证据条目"},\
             "impact":{"type":"string","description":"影响面"},\
             "remediation":{"type":"string","description":"修复建议"},\
             "references":{"type":"array","items":{"type":"object","properties":\
             {"artifact_ref":{"type":"string","description":"prometheus:// 或 dashboard:// 引用"}},\
             "required":["artifact_ref"],"additionalProperties":false},"description":"证据引用"}},\
-            "required":["schema_version","summary","root_cause","evidence","impact","remediation","references"],\
+            "required":["schema_version","summary","root_cause","claims","evidence","impact","remediation","references"],\
             "additionalProperties":false}}}""";
 
     private static final String ENDPOINT = "/api/chat";
@@ -77,6 +96,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
     private final ExternalInvocationRepository ledger;
     private final TransactionOperations tx;
     private final EvidencePackageValidator validator;
+    private final HolmesResponseParser parser;
     private final ObjectMapper mapper;
     private final AlertClock clock;
     private final String model;
@@ -101,6 +121,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.tx = Objects.requireNonNull(tx, "tx");
         this.validator = Objects.requireNonNull(validator, "validator");
+        this.parser = new HolmesResponseParser(50);
         this.mapper = new ObjectMapper();
         this.clock = Objects.requireNonNull(clock, "clock");
         this.model = model;
@@ -179,8 +200,11 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
         }
         long latency = Duration.between(begin, clock.now()).toMillis();
 
-        // 4. 结构验证链（§6.5：尺寸→外层 analysis→内嵌 JSON→schema→限长→脱敏）
+        // 4. 结构验证链（§6.5：尺寸→外层 analysis→内嵌 JSON→schema_version 路由→限长→脱敏）
         EvidencePackageValidator.Result result = validator.validate(chat.body());
+
+        // 4.5 M3-05/06：tool_calls 形状解析 → 内部契约（与验证链独立；解析失败按空落档）
+        List<RcaToolCall> toolCalls = parseToolCalls(chat.body(), result, attempt, run);
 
         // 5. 账本终态：调用本身成功（REJECTED 是验证决策,不是调用失败——账本只记账不决策）
         finishLedger(started, new ExternalInvocation(
@@ -193,15 +217,40 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                 holmesVersion, model, null, null, null,
                 started.startedAt(), clock.now()));
 
-        if (result.status() != ValidationStatus.STRUCTURE_VALIDATED) {
-            return ExecutionResult.terminal(result.status().name(),
-                    String.join("; ", result.errors()));
-        }
-        return ExecutionResult.success(new ReportContent(
-                expectedSchemaVersion, result.status(), result.errors(),
-                result.packageJson(), result.redactedRawText(), model,
+        Digest payloadDigest = result.packageJson() == null
+                ? null : Digest.sha256Of(result.packageJson());
+        // schema_version：验证通过取实际版本；拒绝形态（版本未知等）记请求版本——诚实于"我们要的"
+        int effectiveVersion = result.schemaVersion() > 0 ? result.schemaVersion()
+                : expectedSchemaVersion;
+        RcaTaskExecutor.AttemptArtifact artifact = new RcaTaskExecutor.AttemptArtifact(
+                effectiveVersion, result.status(), result.errors(),
+                result.packageJson(), result.redactedRawText(), result.typedPackage(),
+                toolCalls, Digest.sha256Of(chat.body()), payloadDigest, model,
                 chat.promptTokens(), chat.completionTokens(), chat.totalTokens(),
-                chat.usageMissing()));
+                chat.usageMissing());
+
+        if (result.status() != ValidationStatus.STRUCTURE_VALIDATED) {
+            // REJECTED_* 同权落档（INV-AM3-7）：结构问题是策略违约，重试同形状概率高
+            return ExecutionResult.terminalWithArtifact(result.status().name(),
+                    String.join("; ", result.errors()), artifact);
+        }
+        return ExecutionResult.success(artifact);
+    }
+
+    /** tool_calls 解析 + 适配；解析失败（外层损坏/超限）返回空列表——验证链已给出 REJECTED 决策 */
+    private List<RcaToolCall> parseToolCalls(String body, EvidencePackageValidator.Result result,
+                                             RcaAttempt attempt, RcaRun run) {
+        try {
+            HolmesResponseParser.Parsed parsed = parser.parse(body);
+            int schemaVersion = result.schemaVersion() > 0 ? result.schemaVersion()
+                    : expectedSchemaVersion;
+            Digest payloadDigest = result.packageJson() == null
+                    ? null : Digest.sha256Of(result.packageJson());
+            return ToolCallAdapter.toDomain(parsed.toolCalls(), attempt.id(), run.id(),
+                    run.generation(), schemaVersion, payloadDigest);
+        } catch (HolmesResponseParser.MalformedResponseException e) {
+            return List.of();
+        }
     }
 
     private ExternalInvocation terminalInvocation(ExternalInvocation started, Integer httpStatus,
@@ -274,9 +323,12 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
         // 模型会输出散文/围栏 JSON——ask 里把输出契约写成显式文字指令,不依赖 API 层约束生效
         sb.append('\n');
         sb.append("输出格式硬性要求:调查结束后,你的最终回答必须是一个纯 JSON 对象,不要 markdown 代码块围栏,");
-        sb.append("不要任何解释文字或前后缀。JSON 必须恰好包含以下七个顶层键:schema_version(整数,值为 1)、");
-        sb.append("summary(字符串)、root_cause(字符串)、evidence(字符串数组)、impact(字符串)、");
-        sb.append("remediation(字符串)、references(对象数组,每个对象只有 artifact_ref 字符串键)。");
+        sb.append("不要任何解释文字或前后缀。JSON 必须恰好包含以下八个顶层键:schema_version(整数,值为 2)、");
+        sb.append("summary(字符串)、root_cause(对象,恰好三个键:component(字符串)、fault_type(字符串)、");
+        sb.append("reason_code(字符串))、claims(对象数组,每个对象恰好六个键:claim_type(字符串)、");
+        sb.append("status(只能取 TRUE/FALSE/UNKNOWN)、component(字符串)、fault_type(字符串)、");
+        sb.append("symptom_codes(字符串数组)、evidence_refs(字符串数组))、evidence(字符串数组)、");
+        sb.append("impact(字符串)、remediation(字符串)、references(对象数组,每个对象只有 artifact_ref 字符串键)。");
         return sb.toString();
     }
 

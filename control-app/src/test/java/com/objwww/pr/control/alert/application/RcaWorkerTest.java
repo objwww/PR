@@ -68,14 +68,21 @@ class RcaWorkerTest {
         }
 
         void succeedNext() {
-            script.add(RcaTaskExecutor.ExecutionResult.success(
-                    new RcaTaskExecutor.ReportContent(1, ValidationStatus.STRUCTURE_VALIDATED,
-                            List.of(), "{\"schema_version\":\"1\"}", "raw", "deepseek-v3",
-                            null, null, null, true)));
+            script.add(RcaTaskExecutor.ExecutionResult.success(validatedArtifact()));
         }
 
         void failRetryableNext() {
             script.add(RcaTaskExecutor.ExecutionResult.retryable("HTTP_5XX", "holmes 500"));
+        }
+
+        /** REJECTED_* 同权落档路径：终态失败但携完整响应现场（INV-AM3-7） */
+        void rejectWithArtifactNext() {
+            script.add(RcaTaskExecutor.ExecutionResult.terminalWithArtifact("REJECTED_MALFORMED",
+                    "缺 analysis", new RcaTaskExecutor.AttemptArtifact(2,
+                            ValidationStatus.REJECTED_MALFORMED, List.of("缺 analysis"),
+                            null, "plain text", null, List.of(),
+                            Digest.sha256Of("plain text"), null, "deepseek-v3",
+                            null, null, null, true)));
         }
     }
 
@@ -85,12 +92,15 @@ class RcaWorkerTest {
     private AlertInboxProcessor intake;
     private RcaWorker worker;
     private RcaRunOrchestrator orchestrator;
+    private ReportCompletedNotifier notifier;
 
     @BeforeEach
     void setUp() {
         stores = new AlertInMemoryStores();
         clock = new MutableClock();
         executor = new ScriptedExecutor();
+        notifier = new ReportCompletedNotifier(stores.publications, stores.outboxes,
+                List.of("test"), "am3-candidate-v1", 280);
         IncidentProjector projector = new IncidentProjector(stores.events, stores.incidents,
                 stores.runs, stores.tasks, new AlertIdentityFactory(),
                 new DeferredPolicy(1000), SlaPolicy.defaults(), clock);
@@ -98,18 +108,22 @@ class RcaWorkerTest {
                 TransactionOperations.withoutTransaction(), clock, "intake-owner",
                 Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofSeconds(10),
                 Duration.ofSeconds(1));
-        orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
-                stores.reports, stores.incidents, stores.slots, SlaPolicy.defaults(),
-                clock, "rca");
+        orchestrator = newOrchestrator();
         worker = newWorker("worker-a");
     }
 
+    private RcaRunOrchestrator newOrchestrator() {
+        return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
+                stores.reports, stores.incidents, stores.slots, stores.investigations,
+                stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca");
+    }
+
     private RcaWorker newWorker(String owner) {
-        return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.incidents,
-                stores.slots, stores.invocations, executor, orchestrator,
+        return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
+                stores.incidents, stores.slots, stores.invocations, executor, orchestrator,
                 TransactionOperations.withoutTransaction(), clock, owner, "rca",
                 Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
-                Duration.ofMinutes(1), Duration.ofMinutes(10));
+                Duration.ofMinutes(1), Duration.ofMinutes(10), 2);
     }
 
     /** 投一组告警（经真实投影链路铸 incident/run/task） */
@@ -126,11 +140,15 @@ class RcaWorkerTest {
         deliver(service, severity, "firing", startsAt, summary);
     }
 
-    /** 六段式通过的报告内容样本（finishTask 手动路径复用） */
-    private static RcaTaskExecutor.ReportContent staticReportContent() {
-        return new RcaTaskExecutor.ReportContent(1, ValidationStatus.STRUCTURE_VALIDATED,
-                List.of(), "{\"schema_version\":\"1\"}", "raw", "deepseek-v3",
-                null, null, null, true);
+    /** 六段式通过的结构验证样本（finishTask 手动路径复用；工具调用为空、usage 缺失） */
+    private static RcaTaskExecutor.AttemptArtifact staticArtifact() {
+        return validatedArtifact();
+    }
+
+    private static RcaTaskExecutor.AttemptArtifact validatedArtifact() {
+        return new RcaTaskExecutor.AttemptArtifact(1, ValidationStatus.STRUCTURE_VALIDATED,
+                List.of(), "{\"schema_version\":\"1\"}", "raw", null, List.of(),
+                null, null, "deepseek-v3", null, null, null, true);
     }
 
     private Incident soleIncidentOf(String service) {
@@ -165,6 +183,19 @@ class RcaWorkerTest {
         assertThat(incident.lastInvestigationHash()).isEqualTo(run.investigationHash());
         assertThat(stores.slots.occupiedSlots("rca")).isEmpty();   // INV-AM1-7 槽归还
         assertThat(stores.reports.all()).hasSize(1);
+
+        // M3-04~08 落档链：STARTED 先行 → 终态 CAS + 报告 + publication + outbox + CAS 原文
+        assertThat(stores.investigations.all()).hasSize(1);
+        var investigation = stores.investigations.all().get(0);
+        assertThat(investigation.id()).isEqualTo(stores.attempts.all().get(0).id());   // 1:1 锚
+        assertThat(investigation.executionStatus())
+                .isEqualTo(com.objwww.pr.control.alert.domain.model.ExecutionStatus.SUCCEEDED);
+        assertThat(investigation.validationStatus()).isEqualTo(ValidationStatus.STRUCTURE_VALIDATED);
+        assertThat(investigation.observedGeneration()).isEqualTo(run.generation());
+        assertThat(investigation.finishedAt()).isNotNull();
+        assertThat(stores.publications.all()).hasSize(1);
+        assertThat(stores.outboxes.all()).hasSize(1);   // 默认单渠道 test
+        assertThat(stores.cas.size()).isEqualTo(1);     // 脱敏原文内容寻址落 CAS
     }
 
     // ------------------------------------------------------------------ ST-A06 分支 2：材料变化 → RERUN
@@ -222,7 +253,7 @@ class RcaWorkerTest {
 
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(
                 work.get().task(), "worker-a", work.get().slotNo(), work.get().slotEpoch(),
-                RcaTaskExecutor.ExecutionResult.success(staticReportContent()), attempt);
+                RcaTaskExecutor.ExecutionResult.success(staticArtifact()), attempt);
 
         assertThat(outcome).isEqualTo(RcaRunOrchestrator.FinishOutcome.RESOLVED_SHORT_CIRCUIT);
         assertThat(stores.runs.all()).hasSize(1);   // 不铸 RERUN
@@ -305,15 +336,13 @@ class RcaWorkerTest {
         assertThat(workerB.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
 
         // worker-a 携旧 epoch 晚到提交：被拒，一行不写
-        RcaRunOrchestrator staleOrchestrator = new RcaRunOrchestrator(stores.tasks,
-                stores.runs, stores.attempts, stores.reports, stores.incidents, stores.slots,
-                SlaPolicy.defaults(), clock, "rca");
+        RcaRunOrchestrator staleOrchestrator = newOrchestrator();
         RcaAttempt staleAttempt = new RcaAttempt(UUID.randomUUID(), staleTask.id(),
                 staleTask.attemptCount(), staleTask.leaseEpoch(), "worker-a",
                 RcaAttemptStatus.STARTED, null, null, null, clock.now, null);
         RcaRunOrchestrator.FinishOutcome rejected = staleOrchestrator.finishTask(
                 staleTask, "worker-a", crashed.get().slotNo(), crashed.get().slotEpoch(),
-                RcaTaskExecutor.ExecutionResult.success(staticReportContent()), staleAttempt);
+                RcaTaskExecutor.ExecutionResult.success(staticArtifact()), staleAttempt);
 
         assertThat(rejected).isEqualTo(RcaRunOrchestrator.FinishOutcome.LEASE_REJECTED);
         // worker-b 的结果原样保留（重新查行，勿用领取时的旧引用）
@@ -350,6 +379,56 @@ class RcaWorkerTest {
         assertThat(stores.invocations.all().get(0).state())
                 .isEqualTo(ExternalInvocationState.UNKNOWN);
         assertThat(stores.invocations.all().get(0).finishedAt()).isNotNull();
+    }
+
+    // ------------------------------------------------------------------ M3-04/08 落档语义
+
+    @Test
+    @DisplayName("INV-AM3-7：REJECTED_* 终态同权落档——无报告无通知，但有调查终态与 CAS 原文")
+    void rejectedArtifactStillArchived() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        executor.rejectWithArtifactNext();
+
+        assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        // 结构违约 = 终态：task DEAD + run FAILED
+        assertThat(stores.tasks.all().get(0).state()).isEqualTo(RcaTaskState.DEAD);
+        assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.FAILED);
+
+        // 但调查记录诚实落档：FAILED + REJECTED_MALFORMED，无 packageJson
+        assertThat(stores.investigations.all()).hasSize(1);
+        var investigation = stores.investigations.all().get(0);
+        assertThat(investigation.executionStatus())
+                .isEqualTo(com.objwww.pr.control.alert.domain.model.ExecutionStatus.FAILED);
+        assertThat(investigation.validationStatus())
+                .isEqualTo(ValidationStatus.REJECTED_MALFORMED);
+        assertThat(investigation.packageJson()).isNull();
+        assertThat(investigation.rawDigest()).isNotNull();
+
+        // 验证失败不产报告/通知；脱敏原文仍进 CAS
+        assertThat(stores.reports.all()).isEmpty();
+        assertThat(stores.publications.all()).isEmpty();
+        assertThat(stores.outboxes.all()).isEmpty();
+        assertThat(stores.cas.size()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("M3-04：悬挂调查记录（STARTED 后崩溃）由恢复扫描标 UNKNOWN，不阻断 task 回收")
+    void hangingInvestigationMarkedUnknownOnRecovery() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        // 人工制造"STARTED 已落、终态未达"的悬挂行（模拟收尾事务前被杀；不动 task 状态）
+        stores.investigations.insertStartedIfAbsent(com.objwww.pr.control.alert.domain.model
+                .InvestigationResult.started(UUID.randomUUID(), UUID.randomUUID(),
+                        UUID.randomUUID(), 0, 2, null, clock.now));
+
+        clock.now = clock.now.plus(Duration.ofMinutes(20));   // 越过悬挂宽限（10m）
+        assertThat(worker.recoverExpired()).isEqualTo(0);     // 无过期 LEASED task
+
+        var recovered = stores.investigations.all().get(0);
+        assertThat(recovered.executionStatus())
+                .isEqualTo(com.objwww.pr.control.alert.domain.model.ExecutionStatus.UNKNOWN);
+        assertThat(recovered.validationStatus()).isEqualTo(ValidationStatus.NOT_VALIDATED);
+        assertThat(recovered.finishedAt()).isNotNull();
     }
 
     // ------------------------------------------------------------------ slot 并发语义

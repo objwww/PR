@@ -2,14 +2,18 @@ package com.objwww.pr.control.alert.application;
 
 import com.objwww.pr.control.alert.domain.model.ExternalInvocation;
 import com.objwww.pr.control.alert.domain.model.ExternalInvocationState;
+import com.objwww.pr.control.alert.domain.model.ExecutionStatus;
 import com.objwww.pr.control.alert.domain.model.Incident;
+import com.objwww.pr.control.alert.domain.model.InvestigationResult;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaAttemptStatus;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
+import com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
@@ -48,6 +52,7 @@ public class RcaWorker {
     private final RcaTaskRepository tasks;
     private final RcaRunRepository runs;
     private final RcaAttemptRepository attempts;
+    private final InvestigationResultRepository investigationResults;
     private final IncidentRepository incidents;
     private final SchedulerSlotRepository slots;
     private final ExternalInvocationRepository invocations;
@@ -64,12 +69,15 @@ public class RcaWorker {
     private final Duration retryBackoff;
     /** 悬挂账本宽限（BA-13②：由 holmes read-timeout 派生，必须长于单次在途调用） */
     private final Duration hangingGrace;
+    /** STARTED 调查记录随 attempt 铸造的请求 schema 版本（M3-04；与 executor RESPONSE_FORMAT 同值） */
+    private final int investigationSchemaVersion;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
 
     public RcaWorker(RcaTaskRepository tasks,
                      RcaRunRepository runs,
                      RcaAttemptRepository attempts,
+                     InvestigationResultRepository investigationResults,
                      IncidentRepository incidents,
                      SchedulerSlotRepository slots,
                      ExternalInvocationRepository invocations,
@@ -83,10 +91,12 @@ public class RcaWorker {
                      Duration heartbeatInterval,
                      Duration pollInterval,
                      Duration retryBackoff,
-                     Duration hangingGrace) {
+                     Duration hangingGrace,
+                     int investigationSchemaVersion) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
+        this.investigationResults = Objects.requireNonNull(investigationResults);
         this.incidents = Objects.requireNonNull(incidents);
         this.slots = Objects.requireNonNull(slots);
         this.invocations = Objects.requireNonNull(invocations);
@@ -107,6 +117,10 @@ public class RcaWorker {
             throw new IllegalArgumentException("hangingGrace 必须为正");
         }
         this.hangingGrace = hangingGrace;
+        if (investigationSchemaVersion < 1) {
+            throw new IllegalArgumentException("investigationSchemaVersion 从 1 起");
+        }
+        this.investigationSchemaVersion = investigationSchemaVersion;
     }
 
     // ------------------------------------------------------------------ 恢复扫描（崩溃双回收 + 悬挂账本）
@@ -156,6 +170,13 @@ public class RcaWorker {
             invocations.finish(unknown);
             log.warn("悬挂账本 {} STARTED→UNKNOWN（崩溃回收）", invocation.id());
         }
+        // M3-04：悬挂调查记录（STARTED 已落但终态未达）同样诚实标 UNKNOWN
+        for (InvestigationResult hanging : investigationResults.findHangingStarted(grace)) {
+            investigationResults.finishTerminal(hanging.withTerminal(
+                    ExecutionStatus.UNKNOWN, ValidationStatus.NOT_VALIDATED, null,
+                    null, null, null, null, null, now));
+            log.warn("悬挂调查记录 {} STARTED→UNKNOWN（崩溃回收）", hanging.id());
+        }
     }
 
     // ------------------------------------------------------------------ 领取（slot+task 同一事务）
@@ -202,7 +223,15 @@ public class RcaWorker {
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), work.task().id(),
                 work.task().attemptCount(), work.task().leaseEpoch(), owner,
                 RcaAttemptStatus.STARTED, null, null, null, now, null);
-        attempts.insert(attempt);
+        // M3-04 全程落档：attempt 铸造同事事务落 InvestigationResult(STARTED)——
+        // 进程在外调后落库前被杀也留悬挂 STARTED 可查（回收标 UNKNOWN）。
+        // id 复用 attempt.id()（一 attempt 一记录的 1:1 锚，executor 铸 tool_call 归属）
+        tx.executeWithoutResult(status -> {
+            attempts.insert(attempt);
+            investigationResults.insertStartedIfAbsent(InvestigationResult.started(
+                    attempt.id(), attempt.id(), work.run().id(), work.run().generation(),
+                    investigationSchemaVersion, null, now));
+        });
 
         RcaTaskExecutor.ExecutionResult result;
         try {

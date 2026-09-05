@@ -8,19 +8,26 @@ import com.objwww.pr.control.alert.application.IncidentProjector;
 import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
 import com.objwww.pr.control.alert.application.RcaWorker;
+import com.objwww.pr.control.alert.application.ReportCompletedNotifier;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
+import com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository;
+import com.objwww.pr.control.alert.domain.repository.NotifyOutboxRepository;
+import com.objwww.pr.control.alert.domain.repository.ReportPublicationRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.service.AlertIdentityFactory;
 import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
+import com.objwww.pr.control.domain.port.ArtifactStore;
+import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
 import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +37,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.transaction.support.TransactionOperations;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
@@ -137,10 +145,32 @@ public class AlertFlowConfig {
                                                        @Value("${app.alert.holmes.version:}") String holmesVersion,
                                                        @Value("${app.alert.holmes.max-events:20}") int maxEvents,
                                                        @Value("${app.alert.holmes.heartbeat-interval:PT30S}") Duration heartbeatInterval,
-                                                       @Value("${app.alert.holmes.expected-schema-version:1}") int expectedSchemaVersion) {
+                                                       // M3-08：输出契约升 v2（RESPONSE_FORMAT strict json_schema），
+                                                       // 包内显式 schema_version 缺失时按此版本兜底
+                                                       @Value("${app.alert.holmes.expected-schema-version:2}") int expectedSchemaVersion) {
         return new HolmesInvestigationExecutor(client, events, ledger, tx, validator,
                 AlertClock.system(), model, holmesVersion, maxEvents, heartbeatInterval,
                 expectedSchemaVersion);
+    }
+
+    /** M3-08：STRUCTURE_VALIDATED 即铸 publication(READY) + 每渠道 outbox（候选标记） */
+    @Bean
+    public ReportCompletedNotifier reportCompletedNotifier(ReportPublicationRepository publications,
+                                                           NotifyOutboxRepository outbox,
+                                                           @Value("${app.alert.notify.channels:test}") String channels,
+                                                           @Value("${app.alert.notify.template-version:am3-candidate-v1}")
+                                                           String templateVersion,
+                                                           @Value("${app.alert.notify.max-excerpt-chars:280}")
+                                                           int maxExcerptChars) {
+        return new ReportCompletedNotifier(publications, outbox,
+                List.of(channels.split(",")), templateVersion, maxExcerptChars);
+    }
+
+    /** M3-07：attempt 原文 CAS 落档（脱敏文本内容寻址；目录可整体迁移） */
+    @Bean
+    public ArtifactStore artifactStore(
+            @Value("${app.artifact.cas-dir:./var/cas}") String casDir) {
+        return new LocalCasArtifactStore(Path.of(casDir));
     }
 
     @Bean
@@ -150,16 +180,22 @@ public class AlertFlowConfig {
                                                  RcaReportRepository reports,
                                                  IncidentRepository incidents,
                                                  SchedulerSlotRepository slots,
+                                                 InvestigationResultRepository investigationResults,
+                                                 RcaToolCallRepository toolCalls,
+                                                 ReportCompletedNotifier notifier,
+                                                 ArtifactStore artifacts,
                                                  SlaPolicy sla,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
-                slots, sla, AlertClock.system(), slotScope);
+                slots, investigationResults, toolCalls, notifier, artifacts,
+                sla, AlertClock.system(), slotScope);
     }
 
     @Bean
     public RcaWorker rcaWorker(RcaTaskRepository tasks,
                                RcaRunRepository runs,
                                RcaAttemptRepository attempts,
+                               InvestigationResultRepository investigationResults,
                                IncidentRepository incidents,
                                SchedulerSlotRepository slots,
                                ExternalInvocationRepository invocations,
@@ -175,13 +211,15 @@ public class AlertFlowConfig {
                                // (宽限必须 > 单次调查最长在途窗,否则会把真在跑的调用误标 UNKNOWN)
                                @Value("${app.alert.worker.retry-backoff:PT1M}") Duration retryBackoff,
                                @Value("${app.alert.holmes.read-timeout:PT8M}") Duration holmesReadTimeout,
-                               @Value("${app.alert.worker.hanging-grace:}") String hangingGraceOverride) {
+                               @Value("${app.alert.worker.hanging-grace:}") String hangingGraceOverride,
+                               @Value("${app.alert.holmes.expected-schema-version:2}") int investigationSchemaVersion) {
         Duration hangingGrace = hangingGraceOverride == null || hangingGraceOverride.isBlank()
                 ? holmesReadTimeout.plus(Duration.ofMinutes(2))
                 : Duration.parse(hangingGraceOverride);
-        return new RcaWorker(tasks, runs, attempts, incidents, slots, invocations,
-                executor, orchestrator, tx, AlertClock.system(), owner, slotScope,
-                taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace);
+        return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
+                invocations, executor, orchestrator, tx, AlertClock.system(), owner, slotScope,
+                taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace,
+                investigationSchemaVersion);
     }
 
     /** 两个消费循环（inbox 投影 + RCA worker）随容器启停（T10 部署启动真执行链） */
