@@ -1,0 +1,32 @@
+# notify-app（AM3 §3.2）：DB 身份 notify_app（V9 授权面）；webhook/secret 仅 env 注入（INV-AM3-3）
+spring:
+  application:
+    name: notify-app
+  datasource:
+    url: ${NOTIFY_DB_URL:jdbc:postgresql://postgres:5432/control}
+    username: notify_app
+    # 密码仅 env 注入，禁止落库/落文件
+    password: ${NOTIFY_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 2
+      connection-timeout: 5000
+
+server:
+  port: 8082
+
+app:
+  notify:
+    # 渠道清单（逗号分隔）与档位（M3-22 三档冻结：VALIDATE_ONLY/TEST_CHANNEL/LIVE）
+    channel-names: ${NOTIFY_CHANNELS:dingtalk-test}
+    channels:
+      dingtalk-test:
+        platform: dingtalk
+        tier: TEST_CHANNEL
+    lease-seconds: 60
+    batch-size: 10
+    idle-sleep-ms: 2000
+    error-sleep-ms: 10000
+    retry-base-seconds: 30
+    retry-cap-seconds: 1800
+    max-field-chars: 500
+    max-total-chars: 3800

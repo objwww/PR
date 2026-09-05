@@ -23,6 +23,7 @@
         <module>control-app</module>
         <module>order-arena</module>
         <module>arena-chaos-admin</module>
+        <module>notify-app</module>
     </modules>
 
     <properties>
