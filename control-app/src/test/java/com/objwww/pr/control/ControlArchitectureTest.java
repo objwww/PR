@@ -72,7 +72,7 @@ class ControlArchitectureTest {
 
     /**
      * INV-AM4-1（AM4 §3.0 R3）：AM4 新增 domain 子包（dag/tool/budget/claim）零框架——
-     * Spring/Jackson/JDBC/HTTP 一律禁入（CanonicalJson 自实现规范化正是为了不引 Jackson）。
+     * Spring/Jackson/JDBC/HTTP 一律禁入（InternalCanonicalJsonV1 自实现规范化正是为了不引 Jackson）。
      *
      * <p>方法名说明：任务原拟名 alertDomainHasNoFrameworkDependency 与既有 AFT-A01 方法重名，
      * 故命名 am4AlertDomainZeroFrameworkDependency。
@@ -86,7 +86,7 @@ class ControlArchitectureTest {
      *   <li>绿：收窄到 AM4 四子包后通过；既有 AFT-A01（允许 jackson）保持原状不动。</li>
      * </ul>
      * 遗留冲突：EvidencePackageValidator 为 AM1 既有类、本批次禁改既有文件，故暂不在
-     * 本规则覆盖面内；待其迁移到 CanonicalJson 后可将本规则扩至整个 alert.domain。
+     * 本规则覆盖面内；待其迁移到 InternalCanonicalJsonV1 后可将本规则扩至整个 alert.domain。
      */
     @Test
     void am4AlertDomainZeroFrameworkDependency() {
