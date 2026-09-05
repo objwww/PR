@@ -88,6 +88,8 @@ services:
       FLYWAY_USER: postgres # owner 身份（DDL）；该凭证不进入任何业务容器
       FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:?}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      # V9（M3-03）：notify_app 角色创建走 Flyway placeholder（AM3 评审纠正：不在 01-roles.sh 提前建）
+      FLYWAY_PLACEHOLDERS_NOTIFY_PASSWORD: ${NOTIFY_DB_PASSWORD:?}
     volumes:
       # 直挂 control-app 资源目录（单一事实源）：V1~V7 改动只改一处，杜绝部署副本漂移
       - ../control-app/src/main/resources/db/migration:/flyway/sql:ro

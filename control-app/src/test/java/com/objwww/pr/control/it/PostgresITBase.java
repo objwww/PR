@@ -14,6 +14,7 @@ import com.objwww.pr.shared.Digest;
 
 import javax.sql.DataSource;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -40,17 +41,23 @@ public abstract class PostgresITBase {
 
     protected static final String CONTROL_ROLE = "control_app";
     protected static final String PUBLISHER_ROLE = "publisher_app";
+    protected static final String NOTIFY_ROLE = "notify_app";
+    protected static final String EVAL_ROLE = "eval_app";
     protected static final String CONTROL_PASSWORD = "it-control-pass";
     protected static final String PUBLISHER_PASSWORD = "it-publisher-pass";
+    protected static final String NOTIFY_PASSWORD = "it-notify-pass";
+    protected static final String EVAL_PASSWORD = "it-eval-pass";
 
-    /** V1 的 12 张 + V3/V4/V5/V6 新表 + V7 告警域 9 表 + V8 DAG 预留表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
+    /** V1 的 12 张 + V3/V4/V5/V6 新表 + V7 告警域 9 表 + V8 DAG 预留表 + V9 AM3 四表
+     *  （TRUNCATE 清场顺序无关，CASCADE 兜底） */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
             "review_finding", "artifact", "webhook_inbox", "step_checkpoint", "repair_request",
             "model_call_ledger", "tool_call", "sandbox_job", "artifact_grant",
             "alert_inbox", "alert_event", "incident", "rca_run", "rca_task", "rca_attempt",
-            "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge");
+            "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
+            "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
@@ -62,10 +69,14 @@ public abstract class PostgresITBase {
     private static HikariDataSource adminDs;
     private static HikariDataSource controlDs;
     private static HikariDataSource publisherDs;
+    private static HikariDataSource notifyDs;
+    private static HikariDataSource evalDs;
 
     protected static JdbcClient adminJdbc;
     protected static JdbcClient controlJdbc;
     protected static JdbcClient publisherJdbc;
+    protected static JdbcClient notifyJdbc;
+    protected static JdbcClient evalJdbc;
     protected static TransactionTemplate controlTx;
     protected static TransactionTemplate publisherTx;
 
@@ -78,7 +89,7 @@ public abstract class PostgresITBase {
         adminDs = pool(PG.getUsername(), PG.getPassword(), 2);
         adminJdbc = JdbcClient.create(adminDs);
 
-        // 与 deploy/db/01-roles.sh 等价的幂等角色创建（授权在 V2/V3，以 owner 身份跑 Flyway）
+        // 与 deploy/db/01-roles.sh 等价的幂等角色创建（授权在 V2/V3/V9，以 owner 身份跑 Flyway）
         adminJdbc.sql("""
                 do $$
                 begin
@@ -92,21 +103,40 @@ public abstract class PostgresITBase {
                     else
                         alter role publisher_app with login password '%s';
                     end if;
+                    if not exists (select from pg_roles where rolname = 'notify_app') then
+                        create role notify_app login password '%s';
+                    else
+                        alter role notify_app with login password '%s';
+                    end if;
+                    if not exists (select from pg_roles where rolname = 'eval_app') then
+                        create role eval_app login password '%s';
+                    else
+                        alter role eval_app with login password '%s';
+                    end if;
                 end
                 $$;
-                """.formatted(CONTROL_PASSWORD, CONTROL_PASSWORD, PUBLISHER_PASSWORD, PUBLISHER_PASSWORD))
+                """.formatted(CONTROL_PASSWORD, CONTROL_PASSWORD,
+                PUBLISHER_PASSWORD, PUBLISHER_PASSWORD,
+                NOTIFY_PASSWORD, NOTIFY_PASSWORD,
+                EVAL_PASSWORD, EVAL_PASSWORD))
                 .update();
 
         Flyway.configure()
                 .dataSource(adminDs)
                 .locations("classpath:db/migration")
+                // V9 的 notify_app 角色密码走 placeholder（部署面由 migrate 服务注入，同语义）
+                .placeholders(Map.of("notify_password", NOTIFY_PASSWORD))
                 .load()
                 .migrate();
 
         controlDs = pool(CONTROL_ROLE, CONTROL_PASSWORD, 24);
         publisherDs = pool(PUBLISHER_ROLE, PUBLISHER_PASSWORD, 6);
+        notifyDs = pool(NOTIFY_ROLE, NOTIFY_PASSWORD, 6);
+        evalDs = pool(EVAL_ROLE, EVAL_PASSWORD, 6);
         controlJdbc = JdbcClient.create(controlDs);
         publisherJdbc = JdbcClient.create(publisherDs);
+        notifyJdbc = JdbcClient.create(notifyDs);
+        evalJdbc = JdbcClient.create(evalDs);
         controlTx = new TransactionTemplate(new DataSourceTransactionManager(controlDs));
         publisherTx = new TransactionTemplate(new DataSourceTransactionManager(publisherDs));
     }

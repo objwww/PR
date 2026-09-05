@@ -110,11 +110,10 @@ public class AlertFlowConfig {
     @Bean
     public EvidencePackageValidator evidencePackageValidator(
             @Value("${app.alert.holmes.max-response-bytes:1048576}") int maxResponseBytes,
-            @Value("${app.alert.holmes.expected-schema-version:1}") int expectedSchemaVersion,
             @Value("${app.alert.holmes.max-evidence-items:20}") int maxEvidenceItems,
             @Value("${app.alert.holmes.max-field-chars:4000}") int maxFieldChars) {
-        return new EvidencePackageValidator(maxResponseBytes, expectedSchemaVersion,
-                maxEvidenceItems, maxFieldChars);
+        // M3-02：schema_version 按包内显式路由（v1/v2），不再由配置指定期望版本
+        return new EvidencePackageValidator(maxResponseBytes, maxEvidenceItems, maxFieldChars);
     }
 
     @Bean

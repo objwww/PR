@@ -77,7 +77,7 @@ class HolmesInvestigationExecutorWireMockTest {
         holmes = new WireMockServer(0);
         holmes.start();
         stores = new AlertInMemoryStores();
-        validator = new EvidencePackageValidator(1024 * 1024, 1, 20, 4000);
+        validator = new EvidencePackageValidator(1024 * 1024, 20, 4000);
         HolmesClient client = new HolmesClient(holmes.baseUrl(), API_KEY,
                 Duration.ofSeconds(2), Duration.ofMillis(600), 1024 * 1024);
         executor = new HolmesInvestigationExecutor(client, stores.events,
@@ -343,7 +343,7 @@ class HolmesInvestigationExecutorWireMockTest {
     void exA07_oversizeRejected() {
         HolmesClient client = new HolmesClient(holmes.baseUrl(), API_KEY,
                 Duration.ofSeconds(2), Duration.ofSeconds(2), 1024 * 1024);
-        EvidencePackageValidator tight = new EvidencePackageValidator(200, 1, 20, 4000);
+        EvidencePackageValidator tight = new EvidencePackageValidator(200, 20, 4000);
         HolmesInvestigationExecutor tightExecutor = new HolmesInvestigationExecutor(client,
                 stores.events, stores.invocations, TransactionOperations.withoutTransaction(),
                 tight, new FixedClock(), "deepseek-v3", "1.5.1", 20, Duration.ofMillis(50), 1);
@@ -416,14 +416,27 @@ class HolmesInvestigationExecutorWireMockTest {
     }
 
     @Test
-    @DisplayName("EX-A07 schema_version 不符：REJECTED_SCHEMA_VERSION")
+    @DisplayName("EX-A07 schema_version 不符：REJECTED_SCHEMA_VERSION（未知版本禁止猜）")
     void exA07_schemaVersionMismatchRejected() throws Exception {
-        String pkg = validPackage().replace("\"schema_version\":1", "\"schema_version\":2");
+        // M3-02 起 v2 是合法版本；版本拒绝只针对路由表外的未知版本
+        String pkg = validPackage().replace("\"schema_version\":1", "\"schema_version\":3");
         stubOk(chatBody(pkg, null, null, null));
 
         RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
 
         assertThat(result.errorClass()).isEqualTo("REJECTED_SCHEMA_VERSION");
+        assertThat(result.report()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("M3-02 路由：v1 形状冒充 v2 → 走 v2 类型化链路被结构拒绝")
+    void m3v2Routing_v1ShapeStampedV2IsSchemaMismatch() throws Exception {
+        String pkg = validPackage().replace("\"schema_version\":1", "\"schema_version\":2");
+        stubOk(chatBody(pkg, null, null, null));
+
+        RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
+
+        assertThat(result.errorClass()).isEqualTo("REJECTED_SCHEMA_MISMATCH");
         assertThat(result.report()).isEmpty();
     }
 

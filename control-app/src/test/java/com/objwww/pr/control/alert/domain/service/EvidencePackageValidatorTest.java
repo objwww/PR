@@ -16,7 +16,7 @@ class EvidencePackageValidatorTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final EvidencePackageValidator validator =
-            new EvidencePackageValidator(64 * 1024, 1, 10, 2000);
+            new EvidencePackageValidator(64 * 1024, 10, 2000);
 
     /** 组装 Holmes /api/chat 响应（官方 ChatResponse）：{analysis: "<analysis JSON 字符串>"} */
     private String holmesResponse(String analysisJson) throws Exception {
@@ -60,7 +60,8 @@ class EvidencePackageValidatorTest {
 
     @Test
     void wrongSchemaVersionIsRejected() throws Exception {
-        String pkg = validPackage().replace("\"schema_version\":1", "\"schema_version\":2");
+        // M3-02 起 v2 是合法版本；版本拒绝只针对路由表外的未知版本（如 3）
+        String pkg = validPackage().replace("\"schema_version\":1", "\"schema_version\":3");
         var result = validator.validate(holmesResponse(pkg));
 
         assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_SCHEMA_VERSION);
@@ -68,7 +69,7 @@ class EvidencePackageValidatorTest {
 
     @Test
     void oversizeResponseIsRejected() throws Exception {
-        EvidencePackageValidator tight = new EvidencePackageValidator(100, 1, 10, 2000);
+        EvidencePackageValidator tight = new EvidencePackageValidator(100, 10, 2000);
         var result = tight.validate(holmesResponse(validPackage()));
 
         assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_OVERSIZE);
@@ -99,7 +100,7 @@ class EvidencePackageValidatorTest {
     @Test
     @DisplayName("BA-14:围栏外的散文前后缀不参与验证,提取后照走完整链(坏包照样拒)")
     void fencedBadPackageStillRejected() throws Exception {
-        String fenced = "结论如下:\n```json\n" + validPackage().replace("\"schema_version\":1", "\"schema_version\":2")
+        String fenced = "结论如下:\n```json\n" + validPackage().replace("\"schema_version\":1", "\"schema_version\":3")
                 + "\n```\n以上。";
         var result = validator.validate(holmesResponse(fenced));
 
@@ -136,7 +137,7 @@ class EvidencePackageValidatorTest {
 
     @Test
     void evidenceOverflowAndFieldTooLongAreRejected() throws Exception {
-        EvidencePackageValidator tight = new EvidencePackageValidator(64 * 1024, 1, 2, 10);
+        EvidencePackageValidator tight = new EvidencePackageValidator(64 * 1024, 2, 10);
 
         ObjectNode pkg = (ObjectNode) mapper.readTree(validPackage());
         ArrayNode evidence = (ArrayNode) pkg.get("evidence");
@@ -149,7 +150,7 @@ class EvidencePackageValidatorTest {
 
     @Test
     void secretsAreRedactedFromRawTextBeforePersistence() {
-        // INV-AM1-8 / EX-A13：密钥与敏感字符脱敏后才入库
+        // INV-AM1-8 / EX-A13：密钥与敏感字串脱敏后才入库
         String raw = "key=sk-AbCdEf1234567890 auth=Bearer eyJhbGciOi.abc hash=deadbeefdeadbeefdeadbeefdeadbeef";
         String out = validator.redact(raw);
 
@@ -157,5 +158,107 @@ class EvidencePackageValidatorTest {
                 .doesNotContain("eyJhbGciOi.abc")
                 .doesNotContain("deadbeefdeadbeefdeadbeefdeadbeef")
                 .contains("****");
+    }
+
+    // ---------------------------------------------------------------- M3-02：v1/v2 路由
+
+    /** 合法 v2 包（类型化 root_cause + claims） */
+    private String validV2Package() {
+        ObjectNode pkg = mapper.createObjectNode();
+        pkg.put("schema_version", 2);
+        pkg.put("summary", "checkout 错误率超阈值");
+        ObjectNode rc = pkg.putObject("root_cause");
+        rc.put("component", "payment");
+        rc.put("fault_type", "business_error_rate");
+        rc.put("reason_code", "paymentFailure=50%");
+        ObjectNode c1 = pkg.putArray("claims").addObject();
+        c1.put("claim_type", "root_cause");
+        c1.put("status", "TRUE");
+        c1.put("component", "payment");
+        c1.put("fault_type", "business_error_rate");
+        c1.putArray("symptom_codes").add("PAYMENT_5XX_HIGH");
+        c1.putArray("evidence_refs").add("prometheus://query/5xx_rate");
+        pkg.putArray("evidence").add("Prometheus 查询显示 5xx 占比 0.5");
+        pkg.put("impact", "支付成功率下降");
+        pkg.put("remediation", "关闭故障注入开关");
+        pkg.putArray("references").addObject().put("artifact_ref", "prometheus://query/5xx_rate");
+        return pkg.toString();
+    }
+
+    @Test
+    @DisplayName("M3-02:合法 v2 包走类型化链路,Result 带 typedPackage")
+    void validV2PackageRoutesToTypedPath() throws Exception {
+        var result = validator.validate(holmesResponse(validV2Package()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.STRUCTURE_VALIDATED);
+        assertThat(result.schemaVersion()).isEqualTo(2);
+        assertThat(result.typedPackage()).isNotNull();
+        assertThat(result.typedPackage().rootCause().component()).isEqualTo("payment");
+        assertThat(result.typedPackage().claims()).hasSize(1);
+        assertThat(result.packageJson()).contains("\"root_cause\"").contains("\"claims\"");
+    }
+
+    @Test
+    @DisplayName("M3-02:v1 包行为原样回归(typedPackage 为空)")
+    void v1PackageStillValidatesUntouched() throws Exception {
+        var result = validator.validate(holmesResponse(validPackage()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.STRUCTURE_VALIDATED);
+        assertThat(result.schemaVersion()).isEqualTo(1);
+        assertThat(result.typedPackage()).isNull();
+    }
+
+    @Test
+    @DisplayName("M3-02:未知 schema_version 显式拒绝,禁止猜版本")
+    void unknownSchemaVersionIsRejected() throws Exception {
+        ObjectNode pkg = (ObjectNode) mapper.readTree(validPackage());
+        pkg.put("schema_version", 3);
+        var result = validator.validate(holmesResponse(pkg.toString()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_SCHEMA_VERSION);
+        assertThat(result.errors()).anyMatch(e -> e.contains("禁止猜版本"));
+    }
+
+    @Test
+    @DisplayName("M3-02:v2 包 root_cause 若还是自由文本 → 结构拒绝")
+    void v2WithFreeTextRootCauseIsRejected() throws Exception {
+        ObjectNode pkg = (ObjectNode) mapper.readTree(validV2Package());
+        pkg.put("root_cause", "flagd 注入");
+        var result = validator.validate(holmesResponse(pkg.toString()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_SCHEMA_MISMATCH);
+        assertThat(result.errors()).anyMatch(e -> e.contains("root_cause"));
+    }
+
+    @Test
+    @DisplayName("M3-02:v2 类型化字段违规(blank component)进拒绝原因链")
+    void v2TypedFieldViolationIsRejected() throws Exception {
+        ObjectNode pkg = (ObjectNode) mapper.readTree(validV2Package());
+        ((ObjectNode) pkg.get("root_cause")).put("component", " ");
+        var result = validator.validate(holmesResponse(pkg.toString()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_SCHEMA_MISMATCH);
+        assertThat(result.errors()).anyMatch(e -> e.contains("component"));
+    }
+
+    @Test
+    @DisplayName("M3-02:BA-14 围栏包裹的 v2 包同样提取后走类型化链路")
+    void fencedV2PackageIsExtractedAndValidated() throws Exception {
+        String fenced = "```json\n" + validV2Package() + "\n```";
+        var result = validator.validate(holmesResponse(fenced));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.STRUCTURE_VALIDATED);
+        assertThat(result.schemaVersion()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("M3-02:v2 共享政策仍生效(references 白名单/字段超长)")
+    void v2SharedPolicyStillApplies() throws Exception {
+        ObjectNode pkg = (ObjectNode) mapper.readTree(validV2Package());
+        ((ArrayNode) pkg.get("references")).addObject().put("artifact_ref", "https://evil.example/x");
+        var result = validator.validate(holmesResponse(pkg.toString()));
+
+        assertThat(result.status()).isEqualTo(ValidationStatus.REJECTED_SCHEMA_MISMATCH);
+        assertThat(result.errors()).anyMatch(e -> e.contains("artifact_ref"));
     }
 }
