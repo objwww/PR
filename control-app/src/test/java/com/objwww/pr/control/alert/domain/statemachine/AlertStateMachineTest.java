@@ -152,6 +152,50 @@ class AlertStateMachineTest {
                         com.objwww.pr.control.alert.domain.model.InboxDecision.SUPPRESSED);
     }
 
+    // ---------------- UT-A05 ReportPublication（六态，M3-09 冻结） ----------------
+
+    @Test
+    void utA05PublicationMachineExhaustive() {
+        var P = com.objwww.pr.control.alert.domain.model.PublicationState.PENDING;
+        var RDY = com.objwww.pr.control.alert.domain.model.PublicationState.READY;
+        var S = com.objwww.pr.control.alert.domain.model.PublicationState.SENT;
+        var RW = com.objwww.pr.control.alert.domain.model.PublicationState.RETRY_WAIT;
+        var D = com.objwww.pr.control.alert.domain.model.PublicationState.DEAD;
+        var SUP = com.objwww.pr.control.alert.domain.model.PublicationState.SUPPRESSED;
+
+        Map<com.objwww.pr.control.alert.domain.model.PublicationState,
+                Set<com.objwww.pr.control.alert.domain.model.PublicationState>> expected = Map.of(
+                P, Set.of(RDY, SUP),            // 出生后就绪 / 出生即抑制（不发布的报告）
+                RDY, Set.of(S, RW, D),          // 送达 / 429·5xx 退避 / 4xx·耗尽
+                RW, Set.of(RDY, D));            // 退避到期重投 / 退避耗尽
+
+        assertExhaustive(com.objwww.pr.control.alert.domain.model.PublicationState.class,
+                expected, ReportPublicationStateMachine::allowed);
+        assertIllegalThrows(com.objwww.pr.control.alert.domain.model.PublicationState.class,
+                expected, ReportPublicationStateMachine::requireTransition);
+    }
+
+    @Test
+    void utA05PublicationTerminalSemantics() {
+        // 三终态无出边（穷举已证非法回流），此处锚定最危险的"SENT 复活"与"DEAD 自动重发"
+        assertThatThrownBy(() -> ReportPublicationStateMachine.requireTransition(
+                com.objwww.pr.control.alert.domain.model.PublicationState.SENT,
+                com.objwww.pr.control.alert.domain.model.PublicationState.READY))
+                .isInstanceOf(IllegalTransitionException.class);
+        assertThatThrownBy(() -> ReportPublicationStateMachine.requireTransition(
+                com.objwww.pr.control.alert.domain.model.PublicationState.DEAD,
+                com.objwww.pr.control.alert.domain.model.PublicationState.RETRY_WAIT))
+                .isInstanceOf(IllegalTransitionException.class);
+        // UNKNOWN 不自动重发：没有 UNKNOWN 态，重投只经 RETRY_WAIT→READY 一条边
+        assertThat(com.objwww.pr.control.alert.domain.model.PublicationState.values())
+                .containsExactly(com.objwww.pr.control.alert.domain.model.PublicationState.PENDING,
+                        com.objwww.pr.control.alert.domain.model.PublicationState.READY,
+                        com.objwww.pr.control.alert.domain.model.PublicationState.SENT,
+                        com.objwww.pr.control.alert.domain.model.PublicationState.RETRY_WAIT,
+                        com.objwww.pr.control.alert.domain.model.PublicationState.DEAD,
+                        com.objwww.pr.control.alert.domain.model.PublicationState.SUPPRESSED);
+    }
+
     // ---------------- G0-05/06/07 显式非法迁移锚点（接线验收） ----------------
 
     @Test

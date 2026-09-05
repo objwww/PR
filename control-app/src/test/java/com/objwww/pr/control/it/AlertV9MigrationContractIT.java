@@ -214,6 +214,24 @@ class AlertV9MigrationContractIT extends PostgresITBase {
     }
 
     @Test
+    void rcaReportIsImmutableAtDbLevel() {
+        Seed seed = seedAlertChain();
+        UUID reportId = seedReport(seed);
+
+        // 报告不可变（BA-10②）：control_app 只有 select,insert（V7 L348），
+        // UPDATE/DELETE 在权限面直接拒绝（零行也拒——权限检查先于扫描）
+        assertThat(chainContains(() -> controlJdbc.sql(
+                        "UPDATE rca_report SET raw_text = raw_text WHERE false").update(),
+                "permission denied")).isTrue();
+        assertThat(chainContains(() -> controlJdbc.sql(
+                        "DELETE FROM rca_report WHERE false").update(),
+                "permission denied")).isTrue();
+        // 读回路径畅通
+        assertThat(controlJdbc.sql("SELECT count(*) FROM rca_report WHERE id = :id")
+                .param("id", reportId).query(Long.class).single()).isEqualTo(1L);
+    }
+
+    @Test
     void publicationStateMachineChecks() {
         Seed seed = seedAlertChain();
         UUID reportId = seedReport(seed);
