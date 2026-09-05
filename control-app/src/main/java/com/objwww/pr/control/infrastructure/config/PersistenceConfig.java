@@ -136,4 +136,12 @@ public class PersistenceConfig {
             JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository(jdbc);
     }
+
+    // ---------------- AM3 评测持久化（V10，M3-14 装配；生产消费方 = M3-15 eval profile） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalRunRepository evalRunRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEvalRunRepository(jdbc);
+    }
 }

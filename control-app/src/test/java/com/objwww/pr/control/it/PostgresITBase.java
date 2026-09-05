@@ -49,7 +49,7 @@ public abstract class PostgresITBase {
     protected static final String EVAL_PASSWORD = "it-eval-pass";
 
     /** V1 的 12 张 + V3/V4/V5/V6 新表 + V7 告警域 9 表 + V8 DAG 预留表 + V9 AM3 四表
-     *  （TRUNCATE 清场顺序无关，CASCADE 兜底） */
+     *  + V10 评测两表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
@@ -57,7 +57,8 @@ public abstract class PostgresITBase {
             "model_call_ledger", "tool_call", "sandbox_job", "artifact_grant",
             "alert_inbox", "alert_event", "incident", "rca_run", "rca_task", "rca_attempt",
             "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
-            "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox");
+            "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox",
+            "eval_case_result", "eval_run");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
