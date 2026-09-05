@@ -16,22 +16,17 @@
 
 **里程碑序列**：AM0 平台拼装 → AM1 接入控制面（control-app 改造）→ AM2 交易域化（订单靶场 + 业务故障注入）→ AM3 评测 + 出口 → AM4+ 压力点驱动。
 
-## 当前状态（2026-09-04 晚）
+## 当前状态（2026-09-05）
 
-**架构状态**：**已定格**（用户确认）。架构基线双文档停止演化（AA 系列封版于 v2.3；FUT 系列以 v1.2 为准）；自此刻起 **G0 收口前不再新增设计文档**——工作重心全面转向代码与证据。
+**架构状态**：**已定格**（用户确认）。AA 系列封版于 v2.3；FUT 系列以 v1.2 为准；G0 已收口，冻结纪律继续：所有工作以代码与证据为中心。
 
-**当前阶段**：**AM1 G0 收口执行完毕（2026-09-04，单 commit 落账不 push，待用户 G2 终审后进 AM2）**。执行依据 = `docs/告警G0-收口技术方案.md`（v1.0，G0-01~10、G0-12 已全部单项验收；G0-11 复核材料即本 commit）；任务树总表 = `docs/告警Agent-增量实现任务拆解-v1.md`；AM1/AM2/AM3 技术方案为设计依据文档。
+**当前阶段**：**AM1 已收官（2026-09-05 G2 用户终审通过 + 已推送 origin/main `4acebce..93d6445`），AM2 靶场动工中**。执行依据 = `docs/告警AM2-落码技术方案.md` v2.0r1（M2-01~28，已对照任务拆分原文逐行校准）；任务树总表 = `docs/告警Agent-增量实现任务拆解-v1.md`；AM1/AM2/AM3 技术方案为设计依据文档。
 
-**执行清单（G0-01~10、G0-12 全部完成 ✅）**：
-- G0-01~09（基线 manifest → 配置键统一 → Holmes key 桥接 → rca_report 自检修正 → 状态机三线接线+episode 乱序修复 → PG IT → AM0 配置回收+Holmes 运行时三修复）：全绿，BA-09/10/11/12 随之关闭
-- G0-10 单链路 E2E：195 真栈全链打通（flagd 注入→Sloth firing→AM 分组→webhook 202→inbox→incident→run/task→Holmes 真 LLM→rca_report STRUCTURE_VALIDATED→resolved 归并 RESOLVED）+ SIGKILL 崩溃演练 + 全流程 5 截图与 DB 终态快照；**BA-14/BA-15 双修复即出自本轮实证**
-- G0-12 BA-13 四条优化：全部落地带单测，已部署 195 重启验证
-- BA 系列收口状态见 `docs/告警-BUGLOG.md`：BA-09~19 已关闭（BA-17/18 为记录/纪律类），BA-20/21 为开放观察项移交 AM2/AM3
-- AM1 方案 v2.2 增量（rca_task_edge + task 预留列）：**经主会话自查纠偏，移交 AM4（M4-01~03），G0 不新增迁移**——V8 编号归还 AM3
+**已备待启**：AM3 施工图 `docs/告警AM3-落码技术方案.md` v1.0（M3-01~30，主会话亲自读任务拆分原文后出具；动工硬前提 = AM2 G2）。
 
-**下一步动作**：用户按 G0-11 复核本 commit（构建绿 + 审查逐条对照 + IT 计数非零 + E2E 证据四件套已齐）→ 裁定 AM1 G2 通过 → 进 AM2（靶场，`docs/告警AM2-落码技术方案.md` v1.0 已备）。
+**移交 AM2 的输入项**：BA-20（靶场设计先用探针实测 SLO 分子语义）、BA-21（severity 不裂单语义显式建模）。
 
-**后台进行中**：harness 设计调研（Claude Code/Codex/OpenHands/DeepSeek 等，产出 `docs/告警-调研-Harness设计-v1.md`）——服务于 AM4 Native 内核设计，不阻塞 G0。
+**后台进行中**：七项备料经 ZCode MCP 派发中——桥有客户端校验 bug（agent-start 报错但服务端部分创建会话）；P1 在跑（run_5430d9ee…，GLM-5.3-Flash）；P2~P7 因工作区独占租约串行，监控 cron `01M1PQ8RSPYZZ6SYNQPMX63ZVZ`（每 11 分钟检查并续派）；2026-09-06 13:00 一次性收取 cron `01M1PPQTMKYZ629H6QZ8F07ACJ`。
 
 **验证终局（G1~G7）**：
 - G1 镜像供应链 ✅（20/20，ghcr 直拉停滞 → 本机 crane 摆渡，记 INC-3）
@@ -154,4 +149,16 @@
 - 2026-09-04 晚：harness 设计调研回收 `docs/告警-调研-Harness设计-v1.md`（35KB）——最值得抄 5 条（Claude Code 权限 harness 强制执行/Codex safety.rs 三态判定/MCP 治理三件套/Holmes spill-to-disk 上下文预算/工具宁少勿多按工作流聚合）+ 拒绝 3 条（Pi YOLO 无权限/auto 模式 LLM 代审/OpenHands 平台化架构）；MCP 接入施工图齐备（命名空间/白黑名单/延迟加载）。证据入 E-15，全部作 AM4 设计素材，不动已定格基线。
 - 2026-09-04 晚：用户指示开始 G1 技术方案 → 主会话出具 `docs/告警AM2-落码技术方案.md` v1.0（AM2 订单靶场施工图，对齐任务树 M2-01~28 四阶段：工程底座/正常订单切片/故障叠加/三场景 E2E+G2，每任务文件级改动点 + 验收命令；设计依据 AM2 v3.0；动工硬前提 = AM1 G0 过 G2），可转执行者备料。
 - 2026-09-04 深夜：**G0 收口执行完毕**（执行依据 `告警G0-收口技术方案.md` v1.0）：G0-01~10、G0-12 全部单项验收通过；G0-10 单链路 E2E 195 真栈全绿（flagd 注入→Sloth firing→AM 投递→webhook→投影→Holmes 真 LLM→结构验证报告→SIGKILL 崩溃演练→真实 resolved 归并，全流程 5 截图+DB 终态快照）；**BA-14（response_format 被忽略→散文拒收）/BA-15（bash 工具诱导 kubectl+prometheus 工具集静默禁用）双修复出自 E2E 实证**；G0-12 四条优化带单测并部署 195。缺陷账：BA-09~17 关闭、BA-18 纪律固化、BA-20/21 开放观察项移交 AM2/AM3。本地全量 215 tests 0 fail（2 skip=需 docker 的 PG IT），195 真 PG IT 真跑。全部成果**单个 commit 落账（不 push）**；G0-11 G2 复核材料即该 commit，待用户终审后进 AM2。
-- 2026-09-05：**主会话 G0-11 复审（四件套）全过**：① 构建绿（BUILD SUCCESS，215 tests 0 failures 2 skipped）；② 逐项抽查：配置键统一/Holmes key 桥接/rca_report 自检挪组/三台状态机接线/episode 乱序修复（IncidentProjector:206 迟到 firing 只计数不复活）/Holmes 响应限读/UNKNOWN 账本/Hikari 12+5000ms（application-docker.yml）全部落实；③ IT 非零（failsafe-reports 含 AlertV7MigrationContractIT + PostgresRcaTaskRepositoryIT）；④ E2E 证据完整且含诚实声明（过程日志丢失记 BA-16）。**AM1 G2 待用户终审确认**。遗留：BA-13 优化项未逐条核验（非阻塞）；BA-20/21 为 AM2/AM3 输入。
+- 2026-09-05：**主会话 G0-11 复审（四件套）全过**：① 构建绿（BUILD SUCCESS，215 tests 0 failures 2 skipped）；② 逐项抽查：配置键统一/Holmes key 桥接/rca_report 自检挪组/三台状态机接线/episode 乱序修复/Holmes 响应限读/UNKNOWN 账本/Hikari 显式配置全部落实；③ IT 非零（failsafe 含 AlertV7MigrationContractIT + PostgresRcaTaskRepositoryIT）；④ E2E 证据完整且含诚实声明（BA-16）。遗留：BA-13 未逐条核验（非阻塞）；BA-20/21 移交 AM2/AM3。
+- 2026-09-05：**AM1 G2 用户终审通过（"am1确认"）+ 推送完成**：commit `4acebce`（G0 收口）+ `93d6445`（G2 台账）已推送 origin/main（5686d28..93d6445）。注：本机直连 GitHub 不通，推送经本地代理 127.0.0.1:7890（git -c http.proxy 一次性指定，未改 git 全局配置——后续推送如遇同样问题照此办理）。**AM1 阶段正式收官，AM2 订单靶场解锁**，执行依据 `docs/告警AM2-落码技术方案.md` v2.0r1（M2-01~28）。
+- 2026-09-05：用户指示开启下一个技术方案 → 主会话**先亲自读任务拆分 M3 原文（173~220 行）再动笔**（纪律修正后首次执行），出具 `docs/告警AM3-落码技术方案.md` v1.0（M3-01~30 三阶段施工图：契约与持久化/评分闭环/通知成本观测；含 V8 迁移四表、EvidencePackage v2、三指标纯函数、eval-runner 独立身份、LiteLLM 一对多对账、Holmes 预算 spike；动工硬前提 = AM2 G2）。AM2 方案自查补 M2-01 Dockerfile/512MiB + C-1 术语说明（v2.0r1）。
+- 2026-09-05：评审校准 AM2/AM3 边界（AM2 只做故障/真值/映射/恢复，不越界建评分器与批量评测）→ 落码方案修正：M2-03 不创建 notify_app（归 AM3 M3-03/V8）、M2-24 增 ScenarioMapExportV1 交接契约及测试、M2-25~27 明确每场景一次；AM3 v3.0 §6.1 角色创建分工纠正 + T 编号声明为设计工作包。七项并行备料任务由**用户自行派送**第三方 agent，派送单 = `docs/告警-并行任务-七项备料.md`（P1 Holmes 预算 spike / P2 bench 基线 / P3 conftest 策略 / P4 模型输出稳定性 / P5 同义词+场景清单 / P6 prometheus-mcp 验证 / P7 195 内存水位）。
+- 2026-09-05：评审第三轮（AM3 数据契约 8 P0 + P1）全部采纳 → `docs/告警AM3-落码技术方案.md` 升 v1.1（迁移拆 V8/V9、generation 栅栏列、attempt 全程落档 STARTED 先行、统一 ScenarioDriver 三实现、S2 换 flagd paymentUnreachable、GT 延迟授权、评分对象选择规则、对账降级链、通知三档、Holmes 服务端日志脱敏、可复现元数据扩展、评测时间参数显式化）；AM3 v3.0 同步升 v3.0r1。评审第四轮（E2E 太粗）→ §12 新增 E2E-M3-01~08 八链矩阵（v3.0r2 + 落码方案 v1.2），M3-30 升为八链最终部署门。
+- 2026-09-05 凌晨：七项备料改派 ZCode MCP（用户指示）——派发发现桥 bug：agent-start 客户端校验报错 `data/threadId must be string`，但服务端实际可能已建会话（P1 即如此）；用户侧修复 `~/.zcode/cli/config.json`（model.main/provider 缺失致冷启动失败，GLM-5.3-Flash 已配）。工作区独占租约导致同时只能跑一个 → 改串行派发 + 监控 cron 续派。P1（Holmes 预算 spike）运行中。
+- 2026-09-05 凌晨：P1（Holmes 预算 spike）主体完成——结论：holmes 原生只能 BEST_EFFORT（max_steps/max_tokens 实测硬拦，无 token/成本预算参数），metadata 透传双通道实证可达（EXTRA_HEADERS + extra_body spend_logs_metadata 正中 LiteLLM SpendLogs 白名单）；**重要发现：LiteLLM proxy 在 holmes 镜像内因缺 Prisma binaries 起不来（M3-24 部署路径须改官方镜像）**；空载 prompt 底座实测 4545 token（预算校准基线）。run 超时终止，差 Exp5 proxy 硬拦证据与清单回填；恢复 run 卡资源等待（session is not ready），新会话派发双侧失败——桥故障升级，监控 cron 已换修订版（每 17 分钟，桥恢复才续派 P2~P7，不空转）。证据：docs/测试证据/AM3/spike-holmes-budget/
+- 2026-09-05 午：**七项备料全部完成**（P1~P7 ✅，完成清单全部回填）：P1 Holmes 预算 spike（原生 BEST_EFFORT + metadata 双通道可达 + LiteLLM proxy 在 holmes 镜像缺 Prisma 起不来）；P2 bench 基线（117 项，整改清单：pids_limit 全缺/健康检查缺/CPU 限额缺等）；P3 conftest 7 deny+1 warn（25/25 正反样本绿 + 195 实栈 18 违规清单）；P4 模型输出稳定性 180 调用（文字硬指令是唯一有效载体、response_format 在此端点零约束、qwen-plus 裸 API 可用澄清 AM0 结论）；P5 同义词词典+场景清单（含四组 ExportV1 映射对齐 + F2 指标名分歧上报）；P6 prometheus-mcp 验证（主会话接管停滞会话直接执行：crane 摆渡 + 只读白名单 + query 闭环，RSS 62.6M）；P7 195 内存水位（ZCode 侧精测修正主会话初稿：available 4.25G、AM3 最坏 +800M 可容纳、node_exporter 缺失致三级闸不可评估、磁盘 74% 先到瓶颈）。桥故障期间 ZCode 侧自治推进 P2~P5/P7，主会话接管 P6 与 P1 回填；两个监控 cron（含明 13:00 收取）已删。
+- 2026-09-05：**AM2 阶段一~三落码完成**（执行依据 `告警AM2-落码技术方案.md` v2.0r1，M2-01~28 顺序执行）：阶段一工程底座（order-arena/arena-chaos-admin 双模块 + V1~V3 迁移 + docker compose + CI 门）；阶段二正常订单纵向切片（两步创单/幂等/资源台账/补偿出箱/流量发生器）；阶段三故障叠加（ChaosSwitchboard/三故障 F1/F2/F3 注入与恢复/DomainProbe 三台账指标/场景图 oa_scenario_map/管理面 API）；每阶段本地门 `mvn test` 全绿（order-arena 43 UT）。
+- 2026-09-05 深夜：**AM2 阶段四部署门完成**：195 真栈重建（deploy/alert/docker-compose.yml，双 arena 容器 healthy——Ubuntu 26.04 bash 5.3 禁 /dev/tcp 改 wget 健康检查）；order-arena 11 IT + arena-chaos-admin IT 195 真 PG 真跑；promtool 双检 5 用例全过（time() 是相对评估时刻的坑实测修正）；INV-AM2-1~7 逐条落码实证。三场景 E2E 驱动/编排器/侦听器落 `var/e2e/`（arena-e2e-cli 容器 eval-mgmt+alert-net 双网，slot=1 串行，run tag 派生全部场景名防 uq_chaos_scenario 烧名）。
+- 2026-09-05 深夜：**E2E attempt 1~7 排障七轮**（详单）：①驱动缺 sku 参数/②V5 uq_scenario_map_fp 全局唯一过严激活 409 → V6 迁移 drop（BA-23）/③switchboard 2s 可丢缓存激活竞态（激活后等 3s）/④**C-6 指纹算法 ground-truth 修正**——AM 实测 0d7404ae811ae84a vs 冻结 0815624c44921472，17 变体枚举锁定"每对尾随 0xff 含末对"形态，Java/测试/驱动三端改齐（BA-22）/⑤侦听器依赖 incident.current_rca_run_id（run 完成即被清除）→ v2 三独立查询（BA-26）/⑥驱动跨进程订单号不传递 + TTL 断言元组笔误 + dpc02 漏 sku + 编排器只 grep FAIL 漏 Traceback 假绿/⑦幂等重放契约实测 200 replayed=true 返回原单（非 409），断言改按真实契约。期间 ssh 断连一次，远端脚本因 tee 持句柄存活自跑完成（F2/F3 下游链意外先证全通）。
+- 2026-09-05：**E2E attempt 8 真全绿（run tag 0905040208）**：preflight/F1/F2/F3 phase1+phase2/TTL/DP-C02 八阶段退出码全 0，RESULT: ALL PASS（判定已含退出码+Traceback 双查）。三场景指纹三重一致（F1=0d7404ae811ae84a/F2=653693464eea7e9b/F3=f95e79c26f0e7b4c）；恢复语义全实证（F1 canonical 保留+重复废单、F2 事实驱动回跳+审计一一配对、F3 拒绝废单+迟到补 ENABLE）；TTL 30s 自愈 CLOSED+RECOVERED；DP-C02 流量/幂等重放/探针全过；落库终态 4 会话 CLOSED、scenario_map v1/v2 指纹全对、incident 全 RESOLVED、run 全 SUCCEEDED、报告全 STRUCTURE_VALIDATED。manifest 四件套关联实 ID 记录于证据包 README。证据：`docs/测试证据/AM2/`。
+- 2026-09-05：**DoD 全门 mvn clean verify 揪出指纹残留并收口**：ChaosActivationLifecycleIT 两处硬编码旧指纹 46bc3a8af2447e6c（C-6 修正时只改了单测向量漏了 IT）→ 改为冻结值 f95e79c26f0e7b4c；ChaosAdminControllerTest 桩值同批对齐。**全门终验（195，docker 守护态）：ExitCode=0，failsafe 71 IT 全绿**（order-arena 9 类 54 + arena-chaos-admin 8 + control-app 回归 9，全 0 失败 0 错误）；教训入账：`-q` 静默模式全绿时无任何汇总输出，勿把安静当挂死，守护态容器 ExitCode 才是判定源。文档三件套同步（测试记录 AM2 章节 + BUGLOG BA-22~26）；证据归档 `docs/测试证据/AM2/`（E2E 全绿日志 + 全门日志 + 五脚本 + README 含 DP-C01~07 实例化、manifest 实 ID、诚实声明）。

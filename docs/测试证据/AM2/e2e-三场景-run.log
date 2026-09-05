@@ -1,0 +1,227 @@
+# AM2 M2-25~28 三场景 E2E @ 2026-09-05T04:02:08Z (slot=1 串行)
+
+======== preflight（DP-C04 管理面鉴权面 + 链路可达） ========
+E2E|PASS|pf:arena healthz|
+E2E|PASS|pf:admin healthz|
+E2E|PASS|pf:admin 无 token → 401|401
+E2E|PASS|pf:admin 错 token → 401|401
+E2E|PASS|pf:prometheus healthy|200
+E2E|PASS|pf:alertmanager 可达|200
+E2E|PASS|pf:oa 指标在位|oa_domain_probe_up=1.0
+E2E|INFO|preflight|done tag=0905040208
+E2E|SUBTOTAL|preflight|fail=0
+（preflight 退出码=0）
+
+======== 场景 F1 · phase1（激活→注入→指标→告警→指纹三重对账） ========
+E2E|PASS|p1:F1 本地重算==冻结常量|0d7404ae811ae84a
+E2E|PASS|p1:F1 激活 201|201 {'scenarioId': 'f1-e2e-0905040208', 'alertFingerprint': '0d7404ae811ae84a', 'sessionId': '458e0166-b147-4865-9439-a9a51128aff2', 'generation': 0}
+E2E|INFO|p1:activation|{"scenarioId": "f1-e2e-0905040208", "alertFingerprint": "0d7404ae811ae84a", "sessionId": "458e0166-b147-4865-9439-a9a51128aff2", "generation": 0}
+E2E|PASS|p1:F1 激活响应指纹==冻结|{'scenarioId': 'f1-e2e-0905040208', 'alertFingerprint': '0d7404ae811ae84a', 'sessionId': '458e0166-b147-4865-9439-a9a51128aff2', 'generation': 0}
+E2E|PASS|p1:F1 创单a → 201 ENABLED（幂等旁路生效）|201 {'bookingStatus': 'ENABLED', 'orderId': '72a67174-2ada-42f0-a6aa-24d395fd98b1'}
+E2E|PASS|p1:F1 创单b → 201 ENABLED（幂等旁路生效）|201 {'bookingStatus': 'ENABLED', 'orderId': '4bc377b0-356b-4b38-950a-22b5ed832dcc'}
+E2E|PASS|p1:F1 创单c → 201 ENABLED（幂等旁路生效）|201 {'bookingStatus': 'ENABLED', 'orderId': 'dbc9efc4-4780-4908-bc92-5fae343dd07b'}
+E2E|PASS|p1:F1 三单互异|['72a67174-2ada-42f0-a6aa-24d395fd98b1', '4bc377b0-356b-4b38-950a-22b5ed832dcc', 'dbc9efc4-4780-4908-bc92-5fae343dd07b']
+E2E|INFO|p1:alert-json|{"labels": {"alertname": "ArenaDuplicateOrders", "fault_type": "F1", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}, "annotations": {"summary": "靶场重复单 episode 打开（F1 症状）：同 intent 多个未废订单"}, "state": "firing", "activeAt": "2026-09-05T04:02:58.841504081Z", "value": "2e+00"}
+E2E|PASS|p1:F1 标签集精确一致|{"alertname": "ArenaDuplicateOrders", "fault_type": "F1", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}
+E2E|PASS|p1:F1 指纹三重一致|am=0d7404ae811ae84a recompute=0d7404ae811ae84a frozen=0d7404ae811ae84a
+E2E|SUBTOTAL|phase1|fail=0
+（F1 phase1 退出码=0）
+-------- F1 · incident/Holmes 侦听（alertname=ArenaDuplicateOrders） --------
+WATCH_OK incident=5552d241-77f4-4bcd-abeb-35f3f2f1a90d gen=3 run=c3bb1d72-99cb-4dbc-80b8-a6448919e3af report=9705938e-8e96-4c9c-85eb-0dd0885afc32
+-------- F1 · phase2（回填→off→修复→归零；incident=5552d241-77f4-4bcd-abeb-35f3f2f1a90d run=c3bb1d72-99cb-4dbc-80b8-a6448919e3af report=9705938e-8e96-4c9c-85eb-0dd0885afc32） --------
+E2E|PASS|p2:F1 incident 回填 202 + v2 + 指纹一致|202 {'alertFingerprint': '0d7404ae811ae84a', 'mappingVersion': 2}
+E2E|PASS|p2:F1 off → 202 RECOVERING|202 {'state': 'RECOVERING', 'scenarioId': 'f1-e2e-0905040208'}
+E2E|PASS|p2:F1 canonical 保留 + 重复单废单|a/b/c=('ENABLED', 'DISCARDED', 'DISCARDED')
+E2E|INFO|p2:order-view|{"sku": "sku-std", "correlationId": "chaos-f1e2e-0905040208-a", "quantity": 1, "bookingStatus": "ENABLED", "payStatus": "NOT_PAY", "orderId": "72a67174-2ada-42f0-a6aa-24d395fd98b1", "amount": "10.00", "intentId": "e2e-f1-intent-1-0905040208"}
+E2E|INFO|p2:order-view|{"sku": "sku-std", "correlationId": "chaos-f1e2e-0905040208-b", "quantity": 1, "bookingStatus": "DISCARDED", "payStatus": "NOT_PAY", "orderId": "4bc377b0-356b-4b38-950a-22b5ed832dcc", "amount": "10.00", "intentId": "e2e-f1-intent-1-0905040208"}
+E2E|INFO|p2:order-view|{"sku": "sku-std", "correlationId": "chaos-f1e2e-0905040208-c", "quantity": 1, "bookingStatus": "DISCARDED", "payStatus": "NOT_PAY", "orderId": "dbc9efc4-4780-4908-bc92-5fae343dd07b", "amount": "10.00", "intentId": "e2e-f1-intent-1-0905040208"}
+E2E|PASS|p2:F1 审计含会话级 RECOVERED|{"RECOVERED": 1}
+E2E|PASS|p2:F1 会话 CLOSED（管理面依审计推进）|state=CLOSED
+E2E|PASS|p2:F1 告警回落 + 台账归零|gauge=None
+E2E|INFO|p2:final-status|{"audit": {"RECOVERED": 1}, "session": {"state": "CLOSED", "faultType": "F1", "scenarioId": "f1-e2e-0905040208", "expiresAt": "2026-09-05T04:17:09.102796Z", "generation": 1, "ttlSeconds": 900}}
+E2E|SUBTOTAL|phase2|fail=0
+（F1 phase2 退出码=0）
+-------- F1 manifest 关联（GT/Alert/Incident/Report 一一对应） --------
+  alert=ArenaDuplicateOrders（激活指纹见上方 p1:activation/p1:指纹三重一致）
+  incident_id=5552d241-77f4-4bcd-abeb-35f3f2f1a90d incident_generation=3
+  run_id=c3bb1d72-99cb-4dbc-80b8-a6448919e3af report_id=9705938e-8e96-4c9c-85eb-0dd0885afc32
+
+======== 场景 F2 · phase1（激活→注入→指标→告警→指纹三重对账） ========
+E2E|PASS|p1:F2 本地重算==冻结常量|653693464eea7e9b
+E2E|PASS|p1:F2 激活 201|201 {'scenarioId': 'f2-e2e-0905040208', 'alertFingerprint': '653693464eea7e9b', 'sessionId': 'e5f603b4-b013-4aa7-bac8-0afc7f55cd2c', 'generation': 0}
+E2E|INFO|p1:activation|{"scenarioId": "f2-e2e-0905040208", "alertFingerprint": "653693464eea7e9b", "sessionId": "e5f603b4-b013-4aa7-bac8-0afc7f55cd2c", "generation": 0}
+E2E|PASS|p1:F2 激活响应指纹==冻结|{'scenarioId': 'f2-e2e-0905040208', 'alertFingerprint': '653693464eea7e9b', 'sessionId': 'e5f603b4-b013-4aa7-bac8-0afc7f55cd2c', 'generation': 0}
+E2E|PASS|p1:F2 创单 → 201 ENABLED|201 {'bookingStatus': 'ENABLED', 'orderId': '5d08b71a-467d-446e-bf84-bd49503bc6e5'}
+E2E|PASS|p1:F2 注入回跳生效（GET 404 CREATED 不可见）|最终 GET=404
+E2E|INFO|p1:alert-json|{"labels": {"alertname": "ArenaIllegalTransitions", "fault_type": "F2", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}, "annotations": {"summary": "靶场状态违规 episode 打开（F2 症状）：回跳签名/PAID 无支付事实"}, "state": "firing", "activeAt": "2026-09-05T04:03:58.841504081Z", "value": "1e+00"}
+E2E|PASS|p1:F2 标签集精确一致|{"alertname": "ArenaIllegalTransitions", "fault_type": "F2", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}
+E2E|PASS|p1:F2 指纹三重一致|am=653693464eea7e9b recompute=653693464eea7e9b frozen=653693464eea7e9b
+E2E|SUBTOTAL|phase1|fail=0
+（F2 phase1 退出码=0）
+-------- F2 · incident/Holmes 侦听（alertname=ArenaIllegalTransitions） --------
+WATCH_OK incident=58dfb3a4-8972-4111-ab11-868093aeb8fc gen=0 run=7bc4f687-4cb4-43a3-8c92-59da12579194 report=a619810c-47a8-4b30-97d5-3caec6291f25
+-------- F2 · phase2（回填→off→修复→归零；incident=58dfb3a4-8972-4111-ab11-868093aeb8fc run=7bc4f687-4cb4-43a3-8c92-59da12579194 report=a619810c-47a8-4b30-97d5-3caec6291f25） --------
+E2E|PASS|p2:F2 incident 回填 202 + v2 + 指纹一致|202 {'alertFingerprint': '653693464eea7e9b', 'mappingVersion': 2}
+E2E|PASS|p2:F2 off → 202 RECOVERING|202 {'state': 'RECOVERING', 'scenarioId': 'f2-e2e-0905040208'}
+E2E|PASS|p2:F2 事实驱动恢复 → ENABLED|(200, {'sku': 'sku-std', 'correlationId': 'chaos-f2e2e-0905040208-1', 'quantity': 1, 'bookingStatus': 'ENABLED', 'payStatus': 'NOT_PAY', 'orderId': '5d08b71a-467d-446e-bf84-bd49503bc6e5', 'amount': '10.00', 'intentId': 'e2e-f2-intent-1-0905040208'})
+E2E|INFO|p2:order-view|{"sku": "sku-std", "correlationId": "chaos-f2e2e-0905040208-1", "quantity": 1, "bookingStatus": "ENABLED", "payStatus": "NOT_PAY", "orderId": "5d08b71a-467d-446e-bf84-bd49503bc6e5", "amount": "10.00", "intentId": "e2e-f2-intent-1-0905040208"}
+E2E|PASS|p2:F2 审计含会话级 RECOVERED|{"RECOVERED": 2, "INJECTED": 1}
+E2E|PASS|p2:F2 会话 CLOSED（管理面依审计推进）|state=CLOSED
+E2E|PASS|p2:F2 告警回落 + 台账归零|gauge=None
+E2E|INFO|p2:final-status|{"audit": {"RECOVERED": 2, "INJECTED": 1}, "session": {"state": "CLOSED", "faultType": "F2", "scenarioId": "f2-e2e-0905040208", "expiresAt": "2026-09-05T04:18:32.676761Z", "generation": 1, "ttlSeconds": 900}}
+E2E|SUBTOTAL|phase2|fail=0
+（F2 phase2 退出码=0）
+-------- F2 manifest 关联（GT/Alert/Incident/Report 一一对应） --------
+  alert=ArenaIllegalTransitions（激活指纹见上方 p1:activation/p1:指纹三重一致）
+  incident_id=58dfb3a4-8972-4111-ab11-868093aeb8fc incident_generation=0
+  run_id=7bc4f687-4cb4-43a3-8c92-59da12579194 report_id=a619810c-47a8-4b30-97d5-3caec6291f25
+
+======== 场景 F3 · phase1（激活→注入→指标→告警→指纹三重对账） ========
+E2E|PASS|p1:F3 本地重算==冻结常量|f95e79c26f0e7b4c
+E2E|PASS|p1:F3 激活 201|201 {'scenarioId': 'f3-e2e-0905040208', 'alertFingerprint': 'f95e79c26f0e7b4c', 'sessionId': 'f4706aee-afc3-4054-8def-28735a94b792', 'generation': 0}
+E2E|INFO|p1:activation|{"scenarioId": "f3-e2e-0905040208", "alertFingerprint": "f95e79c26f0e7b4c", "sessionId": "f4706aee-afc3-4054-8def-28735a94b792", "generation": 0}
+E2E|PASS|p1:F3 激活响应指纹==冻结|{'scenarioId': 'f3-e2e-0905040208', 'alertFingerprint': 'f95e79c26f0e7b4c', 'sessionId': 'f4706aee-afc3-4054-8def-28735a94b792', 'generation': 0}
+E2E|PASS|p1:F3 创单1(sku-std) → 201 CREATED/UNKNOWN|201 {'orderId': 'd6459154-b1ac-456d-89d5-bec8e36c8a7a', 'paymentResult': 'UNKNOWN', 'bookingStatus': 'CREATED'}
+E2E|PASS|p1:F3 创单2(sku-x-latesuccess) → 201 CREATED/UNKNOWN|201 {'orderId': 'b98010c6-e2f3-4782-bd97-c86898d9865d', 'paymentResult': 'UNKNOWN', 'bookingStatus': 'CREATED'}
+E2E|PASS|p1:F3 窗口保持（45s 后仍 CREATED 不可见）|GET=404 {'error': '订单不存在或不可见'}
+E2E|PASS|p1:F3 窗口保持（次单同判）|
+E2E|INFO|p1:alert-json|{"labels": {"alertname": "ArenaOrderStuck", "fault_type": "F3", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}, "annotations": {"summary": "靶场卡单 episode 打开（F3 症状）：CREATED 停留超阈值"}, "state": "firing", "activeAt": "2026-09-05T04:05:58.841504081Z", "value": "2e+00"}
+E2E|PASS|p1:F3 标签集精确一致|{"alertname": "ArenaOrderStuck", "fault_type": "F3", "instance": "order-arena:8080", "job": "order-arena", "service": "order-arena", "severity": "page"}
+E2E|PASS|p1:F3 指纹三重一致|am=f95e79c26f0e7b4c recompute=f95e79c26f0e7b4c frozen=f95e79c26f0e7b4c
+E2E|SUBTOTAL|phase1|fail=0
+（F3 phase1 退出码=0）
+-------- F3 · incident/Holmes 侦听（alertname=ArenaOrderStuck） --------
+WATCH_OK incident=74c07688-1c28-41ee-afde-6819eaff2c4b gen=0 run=3b5f107e-f8b2-403c-ad43-d21c414b7dcd report=2d40aa09-1d82-450d-8c5d-deaec2df88a1
+-------- F3 · phase2（回填→off→修复→归零；incident=74c07688-1c28-41ee-afde-6819eaff2c4b run=3b5f107e-f8b2-403c-ad43-d21c414b7dcd report=2d40aa09-1d82-450d-8c5d-deaec2df88a1） --------
+E2E|PASS|p2:F3 incident 回填 202 + v2 + 指纹一致|202 {'alertFingerprint': 'f95e79c26f0e7b4c', 'mappingVersion': 2}
+E2E|PASS|p2:F3 off → 202 RECOVERING|202 {'state': 'RECOVERING', 'scenarioId': 'f3-e2e-0905040208'}
+E2E|PASS|p2:F3 拒绝裁定废单 + 迟到成功补 ENABLE|std/latesuccess=('DISCARDED', 'ENABLED')
+E2E|INFO|p2:order-view[std]|{"sku": "sku-std", "correlationId": "chaos-f3e2e-0905040208-1", "quantity": 1, "bookingStatus": "DISCARDED", "payStatus": "NOT_PAY", "orderId": "d6459154-b1ac-456d-89d5-bec8e36c8a7a", "amount": "10.00", "intentId": "e2e-f3-intent-1-0905040208"}
+E2E|INFO|p2:order-view[latesuccess]|{"sku": "sku-x-latesuccess", "correlationId": "chaos-f3e2e-0905040208-2", "quantity": 1, "bookingStatus": "ENABLED", "payStatus": "NOT_PAY", "orderId": "b98010c6-e2f3-4782-bd97-c86898d9865d", "amount": "10.00", "intentId": "e2e-f3-intent-2-0905040208"}
+E2E|PASS|p2:F3 审计含会话级 RECOVERED|{"RECOVERED": 1}
+E2E|PASS|p2:F3 会话 CLOSED（管理面依审计推进）|state=CLOSED
+E2E|PASS|p2:F3 告警回落 + 台账归零|gauge=None
+E2E|INFO|p2:final-status|{"audit": {"RECOVERED": 1}, "session": {"state": "CLOSED", "faultType": "F3", "scenarioId": "f3-e2e-0905040208", "expiresAt": "2026-09-05T04:19:31.199949Z", "generation": 1, "ttlSeconds": 900}}
+E2E|SUBTOTAL|phase2|fail=0
+（F3 phase2 退出码=0）
+-------- F3 manifest 关联（GT/Alert/Incident/Report 一一对应） --------
+  alert=ArenaOrderStuck（激活指纹见上方 p1:activation/p1:指纹三重一致）
+  incident_id=74c07688-1c28-41ee-afde-6819eaff2c4b incident_generation=0
+  run_id=3b5f107e-f8b2-403c-ad43-d21c414b7dcd report_id=2d40aa09-1d82-450d-8c5d-deaec2df88a1
+
+======== TTL 崩溃自愈演练（无操作员，DP-C07） ========
+E2E|PASS|ttl:激活 201（ttl=30s）|201 {'scenarioId': 'f1-ttl-0905040208', 'alertFingerprint': '0d7404ae811ae84a', 'sessionId': '870f711c-c080-4df9-96ed-c66e666c46b1', 'generation': 0}
+E2E|PASS|ttl:重复单就位|{'bookingStatus': 'ENABLED', 'orderId': '5aba2e14-685b-4149-ad65-1f34512038c6'}/{'bookingStatus': 'ENABLED', 'orderId': 'e5da723f-0bf5-4210-b03d-80aca5bb0f7d'}
+E2E|PASS|ttl:无操作员自愈 TTL→RECOVERING→CLOSED+RECOVERED|state=CLOSED
+E2E|INFO|ttl:final-status|{"audit": {"RECOVERED": 1}, "session": {"state": "CLOSED", "faultType": "F1", "scenarioId": "f1-ttl-0905040208", "expiresAt": "2026-09-05T04:06:59.807404Z", "generation": 0, "ttlSeconds": 30}}
+E2E|PASS|ttl:恢复语义仍成立（canonical 保留）|('ENABLED', 'DISCARDED')
+E2E|PASS|ttl:告警回落 + 台账归零|gauge=0.0
+E2E|SUBTOTAL|ttl|fail=0
+（ttl 退出码=0）
+
+======== DP-C02 live- 正常流量面 ========
+E2E|PASS|dpc02:流量计数持续增长|26177.0→26252.0 inc=120.0
+E2E|PASS|dpc02:live- 创单 → 201 ENABLED|201 {'bookingStatus': 'ENABLED', 'orderId': '9ebf8580-7201-4e61-b1e7-6fad2e0c0c9e'}
+E2E|PASS|dpc02:live- GET 可见|{"sku": "sku-std", "correlationId": "live-e2e-0905040208", "quantity": 1, "bookingStatus": "ENABLED", "payStatus": "NOT_PAY", "orderId": "9ebf8580-7201-4e61-b1e7-6fad2e0c0c9e", "amount": "10.00", "intentId": "e2e-live-intent-1-0905040208"}
+E2E|PASS|dpc02:live- 幂等重放返回原单（200 replayed）|200 {'orderId': '9ebf8580-7201-4e61-b1e7-6fad2e0c0c9e', 'bookingStatus': 'ENABLED', 'replayed': True}
+E2E|PASS|dpc02:探针自证 up|probe_up=1.0
+E2E|SUBTOTAL|dpc02|fail=0
+（dpc02 退出码=0）
+
+======== DP-C01/03/06 部署门取证 ========
+-- 容器健康（DP-C01） --
+alert-arena-chaos-admin-1	Up 43 minutes (healthy)
+alert-order-arena-1	Up 7 hours (healthy)
+-- 网络成员（DP-C03，C-3 断言：arena 只在 alert-net、admin 只在 eval-mgmt） --
+alert-net 
+
+eval-mgmt 
+
+alert-net deploy_internal eval-mgmt 
+
+-- admin 宿主端口为零（M2-17） --
+0
+-- 迁移版本（DP-C06） --
+
+1 v1 success=true
+2 v2 success=true
+3 v3 success=true
+4 v4 success=true
+5 v5 success=true
+6 v6 success=true
+
+======== 落库取证（会话/审计/事件/scenario_map/incident/报告） ========
+    scenario_id    | fault_type |         target         | state  | generation 
+-------------------+------------+------------------------+--------+------------
+ f1-e2e-0905040208 | F1         | chaos-f1e2e-0905040208 | CLOSED |          1
+ f2-e2e-0905040208 | F2         | chaos-f2e2e-0905040208 | CLOSED |          1
+ f3-e2e-0905040208 | F3         | chaos-f3e2e-0905040208 | CLOSED |          1
+ f1-ttl-0905040208 | F1         | chaos-ttl-0905040208   | CLOSED |          0
+(4 rows)
+
+    scenario_id    | fault_type |  action   |               order_id               |                          detail                          
+-------------------+------------+-----------+--------------------------------------+----------------------------------------------------------
+ f1-e2e-0905040208 | F1         | RECOVERED | -                                    | {"detail": "canonical_kept=1, duplicates_compensated=2"}
+ f2-e2e-0905040208 | F2         | INJECTED  | 5d08b71a-467d-446e-bf84-bd49503bc6e5 | {"path": "direct-sql-backjump"}
+ f2-e2e-0905040208 | F2         | RECOVERED | 5d08b71a-467d-446e-bf84-bd49503bc6e5 | {"detail": "restored=true"}
+ f2-e2e-0905040208 | F2         | RECOVERED | -                                    | {"detail": "restored=1"}
+ f3-e2e-0905040208 | F3         | RECOVERED | -                                    | {"detail": "unsettled_drained=true"}
+ f1-ttl-0905040208 | F1         | RECOVERED | -                                    | {"detail": "canonical_kept=1, duplicates_compensated=1"}
+(6 rows)
+
+    scenario_id    |     event_type     |          occurred_at          
+-------------------+--------------------+-------------------------------
+ f1-e2e-0905040208 | ACTIVATED          | 2026-09-05 04:02:09.102796+00
+ f1-e2e-0905040208 | DEACTIVATED        | 2026-09-05 04:03:02.482603+00
+ f1-e2e-0905040208 | RECOVERY_COMPLETED | 2026-09-05 04:03:06.996289+00
+ f2-e2e-0905040208 | ACTIVATED          | 2026-09-05 04:03:32.676761+00
+ f2-e2e-0905040208 | DEACTIVATED        | 2026-09-05 04:04:01.018459+00
+ f2-e2e-0905040208 | RECOVERY_COMPLETED | 2026-09-05 04:04:07.026719+00
+ f3-e2e-0905040208 | ACTIVATED          | 2026-09-05 04:04:31.199949+00
+ f3-e2e-0905040208 | DEACTIVATED        | 2026-09-05 04:05:59.562732+00
+ f3-e2e-0905040208 | RECOVERY_COMPLETED | 2026-09-05 04:06:02.069547+00
+ f1-ttl-0905040208 | ACTIVATED          | 2026-09-05 04:06:29.807404+00
+ f1-ttl-0905040208 | TTL_EXPIRED        | 2026-09-05 04:07:02.092148+00
+ f1-ttl-0905040208 | RECOVERY_COMPLETED | 2026-09-05 04:07:07.095608+00
+(12 rows)
+
+    scenario_id    | mapping_version | alert_fingerprint |             incident_id              | incident_generation |                run_id                |              report_id               
+-------------------+-----------------+-------------------+--------------------------------------+---------------------+--------------------------------------+--------------------------------------
+ f1-e2e-0905040208 |               1 | 0d7404ae811ae84a  |                                      |                     |                                      | 
+ f1-e2e-0905040208 |               2 | 0d7404ae811ae84a  | 5552d241-77f4-4bcd-abeb-35f3f2f1a90d |                   3 | c3bb1d72-99cb-4dbc-80b8-a6448919e3af | 9705938e-8e96-4c9c-85eb-0dd0885afc32
+ f1-ttl-0905040208 |               1 | 0d7404ae811ae84a  |                                      |                     |                                      | 
+ f2-e2e-0905040208 |               1 | 653693464eea7e9b  |                                      |                     |                                      | 
+ f2-e2e-0905040208 |               2 | 653693464eea7e9b  | 58dfb3a4-8972-4111-ab11-868093aeb8fc |                   0 | 7bc4f687-4cb4-43a3-8c92-59da12579194 | a619810c-47a8-4b30-97d5-3caec6291f25
+ f3-e2e-0905040208 |               1 | f95e79c26f0e7b4c  |                                      |                     |                                      | 
+ f3-e2e-0905040208 |               2 | f95e79c26f0e7b4c  | 74c07688-1c28-41ee-afde-6819eaff2c4b |                   0 | 3b5f107e-f8b2-403c-ad43-d21c414b7dcd | 2d40aa09-1d82-450d-8c5d-deaec2df88a1
+(7 rows)
+
+                             incident_key                              |  status  | generation | current_rca_run_id 
+-----------------------------------------------------------------------+----------+------------+--------------------
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    | RESOLVED |          3 | 
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena | RESOLVED |          0 | 
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         | RESOLVED |          0 | 
+(3 rows)
+
+             incident_id              |   state   | trigger_kind 
+--------------------------------------+-----------+--------------
+ 5552d241-77f4-4bcd-abeb-35f3f2f1a90d | SUCCEEDED | INITIAL
+ 58dfb3a4-8972-4111-ab11-868093aeb8fc | SUCCEEDED | INITIAL
+ 74c07688-1c28-41ee-afde-6819eaff2c4b | SUCCEEDED | INITIAL
+ 5552d241-77f4-4bcd-abeb-35f3f2f1a90d | SUCCEEDED | INITIAL
+ 5552d241-77f4-4bcd-abeb-35f3f2f1a90d | SUCCEEDED | INITIAL
+ 5552d241-77f4-4bcd-abeb-35f3f2f1a90d | SUCCEEDED | INITIAL
+(6 rows)
+
+                run_id                |  validation_status  |       model        
+--------------------------------------+---------------------+--------------------
+ 0bad7749-388f-4ca6-be0c-f52d426fadf1 | STRUCTURE_VALIDATED | openai/deepseek-v3
+ 7bc4f687-4cb4-43a3-8c92-59da12579194 | STRUCTURE_VALIDATED | openai/deepseek-v3
+ 3b5f107e-f8b2-403c-ad43-d21c414b7dcd | STRUCTURE_VALIDATED | openai/deepseek-v3
+ fc2bf9e5-aff9-4424-8720-852c7c9d1aee | STRUCTURE_VALIDATED | openai/deepseek-v3
+ 02edb742-461d-4b4f-88bb-79b820b4e059 | STRUCTURE_VALIDATED | openai/deepseek-v3
+ c3bb1d72-99cb-4dbc-80b8-a6448919e3af | STRUCTURE_VALIDATED | openai/deepseek-v3
+(6 rows)
+
+
+# run finished @ 2026-09-05T04:08:43Z

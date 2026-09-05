@@ -21,6 +21,8 @@
     <modules>
         <module>shared-kernel</module>
         <module>control-app</module>
+        <module>order-arena</module>
+        <module>arena-chaos-admin</module>
     </modules>
 
     <properties>

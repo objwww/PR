@@ -14,7 +14,11 @@
 #   - prometheus/alertmanager 挂 opentelemetry-demo 外部网（抓 otel-collector:9464 指标；
 #     collector 的 prometheus exporter 由 deploy/alert/otelcol/otelcol-config-extras.yml 加装）
 #   - alert-net 外部共享网：holmes(别名 holmes) / alertmanager / control-app(主栈 compose 挂入)
-#   - 全部端口仅绑 127.0.0.1，公网零暴露（INV-AM0-1）
+#     / order-arena(AM2) / arena-migrate / postgres(主栈 compose 挂入，AM2 起供 arena 域触库)
+#   - eval-mgmt 外部私网（--internal，无宿主端口、无外网出口）：仅 arena-chaos-admin(AM2)；
+#     AM3 的 eval-runner 届时加入。业务 order-arena 对 eval-mgmt 零成员（C-3 裁定：
+#     "同容器双网监听"不成立，管理面必须拆独立服务/独立容器）
+#   - 全部端口仅绑 127.0.0.1，公网零暴露（INV-AM0-1）；arena-chaos-admin 无宿主端口
 
 services:
   prometheus:
@@ -78,6 +82,99 @@ services:
         aliases:
           - holmes    # control-app 的 HOLMES_BASE_URL=http://holmes:8080 经此别名解析
 
+  # ---------------------------------------------------------------- AM2 订单靶场（M2-01/02，C-3 拓扑）
+
+  arena-migrate:
+    # arena 域 Flyway one-shot（V1~V5，owner 身份）：schema/角色 DO 块/业务表/outbox/
+    # chaos+GT/scenario_map。与主栈 migrate 的关系：不同 schema（arena vs public），
+    # 各自的 flyway_schema_history 落在自己 schema 内，互不干扰。
+    # 前置：主栈（deploy/docker-compose.yml 的 postgres）先起——跨 compose 项目无法
+    # depends_on，靠 flyway -connectRetries 兜底；部署顺序 = 主栈 → alert 栈。
+    image: flyway/flyway:10-alpine
+    restart: "no"
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pr_agent}
+      FLYWAY_USER: postgres # owner 身份（DDL + 角色 DO 块）；该凭证不进入任何业务容器
+      FLYWAY_PASSWORD: "${POSTGRES_PASSWORD:?}"
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_SCHEMAS: arena  # 首个 schema = default schema，历史表落 arena.flyway_schema_history
+      # V1 角色 DO 块的密码 placeholder（与主栈 .env 三键同值）
+      FLYWAY_PLACEHOLDERS_ARENA_PASSWORD: "${ARENA_DB_PASSWORD:?}"
+      FLYWAY_PLACEHOLDERS_CHAOS_ADMIN_PASSWORD: "${CHAOS_ADMIN_DB_PASSWORD:?}"
+      FLYWAY_PLACEHOLDERS_EVAL_PASSWORD: "${EVAL_DB_PASSWORD:?}"
+    volumes:
+      # 直挂 order-arena 资源目录（单一事实源，与主栈 migrate 同纪律）；
+      # 本 compose 位于 deploy/alert/，仓库根需再上一级
+      - ../../order-arena/src/main/resources/db/migration:/flyway/sql:ro
+    command: ["-connectRetries=30", "migrate"]
+    networks:
+      - alert-net
+
+  order-arena:
+    build:
+      context: ../../order-arena
+    image: pr-agent/order-arena:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      - arena-migrate   # 顺序意图（跨栈 DB 就绪靠应用侧重试；migrate 幂等可重跑）
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      ARENA_DB_PASSWORD: "${ARENA_DB_PASSWORD:?}"
+      # 有界流量发生器（M2-15）：docker 栈内默认开启（live- 正常流量）
+      TRAFFIC_ENABLED: "${TRAFFIC_ENABLED:-true}"
+    ports:
+      # 仅绑 loopback（业务 API 供 DP-C02/E2E 取证走 SSH 隧道；与 control-app 同纪律）
+      - "${ARENA_BIND:-127.0.0.1}:${ARENA_PORT:-8081}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m          # M2-01 冻结：靶场含内嵌流量发生器 ≤ 512MiB（AM2 v3.0 §6.8）
+    mem_reservation: 256m
+    healthcheck:
+      # 基底 Ubuntu 26.04 的 bash 5.3 编译时关了 /dev/tcp 网络重定向（实测 No such file）；
+      # 镜像自带 wget（无 curl），healthz 仅容器内可达
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - alert-net     # C-3：业务容器只在 alert-net，eval-mgmt 零成员
+
+  arena-chaos-admin:
+    build:
+      context: ../../arena-chaos-admin
+    image: pr-agent/arena-chaos-admin:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      - arena-migrate
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      CHAOS_ADMIN_DB_PASSWORD: "${CHAOS_ADMIN_DB_PASSWORD:?}"
+      CHAOS_ADMIN_TOKEN: "${CHAOS_ADMIN_TOKEN:?}"
+    # 无 ports：管理面零宿主端口（M2-17 断言面之一）；可达性只经 eval-mgmt
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    healthcheck:
+      # 同 order-arena：wget 拉 /healthz（bash 5.3 无 /dev/tcp）
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - eval-mgmt     # C-3：管理面只入 eval-mgmt；alert-net/Holmes 不可达（M2-17 195 断言）
+
 networks:
   opentelemetry-demo:
     external: true        # otel demo 栈已建网（195 上同名）
@@ -86,3 +183,8 @@ networks:
   alert-net:
     external: true
     name: alert-net
+  # eval-mgmt 私网（AM2 C-3）：预先 `docker network create eval-mgmt --internal`；
+  # 主栈 postgres 挂入它 + alert-net（deploy/docker-compose.yml），为 arena/admin 两角色触库
+  eval-mgmt:
+    external: true
+    name: eval-mgmt

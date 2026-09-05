@@ -1,0 +1,17 @@
+# docker 部署 profile（deploy/alert compose 起栈时 --spring.profiles.active=docker）。
+# datasource 指向 postgres 容器别名（经 alert-net 可达）；密码只走环境变量。
+spring:
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:pr_agent}
+    username: arena_app
+    password: ${ARENA_DB_PASSWORD}
+    # §7.2 Hikari 显式预算：4 流量 + 2 探测/补偿 + 2 余量 = 8；快速失败不排队挂死
+    hikari:
+      maximum-pool-size: 8
+      connection-timeout: 5000
+  flyway:
+    # 迁移唯一执行者 = deploy/alert compose 的 arena-migrate one-shot（owner 身份）；
+    # arena 容器不持 DDL 凭证
+    enabled: false

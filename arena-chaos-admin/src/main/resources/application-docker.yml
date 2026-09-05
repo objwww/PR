@@ -1,0 +1,15 @@
+# docker 部署 profile（deploy/alert compose；容器只入 eval-mgmt 私网，无宿主端口）。
+spring:
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:pr_agent}
+    username: chaos_admin_app
+    password: ${CHAOS_ADMIN_DB_PASSWORD}
+    # 管理面低频写（激活/关闭/TTL 清理），池从紧
+    hikari:
+      maximum-pool-size: 4
+      connection-timeout: 5000
+  flyway:
+    # 迁移唯一执行者 = deploy/alert compose 的 arena-migrate one-shot（owner 身份）
+    enabled: false

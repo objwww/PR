@@ -169,7 +169,7 @@ flowchart LR
 | control_app | RW | 无 | **禁止** | INSERT |
 | arena_app | 禁止 | RW | RW | 禁止 |
 | eval_app | SELECT | SELECT | SELECT | 禁止 |
-| notify_app(AM3) | 报告摘要 SELECT | 禁止 | 禁止 | SELECT/UPDATE |
+| notify_app（AM3 M3-03 创建） | 报告摘要 SELECT | 禁止 | 禁止 | SELECT/UPDATE |
 | HolmesGPT | 无 DB 凭证 | 无 DB 凭证 | 禁止 | 禁止 |
 
 迁移路径：`control-app/db/migration`（control 域）+ `order-arena/db/migration`（arena 域 V1 起）；权限矩阵进迁移契约测试与启动自检。

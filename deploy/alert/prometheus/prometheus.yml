@@ -8,6 +8,10 @@ scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: ['otel-collector:9464']
+  # AM2 靶场（order-arena 内嵌 /metrics；指标自带 service="order-arena" 公共标签）
+  - job_name: order-arena
+    static_configs:
+      - targets: ['order-arena:8080']
 
 rule_files:
   - /etc/prometheus/rules/*.yml

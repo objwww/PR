@@ -45,9 +45,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
-      # initdb 角色脚本读取（deploy/db/01-roles.sh）
+      # initdb 角色脚本读取（deploy/db/01-roles.sh；AM2 增 arena 三角色）
       CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:?}
       PUBLISHER_DB_PASSWORD: ${PUBLISHER_DB_PASSWORD:?}
+      ARENA_DB_PASSWORD: ${ARENA_DB_PASSWORD:?}
+      CHAOS_ADMIN_DB_PASSWORD: ${CHAOS_ADMIN_DB_PASSWORD:?}
+      EVAL_DB_PASSWORD: ${EVAL_DB_PASSWORD:?}
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./db/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
@@ -58,6 +61,13 @@ services:
       retries: 20
     networks:
       - internal
+      # AM2（M2-02）：postgres 加入跨栈共享网，供 arena 域触库——
+      #   alert-net：order-arena（arena_app 角色）/ arena-migrate
+      #   eval-mgmt：arena-chaos-admin（chaos_admin_app 角色；私网见 deploy/alert compose）
+      # C-3 拓扑注：postgres 本就无"管理面"概念，多网成员经角色授权隔离，
+      # 不违反"管理服务不得双网"的裁定（该裁定针对的是 0.0.0.0 端口的管理 API）
+      - alert-net
+      - eval-mgmt
     deploy:
       resources:
         limits:
@@ -146,3 +156,5 @@ networks:
     driver: bridge
   alert-net:
     external: true   # 与 deploy/alert 共享(预先 docker network create alert-net)
+  eval-mgmt:
+    external: true   # AM2 chaos 管理面私网(deploy/alert 侧孤立；预先 create --internal)

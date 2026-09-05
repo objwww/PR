@@ -1,0 +1,38 @@
+# AM2 靶场故障症状规则（M2-23）：每个故障一条最小规则 + 探针自证。
+# 告警标签是 C-6 指纹的输入面——alertname/fault_type/service 冻结，
+# 改名 = scenario_map 全量重配（激活请求的 alertLabels 必须与此处的最终标签集一致，
+# 含 metric 携带的 job/instance 与本文件的 labels）。
+groups:
+  - name: arena-fault-symptoms
+    rules:
+      - alert: ArenaOrderStuck
+        expr: oa_stuck_orders_current > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F3
+        annotations:
+          summary: "靶场卡单 episode 打开（F3 症状）：CREATED 停留超阈值"
+      - alert: ArenaDuplicateOrders
+        expr: oa_duplicate_orders_current > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F1
+        annotations:
+          summary: "靶场重复单 episode 打开（F1 症状）：同 intent 多个未废订单"
+      - alert: ArenaIllegalTransitions
+        expr: oa_state_violations_current > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F2
+        annotations:
+          summary: "靶场状态违规 episode 打开（F2 症状）：回跳签名/PAID 无支付事实"
+      - alert: ArenaDomainProbeDown
+        expr: oa_domain_probe_up == 0 or time() - oa_domain_probe_last_success_timestamp > 180
+        labels:
+          severity: page
+          service: order-arena
+        annotations:
+          summary: "领域探针失明（C-7：探测失败保留末值，绝不伪装业务恢复）"

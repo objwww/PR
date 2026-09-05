@@ -1,0 +1,395 @@
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+04:29:22.055 [main] INFO com.objwww.pr.control.infrastructure.selfcheck.StartupSelfCheckRunner -- [control] 启动自检通过（B25 运行时门）
+04:29:22.088 [main] INFO com.tngtech.archunit.core.PluginLoader -- Detected Java version 21.0.12
+04:29:24.597 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- incident 2930ade7-769d-4fc2-8ccd-58209f2288fe 材料变化，铸 RERUN run
+04:29:24.604 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task e4e6822f-beca-4627-9576-336a535bab9d 租约过期回收（疑似 worker 崩溃）owner=worker-a
+04:29:24.604 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- 悬挂账本 032ec28d-e26c-4d23-801b-9aeb8c55977c STARTED→UNKNOWN（崩溃回收）
+04:29:24.620 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 996cca8f-b609-443e-a115-95c7352f6c36 租约过期回收（疑似 worker 崩溃）owner=worker-a
+04:29:24.621 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 996cca8f-b609-443e-a115-95c7352f6c36 旧租约提交被拒 owner=worker-a epoch=1
+04:29:24.632 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox 67703edf-e94a-4720-877e-fff64d86142a 死信: payload_raw JSON 解析失败: Unexpected character ('n' (code 110)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 2]
+04:29:24.702 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox 32515c3e-eed5-4b16-8acb-b4a1cbab304f 死信: 缺少 alertname 标签，无法铸造 incidentKey
+04:29:24.992 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:24.992 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:24.994 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 2 ms
+04:29:25.092 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.092 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.092 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.102 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.102 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.102 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.115 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.115 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.116 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+04:29:25.127 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.127 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.128 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+04:29:25.132 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.132 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.132 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.142 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.142 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.142 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.155 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.155 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.155 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.160 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.160 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.160 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.171 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.171 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.171 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.182 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.182 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.183 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+04:29:25.194 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.195 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.195 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.205 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.205 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.205 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.218 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.218 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.218 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.222 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:25.223 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:25.223 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:25.226 [main] WARN com.objwww.pr.control.alert.interfaces.AlertWebhookController -- 整组无法持久化，返回 503: db down
+04:29:25.239 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本 STARTED 写失败，零触网（D5）: RuntimeException
+04:29:25.271 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本终态写失败（SUCCEEDED），转 UNKNOWN 语义: RuntimeException
+04:29:25.299 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.control.ControlContextSmokeTest]: ControlContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+04:29:25.367 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.control.ControlApplication for test class com.objwww.pr.control.ControlContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T04:29:25.717Z  INFO 118 --- [control-app] [           main] c.o.pr.control.ControlContextSmokeTest   : Starting ControlContextSmokeTest using Java 21.0.12 with PID 118 (started by root in /ws/control-app)
+2026-09-05T04:29:25.720Z  INFO 118 --- [control-app] [           main] c.o.pr.control.ControlContextSmokeTest   : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T04:29:27.365Z  INFO 118 --- [control-app] [           main] c.o.pr.control.ControlContextSmokeTest   : Started ControlContextSmokeTest in 1.924 seconds (process running for 9.824)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+2026-09-05T04:29:28.035Z  INFO 118 --- [control-app] [           main] org.testcontainers.DockerClientFactory   : Testcontainers version: 1.20.4
+2026-09-05T04:29:28.403Z  INFO 118 --- [control-app] [           main] o.t.d.DockerClientProviderStrategy       : Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+2026-09-05T04:29:28.407Z  INFO 118 --- [control-app] [           main] org.testcontainers.DockerClientFactory   : Docker host IP address is 172.17.0.1
+2026-09-05T04:29:28.422Z  INFO 118 --- [control-app] [           main] org.testcontainers.DockerClientFactory   : Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+2026-09-05T04:29:28.425Z  WARN 118 --- [control-app] [           main] o.testcontainers.utility.ResourceReaper  : 
+********************************************************************************
+Ryuk has been disabled. This can cause unexpected behavior in your environment.
+********************************************************************************
+2026-09-05T04:29:28.428Z  INFO 118 --- [control-app] [           main] org.testcontainers.DockerClientFactory   : Checking the system...
+2026-09-05T04:29:28.428Z  INFO 118 --- [control-app] [           main] org.testcontainers.DockerClientFactory   : ✔︎ Docker server version should be at least 1.6.0
+2026-09-05T04:29:28.437Z  INFO 118 --- [control-app] [           main] org.testcontainers.images.PullPolicy     : Image pull policy will be performed by: DefaultPullPolicy()
+2026-09-05T04:29:28.439Z  INFO 118 --- [control-app] [           main] o.t.utility.ImageNameSubstitutor         : Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+2026-09-05T04:29:28.489Z  INFO 118 --- [control-app] [           main] tc.postgres:16-alpine                    : Creating container for image: postgres:16-alpine
+2026-09-05T04:29:28.494Z  INFO 118 --- [control-app] [           main] o.t.utility.RegistryAuthLocator          : Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: postgres:16-alpine, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+2026-09-05T04:29:28.619Z  INFO 118 --- [control-app] [           main] tc.postgres:16-alpine                    : Container postgres:16-alpine is starting: d70efb879b6ee77bde65827cbc23531f93b2f68c870a213e09f97a0494a1e65c
+2026-09-05T04:29:29.829Z  INFO 118 --- [control-app] [           main] tc.postgres:16-alpine                    : Container postgres:16-alpine started in PT1.340000391S
+2026-09-05T04:29:29.830Z  INFO 118 --- [control-app] [           main] tc.postgres:16-alpine                    : Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:32997/test?loggerLevel=OFF)
+2026-09-05T04:29:29.837Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-05T04:29:30.042Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@146629c0
+2026-09-05T04:29:30.044Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-05T04:29:30.200Z  INFO 118 --- [control-app] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://172.17.0.1:32997/test?loggerLevel=OFF (PostgreSQL 16.15)
+2026-09-05T04:29:30.265Z  INFO 118 --- [control-app] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table "public"."flyway_schema_history" does not exist yet
+2026-09-05T04:29:30.267Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 8 migrations (execution time 00:00.018s)
+2026-09-05T04:29:30.278Z  INFO 118 --- [control-app] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table "public"."flyway_schema_history" ...
+2026-09-05T04:29:30.307Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema "public": << Empty Schema >>
+2026-09-05T04:29:30.344Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "1 - m0 schema"
+2026-09-05T04:29:30.438Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "2 - grants"
+2026-09-05T04:29:30.462Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "3 - m1 inbox reconcile"
+2026-09-05T04:29:30.500Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "4 - m2 checkpoint repair"
+2026-09-05T04:29:30.540Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "5 - m3 model governance"
+2026-09-05T04:29:30.582Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "6 - m4 sandbox"
+2026-09-05T04:29:30.636Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "7 - am1 alert domain"
+2026-09-05T04:29:30.693Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "8 - am1 dag reserve"
+2026-09-05T04:29:30.710Z  INFO 118 --- [control-app] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 8 migrations to schema "public", now at version v8 (execution time 00:00.272s)
+2026-09-05T04:29:30.714Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-09-05T04:29:30.721Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@ae21dfa
+2026-09-05T04:29:30.722Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-09-05T04:29:30.722Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Starting...
+2026-09-05T04:29:30.730Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@45ebf3d5
+2026-09-05T04:29:30.730Z  INFO 118 --- [control-app] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Start completed.
+04:29:32.994 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+04:29:33.155 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+04:29:33.454 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+04:29:33.456 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+04:29:33.475 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+04:29:33.477 [main] WARN org.testcontainers.utility.ResourceReaper -- 
+********************************************************************************
+Ryuk has been disabled. This can cause unexpected behavior in your environment.
+********************************************************************************
+04:29:33.480 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+04:29:33.480 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+04:29:33.510 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+04:29:33.512 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+04:29:33.571 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+04:29:33.575 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: postgres:16-alpine, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+04:29:33.748 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: cd8cf5dbc7e9174240e6135410b7fd980037e45b1ea45032a55a8a27435a8ded
+04:29:35.017 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.445885471S
+04:29:35.018 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:32998/test?loggerLevel=OFF)
+04:29:35.027 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+04:29:35.273 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@29a69a35
+04:29:35.275 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+04:29:35.651 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:32998/test?loggerLevel=OFF (PostgreSQL 16.15)
+04:29:35.721 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+04:29:35.726 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 8 migrations (execution time 00:00.031s)
+04:29:35.744 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+04:29:35.791 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+04:29:35.845 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+04:29:35.966 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+04:29:36.006 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+04:29:36.056 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+04:29:36.099 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+04:29:36.135 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+04:29:36.202 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+04:29:36.340 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+04:29:36.377 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 8 migrations to schema "public", now at version v8 (execution time 00:00.378s)
+04:29:36.384 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+04:29:36.419 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@7f37b6d9
+04:29:36.420 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+04:29:36.420 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+04:29:36.456 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@1507c3c3
+04:29:36.457 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+04:29:39.800 [main] INFO com.tngtech.archunit.core.PluginLoader -- Detected Java version 21.0.12
+04:29:42.188 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.arena.ArenaContextSmokeTest]: ArenaContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+04:29:42.330 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.arena.ArenaApplication for test class com.objwww.pr.arena.ArenaContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T04:29:42.780Z  INFO 459 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : Starting ArenaContextSmokeTest using Java 21.0.12 with PID 459 (started by root in /ws/order-arena)
+2026-09-05T04:29:42.782Z  INFO 459 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T04:29:44.269Z  INFO 459 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : Started ArenaContextSmokeTest in 1.782 seconds (process running for 5.382)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+2026-09-05T04:29:44.893Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:44.894Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:44.895Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.016Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.017Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.017Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.026Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.026Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.026Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.042Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.042Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.042Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.052Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.052Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.052Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.065Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.065Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.065Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.074Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.074Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.074Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T04:29:45.083Z  INFO 459 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T04:29:45.083Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T04:29:45.083Z  INFO 459 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+04:29:46.300 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+04:29:46.506 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+04:29:46.808 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+04:29:46.810 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+04:29:46.827 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+04:29:46.830 [main] WARN org.testcontainers.utility.ResourceReaper -- 
+********************************************************************************
+Ryuk has been disabled. This can cause unexpected behavior in your environment.
+********************************************************************************
+04:29:46.833 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+04:29:46.833 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+04:29:46.862 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+04:29:46.864 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+04:29:46.930 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+04:29:46.936 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: postgres:16-alpine, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+04:29:47.101 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 11a330da355cb5717787d68b655a12f77969fadc0b4b1a607f73d475b67ebea1
+04:29:48.341 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.41014848S
+04:29:48.341 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:32999/test?loggerLevel=OFF)
+04:29:48.352 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+04:29:48.568 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@dca2615
+04:29:48.569 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+04:29:48.914 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:32999/test?loggerLevel=OFF (PostgreSQL 16.15)
+04:29:48.958 [main] INFO org.flywaydb.core.internal.database.base.Schema -- Creating schema "arena" ...
+04:29:48.966 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "arena"."flyway_schema_history" ...
+04:29:49.040 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "arena": null
+04:29:49.084 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "1 - am2 order base"
+04:29:49.091 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: schema "arena" already exists, skipping (SQL State: 42P06 - Error Code: 0)
+04:29:49.189 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "2 - am2 compensation outbox"
+04:29:49.234 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "3 - am2 chaos gt"
+04:29:49.275 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "4 - am2 probe reconcile"
+04:29:49.317 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "5 - am2 scenario map"
+04:29:49.334 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "6 - am2 drop map fp unique"
+04:29:49.348 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 6 migrations to schema "arena", now at version v6 (execution time 00:00.168s)
+04:29:49.359 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+04:29:49.386 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@285c6918
+04:29:49.387 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+04:29:49.387 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+04:29:49.401 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@4b0b64cc
+04:29:49.401 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+04:29:49.401 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+04:29:49.420 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@7ad1caa2
+04:29:49.420 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+04:29:49.589 [main] WARN com.objwww.pr.arena.application.DomainProbe -- 领域探针失明（保留末值，不伪装恢复）: simulated outage
+04:29:49.997 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F1 恢复收口: scenario=f1-sc-paid 重复行=2 补偿=1
+04:29:50.041 [main] WARN com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 注入回跳: scenario=f2-sc-it 单数=1
+04:29:50.046 [main] WARN com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 注入回跳: scenario=f2-sc-it 单数=1
+04:29:50.078 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 恢复收口: scenario=f2-sc-it 恢复=2
+04:29:50.092 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 恢复收口: scenario=f2-sc-it 恢复=0
+04:29:50.123 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F1 恢复收口: scenario=f1-sc-rec 重复行=2 补偿=1
+04:29:50.193 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 CAPTURE 迟到成功，补 PAID: order=ca7d23b9-c0f4-44cf-86b2-f86f0872a865
+04:29:50.219 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 迟到成功，补 ENABLE: order=05383643-ea78-4366-ae22-122078d644a4
+04:29:50.252 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 裁定拒绝，废单补偿: order=2e58e0b1-92a4-40a8-987b-f82bbf825f87
+04:29:50.280 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 裁定拒绝，废单补偿: order=786ff01f-aa7d-466a-938b-8017357be9b0
+04:29:50.939 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+04:29:50.940 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+04:29:51.244 [main] WARN com.objwww.pr.arena.application.chaos.ChaosSwitchboard -- chaos 开关读面 fail-closed: Connection refused
+04:29:51.544 [main] WARN com.objwww.pr.arena.application.chaos.ChaosSwitchboard -- chaos 会话读面 fail-closed: Connection refused
+04:29:51.545 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Shutdown initiated...
+04:29:51.575 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Shutdown completed.
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+04:29:55.244 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.246 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.257 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 9 ms
+04:29:55.276 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.278 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.278 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.543 [main] WARN com.objwww.pr.arenaadmin.interfaces.ChaosAdminController -- chaos 关闭: F3 scenario=f3-e2e-001（进入 RECOVERING，等待恢复收口）
+04:29:55.640 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.641 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.641 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.651 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.651 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.658 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 7 ms
+04:29:55.688 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.688 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.688 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.695 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.695 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.695 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.713 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.713 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.714 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+04:29:55.723 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.723 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.724 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.744 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.744 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.744 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.750 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.750 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.750 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.767 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.768 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.768 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.773 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.774 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.774 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.794 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.794 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.795 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.800 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.800 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.801 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.823 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.823 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.824 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.829 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+04:29:55.829 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+04:29:55.829 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+04:29:55.849 [main] WARN com.objwww.pr.arenaadmin.interfaces.ChaosAdminController -- chaos 激活: F3 scenario=f3-e2e-001 operator=it
+04:29:55.960 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest]: ChaosAdminContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+04:29:56.048 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.arenaadmin.ChaosAdminApplication for test class com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T04:29:56.468Z  INFO 610 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : Starting ChaosAdminContextSmokeTest using Java 21.0.12 with PID 610 (started by root in /ws/arena-chaos-admin)
+2026-09-05T04:29:56.469Z  INFO 610 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T04:29:57.382Z  INFO 610 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : Started ChaosAdminContextSmokeTest in 1.274 seconds (process running for 4.522)
+04:29:58.205 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+04:29:58.359 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+04:29:58.639 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+04:29:58.641 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+04:29:58.662 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+04:29:58.664 [main] WARN org.testcontainers.utility.ResourceReaper -- 
+********************************************************************************
+Ryuk has been disabled. This can cause unexpected behavior in your environment.
+********************************************************************************
+04:29:58.668 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+04:29:58.668 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+04:29:58.694 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+04:29:58.695 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+04:29:58.755 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+04:29:58.760 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: postgres:16-alpine, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+04:29:58.935 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: ba307b99cbb16b0e3b0818b03e913898374ef7bc149a12942c2feaa4eb221cb8
+04:30:00.163 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.407886097S
+04:30:00.164 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33000/test?loggerLevel=OFF)
+04:30:00.172 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+04:30:00.377 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@131fcb6f
+04:30:00.378 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+04:30:00.809 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:33000/test?loggerLevel=OFF (PostgreSQL 16.15)
+04:30:00.857 [main] INFO org.flywaydb.core.internal.database.base.Schema -- Creating schema "arena" ...
+04:30:00.863 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "arena"."flyway_schema_history" ...
+04:30:00.924 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "arena": null
+04:30:01.000 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "1 - am2 order base"
+04:30:01.017 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: schema "arena" already exists, skipping (SQL State: 42P06 - Error Code: 0)
+04:30:01.108 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "2 - am2 compensation outbox"
+04:30:01.149 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "3 - am2 chaos gt"
+04:30:01.191 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "4 - am2 probe reconcile"
+04:30:01.229 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "5 - am2 scenario map"
+04:30:01.252 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "6 - am2 drop map fp unique"
+04:30:01.267 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 6 migrations to schema "arena", now at version v6 (execution time 00:00.197s)
+04:30:01.279 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+04:30:01.311 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@6ad16c5d
+04:30:01.312 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+04:30:01.312 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+04:30:01.327 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@41294371
+04:30:01.327 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+EXIT=$?

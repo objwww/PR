@@ -1,0 +1,18 @@
+# 默认 profile：无数据库环境空跑启动。
+spring:
+  application:
+    name: arena-chaos-admin
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+  flyway:
+    enabled: false
+
+app:
+  chaos-admin:
+    # 管理面独立凭证（eval-mgmt 私网 + token 双重边界，C-3）；与业务侧零共享凭证
+    admin-token: ${CHAOS_ADMIN_TOKEN:}
+    # TTL 上下界（秒）：与 arena 迁移 V3 的 ck_chaos_ttl 同源；越界请求 400
+    ttl-min-seconds: 30
+    ttl-max-seconds: 7200

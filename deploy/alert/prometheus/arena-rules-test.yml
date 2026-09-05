@@ -1,0 +1,100 @@
+# M2-23 promtool 单元测试（在 195 上执行：docker run --rm -v $PWD:/w -w /w
+#   quay.io/prometheus/prometheus:v3.13.1 promtool test rules prometheus/arena-rules-test.yml）
+# 本文件位于 rules/ 目录之外——rule_files glob 只装载 rules/*.yml，测试文件不入生产加载面。
+rule_files:
+  - rules/arena.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'oa_stuck_orders_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 0 3 3 3'
+      - series: 'oa_domain_probe_up{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: ArenaOrderStuck
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ArenaOrderStuck
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F3
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "靶场卡单 episode 打开（F3 症状）：CREATED 停留超阈值"
+
+  - interval: 1m
+    input_series:
+      - series: 'oa_duplicate_orders_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 2 2'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaDuplicateOrders
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F1
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "靶场重复单 episode 打开（F1 症状）：同 intent 多个未废订单"
+
+  - interval: 1m
+    input_series:
+      - series: 'oa_state_violations_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaIllegalTransitions
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F2
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "靶场状态违规 episode 打开（F2 症状）：回跳签名/PAID 无支付事实"
+
+  - interval: 1m
+    input_series:
+      - series: 'oa_domain_probe_up{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '1 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaDomainProbeDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "领域探针失明（C-7：探测失败保留末值，绝不伪装业务恢复）"
+
+  - interval: 1m
+    input_series:
+      # up=1 但成功时间戳停摆 → 陈旧度条件同样触发（探测僵死也能被抓）。
+      # 注意 promtool 的 time() = 相对测试时刻（4m=240s），样本须取 0 才能过 180s 阈值
+      - series: 'oa_domain_probe_up{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '1 1 1 1 1'
+      - series: 'oa_domain_probe_last_success_timestamp{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ArenaDomainProbeDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "领域探针失明（C-7：探测失败保留末值，绝不伪装业务恢复）"
