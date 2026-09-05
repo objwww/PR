@@ -19,6 +19,9 @@ public interface RcaRunRepository {
     /** 行锁（finishTask 收尾算法 "lock task → lock incident" 链路） */
     Optional<RcaRun> findByIdForUpdate(UUID id);
 
+    /** 无锁读（评测评分轮询面，M3-16；只读身份用） */
+    Optional<RcaRun> findById(UUID id);
+
     boolean update(RcaRun run);
 
     /** 当前活跃 run（QUEUED/RUNNING）；无则 empty */

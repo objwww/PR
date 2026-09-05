@@ -280,6 +280,11 @@ public final class AlertInMemoryStores {
         }
 
         @Override
+        public synchronized Optional<RcaRun> findById(UUID id) {
+            return Optional.ofNullable(rows.get(id));
+        }
+
+        @Override
         public synchronized boolean update(RcaRun run) {
             if (!rows.containsKey(run.id())) {
                 return false;

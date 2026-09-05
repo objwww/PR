@@ -1,0 +1,40 @@
+# eval-runner 装配/隔离测试用最小注册表（与 deploy/alert/eval/eval-scenarios.yml 同构：
+# S1 = flagd 面 / S3 = 靶场 chaos 面；字段以 GoldenScenarioRegistry 白名单为准）
+registry_version: 1
+schema_version: 1
+lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 1)"
+scenarios:
+  - scenario_id: S1
+    name: paymentFailure=50%
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment
+    expected_root_cause:
+      component: payment
+      fault_type: BUSINESS_ERROR_RATE
+      reason_code: PAYMENT_CHARGE_FAILURE
+    expected_symptom_codes:
+      - checkout
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 600
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+  - scenario_id: S3
+    name: F1 幂等失效
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F1
+    target: order-arena chaos- 前缀评测流量
+    expected_root_cause:
+      component: order-arena
+      fault_type: IDEMPOTENCY_BYPASS
+      reason_code: DUPLICATE_CREATE_SAME_INTENT
+    expected_symptom_codes:
+      - ArenaDuplicateOrders
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120

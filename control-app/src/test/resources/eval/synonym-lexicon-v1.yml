@@ -1,0 +1,19 @@
+# eval-runner 装配/隔离测试用最小词典（与 deploy/alert/eval/synonym-lexicon-v1.yml 同构）
+lexicon_version: 1
+components:
+  - code: payment
+    synonyms: [payment-svc]
+  - code: order-arena
+    synonyms: []
+fault_types:
+  - code: BUSINESS_ERROR_RATE
+    synonyms: [业务错误率升高]
+  - code: IDEMPOTENCY_BYPASS
+    synonyms: []
+reason_codes:
+  - code: PAYMENT_CHARGE_FAILURE
+    fault_type: BUSINESS_ERROR_RATE
+    synonyms: [扣款失败]
+  - code: DUPLICATE_CREATE_SAME_INTENT
+    fault_type: IDEMPOTENCY_BYPASS
+    synonyms: []

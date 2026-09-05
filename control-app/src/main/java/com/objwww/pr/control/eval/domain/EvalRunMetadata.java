@@ -3,6 +3,8 @@ package com.objwww.pr.control.eval.domain;
 import com.objwww.pr.shared.Digest;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -48,31 +50,40 @@ public record EvalRunMetadata(int schemaVersion,
 
     /** 十项元数据的固定字段序 canonical 摘要（重跑一致锚；不依赖构造顺序） */
     public Digest configDigest() {
-        String canonical = "eval-run-meta/v1"
-                + "|schema=" + schemaVersion
-                + "|dataset=" + datasetVersion
-                + "|registry=" + registryDigest.value()
-                + "|lexicon=" + lexiconVersion
-                + "|model=" + model
-                + "|prompt=" + promptVersion + ":" + promptDigest.value()
-                + "|tools=" + toolRegistryDigest.value()
-                + "|temperature=" + dec(temperature)
-                + "|topP=" + dec(topP)
-                + "|maxTokens=" + dec(maxTokens)
-                + "|requestedSeed=" + dec(requestedSeed)
-                + "|effectiveSeed=" + dec(effectiveSeed)
-                + "|provider=" + providerFingerprint
-                + "|rules=" + alertRuleDigest.value()
-                + "|driver=" + scenarioDriverVersion;
-        return Digest.sha256Of(canonical);
+        StringBuilder canonical = new StringBuilder("eval-run-meta/v1");
+        canonicalMap().forEach((key, value) ->
+                canonical.append('|').append(key).append('=').append(render(value)));
+        return Digest.sha256Of(canonical.toString());
     }
 
-    private static String dec(Object value) {
+    /** 报告面投影（M3-18 全配置版本；固定字段序 LinkedHashMap） */
+    public Map<String, Object> canonicalMap() {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("schema_version", schemaVersion);
+        map.put("dataset_version", datasetVersion);
+        map.put("registry_digest", registryDigest.value());
+        map.put("lexicon_version", lexiconVersion);
+        map.put("model", model);
+        map.put("prompt_version", promptVersion);
+        map.put("prompt_digest", promptDigest.value());
+        map.put("tool_registry_digest", toolRegistryDigest.value());
+        map.put("temperature", render(temperature));
+        map.put("top_p", render(topP));
+        map.put("max_tokens", render(maxTokens));
+        map.put("requested_seed", render(requestedSeed));
+        map.put("effective_seed", render(effectiveSeed));
+        map.put("provider_fingerprint", providerFingerprint);
+        map.put("alert_rule_digest", alertRuleDigest.value());
+        map.put("scenario_driver_version", scenarioDriverVersion);
+        return map;
+    }
+
+    private static Object render(Object value) {
         if (value == null) {
             return "null";
         }
         return value instanceof BigDecimal bd
                 ? bd.stripTrailingZeros().toPlainString()
-                : value.toString();
+                : value;
     }
 }

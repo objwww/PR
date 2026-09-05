@@ -10,6 +10,7 @@ import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * GoldenCase 注册表装载器（M3-10 GoldenCase 适配器）：eval-scenarios.yml → 域对象。
@@ -84,7 +85,43 @@ public final class GoldenScenarioRegistry {
                 intField(t, "cleanup_timeout_seconds"));
         return new GoldenCase(scenarioId, strOrNull(s, "name"), strOrNull(s, "driver"),
                 strOrNull(s, "chaos_family"), strOrNull(s, "target"),
-                rootCause, symptoms, timing);
+                rootCause, symptoms, alertLabels(s, scenarioId), injection(s), timing);
+    }
+
+    /** injection 块（S1/S2 flag 面；缺块/靶场场景 = null） */
+    private static GoldenCase.Injection injection(Map<String, Object> s) {
+        Object raw = s.get("injection");
+        if (!(raw instanceof Map<?, ?> injection)) {
+            return null;
+        }
+        Object flag = injection.get("flag");
+        Object variant = injection.get("variant");
+        Object baseline = injection.get("baseline_variant");
+        if (flag == null || variant == null || baseline == null) {
+            return null;
+        }
+        return new GoldenCase.Injection(flag.toString(), variant.toString(),
+                baseline.toString());
+    }
+
+    /** 首条 expected_alerts 的 labels_frozen（C-6 指纹输入面；缺省 = 空映射） */
+    private static Map<String, String> alertLabels(Map<String, Object> s, String scenarioId) {
+        Object alerts = s.get("expected_alerts");
+        if (!(alerts instanceof List<?> list) || list.isEmpty()
+                || !(list.get(0) instanceof Map<?, ?> alert)) {
+            return Map.of();
+        }
+        Object labels = ((Map<?, ?>) alert).get("labels_frozen");
+        if (!(labels instanceof Map<?, ?> labelMap)) {
+            return Map.of();
+        }
+        Map<String, String> out = new java.util.LinkedHashMap<>();
+        labelMap.forEach((k, v) -> out.put(String.valueOf(k), String.valueOf(v)));
+        if (!out.isEmpty() && !out.containsKey("alertname")) {
+            throw new IllegalArgumentException(
+                    "场景 " + scenarioId + " labels_frozen 必含 alertname");
+        }
+        return out;
     }
 
     private static String str(Map<String, Object> map, String key) {
@@ -141,7 +178,8 @@ public final class GoldenScenarioRegistry {
                     .append(',').append(c.expectedRootCause().component())
                     .append(',').append(c.expectedRootCause().faultType())
                     .append(',').append(c.expectedRootCause().reasonCode())
-                    .append(',').append(String.join("+", c.expectedSymptomCodes()));
+                    .append(',').append(String.join("+", c.expectedSymptomCodes()))
+                    .append(',').append(new TreeMap<>(c.expectedAlertLabels()));
         }
         return Digest.sha256Of(canonical.toString());
     }

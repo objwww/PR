@@ -59,6 +59,15 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
     }
 
     @Override
+    public Optional<RcaRun> findById(UUID id) {
+        List<RcaRun> rows = jdbc.sql("SELECT * FROM rca_run WHERE id = :id")
+                .param("id", id)
+                .query(this::mapRow)
+                .list();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
     public boolean update(RcaRun run) {
         return jdbc.sql("""
                 UPDATE rca_run SET
