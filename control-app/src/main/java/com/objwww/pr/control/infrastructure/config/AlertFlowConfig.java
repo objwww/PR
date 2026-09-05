@@ -30,6 +30,7 @@ import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
 import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
@@ -147,10 +148,11 @@ public class AlertFlowConfig {
                                                        @Value("${app.alert.holmes.heartbeat-interval:PT30S}") Duration heartbeatInterval,
                                                        // M3-08：输出契约升 v2（RESPONSE_FORMAT strict json_schema），
                                                        // 包内显式 schema_version 缺失时按此版本兜底
-                                                       @Value("${app.alert.holmes.expected-schema-version:2}") int expectedSchemaVersion) {
+                                                       @Value("${app.alert.holmes.expected-schema-version:2}") int expectedSchemaVersion,
+                                                       AlertMetrics alertMetrics) {
         return new HolmesInvestigationExecutor(client, events, ledger, tx, validator,
                 AlertClock.system(), model, holmesVersion, maxEvents, heartbeatInterval,
-                expectedSchemaVersion);
+                expectedSchemaVersion, alertMetrics);
     }
 
     /** M3-08：STRUCTURE_VALIDATED 即铸 publication(READY) + 每渠道 outbox（候选标记） */
@@ -185,10 +187,11 @@ public class AlertFlowConfig {
                                                  ReportCompletedNotifier notifier,
                                                  ArtifactStore artifacts,
                                                  SlaPolicy sla,
+                                                 AlertMetrics alertMetrics,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
-                sla, AlertClock.system(), slotScope);
+                sla, AlertClock.system(), slotScope, alertMetrics);
     }
 
     @Bean

@@ -18,12 +18,17 @@ import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
+import com.objwww.pr.control.infrastructure.observability.StructuredLog;
 import com.objwww.pr.shared.Digest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -47,6 +52,8 @@ import java.util.concurrent.TimeUnit;
  * tokens 从 metadata.usage 尽力解析，缺失记 usage_missing=true（EX-A08），不算失败。
  */
 public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
+
+    private static final Logger log = LoggerFactory.getLogger(HolmesInvestigationExecutor.class);
 
     /**
      * 官方 response_format：strict json_schema 强约束 v2 类型化包（AM3 §6.3；M3-08 升版）——
@@ -104,6 +111,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
     private final int maxEvents;
     private final Duration heartbeatInterval;
     private final int expectedSchemaVersion;
+    private final AlertMetrics metrics;
 
     public HolmesInvestigationExecutor(HolmesClient client,
                                        AlertEventRepository events,
@@ -115,7 +123,8 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                                        String holmesVersion,
                                        int maxEvents,
                                        Duration heartbeatInterval,
-                                       int expectedSchemaVersion) {
+                                       int expectedSchemaVersion,
+                                       AlertMetrics metrics) {
         this.client = Objects.requireNonNull(client, "client");
         this.events = Objects.requireNonNull(events, "events");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
@@ -135,6 +144,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
             throw new IllegalArgumentException("expectedSchemaVersion 从 1 起");
         }
         this.expectedSchemaVersion = expectedSchemaVersion;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     @Override
@@ -173,7 +183,8 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                     },
                     heartbeatInterval.toMillis(), heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
             try {
-                chat = client.chat(requestBody);
+                // M3-27：run/attempt 关联头透传（server.py 只记头与 ask 摘要，不落正文）
+                chat = client.chat(requestBody, run.id().toString(), attempt.id().toString());
             } finally {
                 beat.cancel(false);
             }
@@ -228,6 +239,17 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                 toolCalls, Digest.sha256Of(chat.body()), payloadDigest, model,
                 chat.promptTokens(), chat.completionTokens(), chat.totalTokens(),
                 chat.usageMissing());
+
+        // M3-27/28：attempt 终态结构化事件 + 指标——标签为封闭枚举值，不含 ask 正文/原始工具参数
+        StructuredLog.event(log, "rca_attempt_finished", Map.ofEntries(
+                Map.entry("run_id", run.id().toString()),
+                Map.entry("task_id", task.id().toString()),
+                Map.entry("attempt_id", attempt.id().toString()),
+                Map.entry("validation_status", result.status().name()),
+                Map.entry("latency_ms", latency),
+                Map.entry("usage_missing", chat.usageMissing())));
+        metrics.attemptFinished(result.status().name());
+        metrics.attemptLatency(latency);
 
         if (result.status() != ValidationStatus.STRUCTURE_VALIDATED) {
             // REJECTED_* 同权落档（INV-AM3-7）：结构问题是策略违约，重试同形状概率高

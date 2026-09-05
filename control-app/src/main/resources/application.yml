@@ -64,3 +64,14 @@ app:
     # 单价表：app.model.price.<model>.{input,output}-micros-per-1k + pricing-version + currency；
     # 双单价均为 0（默认）= 不估算；改价必须升 pricing-version
     price: {}
+
+# M3-28：actuator 最小暴露面——health/metrics 仅运维面（宿主端口本就 127.0.0.1 绑定，
+# INV-AM0-1）；env/heapdump 等敏感端点一律不开
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never

@@ -26,6 +26,8 @@ import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.alert.domain.statemachine.RcaRunStateMachine;
 import com.objwww.pr.control.alert.domain.statemachine.RcaTaskStateMachine;
 import com.objwww.pr.control.domain.port.ArtifactStore;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
+import com.objwww.pr.control.infrastructure.observability.StructuredLog;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,6 +88,7 @@ public class RcaRunOrchestrator {
     private final AlertClock clock;
     private final String slotScope;
     private final ObjectMapper mapper = new ObjectMapper();
+    private final AlertMetrics metrics;
 
     public RcaRunOrchestrator(RcaTaskRepository tasks,
                               RcaRunRepository runs,
@@ -98,7 +102,8 @@ public class RcaRunOrchestrator {
                               ArtifactStore artifacts,
                               SlaPolicy sla,
                               AlertClock clock,
-                              String slotScope) {
+                              String slotScope,
+                              AlertMetrics metrics) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -112,6 +117,7 @@ public class RcaRunOrchestrator {
         this.sla = Objects.requireNonNull(sla);
         this.clock = Objects.requireNonNull(clock);
         this.slotScope = Objects.requireNonNull(slotScope);
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     /**
@@ -162,6 +168,16 @@ public class RcaRunOrchestrator {
             tasks.update(withTaskState(fresh, RcaTaskState.DEAD, null, now));
             outcome = FinishOutcome.DEAD;
         }
+
+        // M3-27/28：task 决策结构化事件 + 指标——decision 标签为 FinishOutcome 封闭枚举，无 UUID 标签
+        StructuredLog.event(log, "rca_task_decision", Map.ofEntries(
+                Map.entry("run_id", run.id().toString()),
+                Map.entry("task_id", task.id().toString()),
+                Map.entry("attempt_id", startedAttempt.id().toString()),
+                Map.entry("decision", outcome.name()),
+                Map.entry("latency_ms", Duration.between(startedAttempt.startedAt(), now).toMillis())));
+        metrics.taskDecision(outcome.name());
+
         if (slotEpoch >= 0) {
             slots.release(slotScope, slotNo, owner, slotEpoch);
         }

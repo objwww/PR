@@ -71,6 +71,19 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- M3-28：actuator + Micrometer 最小指标（暴露面在 application.yml 收口为
+             health,info,metrics；禁高基数 ID label 由 AlertMetrics label allowlist 测试钉死） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- M3-29：tracing API + brave 桥（无 exporter 时 span 仅内存态；异步边界
+             关联由 TracedTasks + 测试钉死，OTel collector 上线后零改动接通） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -5,6 +5,7 @@ import com.objwww.pr.control.alert.domain.model.ExternalInvocationState;
 import com.objwww.pr.control.alert.domain.model.Incident;
 import com.objwww.pr.control.alert.domain.model.InboxState;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.alert.domain.model.RcaAttemptStatus;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
@@ -115,7 +116,8 @@ class RcaWorkerTest {
     private RcaRunOrchestrator newOrchestrator() {
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
-                stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca");
+                stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca",
+                AlertMetrics.NOOP);
     }
 
     private RcaWorker newWorker(String owner) {

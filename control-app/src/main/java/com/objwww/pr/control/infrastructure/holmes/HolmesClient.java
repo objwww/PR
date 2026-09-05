@@ -94,11 +94,26 @@ public final class HolmesClient {
      * @param requestBody 完整请求体 JSON（ask + response_format 等；不含任何密钥）
      */
     public HolmesChatResult chat(String requestBody) {
+        return chat(requestBody, null, null);
+    }
+
+    /**
+     * POST /api/chat + run/attempt 关联头（M3-27：Holmes 服务端日志按头关联而非
+     * 记 ask 正文；spike §二 已验证自定义请求头到达端点）。
+     */
+    public HolmesChatResult chat(String requestBody, String runId, String attemptId) {
         String body;
         try {
-            body = rest.post()
+            var spec = rest.post()
                     .uri("/api/chat")
-                    .header("Content-Type", "application/json")
+                    .header("Content-Type", "application/json");
+            if (runId != null) {
+                spec = spec.header("X-Run-Id", runId);
+            }
+            if (attemptId != null) {
+                spec = spec.header("X-Attempt-Id", attemptId);
+            }
+            body = spec
                     .body(requestBody)
                     // BA-12② 受限读：整包 body(String) 会被异常大响应打爆堆——限读到
                     // maxResponseBytes+1 即止，超限截断的文本交给结构验证链判 REJECTED_OVERSIZE

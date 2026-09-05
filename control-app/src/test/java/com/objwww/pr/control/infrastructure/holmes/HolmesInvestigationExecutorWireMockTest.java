@@ -1,5 +1,8 @@
 package com.objwww.pr.control.infrastructure.holmes;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -23,11 +26,13 @@ import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
@@ -84,7 +89,7 @@ class HolmesInvestigationExecutorWireMockTest {
         executor = new HolmesInvestigationExecutor(client, stores.events,
                 stores.invocations, TransactionOperations.withoutTransaction(),
                 validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
-                Duration.ofMillis(50), 1);
+                Duration.ofMillis(50), 1, AlertMetrics.NOOP);
     }
 
     @AfterEach
@@ -344,6 +349,33 @@ class HolmesInvestigationExecutorWireMockTest {
     }
 
     @Test
+    @DisplayName("M3-27 日志卫生：capture 断言执行器日志无 ask 正文/secret，结构化事件在位")
+    void m327_logsNeverCarryAskOrSecret() throws Exception {
+        Logger execLogger = (Logger) LoggerFactory.getLogger(HolmesInvestigationExecutor.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        execLogger.addAppender(appender);
+        try {
+            stubOk(chatBody(validPackage(), 10, 5, 15));
+            Incident incident = incident();
+            RcaRun run = run(incident);
+            RcaTask task = task(run);
+            executor.execute(task, run, incident, attempt(task), heartbeatCalls::incrementAndGet);
+        } finally {
+            execLogger.detachAppender(appender);
+        }
+
+        List<String> lines = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage).toList();
+        // 结构化终态事件确实在位（含关联 ID 与验证状态，不含内容字段）
+        assertThat(lines).anyMatch(l -> l.contains("rca_attempt_finished")
+                && l.contains("validation_status"));
+        // ask 正文（incident label 原文）与渠道 secret 永不进日志面
+        assertThat(lines).noneMatch(l -> l.contains("alertname=HighErrorRate"));
+        assertThat(lines).noneMatch(l -> l.contains(API_KEY));
+    }
+
+    @Test
     @DisplayName("EX-A07 响应超尺寸：REJECTED_OVERSIZE")
     void exA07_oversizeRejected() {
         HolmesClient client = new HolmesClient(holmes.baseUrl(), API_KEY,
@@ -351,7 +383,8 @@ class HolmesInvestigationExecutorWireMockTest {
         EvidencePackageValidator tight = new EvidencePackageValidator(200, 20, 4000);
         HolmesInvestigationExecutor tightExecutor = new HolmesInvestigationExecutor(client,
                 stores.events, stores.invocations, TransactionOperations.withoutTransaction(),
-                tight, new FixedClock(), "deepseek-v3", "1.5.1", 20, Duration.ofMillis(50), 1);
+                tight, new FixedClock(), "deepseek-v3", "1.5.1", 20, Duration.ofMillis(50), 1,
+                AlertMetrics.NOOP);
         stubOk("{\"analysis\": \"" + "x".repeat(500) + "\"}");
 
         Incident incident = incident();
@@ -391,7 +424,7 @@ class HolmesInvestigationExecutorWireMockTest {
         HolmesInvestigationExecutor cappedExecutor = new HolmesInvestigationExecutor(capped,
                 stores.events, stores.invocations, TransactionOperations.withoutTransaction(),
                 validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
-                Duration.ofMillis(50), 1);
+                Duration.ofMillis(50), 1, AlertMetrics.NOOP);
         // 完整响应合法且远超 200 字节——若 client 未截断，本用例会 STRUCTURE_VALIDATED
         stubOk(chatBody(validPackage(), 10, 5, 15));
 
@@ -520,7 +553,7 @@ class HolmesInvestigationExecutorWireMockTest {
         HolmesInvestigationExecutor failing = new HolmesInvestigationExecutor(client,
                 stores.events, failingLedger, TransactionOperations.withoutTransaction(),
                 validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
-                Duration.ofMillis(50), 1);
+                Duration.ofMillis(50), 1, AlertMetrics.NOOP);
         holmes.stubFor(post(urlPathEqualTo("/api/chat"))
                 .willReturn(aResponse().withStatus(200).withBody("{}")));
 

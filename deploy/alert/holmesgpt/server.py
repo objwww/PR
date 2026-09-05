@@ -9,6 +9,7 @@ if add_custom_certificate(ADDITIONAL_CERTIFICATE):
 
 # DO NOT ADD ANY IMPORTS OR CODE ABOVE THIS LINE
 # IMPORTING ABOVE MIGHT INITIALIZE AN HTTPS CLIENT THAT DOESN'T TRUST THE CUSTOM CERTIFICATE
+import hashlib
 import json
 import logging
 import ssl
@@ -553,13 +554,30 @@ def _stream_with_trace_cleanup(storage, stream_generator, req_info, trace_span):
         storage.__exit__(None, None, None)
 
 
+def _safe_req_info(chat_request, http_request):
+    """AM3 M3-27：日志只记 ask 字节数 + sha256 前 16 hex + run/attempt 关联头。
+
+    方案 §6.4/BA-10②：server 日志绝不落 ask 正文与 secret——req_info 会被
+    Received/Completed/stream cleanup 多处复用，此处一次收口。
+    """
+    ask_text = chat_request.ask or ""
+    ask_size = len(ask_text.encode("utf-8"))
+    ask_digest = hashlib.sha256(ask_text.encode("utf-8")).hexdigest()[:16]
+    run_id = http_request.headers.get("X-Run-Id", "-")
+    attempt_id = http_request.headers.get("X-Attempt-Id", "-")
+    return (
+        f"/api/chat request: ask_size={ask_size}B ask_sha256_16={ask_digest} "
+        f"run_id={run_id} attempt_id={attempt_id}"
+    )
+
+
 @app.post("/api/chat")
 def chat(chat_request: ChatRequest, http_request: Request):
     try:
         # Log incoming request details
         has_images = bool(chat_request.images)
         has_structured_output = bool(chat_request.response_format)
-        req_info = f"/api/chat request: ask={chat_request.ask}"
+        req_info = _safe_req_info(chat_request, http_request)
         logging.info(
             f"Received: {req_info}, model={chat_request.model}, "
             f"images={has_images}, structured_output={has_structured_output}, "
