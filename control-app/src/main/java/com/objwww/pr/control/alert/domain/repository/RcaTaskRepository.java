@@ -1,6 +1,7 @@
 package com.objwww.pr.control.alert.domain.repository;
 
 import com.objwww.pr.control.alert.domain.model.RcaTask;
+import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -41,6 +42,16 @@ public interface RcaTaskRepository {
     List<RcaTask> findExpiredLeased(Instant now);
 
     Optional<RcaTask> findById(UUID id);
+
+    /** run 全量任务（推进器输入；返回序 = id 升序，稳定可复现） */
+    List<RcaTask> findByRunId(UUID runId);
+
+    /**
+     * 状态 CAS 迁移（M4-06 推进器并发栅栏）：{@code UPDATE ... SET state=:to
+     * WHERE id=:id AND state=:from}——1=本次迁移生效；0=并发已收敛/状态已漂移。
+     * 状态机合法性由调用方保证（本端口只做行级竞态裁决）。
+     */
+    boolean transitionState(UUID id, RcaTaskState from, RcaTaskState to);
 
     /** 排队 task 数（DeferredPolicy backlog 输入） */
     int countQueued();

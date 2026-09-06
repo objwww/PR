@@ -89,6 +89,12 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaTaskRepository(jdbc);
     }
 
+    /** M4-04/05：rca_task_edge 读写（V8+V18 约束面上的薄仓储） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresTaskEdgeRepository(jdbc);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository rcaAttemptRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository(jdbc);

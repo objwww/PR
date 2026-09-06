@@ -1,6 +1,7 @@
 package com.objwww.pr.control.infrastructure.persistence;
 
 import com.objwww.pr.control.alert.domain.model.RcaTask;
+import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.statemachine.RcaStateContract;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -150,6 +151,26 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 .query(this::mapRow)
                 .list();
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public List<RcaTask> findByRunId(UUID runId) {
+        return jdbc.sql("SELECT * FROM rca_task WHERE run_id = :runId ORDER BY id")
+                .param("runId", runId)
+                .query(this::mapRow)
+                .list();
+    }
+
+    @Override
+    public boolean transitionState(UUID id, RcaTaskState from, RcaTaskState to) {
+        return jdbc.sql("""
+                UPDATE rca_task SET state = :to, updated_at = now()
+                 WHERE id = :id AND state = :from
+                """)
+                .param("id", id)
+                .param("from", from.name())
+                .param("to", to.name())
+                .update() > 0;
     }
 
     @Override

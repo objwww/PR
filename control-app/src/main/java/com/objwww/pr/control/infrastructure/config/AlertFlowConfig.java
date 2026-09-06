@@ -225,6 +225,14 @@ public class AlertFlowConfig {
                 investigationSchemaVersion);
     }
 
+    /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */
+    @Bean
+    public com.objwww.pr.control.alert.application.DagExecutionService dagExecutionService(
+            com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository edges,
+            RcaTaskRepository tasks) {
+        return new com.objwww.pr.control.alert.application.DagExecutionService(edges, tasks);
+    }
+
     /** 两个消费循环（inbox 投影 + RCA worker）随容器启停（T10 部署启动真执行链） */
     @Bean
     public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker) {

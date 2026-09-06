@@ -28,7 +28,8 @@ class AlertDagCycleGuardIT extends PostgresITBase {
     void truncateAll() {
         super.truncateAll();
         TaskEdgeRepository edges = new PostgresTaskEdgeRepository(controlJdbc);
-        service = new DagExecutionService(edges);
+        var tasks = new com.objwww.pr.control.infrastructure.persistence.PostgresRcaTaskRepository(controlJdbc);
+        service = new DagExecutionService(edges, tasks);
         seed = seedRunWithTasks(3);
     }
 

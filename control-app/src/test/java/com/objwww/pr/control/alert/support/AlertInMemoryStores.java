@@ -380,6 +380,27 @@ public final class AlertInMemoryStores {
         }
 
         @Override
+        public synchronized List<RcaTask> findByRunId(UUID runId) {
+            return rows.values().stream()
+                    .filter(t -> t.runId().equals(runId))
+                    .sorted(Comparator.comparing(RcaTask::id))
+                    .toList();
+        }
+
+        @Override
+        public synchronized boolean transitionState(UUID id, RcaTaskState from, RcaTaskState to) {
+            RcaTask t = rows.get(id);
+            if (t == null || t.state() != from) {
+                return false;
+            }
+            rows.put(id, new RcaTask(t.id(), t.runId(), t.taskKey(), to,
+                    t.priority(), t.availableAt(), t.readySince(), t.deadlineAt(),
+                    t.leaseOwner(), t.leaseUntil(), t.leaseEpoch(),
+                    t.attemptCount(), t.maxAttempts(), t.createdAt(), t.updatedAt()));
+            return true;
+        }
+
+        @Override
         public synchronized int countQueued() {
             return (int) rows.values().stream()
                     .filter(t -> t.state() == RcaTaskState.READY || t.state() == RcaTaskState.RETRY_WAIT)
