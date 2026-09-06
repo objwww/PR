@@ -134,6 +134,20 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentBudgetLedger(jdbc, tx);
     }
 
+    /** M4-10/11：统一事件账本（join 调用方事务的 REQUIRED 模板 + 进度事件 REQUIRES_NEW 模板） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx,
+            org.springframework.transaction.PlatformTransactionManager txManager) {
+        org.springframework.transaction.support.TransactionTemplate independent =
+                new org.springframework.transaction.support.TransactionTemplate(txManager);
+        independent.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaEventAppender(
+                jdbc, tx, independent);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
