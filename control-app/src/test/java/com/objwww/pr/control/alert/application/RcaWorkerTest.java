@@ -353,6 +353,66 @@ class RcaWorkerTest {
         assertThat(stores.attempts.all()).hasSize(1);   // 旧 worker 的 attempt 未落
     }
 
+    // ------------------------------------------------------------------ M4-07 generation fence
+
+    @Test
+    @DisplayName("M4-07 generation fence：run SUPERSEDED 后旧 worker 提交 → task STALE，结果零落档不污染新 run")
+    void generationFence_staleFinishDoesNotPolluteNewRun() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
+        assertThat(work).isPresent();
+        RcaTask held = work.get().task();
+
+        // incident 代际前进：旧 run 出活跃集（SUPERSEDED），新 run gen+1 上位（uq 允许）
+        RcaRun oldRun = stores.runs.findByIdForUpdate(work.get().run().id()).orElseThrow();
+        stores.runs.update(new RcaRun(oldRun.id(), oldRun.incidentId(), oldRun.generation(),
+                oldRun.trigger(), RcaRunState.SUPERSEDED, oldRun.investigationHash(),
+                oldRun.createdAt(), clock.now, oldRun.startedAt(), clock.now, null));
+        RcaRun newRun = new RcaRun(UUID.randomUUID(), oldRun.incidentId(), oldRun.generation() + 1,
+                RunTrigger.INITIAL, RcaRunState.QUEUED, oldRun.investigationHash(),
+                clock.now, clock.now, null, null, null);
+        stores.runs.insert(newRun);
+
+        RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), held.id(), held.attemptCount(),
+                held.leaseEpoch(), "worker-a", RcaAttemptStatus.STARTED, null, null, null,
+                clock.now, null);
+        stores.attempts.insert(attempt);
+        RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(held, "worker-a",
+                work.get().slotNo(), work.get().slotEpoch(),
+                RcaTaskExecutor.ExecutionResult.success(staticArtifact()), attempt);
+
+        assertThat(outcome).isEqualTo(RcaRunOrchestrator.FinishOutcome.STALE_GENERATION);
+        assertThat(stores.tasks.findById(held.id()).orElseThrow().state())
+                .as("旧代结果只能 STALE（INV-AM4-4）").isEqualTo(RcaTaskState.STALE);
+        assertThat(stores.reports.all()).as("旧代结果不产报告").isEmpty();
+        assertThat(stores.publications.all()).isEmpty();
+        assertThat(stores.outboxes.all()).isEmpty();
+        assertThat(stores.investigations.all())
+                .as("旧代结果不落调查终态（merge 面栅栏）").isEmpty();
+        assertThat(stores.runs.findById(newRun.id()).orElseThrow().state())
+                .as("新 run 不受污染").isEqualTo(RcaRunState.QUEUED);
+        assertThat(stores.slots.occupiedSlots("rca")).as("槽正常归还").isEmpty();
+    }
+
+    @Test
+    @DisplayName("M4-07 generation fence：崩溃回收遇死 run → STALE 不重排（不复活死 run 的工作）")
+    void generationFence_recoverDoesNotRequeueSupersededRun() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
+        assertThat(work).isPresent();
+
+        RcaRun oldRun = stores.runs.findByIdForUpdate(work.get().run().id()).orElseThrow();
+        stores.runs.update(new RcaRun(oldRun.id(), oldRun.incidentId(), oldRun.generation(),
+                oldRun.trigger(), RcaRunState.SUPERSEDED, oldRun.investigationHash(),
+                oldRun.createdAt(), clock.now, oldRun.startedAt(), clock.now, null));
+
+        clock.now = clock.now.plus(Duration.ofMinutes(6));   // 租约过期
+        assertThat(worker.recoverExpired()).isEqualTo(1);
+        assertThat(stores.tasks.all().get(0).state())
+                .as("死 run 的过期租约 → STALE，不走 RETRY_WAIT 重排")
+                .isEqualTo(RcaTaskState.STALE);
+    }
+
     // ------------------------------------------------------------------ 恢复扫描（崩溃双回收 + 悬挂账本）
 
     @Test

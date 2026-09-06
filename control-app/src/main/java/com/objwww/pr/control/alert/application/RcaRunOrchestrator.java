@@ -72,7 +72,7 @@ public class RcaRunOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(RcaRunOrchestrator.class);
 
     /** finishTask 结果（worker 观测/测试断言） */
-    public enum FinishOutcome {COMPLETED, RERUN_CAST, RESOLVED_SHORT_CIRCUIT, RETRY_SCHEDULED, DEAD, LEASE_REJECTED}
+    public enum FinishOutcome {COMPLETED, RERUN_CAST, RESOLVED_SHORT_CIRCUIT, RETRY_SCHEDULED, DEAD, LEASE_REJECTED, STALE_GENERATION}
 
     private final RcaTaskRepository tasks;
     private final RcaRunRepository runs;
@@ -137,6 +137,28 @@ public class RcaRunOrchestrator {
         }
         RcaTask fresh = tasks.findById(task.id()).orElseThrow();
         RcaRun run = runs.findByIdForUpdate(fresh.runId()).orElseThrow();
+
+        // M4-07 generation fence（INV-AM4-4）：run 已出活跃集（被新代际取代/终止）＝
+        // 旧 generation 结果——task 收敛 STALE，attempt 照实落终态，但报告/publication/
+        // 通知零落档（merge 面栅栏），run 收尾跳过，不污染新 run。
+        if (!run.state().isActive()) {
+            attempts.update(finishAttempt(startedAttempt, result, now));
+            RcaTaskStateMachine.requireTransition(fresh.state(), RcaTaskState.STALE);
+            tasks.update(withTaskState(fresh, RcaTaskState.STALE, null, now));
+            if (slotEpoch >= 0) {
+                slots.release(slotScope, slotNo, owner, slotEpoch);
+            }
+            StructuredLog.event(log, "rca_task_decision", Map.ofEntries(
+                    Map.entry("run_id", run.id().toString()),
+                    Map.entry("task_id", task.id().toString()),
+                    Map.entry("attempt_id", startedAttempt.id().toString()),
+                    Map.entry("decision", FinishOutcome.STALE_GENERATION.name()),
+                    Map.entry("run_state", run.state().name())));
+            metrics.taskDecision(FinishOutcome.STALE_GENERATION.name());
+            log.warn("task {} 旧代结果作废（run {} state={}），task→STALE 零落档",
+                    task.id(), run.id(), run.state());
+            return FinishOutcome.STALE_GENERATION;
+        }
 
         // 1) attempt 终态
         attempts.update(finishAttempt(startedAttempt, result, now));

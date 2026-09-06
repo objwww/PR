@@ -13,10 +13,11 @@ import java.util.UUID;
  * rca_task 端口（调度列齐全；SLA 晋升排序 §6.2）。
  *
  * <p>SQL 契约：claimNext =
- * {@code UPDATE ... SET state='LEASED', lease_owner=:owner, lease_until=:now+:lease,
- * lease_epoch=lease_epoch+1, attempt_count=attempt_count+1, updated_at=:now
- * WHERE id = (SELECT id FROM rca_task WHERE state IN ('READY','RETRY_WAIT')
- * AND available_at <= :now ORDER BY (now() >= deadline_at) DESC, priority DESC,
+ * {@code UPDATE ... SET state='LEASED', ... WHERE id = (SELECT id FROM rca_task t
+ * WHERE state IN ('READY','RETRY_WAIT') AND available_at <= :now
+ * AND EXISTS (SELECT 1 FROM rca_run r WHERE r.id = t.run_id
+ *             AND r.state IN ('QUEUED','RUNNING','REPORTING'))   -- M4-07 generation fence
+ * ORDER BY (now() >= deadline_at) DESC, priority DESC,
  * deadline_at, created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *}
  *
  * <p>requireCurrentLease = epoch 栅栏 UPDATE（行数 0 = 旧 worker/已回收）；

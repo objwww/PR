@@ -20,7 +20,11 @@ import java.util.UUID;
  */
 public class PostgresRcaTaskRepository implements RcaTaskRepository {
 
-    /** 端口契约原文（§6.2）：(now() >= deadline_at) DESC, priority DESC, deadline_at, created_at, id */
+    /**
+     * 端口契约原文（§6.2）：(now() >= deadline_at) DESC, priority DESC, deadline_at, created_at, id。
+     * M4-07 generation fence（INV-AM4-4）：只领活跃 run（QUEUED/RUNNING/REPORTING，与 V12
+     * uq 谓词同集）的任务——被新代际取代的 run 其任务不可再领取。
+     */
     private static final String CLAIM_SQL = """
             UPDATE rca_task SET
                 state = 'LEASED',
@@ -30,9 +34,13 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 attempt_count = attempt_count + 1,
                 updated_at = :now
             WHERE id = (
-                SELECT id FROM rca_task
-                 WHERE state IN ('READY', 'RETRY_WAIT') AND available_at <= :now
-                 ORDER BY (now() >= deadline_at) DESC, priority DESC, deadline_at, created_at, id
+                SELECT t.id FROM rca_task t
+                 WHERE t.state IN ('READY', 'RETRY_WAIT') AND t.available_at <= :now
+                   AND EXISTS (SELECT 1 FROM rca_run r
+                                WHERE r.id = t.run_id
+                                  AND r.state IN ('QUEUED', 'RUNNING', 'REPORTING'))
+                 ORDER BY (now() >= t.deadline_at) DESC, t.priority DESC, t.deadline_at,
+                          t.created_at, t.id
                  LIMIT 1 FOR UPDATE SKIP LOCKED
             )
             RETURNING *

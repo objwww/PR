@@ -127,6 +127,7 @@ public class RcaWorker {
 
     /**
      * 过期租约 task → RETRY_WAIT（退避；epoch 不动，重领时 +1 拒旧提交）；
+     * run 已出活跃集 → STALE（M4-07 generation fence：死 run 的工作不重排不复活）；
      * slot 由 {@code slots.reclaimExpired} 随自身租约过期回收；
      * 悬挂账本 STARTED 超过宽限 → UNKNOWN。
      *
@@ -137,16 +138,20 @@ public class RcaWorker {
         slots.reclaimExpired(now);
         long reclaimed = 0;
         for (RcaTask task : tasks.findExpiredLeased(now)) {
-            // 崩溃回收也是一次状态迁移（LEASED→RETRY_WAIT），过状态机（BA-11①/G0-07）
-            RcaTaskStateMachine.requireTransition(task.state(), RcaTaskState.RETRY_WAIT);
+            boolean runActive = runs.findById(task.runId())
+                    .map(run -> run.state().isActive())
+                    .orElse(false);
+            RcaTaskState target = runActive ? RcaTaskState.RETRY_WAIT : RcaTaskState.STALE;
+            // 崩溃回收也是一次状态迁移（LEASED→RETRY_WAIT/STALE），过状态机（BA-11①/G0-07）
+            RcaTaskStateMachine.requireTransition(task.state(), target);
             Instant readyAt = now.plus(retryBackoff);
             RcaTask back = new RcaTask(task.id(), task.runId(), task.taskKey(),
-                    RcaTaskState.RETRY_WAIT, task.priority(), readyAt, readyAt,
+                    target, task.priority(), readyAt, readyAt,
                     task.deadlineAt(), null, null, task.leaseEpoch(),
                     task.attemptCount(), task.maxAttempts(), task.createdAt(), now);
             if (tasks.update(back)) {
                 reclaimed++;
-                log.warn("task {} 租约过期回收（疑似 worker 崩溃）owner={}", task.id(), task.leaseOwner());
+                log.warn("task {} 租约过期回收 owner={} → {}", task.id(), task.leaseOwner(), target);
             }
         }
         markHangingInvocationsUnknown(now);

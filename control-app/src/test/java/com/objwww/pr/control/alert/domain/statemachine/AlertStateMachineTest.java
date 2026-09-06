@@ -125,8 +125,8 @@ class AlertStateMachineTest {
         Map<com.objwww.pr.control.alert.domain.model.RcaTaskState,
                 Set<com.objwww.pr.control.alert.domain.model.RcaTaskState>> expected = Map.of(
                 RD, Set.of(L, C, X),
-                L, Set.of(RD, RN, RW, D, C, X),
-                RN, Set.of(RD, RW, D, C, X),
+                L, Set.of(RD, RN, RW, D, C, X, ST),
+                RN, Set.of(RD, RW, D, C, X, ST),
                 BL, Set.of(RD, SK, C),
                 RW, Set.of(RD, X, C));
 
@@ -141,6 +141,12 @@ class AlertStateMachineTest {
         assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(ST, RD))
                 .isInstanceOf(IllegalTransitionException.class);
         assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(SK, BL))
+                .isInstanceOf(IllegalTransitionException.class);
+        // M4-07 generation fence 入边：LEASED/RUNNING→STALE（在途工作对死 run 收敛，不复活）；
+        // READY/RETRY_WAIT/BLOCKED 不入 STALE——未领取工作靠 claim 栅栏隔离，回收面只处理 LEASED
+        assertThat(RcaTaskStateMachine.allowed(L, ST)).isTrue();
+        assertThat(RcaTaskStateMachine.allowed(RN, ST)).isTrue();
+        assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(RD, ST))
                 .isInstanceOf(IllegalTransitionException.class);
         // WAITING_APPROVAL 属 AM5，本期枚举不引入（评审 v1.1 修正④）
         assertThat(com.objwww.pr.control.alert.domain.model.RcaTaskState.values())
