@@ -181,6 +181,13 @@
 - **HolmesGPT 工具审批**（`enable_tool_approval`/approval_required/恢复需重交 history）：适合交互客户端，不适合作审批事实源——审批必须落控制面（AA-19）。
   来源：http-api.md（E-12 同文档）【明示】
 
+## E-16 Harness 与 M4 机制源码级调研（2026-09-06，11 路并行 agent）【AM4 设计素材，源码级】
+
+- **Harness v3**（`docs/告警-调研-Harness设计-v3.md`，取代 v1/v2 为现役版）：13 对象源码级重调——Claude Code（闭源仅文档）/Codex/Pi/dsh/OpenHands/OpenClaw/HolmesGPT/Gemini CLI/OpenCode/Goose/Aider/Cline/Hermes Agent（NousResearch，实查 242k★，2025-07 创建——推翻此前"2026-02 发布十余万星"的传闻）。每条机制带 `路径:行号` 证据；含对 v1/v2 旧结论的印证/推翻总表（43 条）。分册留档 `var/m4-research/harness-src/h01~h07`。
+- **M4 机制调研 v1**（`docs/告警-调研-M4机制调研-v1.md`）：工具/证据/裁决/预算四册约 50+ 项目源码级重证，M4-13~23、M4-08/09/37 逐条裁定。关键修正：LiteLLM 已演进为事前预留制 budget_reservation（旧"缓存检查+异步补账"结论只对降级模式成立）；smolagents/CrewAI/LangChain 三家超限后再调一次 LLM 收尾（M4-08 耗尽测试须断言零 LLM 调用）；三家规则/工具注册重名静默覆盖（M4-14 须 fail-fast）；三个 default-allow 陷阱（M4-16 空策略须拒绝启动）。分册留档 `var/m4-research/src-part1~4`。
+- **取证降级声明**：本机 GitHub 直连与 127.0.0.1:7890 代理均不通（2026-09-06），全部仓库经 gh-proxy/codeload 镜像取源码快照，commit SHA 经 GitHub API 逐仓核实记录；星数经 API/shields.io。
+- 关键源码证据示例：Codex `SafetyCheck` 三态（codex-rs/core/src/safety.rs:17）；Gemini TOML 五档优先级+deny 剔工具（packages/core/src/policy/）；OpenCode doom_loop 三连熔断（processor.ts:354-381）；HolmesGPT 双池分离 5/10（env_vars.py:221-234）、spill 双阈值 min(15%,25k)；Keep 双哈希三分支（alert_deduplicator.py:61-116）；Bucket4j PG FOR UPDATE 原子扣减（PostgreSQLSelectForUpdateBasedProxyManager.java:69）；in-toto Statement 三段式 + rekor digest 对 canonical 字节算（entries.go:184/352）；Iceberg snapshot 不可变+CAS（SnapshotProducer.java:480-536）。
+
 ## 195 注册表实测记录（2026-09-03，主会话执行）
 
 | 注册表 | 结果 | 证据 |
