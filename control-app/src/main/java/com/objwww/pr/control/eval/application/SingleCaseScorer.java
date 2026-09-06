@@ -28,7 +28,8 @@ import java.util.UUID;
  *
  * <p>verdict 分派冻结（无已验证报告时）：
  * <ul>
- *   <li>Run 内存在 REJECTED_* 报告行 → STRUCTURE_REJECTED（结构失败，计 0 入总分母）；</li>
+ *   <li>Run 内存在 REJECTED_* 调查记录（investigation_result）→ STRUCTURE_REJECTED
+ *       （结构失败，计 0 入总分母，技术方案 §6.4 冻结）；</li>
  *   <li>否则（run 未终态/轮询超时/执行失败无产物）→ TIMEOUT_OR_ABSENT（缺席单独标注）。</li>
  * </ul>
  * 评分输入只取选定报告——多 attempt 并存时其余报告一律不进评分（禁挑最优）。
@@ -66,8 +67,12 @@ public class SingleCaseScorer {
         Optional<RcaReport> selected = selector.select(runReports);
 
         if (selected.isEmpty()) {
-            boolean structureRejected = runReports.stream().anyMatch(r ->
-                    r.validationStatus() != ValidationStatus.STRUCTURE_VALIDATED);
+            // 结构失败判定面 = 调查记录（技术方案 §6.4 行 199 冻结：REJECTED_* 计 0 入分母、
+            // 明确失败非超时；rca_report 只收 STRUCTURE_VALIDATED 行——ORCH-INSERT 面见
+            // RcaRunOrchestrator.archiveArtifact，故报告行的 anyMatch 判据永远为假，改查调查记录）
+            boolean structureRejected = investigations.findByRunId(rcaRunId).stream().anyMatch(r ->
+                    r.validationStatus() != ValidationStatus.STRUCTURE_VALIDATED
+                    && r.validationStatus() != ValidationStatus.NOT_VALIDATED);
             ScoringVerdict verdict = structureRejected
                     ? ScoringVerdict.STRUCTURE_REJECTED
                     : ScoringVerdict.TIMEOUT_OR_ABSENT;
@@ -77,7 +82,7 @@ public class SingleCaseScorer {
                     golden.expectedRootCause(), null,
                     golden.expectedSymptomCodes(), List.of(), 0, 0,
                     golden.expectedSymptomCodes().size(), null, false,
-                    failureSample(structureRejected, runReports)));
+                    failureSample(structureRejected, investigations.findByRunId(rcaRunId))));
         }
 
         RcaReport report = selected.get();
@@ -140,12 +145,13 @@ public class SingleCaseScorer {
                 && !toolCalls.findByResultId(result.get().id()).isEmpty();
     }
 
-    private String failureSample(boolean anyRejected, List<RcaReport> reports) {
+    private String failureSample(boolean anyRejected, List<InvestigationResult> results) {
         if (!anyRejected) {
             return "{\"reason\":\"no_validated_report\"}";
         }
-        return reports.stream()
-                .filter(r -> r.validationStatus() != ValidationStatus.STRUCTURE_VALIDATED)
+        return results.stream()
+                .filter(r -> r.validationStatus() != ValidationStatus.STRUCTURE_VALIDATED
+                        && r.validationStatus() != ValidationStatus.NOT_VALIDATED)
                 .findFirst()
                 .map(r -> {
                     try {

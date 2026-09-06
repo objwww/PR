@@ -113,23 +113,26 @@ class AlertV9MigrationContractIT extends PostgresITBase {
 
     @Test
     void executionAndValidationStatusAreIndependentColumns() {
-        Seed seed = seedAlertChain();
-
-        // 执行失败 + 结构验证通过 可共存（不混装：HTTP 超时前的响应可另行落档的形状面）
-        // 执行成功 + 结构拒绝 可共存
-        insertResultTerminal(UUID.randomUUID(), seed, "SUCCEEDED", "REJECTED_MALFORMED", false);
-        insertResultTerminal(UUID.randomUUID(), seed, "FAILED", "NOT_VALIDATED", false);
+        // uq_rca_investigation_result_attempt：一 attempt 一记录——两种合法组合各用
+        // 独立 attempt 链证明"执行结局与验证结局两列互不约束"
+        Seed seedA = seedAlertChain();
+        Seed seedB = seedAlertChain();
+        insertResultTerminal(UUID.randomUUID(), seedA, "SUCCEEDED", "REJECTED_MALFORMED", false);
+        insertResultTerminal(UUID.randomUUID(), seedB, "FAILED", "NOT_VALIDATED", false);
         assertThat(count("rca_investigation_result")).isEqualTo(2);
 
         // STRUCTURE_VALIDATED 必须有 package_json（INV-AM3-7 的 DB 面）
-        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seed,
+        Seed seedC = seedAlertChain();
+        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seedC,
                         "SUCCEEDED", "STRUCTURE_VALIDATED", false),
                 "ck_rca_ir_validated_has_package")).isTrue();
         // 执行/验证状态链外值被拒
-        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seed,
+        Seed seedD = seedAlertChain();
+        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seedD,
                         "RUNNING", "NOT_VALIDATED", false),
                 "ck_rca_ir_execution")).isTrue();
-        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seed,
+        Seed seedE = seedAlertChain();
+        assertThat(chainContains(() -> insertResultTerminal(UUID.randomUUID(), seedE,
                         "SUCCEEDED", "PENDING", false),
                 "ck_rca_ir_validation")).isTrue();
     }

@@ -120,7 +120,7 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
     public void markSent(UUID id, long leaseEpoch, Instant sentAt) {
         requireUpdated(id, MARK_SENT_SQL, Map.of(
                 "sentAt", Timestamp.from(sentAt),
-                "id", id.toString(),
+                "id", id,
                 "epoch", leaseEpoch));
     }
 
@@ -131,7 +131,7 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
                 "bump", consumeAttempt ? 1 : 0,
                 "availableAt", Timestamp.from(availableAt),
                 "lastError", lastErrorJson,
-                "id", id.toString(),
+                "id", id,
                 "epoch", leaseEpoch));
     }
 
@@ -139,7 +139,7 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
     public void markDead(UUID id, long leaseEpoch, String lastErrorJson) {
         requireUpdated(id, MARK_DEAD_SQL, Map.of(
                 "lastError", lastErrorJson,
-                "id", id.toString(),
+                "id", id,
                 "epoch", leaseEpoch));
     }
 
@@ -147,14 +147,14 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
     public void markSuppressed(UUID id, long leaseEpoch, String noteJson) {
         requireUpdated(id, MARK_SUPPRESSED_SQL, Map.of(
                 "lastError", noteJson,
-                "id", id.toString(),
+                "id", id,
                 "epoch", leaseEpoch));
     }
 
     @Override
     public void syncPublication(UUID publicationId) {
         jdbc.sql(SYNC_PUBLICATION_SQL)
-                .param("id", publicationId.toString())
+                .param("id", publicationId)
                 .update();
     }
 

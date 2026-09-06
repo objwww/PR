@@ -144,4 +144,16 @@ grant update (
 grant select, insert on eval_case_result to eval_app;
 
 revoke all on eval_run, eval_case_result
-    from control_app, publisher_app, notify_app, arena_app, chaos_admin_app, public;
+    from control_app, publisher_app, notify_app, public;
+-- arena 域角色在 control-only 干净库（IT 的 Testcontainers 库）可能不存在——
+-- REVOKE 对不存在角色报 42704，故条件化（幂等；真实部署两角色由 01-roles.sh 创建）
+do $$
+begin
+    if exists (select from pg_roles where rolname = 'arena_app') then
+        revoke all on eval_run, eval_case_result from arena_app;
+    end if;
+    if exists (select from pg_roles where rolname = 'chaos_admin_app') then
+        revoke all on eval_run, eval_case_result from chaos_admin_app;
+    end if;
+end
+$$;

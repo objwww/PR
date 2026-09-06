@@ -19,8 +19,12 @@ import java.util.List;
  */
 public interface ScenarioDriver {
 
-    /** 注入激活（预热等待归 runner 编排，不在 driver 内 sleep 固定值） */
-    ActivationReceipt activate(GoldenCase golden);
+    /**
+     * 注入激活（预热等待归 runner 编排，不在 driver 内 sleep 固定值）。
+     * roundNo 供靶场场景派生每轮独立 scenario_id（uq_chaos_scenario 全局唯一，
+     * 两轮复用同名会被唯一约束拒绝——M3-30 部署门实测修正）。
+     */
+    ActivationReceipt activate(GoldenCase golden, int roundNo);
 
     /** 注入解除 + 恢复确认（实现须执行恢复探针；解除失败同样返回回执不抛半途） */
     RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt);

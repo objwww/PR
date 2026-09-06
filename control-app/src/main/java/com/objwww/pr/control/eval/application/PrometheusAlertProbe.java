@@ -5,6 +5,9 @@ import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.shared.Digest;
 import org.springframework.web.client.RestClient;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,13 +23,14 @@ public final class PrometheusAlertProbe implements AlertProbe {
     private static final long POLL_INTERVAL_MILLIS = 2_000;
 
     private final RestClient rest;
+    private final String baseUrl;
     private final GoldenScenarioRegistry registry;
     private final Sleeper sleeper;
 
     public PrometheusAlertProbe(String baseUrl, GoldenScenarioRegistry registry,
                                 Sleeper sleeper) {
-        this.rest = RestClient.builder().baseUrl(
-                Objects.requireNonNull(baseUrl)).build();
+        this.baseUrl = Objects.requireNonNull(baseUrl);
+        this.rest = RestClient.builder().baseUrl(baseUrl).build();
         this.registry = Objects.requireNonNull(registry);
         this.sleeper = Objects.requireNonNull(sleeper);
     }
@@ -95,11 +99,13 @@ public final class PrometheusAlertProbe implements AlertProbe {
     }
 
     private boolean isFiring(String alertname) {
+        // PromQL 含 {..}，走 uri(URI) 原样发送——RestClient 的 uri 模板展开会把
+        // 标签选择器当占位符（"Not enough variable values available to expand"）
+        String query = "ALERTS{alertname=\"" + alertname + "\",alertstate=\"firing\"}";
+        URI uri = URI.create(baseUrl + "/api/v1/query?query="
+                + URLEncoder.encode(query, StandardCharsets.UTF_8));
         QueryResponse response = rest.get()
-                .uri(b -> b.path("/api/v1/query")
-                        .queryParam("query",
-                                "ALERTS{alertname=\"" + alertname + "\",alertstate=\"firing\"}")
-                        .build())
+                .uri(uri)
                 .retrieve().body(QueryResponse.class);
         return response != null && response.data() != null
                 && response.data().result() != null

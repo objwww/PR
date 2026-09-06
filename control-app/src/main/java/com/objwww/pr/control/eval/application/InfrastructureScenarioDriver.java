@@ -10,7 +10,7 @@ import com.objwww.pr.control.eval.domain.GoldenCase;
 public final class InfrastructureScenarioDriver implements ScenarioDriver {
 
     @Override
-    public ActivationReceipt activate(GoldenCase golden) {
+    public ActivationReceipt activate(GoldenCase golden, int roundNo) {
         throw new IllegalStateException(
                 "InfrastructureScenarioDriver 预留未实现（首批 5 场景不使用），拒绝注入: "
                         + golden.scenarioId());

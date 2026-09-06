@@ -1,0 +1,21 @@
+2026-09-05T17:32:14.590Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : eval 批量完成: run=ba376345-33d9-4152-8af2-36889af3452f coverage=0.5 conditional=0.0 e2e=0.0 unresolvedRate=0.0 tp=0 fp=1 fn=2 reportDigest=4f8b1982d49912be32ff11a935edb01845d4f5248d59f1bc61771610eaf29a1f
+2026-09-05T17:32:34.633Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : usage ledger: {"ledger_schema_version":1,"run_id":"ba376345-33d9-4152-8af2-36889af3452f","basis":"VIRTUAL_KEY","state":"PARTIAL","best_effort":false,"budget_enforcement":"PROXY_VIRTUAL_KEY","run_key_alias":"am3-e2e-run","attempts":[],"expected_prompt_tokens":8034,"expected_completion_tokens":236,"observed_prompt_tokens":67692,"observed_completion_tokens":1771,"notes":["attempt_level_attribution_unavailable（metadata 缺失，key 级聚合对账）"]}
+E2E|PASS|p01:chaos会话已建|sid=chaos-eval-am3-e2e01b-0905-s3-r1
+E2E|PASS|p02:ground_truth落库|sid=chaos-eval-am3-e2e01b-0905-s3-r1
+E2E|PASS|p03:C-6指纹==冻结常量|map=0d7404ae811ae84a
+E2E|PASS|p04:告警曾firing|prom_series=1
+E2E|PASS|p05:incident已铸|incident=5552d241-77f4-4bcd-abeb-35f3f2f1a90d
+E2E|PASS|p06:eval_case_result落档|run=ba376345-33d9-4152-8af2-36889af3452f round1_cases=1
+E2E|PASS|p07:run/task/attempt链|run=2b9b59de-1c09-400e-a7bd-e8342f58a22d matched=1
+E2E|PASS|p08a:调查落档model=deepseek-v3|count=1
+E2E|PASS|p08b:litellm spend记账|spend_rows=4
+E2E|PASS|p09:报告结构有效+v2包|report=47343c61-ee42-4072-b347-741fe0f92ec3
+E2E|PASS|p10:publication+outbox SENT|pub=f6020e98-12be-479b-aa1e-8eea05592708 sent=1
+E2E|PASS|p11:TEST_CHANNEL收到|echo_hits=8
+E2E|INFO|backfill|{"alertFingerprint":"0d7404ae811ae84a","mappingVersion":3}
+E2E|PASS|p12a:eval_app经门禁读GT|gt_rows=1
+E2E|PASS|p12b:未绑定run返回空集|fail_closed=0
+E2E|PASS|p13a:gauge归零|zero_series=1
+E2E|PASS|p13b:incident终态|status_rows=1
+E2E|PASS|p13c:会话CLOSED|closed=1
+E2E|SUBTOTAL|e2e01|fail=0

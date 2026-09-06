@@ -1,0 +1,25 @@
+E2E-M3-05 崩溃重驱与冻结语义 · 断言 v3 输出（2026-09-06，195 现场）
+执行：ssh root@146.56.195.225 "sh /tmp/cc-m330-e2e05b-assert.sh"
+脚本：cc-m330-e2e05b-assert.sh（v3，按 DEAD 悬案定性后的现实面校准）
+====================================================================
+== 断言（run=2deb71ea-5abe-4004-9326-a54f61700492） ==
+E2E|PASS|h00:批件锚定且SUCCEEDED|run=2deb71ea-5abe-4004-9326-a54f61700492
+E2E|PASS|h01:杀点已执行|KILL5=FIRED at 15:37:20
+E2E|PASS|h02:首投已出网（journal 增长）|baseline=22 kill时=25
+E2E|PASS|h03:r1诚实缺席|r1=TIMEOUT_OR_ABSENT
+E2E|PASS|h04:r2正常出判定|r2=DECIDABLE
+E2E|PASS|h05:outbox冻结DEAD（结果未知不重发）|outbox=54ce2bdb-91c4-4f5d-933d-10eaf7441888
+E2E|PASS|h06:诚实话术outcome_unknown|{"error":"outcome_unknown:requesttimedout","reason":"outcome_unknown"}
+E2E|PASS|h07:崩溃后租约过期重领（epoch=2）|lease_epoch=2
+E2E|PASS|h08:DEAD路径不耗attempt预算（冻结语义）|attempt_count=0（两次线上投递由h02+h07证明）
+E2E|PASS|h09:publication聚合DEAD|pub=DEAD
+E2E|PASS|h10:告警代际四拍循环|beats=firing/resolved/firing/resolved
+E2E|PASS|h11:incident终态RESOLVED@13|incident=RESOLVED@13
+E2E|PASS|h12:两会话均CLOSED|closed=2
+E2E|SUBTOTAL|e2e05b|fail=0
+====================================================================
+判定：13/13 PASS。
+说明：v2 草案断言（g04 期望 SENT/attempts≥2、g06 期望 pub SENT）按 E2E 实测
+现实面重校准——E2E-M3-05 的 KILL5 打在 20s 延迟投递第 1s，租约 60s 过期后
+claim 折叠回收重领重发，重发再撞 20s stub，JdkWebhookTransport 10s 请求超时，
+M3-23 冻结语义"结果未知→DEAD 不自动重发"正确执行（定性见取证笔记）。

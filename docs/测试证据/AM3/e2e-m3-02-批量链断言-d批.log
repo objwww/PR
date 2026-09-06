@@ -1,0 +1,34 @@
+E2E|PASS|c00:Åú¼şÃª¶¨|run=ab17422e-f2a8-4f13-8332-85f9d6f7ea66
+E2E|PASS|c01a:Åú¼şÖÕÌ¬SUCCEEDED|run=ab17422e-f2a8-4f13-8332-85f9d6f7ea66
+E2E|PASS|c01b:total_scenarios=6|value=6
+E2E|PASS|c02a:°¸Àı¼ÇÂ¼=6|rows=6
+E2E|PASS|c02b:³¡¾°Êı=3|scenarios=3
+E2E|PASS|c02c:Ã¿³¡¾°Á½ÂÖ|pairs=3
+E2E|PASS|c03:verdictÈ«Âäµµ|with_verdict=6
+E2E|PASS|c04:Ê§°ÜĞĞ·ÖÀàÂäµµ|missing_failure_sample=0
+E2E|PASS|c05a:¼ÆÊıÆßÔª×é|rows=1
+E2E|PASS|c05b:ÈıÖ¸±ê+UNRESOLVEDµ¥ÁĞ|rows=1
+E2E|PASS|c06:¿É¸´ÏÖÔªÊı¾İÊ®Ïî|rows=1
+E2E|PASS|c07:baseline_report_digest|rows=1
+E2E|PASS|c08:°Ğ³¡»á»°=6|sessions=6
+E2E|PASS|c08b:»á»°È«CLOSED|closed=6
+E2E|PASS|c09:litellm spend¼ÇÕË|spend_rows=14
+E2E|PASS|c10a:paymentFailure¹éoff|lines=1
+E2E|PASS|c10b:paymentUnreachable¹éoff|lines=1
+E2E|SUBTOTAL|e2e02|fail=0
+== Öğ°¸ÀıÅĞ¶¨ ==
+S3 r1 DECIDABLE hit=false tp=0 fp=1 fn=1
+S3 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S4 r1 STRUCTURE_REJECTED hit=false tp=0 fp=0 fn=1
+S4 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S5 r1 DECIDABLE hit=false tp=0 fp=1 fn=1
+S5 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+== Ê§°ÜÑù±¾ÕªÒª£¨·Ç DECIDABLE ĞĞ£© ==
+S3 r1 :: {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "Prometheus", "fault_type": "F1", "reason_code": "TOOL_RESTRICTION"}, "actualSymptomCodes": ["tool_restriction"]}
+S3 r2 :: {"reason": "run_not_found"}
+S4 r1 :: {"reason": "structure_rejected", "validationErrors": ["JSON è§£æå¤±è´¥: Unrecognized token 'ç”±äºå·¥å…·è°ƒç”¨è¢«æ‹’ç»': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')\n at [Source: RE
+S4 r2 :: {"reason": "run_not_found"}
+S5 r1 :: {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "order-arena", "fault_type": "F3", "reason_code": "CREATED_STATE_DELAY"}, "actualSymptomCodes": ["created_state_delay"]}
+S5 r2 :: {"reason": "run_not_found"}
+== run ¾ÛºÏ ==
+dec=2 hit=0 unres=0 srej=1 to=3 tp=0 fp=2 fn=6 cov=0.3333333333333333 cond_acc=0 e2e=0

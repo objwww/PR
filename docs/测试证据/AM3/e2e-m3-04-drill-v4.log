@@ -1,0 +1,10 @@
+== 预检：control-app 健康 ==
+health={"status":"UP"}
+== ACTIVE chaos 会话预检 ==
+== 启动 S3 批 ==
+eval-runner-am3-e2e04b-0906 Up 4 seconds
+== 等本批 eval_run 行（新 tag 无历史歧义） ==
+RUN=9185b473-847c-4f76-ae5d-1f769368a4f3
+== 等本批 RCA run（锚定批 started_at 之后） ==
+RR=
+no RR, abort kills

@@ -29,7 +29,7 @@ public final class FlagdScenarioDriver implements ScenarioDriver {
     }
 
     @Override
-    public ActivationReceipt activate(GoldenCase golden) {
+    public ActivationReceipt activate(GoldenCase golden, int roundNo) {
         GoldenCase.Injection injection = golden.injection();
         if (injection == null) {
             throw new IllegalArgumentException(

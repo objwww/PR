@@ -1,0 +1,39 @@
+# E2E-M3-07 权限泄漏反向断言 2026-09-05（伴随批 am3-e2e02c-0905）
+
+== p01 eval_app 直读 GT（期望 ERROR permission denied） ==
+ERROR:  permission denied for table ground_truth_scenario
+
+== p02 eval_app 门禁函数 EXECUTE 正控（未绑定 run → 空集 fail-closed） ==
+0
+
+== p03 生产角色直读 GT（期望全 f） ==
+control_app gt_select=false
+notify_app  gt_select=false
+
+== p04 notify_app 表级权限面（rca_report=f；publication/outbox=t） ==
+notify_app|rca_report|f
+notify_app|report_publication|t
+notify_app|notify_outbox|t
+
+== p05 holmes → chaos-admin（期望 DNS/连接不可达） ==
+DNS_BLOCKED: [Errno -2] Name or service not known
+
+== p06 运行中 eval-runner 挂载面（期望仅 eval 目录+registry，无 docker.sock） ==
+/opt/build/pr/deploy/alert/eval -> /eval
+/opt/build/pr/deploy/alert/eval/eval-scenarios.yml -> /registry.yml
+
+docker.sock mounts=0
+
+== p07 chaos-admin 零宿主端口 + 业务网（alert-net）不可达 ==
+PortBindings=map[]
+000 <- unreachable-from-alert-net (expected)
+
+== p08 正控：eval-mgmt 上 chaos-admin healthz（期望 200） ==
+eval-mgmt healthz=200
+
+== p09 全角色 GT SELECT 扫描（仅 chaos_admin_app 属主为 t） ==
+arena_app gt_select=false
+chaos_admin_app gt_select=true
+control_app gt_select=false
+eval_app gt_select=false
+notify_app gt_select=false

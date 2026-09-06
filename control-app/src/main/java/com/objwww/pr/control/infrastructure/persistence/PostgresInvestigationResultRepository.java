@@ -27,10 +27,10 @@ public class PostgresInvestigationResultRepository implements InvestigationResul
     private static final String INSERT_STARTED_SQL = """
             INSERT INTO rca_investigation_result (
                 id, attempt_id, run_id, observed_generation, schema_version,
-                execution_status, validation_status, created_at
+                execution_status, validation_status, model, created_at
             )
             SELECT :id, :attemptId, :runId, :observedGeneration, :schemaVersion,
-                   'STARTED', 'NOT_VALIDATED', :createdAt
+                   'STARTED', 'NOT_VALIDATED', :model, :createdAt
             WHERE EXISTS (SELECT 1 FROM rca_run r
                           WHERE r.id = :runId AND r.generation = :observedGeneration)
             """;
@@ -69,6 +69,7 @@ public class PostgresInvestigationResultRepository implements InvestigationResul
                     .param("runId", started.runId())
                     .param("observedGeneration", started.observedGeneration())
                     .param("schemaVersion", started.schemaVersion())
+                    .param("model", started.model())
                     .param("createdAt", ts(started.createdAt()))
                     .update();
             if (inserted == 0) {

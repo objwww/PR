@@ -130,8 +130,8 @@ public abstract class NotifyPostgresITBase {
                 .param("key", "alertname=NotifyIT|service=it-" + incidentId).update();
         adminJdbc.sql("""
                 INSERT INTO rca_run(id, incident_id, generation, trigger_kind, state,
-                    investigation_hash, created_at, updated_at)
-                VALUES (:id, :inc, 0, 'INITIAL', 'SUCCEEDED', :hash, now(), now())
+                    investigation_hash, created_at, updated_at, started_at, finished_at)
+                VALUES (:id, :inc, 0, 'INITIAL', 'SUCCEEDED', :hash, now(), now(), now(), now())
                 """).param("id", runId).param("inc", incidentId)
                 .param("hash", "it-" + runId).update();
         adminJdbc.sql("""
@@ -169,7 +169,7 @@ public abstract class NotifyPostgresITBase {
                 INSERT INTO notify_outbox(id, publication_id, report_id, channel,
                     template_version, operation_id, payload_json, state,
                     attempt_count, max_attempts, created_at, updated_at)
-                VALUES (:id, :pub, :report, :channel, 'am3-notice-v1', :op,
+                VALUES (:id, :pub, :report, :channel, 'am3-notice-v1', :op::uuid,
                         CAST(:payload AS jsonb), 'PENDING', 0, 5, now(), now())
                 """).param("id", outboxId).param("pub", publicationId)
                 .param("report", seed.reportId()).param("channel", channel)

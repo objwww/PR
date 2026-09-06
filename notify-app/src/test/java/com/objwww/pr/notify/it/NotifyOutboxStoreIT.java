@@ -30,11 +30,13 @@ class NotifyOutboxStoreIT extends NotifyPostgresITBase {
 
     private UUID outboxId;
     private UUID publicationId;
+    private UUID reportId;
 
     @BeforeEach
     void setUp() {
         store = new PostgresNotifyOutboxStore(notifyJdbc);
         ReportSeed seed = seedValidatedReport();
+        reportId = seed.reportId();
         publicationId = seedPublicationWithOutbox(seed, "dingtalk-test", UUID.randomUUID());
         outboxId = adminJdbc.sql(
                 "SELECT id FROM notify_outbox WHERE publication_id = :p")
@@ -125,11 +127,19 @@ class NotifyOutboxStoreIT extends NotifyPostgresITBase {
     @Test
     @DisplayName("唯一键 (report_id, channel, template_version) 防重：重复插入 23505 拒绝")
     void duplicateDeliveryRowRejected() {
-        ReportSeed seed = seedValidatedReport();
-        UUID operationId = UUID.randomUUID();
-        seedPublicationWithOutbox(seed, "dingtalk-test", operationId);
-
-        assertThatThrownBy(() -> seedPublicationWithOutbox(seed, "dingtalk-test", UUID.randomUUID()))
+        // 同 report+channel+template 第二条 outbox 行（publication 唯一键会先拦二次建 pub，
+        // 故直接对既有 publication 重复投递行）
+        assertThatThrownBy(() -> adminJdbc.sql("""
+                        INSERT INTO notify_outbox(id, publication_id, report_id, channel,
+                            template_version, operation_id, payload_json, state,
+                            attempt_count, max_attempts, created_at, updated_at)
+                        VALUES (:id, :pub, :report, :channel, 'am3-notice-v1', :op::uuid,
+                                CAST(:payload AS jsonb), 'PENDING', 0, 5, now(), now())
+                        """).param("id", UUID.randomUUID()).param("pub", publicationId)
+                        .param("report", reportId).param("channel", "dingtalk-test")
+                        .param("op", UUID.randomUUID().toString())
+                        .param("payload", "{\"operation_id\":\"dup\"}")
+                        .update())
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("uq_notify_outbox_delivery");
     }

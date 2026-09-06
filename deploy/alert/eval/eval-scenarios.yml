@@ -54,9 +54,11 @@ scenarios:
         flagd feature flag 的 defaultVariant 切换（AM0 调研 v1：改 demo.flagd.json 后重启 flagd，
         或 flagd configurator UI）；具体执行由 M3-17 FlagdScenarioDriver 落实
       flag: paymentFailure
-      variant: "0.5"                       # = 50% 失败比例（§6.7 S1 参数）
-      variant_space: ["0", "0.1", "0.25", "0.5", "0.75", "0.95", "1"]
-      baseline_variant: "0"
+      variant: "50%"                        # = 50% 失败比例（§6.7 S1 参数）
+      variant_space: ["off", "10%", "25%", "50%", "75%", "90%", "100%"]
+      baseline_variant: "off"
+      # M3-30 部署门校准（首批前）：P5 提案的 "0.5"/"0" 与 195 部署的 demo.flagd.json
+      # 实际变体（off/10%/…/100%，baseline=off）不符，按部署事实校准（README §六 首批校准）
       caution: >-
         BA-19：flagd JSON 只许精确改写（目标 flag 的 defaultVariant 单键），
         禁 sed 正则批量替换（曾误伤 paymentServiceFailure 致整栈 500）
@@ -70,7 +72,7 @@ scenarios:
       - alertname: checkout
         severity: page
         basis: 双窗（5m+1h）烧损率 > 14.4x 预算消耗速率
-        labels_frozen: {service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
+        labels_frozen: {alertname: checkout, service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
       - alertname: checkout
         severity: ticket
         basis: 双窗（2h+1d）烧损率 > 3x（慢烧档，可能同批 firing）
@@ -84,7 +86,10 @@ scenarios:
     timing:                                # [P5 提案] v1 初值——首批评测前人工校准（M3-17 显式化要求）
       preheat_seconds: 60                  # 注入后流量爬坡预热
       hold_seconds: 600                    # 故障持续时间（for）
-      max_firing_wait_seconds: 600         # 实测参照：G4 演练 3m17s firing；AM1 DP-B03 预算 10min
+      max_firing_wait_seconds: 1500        # [M3-30 校准 2026-09-05] 600→1500：page 需 5m+1h 双窗同超
+                                           # 14.4x；50% 失败档 1h 窗收敛实测需 ~17.3min（0.5·t/3600≥0.144），
+                                           # 600s 实测必超时（E2E-M3-02b S1 两轮全 TIMEOUT 取证）。
+                                           # 25min 预算留余量；G4 演练 3m17s 为高负载/暖窗条件，不可照搬
       max_resolved_wait_seconds: 600       # 复位后 5m 窗稀释 ≤5m + 余量
       cleanup_timeout_seconds: 120
 
@@ -115,7 +120,7 @@ scenarios:
       - alertname: checkout
         severity: page
         basis: payment 整体不可达 → checkout RPC 错误率抬升 → 同 S1 烧损率链路
-        labels_frozen: {service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
+        labels_frozen: {alertname: checkout, service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
       - alertname: checkout
         severity: ticket
         basis: 慢烧档可能同批 firing
@@ -129,7 +134,8 @@ scenarios:
     timing:                                # [P5 提案] 初值同 S1，待校准
       preheat_seconds: 60
       hold_seconds: 600
-      max_firing_wait_seconds: 600
+      max_firing_wait_seconds: 1500        # [M3-30 校准 2026-09-05] 同 S1：100% 失败档 1h 窗收敛 ~8.7min
+                                           # 理论可入 600s，但双窗评估粒度 + 抖动下按 S1 同档 25min 留余量
       max_resolved_wait_seconds: 600
       cleanup_timeout_seconds: 120
 
@@ -161,7 +167,7 @@ scenarios:
       - alertname: ArenaDuplicateOrders
         severity: page
         basis: oa_duplicate_orders_current > 0（同 intent 多个未废订单）
-        labels_frozen: {service: order-arena, fault_type: F1}   # C-6 冻结标签集（arena.yml 头注）
+        labels_frozen: {alertname: ArenaDuplicateOrders, service: order-arena, fault_type: F1}   # C-6 冻结标签集（arena.yml 头注）
     recovery:
       criteria:                            # [文档已定] AM2 §6.7 恢复确认三条件 + C-4
         - chaos off → CAS ACTIVE→RECOVERING→CLOSED，F1 恢复算法执行（canonical 保留、其余废单、资源按台账反向补偿）
@@ -201,7 +207,7 @@ scenarios:
       - alertname: ArenaIllegalTransitions
         severity: page
         basis: oa_state_violations_current > 0（回跳签名 / PAID 无支付事实）
-        labels_frozen: {service: order-arena, fault_type: F2}
+        labels_frozen: {alertname: ArenaIllegalTransitions, service: order-arena, fault_type: F2}
     recovery:
       criteria:
         - chaos off → F2 恢复算法执行：按支付/履约/资源事实恢复合法状态组合；无法确定 → 废单终态（C-4）
@@ -244,7 +250,7 @@ scenarios:
       - alertname: ArenaOrderStuck
         severity: page
         basis: oa_stuck_orders_current > 0（CREATED 停留超阈值）
-        labels_frozen: {service: order-arena, fault_type: F3}
+        labels_frozen: {alertname: ArenaOrderStuck, service: order-arena, fault_type: F3}
     recovery:
       criteria:
         - chaos off → F3ReconcileService 对账收敛（UNKNOWN→RECONCILING→ENABLED/DISCARDED），悬挂台账清平（C-4）

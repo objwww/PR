@@ -1,0 +1,15 @@
+== 预检：control-app restart 策略 ==
+restart_policy=unless-stopped (需 unless-stopped/always)
+== 启动 S3 批 ==
+eval-runner-am3-e2e04-0905 Up 4 seconds
+== 等本批 eval_run 行 ==
+RUN=860161cb-4cc0-44a8-91e7-a706416b30cf
+== 等本批 RCA run（锚定批 started_at 之后） ==
+RR=ff5694fb-4f20-4d46-a6ce-ca12d1d1bb5a
+== 杀点A：等调查 STARTED（外调中）最多 20min ==
+KILL1=FIRED at 13:55:32 started_rows=1
+-- 等 control-app 自动拉起 --
+== 杀点B：等报告已写 + outbox 未 SENT（K4 未确认）最多 20min ==
+KILL2=MISSED
+== 等批退出（最多 30min） ==
+batch exited at 14:27:52

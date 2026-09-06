@@ -155,23 +155,49 @@ class SingleCaseScorerTest {
     }
 
     @Test
-    @DisplayName("无已验证报告：存在 REJECTED_* → STRUCTURE_REJECTED（样本带验证状态）；否则缺席")
+    @DisplayName("无已验证报告：调查记录 REJECTED_* → STRUCTURE_REJECTED（样本带验证状态）；否则缺席")
     void noValidatedReportVerdictDispatch() {
         Instant base = Instant.parse("2026-01-01T00:00:00Z");
         UUID rejectedRun = seedRun(base);
-        seedReport(rejectedRun, UUID.randomUUID(), base.plusSeconds(30),
-                ValidationStatus.REJECTED_MALFORMED, "{}");
+        // 生产落档面（技术方案 §6.4 行 199 冻结判据）：REJECTED_* 只进
+        // rca_investigation_result（RcaRunOrchestrator 仅对 STRUCTURE_VALIDATED 写报告行），
+        // 本用例不种任何报告行 = 生产真实形态
+        UUID attemptId = UUID.randomUUID();
+        UUID resultId = UUID.randomUUID();
+        investigations.insertStartedIfAbsent(com.objwww.pr.control.alert.domain.model.InvestigationResult
+                .started(resultId, attemptId, rejectedRun, 0, 2, "m", base));
+        investigations.finishTerminal(new com.objwww.pr.control.alert.domain.model.InvestigationResult(
+                resultId, attemptId, rejectedRun, 0, 2,
+                com.objwww.pr.control.alert.domain.model.ExecutionStatus.FAILED,
+                ValidationStatus.REJECTED_MALFORMED,
+                List.of("外层 analysis 缺失", "内嵌 JSON 解析失败"),
+                null, null, null, null, "m", null,
+                base.plusSeconds(30), base.plusSeconds(30)));
 
         EvalCaseResult rejected = scorer.score(UUID.randomUUID(), golden, 1, rejectedRun)
                 .orElseThrow();
         assertThat(rejected.verdict()).isEqualTo(ScoringVerdict.STRUCTURE_REJECTED);
         assertThat(rejected.scoredReportId()).isNull();
         assertThat(rejected.failureSampleJson()).contains("REJECTED_MALFORMED");
+        assertThat(rejected.failureSampleJson()).contains("内嵌 JSON 解析失败");
 
         UUID absentRunId = seedRun(base);
         EvalCaseResult absent = scorer.score(UUID.randomUUID(), golden, 1, absentRunId)
                 .orElseThrow();
         assertThat(absent.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
+    }
+
+    @Test
+    @DisplayName("悬挂 STARTED（NOT_VALIDATED）不算结构失败：无报告 → TIMEOUT_OR_ABSENT")
+    void hangingStartIsAbsentNotStructureRejected() {
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+        UUID runId = seedRun(base);
+        investigations.insertStartedIfAbsent(com.objwww.pr.control.alert.domain.model.InvestigationResult
+                .started(UUID.randomUUID(), UUID.randomUUID(), runId, 0, 2, "m", base));
+
+        EvalCaseResult result = scorer.score(UUID.randomUUID(), golden, 1, runId).orElseThrow();
+        assertThat(result.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
+        assertThat(result.failureSampleJson()).contains("no_validated_report");
     }
 
     @Test

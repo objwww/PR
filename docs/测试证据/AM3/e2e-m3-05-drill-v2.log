@@ -1,0 +1,36 @@
+== 预检 ==
+notify: Up 17 hours
+control: Up 47 minutes
+0
+== 1. echo stub 加 20s 延迟（杀点窗口加宽；priority=1 胜 catch-all） ==
+{
+  "id" : "adf41cda-3847-4aeb-adaf-81e6ed49431d",
+  "request" : {
+    "urlPattern" : "/am3/testbot.*",
+    "method" : "POST"
+  },
+  "response" : {
+    "status" : 200,
+    "jsonBody" : {
+      "echo" 
+== 2. journal 基线 ==
+baseline=22
+== 3. 启动 S3 批 ==
+eval-runner-am3-e2e05-0905 Up 4 seconds
+== 4. 看武犬：journal 增长即 kill notify-app + 显式拉起（最多 25min） ==
+KILL5=FIRED at 15:37:20 journal=25 baseline=22
+deploy-notify-app-1 Up 20 seconds
+== 5. 等批退出（最多 30min） ==
+== 6. 恢复：删延迟 stub，重录原 catch-all（am0-catchall 同形） ==
+
+{
+  "id" : "8086b0eb-2e30-469c-afaf-bc44d5b29ff1",
+  "name" : "am0-catchall",
+  "request" : {
+    "urlPattern" : "/.*",
+    "method" : "ANY"
+  },
+  "response" : {
+    "status" : 200,
+    "jsonBody" : 
+drill done at 15:38:21

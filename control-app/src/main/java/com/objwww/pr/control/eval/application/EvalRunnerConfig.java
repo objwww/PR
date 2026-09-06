@@ -133,14 +133,15 @@ public class EvalRunnerConfig {
     }
 
     @Bean
-    public RcaRunResolver rcaRunResolver(JdbcClient jdbc) {
+    public RcaRunResolver rcaRunResolver(JdbcClient jdbc,
+            @Value("${app.alert.eval.run-tag:}") String runTag) {
         return new PostgresRcaRunResolver(jdbc, millis -> {
             try {
                 Thread.sleep(millis);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        });
+        }, runTag);
     }
 
     @Bean
@@ -152,14 +153,24 @@ public class EvalRunnerConfig {
     }
 
     @Bean
+    public ArenaTrafficClient arenaTrafficClient(
+            @Value("${app.alert.eval.arena-base-url:http://order-arena:8080}")
+            String arenaBaseUrl) {
+        return new ArenaTrafficClient.Http(arenaBaseUrl);
+    }
+
+    @Bean
     public ArenaChaosScenarioDriver arenaChaosScenarioDriver(
             @Value("${app.alert.eval.chaos-admin-url:http://arena-chaos-admin:8080}")
             String chaosAdminUrl,
             @Value("${CHAOS_ADMIN_TOKEN:}") String adminToken,
             AlertProbe alertProbe,
-            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion) {
+            ArenaTrafficClient traffic,
+            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
+            @Value("${app.alert.eval.run-tag:}") String runTag) {
         return new ArenaChaosScenarioDriver(
-                new ChaosAdminClient.Http(chaosAdminUrl, adminToken), alertProbe, datasetVersion);
+                new ChaosAdminClient.Http(chaosAdminUrl, adminToken), alertProbe, traffic,
+                datasetVersion, runTag);
     }
 
     @Bean

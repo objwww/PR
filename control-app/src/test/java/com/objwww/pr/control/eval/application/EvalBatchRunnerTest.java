@@ -104,7 +104,7 @@ class EvalBatchRunnerTest {
         final List<RecoveryReceipt> receipts = new ArrayList<>();
 
         @Override
-        public ActivationReceipt activate(GoldenCase golden) {
+        public ActivationReceipt activate(GoldenCase golden, int roundNo) {
             activations++;
             if (!activateFailures.isEmpty()) {
                 throw activateFailures.remove(0);
@@ -156,7 +156,7 @@ class EvalBatchRunnerTest {
         }
 
         @Override
-        public Optional<UUID> resolve(GoldenCase golden, Instant activatedAt,
+        public Optional<UUID> resolve(GoldenCase golden, int roundNo, Instant activatedAt,
                                       int timeoutSeconds) {
             if (toThrow != null) {
                 throw toThrow;

@@ -1,0 +1,29 @@
+poll1 [] runs=0 events=1 results=0 07:29:51
+poll2 [] runs=0 events=1 results=0 07:30:21
+poll3 [] runs=0 events=1 results=0 07:30:51
+poll4 [] runs=0 events=1 results=0 07:31:22
+poll5 [] runs=0 events=1 results=0 07:31:52
+poll6 [] runs=0 events=1 results=0 07:32:22
+poll7 [] runs=0 events=1 results=0 07:32:52
+poll8 [] runs=0 events=1 results=0 07:33:22
+poll9 [] runs=0 events=1 results=0 07:33:52
+poll10 [] runs=0 events=1 results=0 07:34:22
+poll11 [] runs=0 events=1 results=0 07:34:53
+poll12 [] runs=0 events=1 results=0 07:35:23
+poll13 [] runs=0 events=1 results=0 07:35:53
+poll14 [] runs=0 events=2 results=1 07:36:23
+poll15 [] runs=0 events=2 results=1 07:36:53
+poll16 [KILL5=FIRED] runs=1 events=3 results=1 07:37:24
+== drill 关键行 ==
+baseline=22
+KILL5=FIRED at 15:37:20 journal=25 baseline=22
+== 批结果 ==
+1|TIMEOUT_OR_ABSENT|-|{"reason": "run_not_found"}
+RUNNING|
+== 通知 ==
+13fbc752-09cc-4599-be67-644bf4c0541d|CLAIMED|0|READY
+== alert_event ==
+2026-09-06 07:20:14.589709+00|12|firing
+2026-09-06 07:36:05.368638+00|12|resolved
+2026-09-06 07:36:59.437183+00|13|firing
+2026-09-06T07:37:54Z

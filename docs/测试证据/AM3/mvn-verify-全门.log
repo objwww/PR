@@ -1,0 +1,1057 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] order-arena                                                        [jar]
+[INFO] arena-chaos-admin                                                  [jar]
+[INFO] notify-app                                                         [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/6]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ pr-agent ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/6]
+[INFO]   from shared-kernel/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ shared-kernel ---
+[INFO] Deleting /build/shared-kernel/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /build/shared-kernel/src/main/resources
+[INFO] skip non existing resourceDirectory /build/shared-kernel/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 9 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /build/shared-kernel/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 3 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+[INFO] Running com.objwww.pr.shared.DigestTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.104 s -- in com.objwww.pr.shared.DigestTest
+[INFO] Running com.objwww.pr.shared.SharedKernelArchitectureTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.560 s -- in com.objwww.pr.shared.SharedKernelArchitectureTest
+[INFO] Running com.objwww.pr.shared.snapshot.SafeTarExtractorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in com.objwww.pr.shared.snapshot.SafeTarExtractorTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ shared-kernel ---
+[INFO] Building jar: /build/shared-kernel/target/shared-kernel-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ shared-kernel ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ shared-kernel ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/6]
+[INFO]   from control-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ control-app ---
+[INFO] Deleting /build/control-app/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] Copying 11 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 184 source files with javac [debug parameters release 21] to target/classes
+[WARNING] /build/control-app/src/main/java/com/objwww/pr/control/infrastructure/model/RawHttpErrorCapture.java:[23,17] handleError(org.springframework.http.client.ClientHttpResponse) in org.springframework.web.client.ResponseErrorHandler has been deprecated and marked for removal
+[INFO] /build/control-app/src/main/java/com/objwww/pr/control/alert/domain/statemachine/TransitionTable.java: /build/control-app/src/main/java/com/objwww/pr/control/alert/domain/statemachine/TransitionTable.java uses unchecked or unsafe operations.
+[INFO] /build/control-app/src/main/java/com/objwww/pr/control/alert/domain/statemachine/TransitionTable.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 2 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 62 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.domain.ai.CircuitBreakerTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.156 s -- in com.objwww.pr.control.domain.ai.CircuitBreakerTest
+[INFO] Running com.objwww.pr.control.domain.ai.ModelRouterTest
+[INFO] Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.084 s -- in com.objwww.pr.control.domain.ai.ModelRouterTest
+[INFO] Running com.objwww.pr.control.domain.ai.PricingServiceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.objwww.pr.control.domain.ai.PricingServiceTest
+[INFO] Running com.objwww.pr.control.domain.ai.ModelStepBudgetGuardTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.objwww.pr.control.domain.ai.ModelStepBudgetGuardTest
+[INFO] Running com.objwww.pr.control.eval.domain.ScenarioMetricsTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in com.objwww.pr.control.eval.domain.ScenarioMetricsTest
+[INFO] Running com.objwww.pr.control.eval.domain.SynonymLexiconTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.114 s -- in com.objwww.pr.control.eval.domain.SynonymLexiconTest
+[INFO] Running com.objwww.pr.control.eval.domain.litellm.UsageLedgerReconcilerTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.282 s -- in com.objwww.pr.control.eval.domain.litellm.UsageLedgerReconcilerTest
+[INFO] Running com.objwww.pr.control.eval.domain.GoldenScenarioRegistryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.044 s -- in com.objwww.pr.control.eval.domain.GoldenScenarioRegistryTest
+[INFO] Running com.objwww.pr.control.eval.domain.EvalRunMetadataTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.eval.domain.EvalRunMetadataTest
+[INFO] Running com.objwww.pr.control.eval.domain.EvalCaseResultTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.eval.domain.EvalCaseResultTest
+[INFO] Running com.objwww.pr.control.eval.application.UsageLedgerServiceTest
+15:37:25.553 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- SpendLogs 查询失败，usage 对账降级 UNMATCHED（run=d240c984-a793-45a2-b86d-0439f999eef2）: LiteLLM /spend/logs 调用失败: HTTP 500
+15:37:25.560 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- usage 对账: run=d240c984-a793-45a2-b86d-0439f999eef2 取得 proxy 行数=1
+15:37:25.561 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+15:37:25.563 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+15:37:25.565 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- usage_json 解析失败按 usage_missing 落账: attempt=0f13f7e5-b1b7-4f01-9e41-906930348853
+15:37:25.565 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.eval.application.UsageLedgerServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.BaselineReportGeneratorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in com.objwww.pr.control.eval.application.BaselineReportGeneratorTest
+[INFO] Running com.objwww.pr.control.eval.application.SingleCaseScorerTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.objwww.pr.control.eval.application.SingleCaseScorerTest
+[INFO] Running com.objwww.pr.control.eval.application.FinalReportSelectorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.eval.application.FinalReportSelectorTest
+[INFO] Running com.objwww.pr.control.eval.application.ScenarioEvaluatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.eval.application.ScenarioEvaluatorTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+15:37:25.676 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- 场景 S1 第 1 轮注入失败: flagd admin down
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.044 s -- in com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalRunnerProfileIsolationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.790 s -- in com.objwww.pr.control.eval.application.EvalRunnerProfileIsolationTest
+[INFO] Running com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClientTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.200 s -- in com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClientTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.ToolCallAdapterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.infrastructure.holmes.ToolCallAdapterTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesErrorClassifierTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesErrorClassifierTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesResponseParserTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesResponseParserTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutorWireMockTest
+15:37:27.651 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:27.649379933Z","latency_ms":0,"usage_missing":true,"validation_status":"REJECTED_SCHEMA_VERSION","attempt_id":"10f9f21e-2869-47de-b0b6-b2828491758d","run_id":"ec13b7ce-e4c4-4063-b55e-66664d195eec","task_id":"b66e9f06-fe4d-4d05-9b60-b8ec9b2b9392"}
+15:37:27.769 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:27.768922245Z","latency_ms":0,"usage_missing":false,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"9c0a1609-365d-4cfc-aac2-490a1c2c1060","run_id":"bd82379a-2ff9-42b8-869a-6f180beb44fd","task_id":"80167fd3-75c3-472c-bc39-c2acd17328cb"}
+15:37:27.799 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:27.799772312Z","latency_ms":0,"usage_missing":true,"validation_status":"REJECTED_MALFORMED","attempt_id":"affec578-b069-46de-bc46-a69090cff3c5","run_id":"08049ff6-fdc9-43cd-a6a5-53736053bc4a","task_id":"35283bc1-5f2b-4520-a13e-87c04874de0c"}
+15:37:27.905 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:27.905796217Z","latency_ms":0,"usage_missing":true,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"1a35fd82-ca21-449a-8647-4dd6549caf51","run_id":"8253ed6d-87f4-4913-9cc8-7de58fb67853","task_id":"b9e9cab5-44d9-437d-944e-46d43d827883"}
+15:37:27.999 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:27.999479503Z","latency_ms":0,"usage_missing":true,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"3df42f2e-81d5-42e4-8544-5d0c5b006bde","run_id":"8b368880-96d7-4bc7-8833-8ee94acd6f73","task_id":"44fea1df-63ee-448d-8111-71aac61f3db0"}
+15:37:28.085 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:28.084833509Z","latency_ms":0,"usage_missing":false,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"520f4fdf-7182-45a7-b994-beb1955d59e7","run_id":"4d5f5665-3992-46c4-b124-a0fb447779b8","task_id":"6cbf344e-5283-429f-871b-21dabe4a911a"}
+15:37:28.146 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:28.146319281Z","latency_ms":0,"usage_missing":false,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"eb0e76f8-6a10-46eb-915f-b353c91bfc99","run_id":"a3f02c45-d9a2-4117-aea8-97a522dd8211","task_id":"e5d6b189-8d3c-4e90-a6aa-0bdf33700e89"}
+15:37:29.369 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.369286878Z","latency_ms":0,"usage_missing":false,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"7c5e1b1c-da6a-4452-a13f-eb60c4974b3f","run_id":"008a79b7-37cd-4490-bf81-9d3ee11d2e86","task_id":"6fe93638-1f95-4f99-939f-603cb5204a28"}
+15:37:29.443 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.443568535Z","latency_ms":0,"usage_missing":false,"validation_status":"STRUCTURE_VALIDATED","attempt_id":"7bb65062-da99-4c0f-9156-8303c4589570","run_id":"d07c508a-5a6e-4d77-a7e1-5d049efdff42","task_id":"171aeca8-3e15-4447-9e3f-e8500a36066c"}
+15:37:29.469 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.469808267Z","latency_ms":0,"usage_missing":false,"validation_status":"REJECTED_SCHEMA_MISMATCH","attempt_id":"55d2cabf-944a-4289-acd7-b0c23c9839d9","run_id":"e4529d69-7297-433a-a70d-4a3bb704247d","task_id":"53ecbbd9-822f-4363-9514-c7ca8586e534"}
+15:37:29.488 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.488270497Z","latency_ms":0,"usage_missing":true,"validation_status":"REJECTED_OVERSIZE","attempt_id":"41e0cdae-3584-42d0-ac25-a7b5772a18b8","run_id":"3bb6a53b-5917-4078-b665-466be326bf82","task_id":"5603dae7-d7d4-4037-bc64-70dee229733c"}
+15:37:29.513 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.513821983Z","latency_ms":0,"usage_missing":true,"validation_status":"REJECTED_SCHEMA_MISMATCH","attempt_id":"5a9957a1-9b47-442f-ab7f-f7434dce125d","run_id":"a0a42efa-31d9-4df7-a571-c7c2684ab435","task_id":"afd74ee9-0156-42ab-b9dc-50bf7e57bc43"}
+15:37:29.535 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-05T15:37:29.535544475Z","latency_ms":0,"usage_missing":true,"validation_status":"REJECTED_MALFORMED","attempt_id":"25b5ea80-695c-40b4-a2f4-a47c2de0e59e","run_id":"a6037f32-1d38-4596-9cb3-d135648d9d32","task_id":"11628976-ab22-40f3-a79b-327dbbe5a133"}
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.762 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutorWireMockTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.M7MigrationContractTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.051 s -- in com.objwww.pr.control.infrastructure.persistence.M7MigrationContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.selfcheck.ControlSelfCheckTest
+15:37:29.599 [main] INFO com.objwww.pr.control.infrastructure.selfcheck.StartupSelfCheckRunner -- [control] 启动自检通过（B25 运行时门）
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.infrastructure.selfcheck.ControlSelfCheckTest
+[INFO] Running com.objwww.pr.control.infrastructure.model.ProviderErrorClassifierTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in com.objwww.pr.control.infrastructure.model.ProviderErrorClassifierTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.StructuredLogTest
+15:37:29.641 [main] INFO structured-log-test -- {"event":"e","ts":"2026-09-05T15:37:29.638951961Z","error":null}
+15:37:29.643 [main] INFO structured-log-test -- {"event":"e","ts":"2026-09-05T15:37:29.643420028Z","secret_like":"quote\" and\nnewline\ttab"}
+15:37:29.645 [main] INFO structured-log-test -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:29.645526196Z","run_id":"r-1","decision":"COMPLETED","latency_ms":42}
+15:37:29.649 [main] WARN structured-log-test -- structured log 序列化失败 event=e
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.infrastructure.observability.StructuredLogTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.AlertMetricsLabelAllowlistTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.infrastructure.observability.AlertMetricsLabelAllowlistTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.TracedTasksTest
+Sep 05, 2026 3:37:29 PM brave.Tracing$LogSpanHandler end
+INFO: {"traceId":"b80a3ae2425b56b3","id":"b80a3ae2425b56b3","name":"parent","timestamp":1788622649688209,"duration":5067,"localEndpoint":{"serviceName":"unknown","ipv4":"172.17.0.2"}}
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.objwww.pr.control.infrastructure.observability.TracedTasksTest
+[INFO] Running com.objwww.pr.control.ControlArchitectureTest
+15:37:29.722 [main] INFO com.tngtech.archunit.core.PluginLoader -- Detected Java version 21.0.12
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.623 s -- in com.objwww.pr.control.ControlArchitectureTest
+[INFO] Running com.objwww.pr.control.alert.domain.statemachine.AlertStateMachineTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.objwww.pr.control.alert.domain.statemachine.AlertStateMachineTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.DagPromoterTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.objwww.pr.control.alert.domain.dag.DagPromoterTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.DagCycleDetectorTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.domain.dag.DagCycleDetectorTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1Test
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1Test
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ActionDigestTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.tool.ActionDigestTest
+[INFO] Running com.objwww.pr.control.alert.domain.model.EvidencePackageV2ContractTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.alert.domain.model.EvidencePackageV2ContractTest
+[INFO] Running com.objwww.pr.control.alert.domain.budget.RunBudgetTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.objwww.pr.control.alert.domain.budget.RunBudgetTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimReducerTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.objwww.pr.control.alert.domain.claim.ClaimReducerTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.alert.domain.claim.ClaimTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.AlertIdentityFactoryTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.domain.service.AlertIdentityFactoryTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.SlaPolicyTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.objwww.pr.control.alert.domain.service.SlaPolicyTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.DeferredPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.alert.domain.service.DeferredPolicyTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.EvidencePackageValidatorTest
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.objwww.pr.control.alert.domain.service.EvidencePackageValidatorTest
+[INFO] Running com.objwww.pr.control.alert.infrastructure.config.AlertConfigBridgeTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.075 s -- in com.objwww.pr.control.alert.infrastructure.config.AlertConfigBridgeTest
+[INFO] Running com.objwww.pr.control.alert.infrastructure.selfcheck.AlertSelfCheckTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.infrastructure.selfcheck.AlertSelfCheckTest
+[INFO] Running com.objwww.pr.control.alert.application.RcaWorkerTest
+15:37:32.680 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.680106331Z","latency_ms":0,"attempt_id":"114a324d-8742-4940-873c-695d6146984b","task_id":"944241b9-7a89-497a-8196-d4981111660a","run_id":"4882a642-0165-4182-9fe7-01e7a0381c18","decision":"COMPLETED"}
+15:37:32.680 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- incident 21657466-78d0-4102-abcd-0e0fecdfa1e5 材料变化，铸 RERUN run
+15:37:32.681 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.681832953Z","latency_ms":0,"attempt_id":"c657df73-9290-45c9-86cd-4c24882d83f5","task_id":"b30ad6d8-a928-4b66-864a-7bc677476106","run_id":"7b56c812-752c-4043-9fd7-612c7a7ee0bf","decision":"COMPLETED"}
+15:37:32.686 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.686482221Z","latency_ms":0,"attempt_id":"130c8d80-8bc5-494a-97eb-89f23d308f99","task_id":"0d850265-31ac-4a50-9f38-6b3f916a03ca","run_id":"3f4af1be-6593-4ba3-b53a-6ebf62f3ea06","decision":"RETRY_SCHEDULED"}
+15:37:32.687 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.686964590Z","latency_ms":0,"attempt_id":"ef36cc08-37ca-4c33-a513-6911a5d4a2cf","task_id":"0d850265-31ac-4a50-9f38-6b3f916a03ca","run_id":"3f4af1be-6593-4ba3-b53a-6ebf62f3ea06","decision":"RETRY_SCHEDULED"}
+15:37:32.687 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.687203550Z","latency_ms":0,"attempt_id":"a73ebcbe-6145-4350-a3ca-05acaf07e3e4","task_id":"0d850265-31ac-4a50-9f38-6b3f916a03ca","run_id":"3f4af1be-6593-4ba3-b53a-6ebf62f3ea06","decision":"DEAD"}
+15:37:32.690 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task c6c7b2a7-ce78-4865-8006-673a79f7d30a 租约过期回收（疑似 worker 崩溃）owner=worker-a
+15:37:32.690 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- 悬挂账本 9296be87-1063-4f3e-a389-b0d4b25734ae STARTED→UNKNOWN（崩溃回收）
+15:37:32.698 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.698161624Z","latency_ms":0,"attempt_id":"1dec795e-09a4-47e1-9828-ca7feb9f66c0","task_id":"7f8045ef-400c-464d-a6e2-31b56b530f7a","run_id":"542e1551-e6e3-4305-878b-9f1f99d5c723","decision":"COMPLETED"}
+15:37:32.700 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- 悬挂调查记录 8d83f929-d2c4-4778-b3e0-4e55a8cca90e STARTED→UNKNOWN（崩溃回收）
+15:37:32.704 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.704725960Z","latency_ms":0,"attempt_id":"37354686-20c9-4b3f-98db-75fb03c578d4","task_id":"8195abbc-f73f-4dfd-9c3c-02388e8c8f4a","run_id":"81c8c412-7d4a-4340-a4d0-94df0dcb37bb","decision":"DEAD"}
+15:37:32.706 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.706373695Z","latency_ms":0,"attempt_id":"76443deb-e8b2-47fc-b408-f0d2c8b458d4","task_id":"c685d673-95fc-47ec-9d57-6caff2c763ce","run_id":"31fa2dfc-6744-40ec-9e47-29e7c66cc403","decision":"COMPLETED"}
+15:37:32.715 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.715264684Z","latency_ms":0,"attempt_id":"011542dd-d525-47d6-882a-22adc0c9a07b","task_id":"fa62ef9f-0420-426e-903c-bdabcd9fe4cc","run_id":"2327709a-9f2b-40d5-9a77-7dd12d55812c","decision":"RETRY_SCHEDULED"}
+15:37:32.716 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.715817525Z","latency_ms":0,"attempt_id":"9163cea3-511e-4707-be79-2f93e3d0590c","task_id":"fa62ef9f-0420-426e-903c-bdabcd9fe4cc","run_id":"2327709a-9f2b-40d5-9a77-7dd12d55812c","decision":"COMPLETED"}
+15:37:32.719 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.719611693Z","latency_ms":0,"attempt_id":"870b1dcc-5664-4ab0-8b71-1bec70fd1e2d","task_id":"a231f5f6-3b70-4618-843f-97a3e8d3f9d4","run_id":"687e21e2-baae-4b21-98bd-7f28a3d2c508","decision":"COMPLETED"}
+15:37:32.721 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task d8c2231f-aec9-402d-b667-bde99197a6a8 租约过期回收（疑似 worker 崩溃）owner=worker-a
+15:37:32.722 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-05T15:37:32.722167248Z","latency_ms":0,"attempt_id":"c8e812a1-d594-4141-8a72-b14495f761ef","task_id":"d8c2231f-aec9-402d-b667-bde99197a6a8","run_id":"321edfd1-0818-43b5-bc33-afbaaa09b967","decision":"COMPLETED"}
+15:37:32.722 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task d8c2231f-aec9-402d-b667-bde99197a6a8 旧租约提交被拒 owner=worker-a epoch=1
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in com.objwww.pr.control.alert.application.RcaWorkerTest
+[INFO] Running com.objwww.pr.control.alert.application.AlertInboxProcessorTest
+15:37:32.728 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox fe8cb9a3-f4d0-4570-92cb-72444616bd97 死信: payload_raw JSON 解析失败: Unexpected character ('n' (code 110)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 2]
+15:37:32.758 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox 0adfa7bf-fd78-4ca5-ba56-95b4ed864f6c 死信: 缺少 alertname 标签，无法铸造 incidentKey
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.objwww.pr.control.alert.application.AlertInboxProcessorTest
+[INFO] Running com.objwww.pr.control.alert.application.ReportCompletedNotifierTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.alert.application.ReportCompletedNotifierTest
+[INFO] Running com.objwww.pr.control.alert.interfaces.AlertWebhookControllerTest
+15:37:33.014 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.015 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.016 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:37:33.138 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.138 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.138 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.161 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.161 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.161 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.178 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.178 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.178 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.194 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.194 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.194 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.201 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.201 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.202 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:37:33.211 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.211 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.211 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.222 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.222 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.222 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.225 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.225 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.225 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.232 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.232 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.232 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.240 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.240 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.240 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.248 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.248 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.249 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.259 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.259 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.259 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.269 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.270 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.270 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.273 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:37:33.274 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:37:33.274 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:37:33.276 [main] WARN com.objwww.pr.control.alert.interfaces.AlertWebhookController -- 整组无法持久化，返回 503: db down
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.493 s -- in com.objwww.pr.control.alert.interfaces.AlertWebhookControllerTest
+[INFO] Running com.objwww.pr.control.alert.support.AlertInMemoryStoresTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.support.AlertInMemoryStoresTest
+[INFO] Running com.objwww.pr.control.application.ModelGatewayTest
+15:37:33.290 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本 STARTED 写失败，零触网（D5）: RuntimeException
+15:37:33.310 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本终态写失败（SUCCEEDED），转 UNKNOWN 语义: RuntimeException
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in com.objwww.pr.control.application.ModelGatewayTest
+[INFO] Running com.objwww.pr.control.ControlContextSmokeTest
+15:37:33.340 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.control.ControlContextSmokeTest]: ControlContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+15:37:33.430 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.control.ControlApplication for test class com.objwww.pr.control.ControlContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T15:37:33.859Z  INFO 120 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : Starting ControlContextSmokeTest using Java 21.0.12 with PID 120 (started by root in /build/control-app)
+2026-09-05T15:37:33.861Z  INFO 120 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T15:37:35.834Z  INFO 120 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-05T15:37:35.920Z  INFO 120 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : Started ControlContextSmokeTest in 2.418 seconds (process running for 12.344)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.334 s -- in com.objwww.pr.control.ControlContextSmokeTest
+2026-09-05T15:37:36.663Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Testcontainers version: 1.20.4
+2026-09-05T15:37:37.076Z  INFO 120 --- [control-app] [           main] [                                                 ] o.t.d.DockerClientProviderStrategy       : Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+2026-09-05T15:37:37.083Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Docker host IP address is 172.17.0.1
+2026-09-05T15:37:37.100Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+2026-09-05T15:37:37.111Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.images.PullPolicy     : Image pull policy will be performed by: DefaultPullPolicy()
+2026-09-05T15:37:37.112Z  INFO 120 --- [control-app] [           main] [                                                 ] o.t.utility.ImageNameSubstitutor         : Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+2026-09-05T15:37:37.169Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Creating container for image: testcontainers/ryuk:0.11.0
+2026-09-05T15:37:37.174Z  INFO 120 --- [control-app] [           main] [                                                 ] o.t.utility.RegistryAuthLocator          : Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+2026-09-05T15:37:37.301Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Container testcontainers/ryuk:0.11.0 is starting: 2c1f8068c5e366dce1b23e879f6c3f2e25b69830d92999b0df56041aa0fb0a1b
+2026-09-05T15:37:37.563Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Container testcontainers/ryuk:0.11.0 started in PT0.394340445S
+2026-09-05T15:37:37.567Z  INFO 120 --- [control-app] [           main] [                                                 ] o.t.utility.RyukResourceReaper           : Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+2026-09-05T15:37:37.567Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Checking the system...
+2026-09-05T15:37:37.568Z  INFO 120 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresModelCallLedgerRepositoryTest
+2026-09-05T15:37:37.573Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Creating container for image: postgres:16-alpine
+2026-09-05T15:37:37.642Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container postgres:16-alpine is starting: 4075592b9b4c46573261af350af57edebe8b3cbe9f8dd824961a0529d1b42ddf
+2026-09-05T15:37:38.873Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container postgres:16-alpine started in PT1.300486883S
+2026-09-05T15:37:38.874Z  INFO 120 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33068/test?loggerLevel=OFF)
+2026-09-05T15:37:38.879Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-05T15:37:39.013Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@25b19258
+2026-09-05T15:37:39.014Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-05T15:37:39.164Z  INFO 120 --- [control-app] [           main] [                                                 ] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://172.17.0.1:33068/test?loggerLevel=OFF (PostgreSQL 16.15)
+2026-09-05T15:37:39.215Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table "public"."flyway_schema_history" does not exist yet
+2026-09-05T15:37:39.218Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbValidate     : Successfully validated 11 migrations (execution time 00:00.025s)
+2026-09-05T15:37:39.230Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table "public"."flyway_schema_history" ...
+2026-09-05T15:37:39.262Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Current version of schema "public": << Empty Schema >>
+2026-09-05T15:37:39.304Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "1 - m0 schema"
+2026-09-05T15:37:39.425Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "2 - grants"
+2026-09-05T15:37:39.462Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "3 - m1 inbox reconcile"
+2026-09-05T15:37:39.516Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "4 - m2 checkpoint repair"
+2026-09-05T15:37:39.595Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "5 - m3 model governance"
+2026-09-05T15:37:39.677Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "6 - m4 sandbox"
+2026-09-05T15:37:39.804Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "7 - am1 alert domain"
+2026-09-05T15:37:39.894Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "8 - am1 dag reserve"
+2026-09-05T15:37:39.922Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "9 - am3 eval notify"
+2026-09-05T15:37:40.028Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "10 - am3 eval run"
+2026-09-05T15:37:40.090Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "11 - am3 eval readonly"
+2026-09-05T15:37:40.120Z  INFO 120 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Successfully applied 11 migrations to schema "public", now at version v11 (execution time 00:00.568s)
+2026-09-05T15:37:40.126Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-09-05T15:37:40.149Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@7614cb65
+2026-09-05T15:37:40.150Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-09-05T15:37:40.150Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Starting...
+2026-09-05T15:37:40.174Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@133e2570
+2026-09-05T15:37:40.174Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Start completed.
+2026-09-05T15:37:40.174Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-4 - Starting...
+2026-09-05T15:37:40.220Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@56bb900c
+2026-09-05T15:37:40.221Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-4 - Start completed.
+2026-09-05T15:37:40.221Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Starting...
+2026-09-05T15:37:40.232Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@c878c7a
+2026-09-05T15:37:40.233Z  INFO 120 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Start completed.
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.884 s -- in com.objwww.pr.control.it.PostgresModelCallLedgerRepositoryTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 404, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ control-app ---
+[INFO] Building jar: /build/control-app/target/control-app-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ control-app ---
+[INFO] Attaching repackaged archive /build/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+15:37:42.425 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+15:37:42.573 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+15:37:42.917 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+15:37:42.918 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+15:37:42.936 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+15:37:42.945 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+15:37:42.947 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+15:37:43.023 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+15:37:43.027 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+15:37:43.206 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: bd0f81e5d055aad92e374472a682385bdb2a70a29b6a3ba0dfd9e47ff619ce7b
+15:37:43.494 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.471013536S
+15:37:43.504 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+15:37:43.504 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+15:37:43.505 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+15:37:43.530 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+15:37:43.592 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: dec46c7c8fac6ef1c17e6bebb3396de570c8eb0c48279a214a4527cf095c3f07
+15:37:44.844 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.31425432S
+15:37:44.845 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33070/test?loggerLevel=OFF)
+15:37:44.858 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+15:37:45.077 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1c504e66
+15:37:45.078 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+15:37:45.506 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:33070/test?loggerLevel=OFF (PostgreSQL 16.15)
+15:37:45.586 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+15:37:45.590 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 11 migrations (execution time 00:00.036s)
+15:37:45.616 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+15:37:45.691 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+15:37:45.776 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+15:37:45.949 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+15:37:46.009 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+15:37:46.083 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+15:37:46.145 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+15:37:46.223 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+15:37:46.320 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+15:37:46.396 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+15:37:46.438 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+15:37:46.536 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+15:37:46.561 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+15:37:46.575 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 11 migrations to schema "public", now at version v11 (execution time 00:00.546s)
+15:37:46.593 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+15:37:46.616 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@35a0e495
+15:37:46.616 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+15:37:46.616 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+15:37:46.637 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@642413d4
+15:37:46.638 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+15:37:46.638 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+15:37:46.658 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@5114b7c7
+15:37:46.659 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+15:37:46.659 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+15:37:46.676 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@15eb0ae9
+15:37:46.677 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.815 s -- in com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.477 s -- in com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Running com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.308 s -- in com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Running com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.583 s -- in com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.603 s -- in com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 33, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ control-app ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:order-arena >----------------------
+[INFO] Building order-arena 0.0.1-SNAPSHOT                                [4/6]
+[INFO]   from order-arena/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ order-arena ---
+[INFO] Deleting /build/order-arena/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ order-arena ---
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] Copying 7 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ order-arena ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 59 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ order-arena ---
+[INFO] skip non existing resourceDirectory /build/order-arena/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ order-arena ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 17 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] /build/order-arena/src/test/java/com/objwww/pr/arena/deploy/ComposeTopologyContractTest.java: /build/order-arena/src/test/java/com/objwww/pr/arena/deploy/ComposeTopologyContractTest.java uses unchecked or unsafe operations.
+[INFO] /build/order-arena/src/test/java/com/objwww/pr/arena/deploy/ComposeTopologyContractTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ order-arena ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.arena.domain.statemachine.StateMachineExhaustiveTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.184 s -- in com.objwww.pr.arena.domain.statemachine.StateMachineExhaustiveTest
+[INFO] Running com.objwww.pr.arena.ArenaArchitectureTest
+15:37:51.612 [main] INFO com.tngtech.archunit.core.PluginLoader -- Detected Java version 21.0.12
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.182 s -- in com.objwww.pr.arena.ArenaArchitectureTest
+[INFO] Running com.objwww.pr.arena.deploy.ComposeTopologyContractTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.111 s -- in com.objwww.pr.arena.deploy.ComposeTopologyContractTest
+[INFO] Running com.objwww.pr.arena.application.TrafficGeneratorTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.035 s -- in com.objwww.pr.arena.application.TrafficGeneratorTest
+[INFO] Running com.objwww.pr.arena.ArenaContextSmokeTest
+15:37:54.027 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.arena.ArenaContextSmokeTest]: ArenaContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+15:37:54.150 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.arena.ArenaApplication for test class com.objwww.pr.arena.ArenaContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T15:37:54.596Z  INFO 514 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : Starting ArenaContextSmokeTest using Java 21.0.12 with PID 514 (started by root in /build/order-arena)
+2026-09-05T15:37:54.597Z  INFO 514 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T15:37:56.208Z  INFO 514 --- [order-arena] [           main] c.objwww.pr.arena.ArenaContextSmokeTest  : Started ArenaContextSmokeTest in 1.92 seconds (process running for 5.576)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.896 s -- in com.objwww.pr.arena.ArenaContextSmokeTest
+[INFO] Running com.objwww.pr.arena.interfaces.OrderControllerTest
+2026-09-05T15:37:56.861Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:56.861Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:56.862Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.023Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.024Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.024Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.036Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.036Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.036Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.055Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.056Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.056Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.067Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.067Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.067Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.083Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.083Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.083Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.093Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.093Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.093Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-05T15:37:57.103Z  INFO 514 --- [order-arena] [           main] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-05T15:37:57.104Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-05T15:37:57.104Z  INFO 514 --- [order-arena] [           main] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.269 s -- in com.objwww.pr.arena.interfaces.OrderControllerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 30, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ order-arena ---
+[INFO] Building jar: /build/order-arena/target/order-arena-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ order-arena ---
+[INFO] Attaching repackaged archive /build/order-arena/target/order-arena-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ order-arena ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+15:37:58.405 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+15:37:58.570 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+15:37:58.864 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+15:37:58.867 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+15:37:58.890 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+15:37:58.903 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+15:37:58.905 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+15:37:58.983 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+15:37:58.988 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+15:37:59.221 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: a6deb01e5b40034c7cef786f901864af0139d246a9490e6dcf795f7fb4221ae1
+15:37:59.574 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.591383417S
+15:37:59.594 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+15:37:59.595 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+15:37:59.595 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.arena.it.DomainProbeEpisodeIT
+15:37:59.623 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+15:37:59.748 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 6ae7241ce8de134cd78ee3fa93b84b58e58c0a66212d04c12eb445fa020ae46e
+15:38:01.006 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.382971262S
+15:38:01.007 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33072/test?loggerLevel=OFF)
+15:38:01.015 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+15:38:01.231 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@7772054c
+15:38:01.232 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+15:38:01.661 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:33072/test?loggerLevel=OFF (PostgreSQL 16.15)
+15:38:01.718 [main] INFO org.flywaydb.core.internal.database.base.Schema -- Creating schema "arena" ...
+15:38:01.726 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "arena"."flyway_schema_history" ...
+15:38:01.828 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "arena": null
+15:38:01.871 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "1 - am2 order base"
+15:38:01.879 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: schema "arena" already exists, skipping (SQL State: 42P06 - Error Code: 0)
+15:38:01.983 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "2 - am2 compensation outbox"
+15:38:02.020 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "3 - am2 chaos gt"
+15:38:02.055 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "4 - am2 probe reconcile"
+15:38:02.086 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "5 - am2 scenario map"
+15:38:02.107 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "6 - am2 drop map fp unique"
+15:38:02.129 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "7 - am3 eval gt barrier"
+15:38:02.143 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 7 migrations to schema "arena", now at version v7 (execution time 00:00.189s)
+15:38:02.149 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+15:38:02.167 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@597f0937
+15:38:02.168 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+15:38:02.168 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+15:38:02.190 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@3ed34ef5
+15:38:02.190 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+15:38:02.190 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+15:38:02.213 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@506a1372
+15:38:02.213 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+15:38:02.471 [main] WARN com.objwww.pr.arena.application.DomainProbe -- 领域探针失明（保留末值，不伪装恢复）: simulated outage
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.056 s -- in com.objwww.pr.arena.it.DomainProbeEpisodeIT
+[INFO] Running com.objwww.pr.arena.it.ChaosRecoveryIT
+15:38:02.740 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F1 恢复收口: scenario=f1-sc-paid 重复行=2 补偿=1
+15:38:02.792 [main] WARN com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 注入回跳: scenario=f2-sc-it 单数=1
+15:38:02.800 [main] WARN com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 注入回跳: scenario=f2-sc-it 单数=1
+15:38:02.815 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 恢复收口: scenario=f2-sc-it 恢复=2
+15:38:02.828 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F2 恢复收口: scenario=f2-sc-it 恢复=0
+15:38:02.862 [main] INFO com.objwww.pr.arena.application.chaos.ChaosRecoveryService -- F1 恢复收口: scenario=f1-sc-rec 重复行=2 补偿=1
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.208 s -- in com.objwww.pr.arena.it.ChaosRecoveryIT
+[INFO] Running com.objwww.pr.arena.it.F3ReconcileIT
+15:38:02.924 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 CAPTURE 迟到成功，补 PAID: order=3c19c8fb-928e-4af8-983a-77b9c4d302ba
+15:38:02.951 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 迟到成功，补 ENABLE: order=14fd1b49-70c3-403c-ab0b-a4107f6bdba9
+15:38:02.996 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 裁定拒绝，废单补偿: order=06512d19-55d6-48e8-bdd9-d9f4fd120474
+15:38:03.022 [main] INFO com.objwww.pr.arena.application.F3ReconcileService -- F3 AUTH 裁定拒绝，废单补偿: order=f2550ed7-6fd1-4d49-a182-255800591cec
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.153 s -- in com.objwww.pr.arena.it.F3ReconcileIT
+[INFO] Running com.objwww.pr.arena.it.ArenaV3ChaosMigrationIT
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.303 s -- in com.objwww.pr.arena.it.ArenaV3ChaosMigrationIT
+[INFO] Running com.objwww.pr.arena.it.ArenaV2OutboxMigrationIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.133 s -- in com.objwww.pr.arena.it.ArenaV2OutboxMigrationIT
+[INFO] Running com.objwww.pr.arena.it.ArenaPermissionMatrixIT
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.233 s -- in com.objwww.pr.arena.it.ArenaPermissionMatrixIT
+[INFO] Running com.objwww.pr.arena.it.PostgresChaosSwitchboardIT
+15:38:03.770 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+15:38:03.771 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+15:38:04.075 [main] WARN com.objwww.pr.arena.application.chaos.ChaosSwitchboard -- chaos 开关读面 fail-closed: Connection refused
+15:38:04.376 [main] WARN com.objwww.pr.arena.application.chaos.ChaosSwitchboard -- chaos 会话读面 fail-closed: Connection refused
+15:38:04.377 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Shutdown initiated...
+15:38:04.408 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Shutdown completed.
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.739 s -- in com.objwww.pr.arena.it.PostgresChaosSwitchboardIT
+[INFO] Running com.objwww.pr.arena.it.PostgresIdempotencyRepositoryIT
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.171 s -- in com.objwww.pr.arena.it.PostgresIdempotencyRepositoryIT
+[INFO] Running com.objwww.pr.arena.it.ArenaEvalGtBarrierIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.114 s -- in com.objwww.pr.arena.it.ArenaEvalGtBarrierIT
+[INFO] Running com.objwww.pr.arena.it.ArenaV1MigrationContractIT
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.212 s -- in com.objwww.pr.arena.it.ArenaV1MigrationContractIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 58, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ order-arena ---
+[INFO] 
+[INFO] ------------------< com.objwww.pr:arena-chaos-admin >-------------------
+[INFO] Building arena-chaos-admin 0.0.1-SNAPSHOT                          [5/6]
+[INFO]   from arena-chaos-admin/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ arena-chaos-admin ---
+[INFO] Deleting /build/arena-chaos-admin/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ arena-chaos-admin ---
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ arena-chaos-admin ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 7 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ arena-chaos-admin ---
+[INFO] skip non existing resourceDirectory /build/arena-chaos-admin/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ arena-chaos-admin ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 5 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ arena-chaos-admin ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.arenaadmin.fingerprint.AlertmanagerFingerprintTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.095 s -- in com.objwww.pr.arenaadmin.fingerprint.AlertmanagerFingerprintTest
+[INFO] Running com.objwww.pr.arenaadmin.interfaces.ChaosAdminControllerTest
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+15:38:07.947 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:07.949 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:07.953 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 3 ms
+15:38:07.968 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:07.976 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:07.976 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.205 [main] WARN com.objwww.pr.arenaadmin.interfaces.ChaosAdminController -- chaos 关闭: F3 scenario=f3-e2e-001（进入 RECOVERING，等待恢复收口）
+15:38:08.281 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.281 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.281 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.288 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.288 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.289 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.319 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.320 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.320 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.328 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.328 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.329 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.348 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.348 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.348 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.358 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.358 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.358 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.373 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.373 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.373 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.379 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.379 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.379 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.397 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.397 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.397 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.403 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.403 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.403 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.420 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.420 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.421 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:38:08.427 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.427 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.427 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.451 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.451 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.451 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.456 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:38:08.456 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:38:08.456 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:38:08.477 [main] WARN com.objwww.pr.arenaadmin.interfaces.ChaosAdminController -- chaos 激活: F3 scenario=f3-e2e-001 operator=it
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.188 s -- in com.objwww.pr.arenaadmin.interfaces.ChaosAdminControllerTest
+[INFO] Running com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest
+15:38:08.525 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest]: ChaosAdminContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+15:38:08.610 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.arenaadmin.ChaosAdminApplication for test class com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-05T15:38:09.103Z  INFO 667 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : Starting ChaosAdminContextSmokeTest using Java 21.0.12 with PID 667 (started by root in /build/arena-chaos-admin)
+2026-09-05T15:38:09.105Z  INFO 667 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : No active profile set, falling back to 1 default profile: "default"
+2026-09-05T15:38:10.462Z  INFO 667 --- [arena-chaos-admin] [           main] c.o.p.a.ChaosAdminContextSmokeTest       : Started ChaosAdminContextSmokeTest in 1.774 seconds (process running for 4.88)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.998 s -- in com.objwww.pr.arenaadmin.ChaosAdminContextSmokeTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ arena-chaos-admin ---
+[INFO] Building jar: /build/arena-chaos-admin/target/arena-chaos-admin-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ arena-chaos-admin ---
+[INFO] Attaching repackaged archive /build/arena-chaos-admin/target/arena-chaos-admin-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ arena-chaos-admin ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+15:38:11.297 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+15:38:11.467 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+15:38:11.760 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+15:38:11.761 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+15:38:11.779 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+15:38:11.789 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+15:38:11.791 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+15:38:11.860 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+15:38:11.864 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+15:38:12.034 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: b1982b0784b94a34c96408e2a5ad54e8fbbe50afcf13537a046ee67443b6b7a0
+15:38:12.350 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.48968985S
+15:38:12.355 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+15:38:12.356 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+15:38:12.356 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.arenaadmin.it.ChaosActivationLifecycleIT
+15:38:12.386 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+15:38:12.455 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 863eb37357edac77eb927f4821c2c008ec9133ab1f1c74982632002efeaacc15
+15:38:13.663 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.277703221S
+15:38:13.664 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33074/test?loggerLevel=OFF)
+15:38:13.675 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+15:38:13.883 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@6c37bd27
+15:38:13.884 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+15:38:14.284 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:33074/test?loggerLevel=OFF (PostgreSQL 16.15)
+15:38:14.325 [main] INFO org.flywaydb.core.internal.database.base.Schema -- Creating schema "arena" ...
+15:38:14.331 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "arena"."flyway_schema_history" ...
+15:38:14.397 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "arena": null
+15:38:14.439 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "1 - am2 order base"
+15:38:14.444 [main] WARN org.flywaydb.core.internal.sqlscript.DefaultSqlScriptExecutor -- DB: schema "arena" already exists, skipping (SQL State: 42P06 - Error Code: 0)
+15:38:14.514 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "2 - am2 compensation outbox"
+15:38:14.557 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "3 - am2 chaos gt"
+15:38:14.630 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "4 - am2 probe reconcile"
+15:38:14.665 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "5 - am2 scenario map"
+15:38:14.683 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "6 - am2 drop map fp unique"
+15:38:14.695 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "arena" to version "7 - am3 eval gt barrier"
+15:38:14.713 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 7 migrations to schema "arena", now at version v7 (execution time 00:00.170s)
+15:38:14.721 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+15:38:14.754 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@4821aa9f
+15:38:14.754 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+15:38:14.754 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+15:38:14.767 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@ccf91df
+15:38:14.767 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.978 s -- in com.objwww.pr.arenaadmin.it.ChaosActivationLifecycleIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ arena-chaos-admin ---
+[INFO] 
+[INFO] ----------------------< com.objwww.pr:notify-app >----------------------
+[INFO] Building notify-app 0.0.1-SNAPSHOT                                 [6/6]
+[INFO]   from notify-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ notify-app ---
+[INFO] Deleting /build/notify-app/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ notify-app ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ notify-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 16 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ notify-app ---
+[INFO] skip non existing resourceDirectory /build/notify-app/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ notify-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 7 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ notify-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.notify.domain.service.NotificationRendererTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.317 s -- in com.objwww.pr.notify.domain.service.NotificationRendererTest
+[INFO] Running com.objwww.pr.notify.domain.service.FencedNotifyExecutorTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.043 s -- in com.objwww.pr.notify.domain.service.FencedNotifyExecutorTest
+[INFO] Running com.objwww.pr.notify.domain.channel.WebhookChannelTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.074 s -- in com.objwww.pr.notify.domain.channel.WebhookChannelTest
+[INFO] Running com.objwww.pr.notify.application.NotifyOutboxClaimerTest
+15:38:17.382 [main] INFO com.objwww.pr.notify.application.NotifyOutboxClaimer -- NotifyOutboxClaimer 启动: owner=owner-1
+15:38:17.544 [main] WARN com.objwww.pr.notify.application.NotifyOutboxClaimer -- 执行通知失败（行留租约待回收）: operation=cda5905c-f1e3-43fb-9cf2-c576b87e1e44
+java.lang.IllegalStateException: boom
+	at com.objwww.pr.notify.application.NotifyOutboxClaimerTest.lambda$executesBatchSeriallyAndIsolatesFailures$0(NotifyOutboxClaimerTest.java:34)
+	at com.objwww.pr.notify.application.NotifyOutboxClaimer.runOnce(NotifyOutboxClaimer.java:59)
+	at com.objwww.pr.notify.application.NotifyOutboxClaimerTest.executesBatchSeriallyAndIsolatesFailures(NotifyOutboxClaimerTest.java:42)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:767)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8(TestMethodTestDescriptor.java:217)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:213)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:138)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:68)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.apache.maven.surefire.junitplatform.LazyLauncher.execute(LazyLauncher.java:56)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:194)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:150)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:124)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.233 s -- in com.objwww.pr.notify.application.NotifyOutboxClaimerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ notify-app ---
+[INFO] Building jar: /build/notify-app/target/notify-app-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ notify-app ---
+[INFO] Attaching repackaged archive /build/notify-app/target/notify-app-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ notify-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+15:38:18.498 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+15:38:18.654 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+15:38:18.934 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+15:38:18.937 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 172.17.0.1
+15:38:18.960 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+15:38:18.973 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+15:38:18.975 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+15:38:19.042 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+15:38:19.048 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+15:38:19.251 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: fb25b6852d7d022c693f098b00817eba0edb655ea98d64cede7797a443daa6f1
+15:38:19.536 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.493791547S
+15:38:19.542 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+15:38:19.543 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+15:38:19.543 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.notify.it.NotifyOutboxStoreIT
+15:38:19.564 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+15:38:19.633 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 4ded03b16d60e01fd99cccf1edd9ead319b5eb5bc82cee8642425846fdf50610
+15:38:20.946 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.381777633S
+15:38:20.947 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://172.17.0.1:33076/test?loggerLevel=OFF)
+15:38:20.956 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+15:38:21.234 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@76075d65
+15:38:21.235 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+15:38:21.695 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://172.17.0.1:33076/test?loggerLevel=OFF (PostgreSQL 16.15)
+15:38:21.763 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+15:38:21.767 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 11 migrations (execution time 00:00.032s)
+15:38:21.788 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+15:38:21.840 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+15:38:21.900 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+15:38:22.015 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+15:38:22.060 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+15:38:22.098 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+15:38:22.132 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+15:38:22.166 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+15:38:22.224 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+15:38:22.305 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+15:38:22.327 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+15:38:22.386 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+15:38:22.409 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+15:38:22.420 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 11 migrations to schema "public", now at version v11 (execution time 00:00.366s)
+15:38:22.424 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+15:38:22.434 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@4dba773d
+15:38:22.435 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+15:38:22.546 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+15:38:22.555 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@1f03fba0
+15:38:22.556 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+15:38:22.615 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Shutdown initiated...
+15:38:22.620 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Shutdown completed.
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.536 s -- in com.objwww.pr.notify.it.NotifyOutboxStoreIT
+[INFO] Running com.objwww.pr.notify.it.NotifyPermissionIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.185 s -- in com.objwww.pr.notify.it.NotifyPermissionIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ notify-app ---
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.423 s]
+[INFO] shared-kernel ...................................... SUCCESS [  4.800 s]
+[INFO] control-app ........................................ SUCCESS [ 33.747 s]
+[INFO] order-arena ........................................ SUCCESS [ 15.602 s]
+[INFO] arena-chaos-admin .................................. SUCCESS [ 10.455 s]
+[INFO] notify-app ......................................... SUCCESS [  7.849 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:13 min
+[INFO] Finished at: 2026-09-05T15:38:23Z
+[INFO] ------------------------------------------------------------------------

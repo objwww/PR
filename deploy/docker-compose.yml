@@ -149,6 +149,47 @@ services:
           cpus: "1.0"
     logging: *logging
 
+  # AM3（M3-20~23）通知出口：notify_app 身份（V9 授权面：只碰投递面，不得改报告与
+  # 调查记录——BA-10②/E2E-M3-07）；单 worker 领取 notify_outbox → 三档渠道投递。
+  notify-app:
+    build:
+      context: ../notify-app
+    image: pr-agent/notify-app:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      NOTIFY_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pr_agent}
+      NOTIFY_DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?}   # 与 migrate V9 placeholder 同值（INV-AM3-3）
+      # 渠道名 test 与 control 侧 app.alert.notify.channels:test 出箱行对齐；
+      # webhook=echo-receiver(WireMock)——TEST_CHANNEL 真实到达测试机器人（D01）
+      NOTIFY_CHANNELS: "test"
+      APP_NOTIFY_CHANNELS_TEST_TIER: "TEST_CHANNEL"
+      NOTIFY_CHANNEL_TEST_WEBHOOK: ${NOTIFY_CHANNEL_TEST_WEBHOOK:?}
+      NOTIFY_CHANNEL_TEST_SECRET: ${NOTIFY_CHANNEL_TEST_SECRET:-}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50.0
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+      # 仅接 echo-receiver 所在网（测试机器人出口）；不接业务网/eval-mgmt（隔离面）
+      - alert-ab
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+    logging: *logging
+
 volumes:
   pg-data:
   cas-data:
@@ -160,3 +201,5 @@ networks:
     external: true   # 与 deploy/alert 共享(预先 docker network create alert-net)
   eval-mgmt:
     external: true   # AM2 chaos 管理面私网(deploy/alert 侧孤立；预先 create --internal)
+  alert-ab:
+    external: true   # echo-receiver(测试机器人)所在网（G0 起）；预先 create

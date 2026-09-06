@@ -231,9 +231,10 @@ services:
       - ./litellm/config.yaml:/app/config.yaml:ro
       - litellm-logs:/app/logs                        # 日志卷：卷面 chmod 600 纪律（README）
     ports:
-      - "127.0.0.1:4000:4000"                         # 仅 loopback：operator 铸 per-EvalRun 虚拟 key 用
-    mem_limit: 512m                                   # §6.8 冻结：LiteLLM proxy 单容器 512M
-    mem_reservation: 256m
+      - "127.0.0.1:4100:4000"                         # 仅 loopback：operator 铸 per-EvalRun 虚拟 key 用（host 4000 被 flagd-ui 占用）
+    mem_limit: 1536m                                  # §6.8 冻结值 512M 与 litellm 1.89.0 实测冲突：
+                                                      # 启动峰值 1013MiB（M3-30 部署实测，512M 下 OOM-137 循环）→ 放宽至 1.5G，台账已记
+    mem_reservation: 512m
     security_opt:
       - no-new-privileges:true
     tmpfs:
@@ -246,7 +247,35 @@ services:
       retries: 10
       start_period: 120s   # 首启跑 Prisma migrate（spike 实测起得慢）
     networks:
-      - alert-net          # holmes/eval 面经此可达；上游百炼出网同网
+      - alert-net
+
+  flagd-admin:
+    # flagd defaultVariant 单键改写侧车（AM3 M3-17/M3-30；S1/S2 场景注入执行器，
+    # BA-19 单键纪律落码）。与 flagd 共享 demo.flagd.json 卷面（flagd file 源
+    # inotify 热加载，无需重启）；仅 eval-mgmt 私网可达、无宿主端口、零密钥面
+    # （INV-AM3-4 评测边界：只写 flags 文件，不触 docker socket）。
+    build: ./flagd-admin
+    image: pr-agent/flagd-admin:0.0.1-SNAPSHOT
+    container_name: flagd-admin-am3
+    restart: unless-stopped
+    environment:
+      FLAGD_FILE: /flags/demo.flagd.json
+    volumes:
+      - ${FLAGD_FLAGS_DIR:-/opt/build/opentelemetry-demo/src/flagd}:/flags
+    mem_limit: 64m
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+    networks:
+      - eval-mgmt
 
 networks:
   opentelemetry-demo:
@@ -256,11 +285,11 @@ networks:
   alert-net:
     external: true
     name: alert-net
+  eval-mgmt:
+    external: true        # AM2 建立的评测私网（chaos-admin/postgres/eval-runner/flagd-admin）
+    name: eval-mgmt
   # eval-mgmt 私网（AM2 C-3）：预先 `docker network create eval-mgmt --internal`；
   # 主栈 postgres 挂入它 + alert-net（deploy/docker-compose.yml），为 arena/admin 两角色触库
-  eval-mgmt:
-    external: true
-    name: eval-mgmt
 
 volumes:
   litellm-logs:   # litellm proxy 日志（M3-24）；宿主侧权限纪律见 README「LiteLLM」节

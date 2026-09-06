@@ -1,0 +1,31 @@
+Picked up JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-06T06:35:57.762Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Starting ControlApplication v0.0.1-SNAPSHOT using Java 21.0.12 with PID 1 (/app/app.jar started by app in /app)
+2026-09-06T06:35:57.770Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : The following 1 profile is active: "eval"
+2026-09-06T06:35:59.721Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-09-06T06:35:59.733Z  INFO 1 --- [control-app] [           main] [                                                 ] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-06T06:35:59.733Z  INFO 1 --- [control-app] [           main] [                                                 ] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.40]
+2026-09-06T06:35:59.759Z  INFO 1 --- [control-app] [           main] [                                                 ] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-06T06:35:59.760Z  INFO 1 --- [control-app] [           main] [                                                 ] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1922 ms
+2026-09-06T06:36:01.252Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-06T06:36:01.379Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-09-06T06:36:01.398Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 4.828 seconds (process running for 5.712)
+2026-09-06T06:36:01.512Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-06T06:36:01.752Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@31c56721
+2026-09-06T06:36:01.756Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-06T07:09:15.371Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : eval 批量完成: run=9185b473-847c-4f76-ae5d-1f769368a4f3 coverage=0.0 conditional=0.0 e2e=0.0 unresolvedRate=0.0 tp=0 fp=0 fn=2 reportDigest=808b106d816b59f9812e75a01174bc83515cb10b99634c559fefa5927fd712fa
+2026-09-06T07:09:35.484Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.e.a.UsageLedgerService           : usage 对账: run=9185b473-847c-4f76-ae5d-1f769368a4f3 取得 proxy 行数=50
+2026-09-06T07:09:35.490Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : usage ledger: {"ledger_schema_version":1,"run_id":"9185b473-847c-4f76-ae5d-1f769368a4f3","basis":"VIRTUAL_KEY","state":"UNMATCHED","best_effort":false,"budget_enforcement":"PROXY_VIRTUAL_KEY","run_key_alias":"am3-e2e-run","attempts":[],"expected_prompt_tokens":0,"expected_completion_tokens":0,"observed_prompt_tokens":356326,"observed_completion_tokens":9899,"notes":["attempt_level_attribution_unavailable（metadata 缺失，key 级聚合对账）","all_attempts_usage_missing"]}
+2026-09-06T07:09:35.494Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2026-09-06T07:09:35.497Z  INFO 1 --- [control-app] [tomcat-shutdown] [                                                 ] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete
+2026-09-06T07:09:35.503Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-09-06T07:09:35.509Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

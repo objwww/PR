@@ -1,0 +1,42 @@
+E2E|PASS|c00:批件锚定|run=575b6d12-e500-4e73-9687-7bb173aed77e
+E2E|PASS|c01a:批件终态SUCCEEDED|run=575b6d12-e500-4e73-9687-7bb173aed77e
+E2E|PASS|c01b:total_scenarios=10|value=10
+E2E|PASS|c02a:案例记录=10|rows=10
+E2E|PASS|c02b:场景数=5|scenarios=5
+E2E|PASS|c02c:每场景两轮|pairs=5
+E2E|PASS|c03:verdict全落档|with_verdict=10
+E2E|PASS|c04:失败行分类落档|missing_failure_sample=0
+E2E|PASS|c05a:计数七元组|rows=1
+E2E|PASS|c05b:三指标+UNRESOLVED单列|rows=1
+E2E|PASS|c06:可复现元数据十项|rows=1
+E2E|PASS|c07:baseline_report_digest|rows=1
+E2E|PASS|c08:靶场会话=0|sessions=0
+E2E|PASS|c08b:会话全CLOSED|closed=0
+E2E|PASS|c09:litellm spend记账|spend_rows=18
+E2E|PASS|c10a:paymentFailure归off|lines=1
+E2E|PASS|c10b:paymentUnreachable归off|lines=1
+E2E|SUBTOTAL|e2e02|fail=0
+== 逐案例判定 ==
+S1 r1 DECIDABLE hit=false tp=0 fp=1 fn=1
+S1 r2 DECIDABLE hit=false tp=0 fp=1 fn=1
+S2 r1 DECIDABLE hit=false tp=0 fp=1 fn=1
+S2 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S3 r1 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S3 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S4 r1 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S4 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S5 r1 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+S5 r2 TIMEOUT_OR_ABSENT hit=false tp=0 fp=0 fn=1
+== 失败样本摘要（非 DECIDABLE 行） ==
+S1 r1 :: {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "Prometheus", "fault_type": "Access Denied", "reason_code": "Permission Error"}, "actualSymptomCodes": ["permission error"]
+S1 r2 :: {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "Prometheus", "fault_type": "Access Denied", "reason_code": "TOOL_RESTRICTION"}, "actualSymptomCodes": ["slo_burn_rate"]}
+S2 r1 :: {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "Prometheus", "fault_type": "access_denied", "reason_code": "toolset_disabled"}, "actualSymptomCodes": ["toolset_disabled"]
+S2 r2 :: {"reason": "gate_blocked"}
+S3 r1 :: {"reason": "gate_blocked"}
+S3 r2 :: {"reason": "gate_blocked"}
+S4 r1 :: {"reason": "gate_blocked"}
+S4 r2 :: {"reason": "gate_blocked"}
+S5 r1 :: {"reason": "gate_blocked"}
+S5 r2 :: {"reason": "gate_blocked"}
+== run 聚合 ==
+dec=3 hit=0 unres=0 srej=0 to=7 tp=0 fp=3 fn=10 cov=0.3 cond_acc=0 e2e=0

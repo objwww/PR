@@ -101,6 +101,23 @@ public abstract class ArenaPostgresITBase {
                 """.formatted(ARENA_PASSWORD, CHAOS_ADMIN_PASSWORD, EVAL_PASSWORD))
                 .update();
 
+        // AM3 V7 GT 门禁函数（arena.eval_release_gt）跨 schema 读取 public.rca_run /
+        // public.rca_report——部署态这两表由 control-app 迁移建（同库先跑），本容器只跑
+        // arena 迁移，这里按函数契约建最小列面（仅函数触及的列），模拟 control 域存在性
+        adminJdbc.sql("""
+                create table if not exists public.rca_run(
+                    id uuid primary key,
+                    state varchar(24) not null,
+                    finished_at timestamptz,
+                    created_at timestamptz not null default now())
+                """).update();
+        adminJdbc.sql("""
+                create table if not exists public.rca_report(
+                    id uuid primary key,
+                    run_id uuid not null,
+                    created_at timestamptz not null default now())
+                """).update();
+
         Flyway.configure()
                 .dataSource(adminDs)
                 .locations("classpath:db/migration")

@@ -1,0 +1,47 @@
+E2E-M3-05 取证笔记 · outbox DEAD 悬案定性（2026-09-06）
+====================================================================
+【悬案】drill v2 跑完后 notify_outbox 行 54ce2bdb 终态 DEAD / attempt_count=0，
+预期曾是"租约过期重领→重发→SENT"（at-least-once）。定性：是缺陷还是冻结语义？
+
+【定性结论】M3-23 冻结语义的正确执行，非缺陷。
+依据代码（本仓）：
+- PostgresNotifyOutboxStore.CLAIM_SQL：可领取 = PENDING/RETRY_WAIT 到期 或
+  CLAIMED 且 lease_until<now（崩溃回收折叠进领取查询，§6.8）；claim 只升
+  lease_epoch，不动 attempt_count。
+- FencedNotifyExecutor：SendResult.OutcomeUnknown → dead("outcome_unknown")，
+  "请求已发出结果未知→DEAD（UNKNOWN 不自动重发，诚实话术在 last_error）"。
+- markDead SQL 不改 attempt_count（DEAD 路径不耗预算计数——预算只为
+  RETRY_WAIT 重试消耗）；JdkWebhookTransport 请求超时 10s（连接 5s），
+  超时 IOException 经 Classifier 归 OutcomeUnknown。
+
+【完整时间线（DB + 日志双源对齐）】
+07:19:17  eval_run 2deb71ea（tag am3-e2e05-0905）启动
+07:20:14  alert_event firing@gen12（r1 牺牲局注入）
+07:29-37  r1：事件级去重未开新 run（同 M3-06 已证机制），r1 判 TIMEOUT_OR_ABSENT
+07:36:05  resolved@gen12（group_interval=10s 临时配方下 resolve 抢先落投）
+07:36:59  firing@gen13 → control-app 开 r2 run 2ea33041（rca_run）
+07:37:00-18  r2 run SUCCEEDED（18s，模型本轮异常快），报告 13fbc752 落档
+07:37:18.4  outbox 行 54ce2bdb 创建（PENDING，available_at 同刻）
+07:37:18.6  claim#1（epoch 0→1，lease 60s → until 07:38:18.6）；
+            POST 打向 WireMock 20s 延迟 stub（journal 22→25）
+07:37:20    KILL5：notify-app 被杀于延迟投递第 1s（drill 看门犬 journal 触发）
+07:37:25    drill 显式 docker start（kill 不触发 restart 策略，M3-04 已证）
+07:37:38-41 notify-app 重启完成，Claimer 上线
+07:38:18.6  租约过期，claim#2 折叠回收重领（epoch 1→2，attempt_count 不动）
+07:38:18.7  重发再撞仍在位的 20s 延迟 stub（drill 07:38:21 才做完 stub 还原）
+07:38:28.678 10s 请求超时 → OutcomeUnknown → markDead（epoch 栅栏命中）；
+            6ms 后 publication ebb2de03 聚合 DEAD（07:38:28.684）
+07:37:59    批件 SUCCEEDED（通知终态不阻断批件）；resolved@gen13 落地
+07:37:59.49 incident RESOLVED@13；两会话 CLOSED
+（drill 随后 mappings/reset + 重录 am0-catchall 还原环境）
+
+【关键判定面】
+- "至少一次"的诚实边界：崩溃在途 + 重发结果未知 → 冻结 DEAD 人工复核，
+  不自动重发以避免重复打扰用户——这是 M3-23 明文设计决策，非丢失。
+- attempt_count=0 不是"零投递"：线上两次投递由 journal 22→25（首投）+
+  lease_epoch=2（重领重发）证明；attempt 计数只随耗预算的 RETRY_WAIT 增长。
+- 若要打出 SENT 面：杀点须落在租约过期后重发命中正常 stub 的窗口（即把
+  stub 延迟还原后再等重领），或加长 stub 延迟外的短延迟配方。本轮 20s stub
+  与 60s 租约的组合天然导出"重发撞延迟"——真实且更严苛的结局，如实归档。
+
+【悬案未发现缺陷；无需代码修改。】断言 v3 13/13 PASS（按现实面校准）。

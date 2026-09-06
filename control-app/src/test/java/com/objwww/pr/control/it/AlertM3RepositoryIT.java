@@ -86,6 +86,19 @@ class AlertM3RepositoryIT extends PostgresITBase {
                 observedGeneration, 2, "deepseek-v3", Instant.now());
     }
 
+    /** rca_report 真实行（report_publication/notify_outbox 的 FK 面） */
+    private UUID seedReport(Seed seed) {
+        UUID reportId = UUID.randomUUID();
+        controlJdbc.sql("""
+                INSERT INTO rca_report(id, run_id, attempt_id, schema_version, validation_status,
+                    package_json, raw_text, usage_missing, created_at)
+                VALUES (:id, :run, :attempt, 2, 'STRUCTURE_VALIDATED',
+                        CAST('{"schema_version":2}' AS jsonb), 'raw', true, now())
+                """).param("id", reportId).param("run", seed.runId())
+                .param("attempt", seed.attemptId()).update();
+        return reportId;
+    }
+
     // ------------------------------------------------------------------ InvestigationResult
 
     @Test
@@ -138,7 +151,8 @@ class AlertM3RepositoryIT extends PostgresITBase {
         var stored = investigations.findByAttemptId(seed.attemptId()).orElseThrow();
         assertThat(stored.executionStatus()).isEqualTo(ExecutionStatus.SUCCEEDED);
         assertThat(stored.validationStatus()).isEqualTo(ValidationStatus.STRUCTURE_VALIDATED);
-        assertThat(stored.packageJson()).contains("\"schema_version\":2");
+        // jsonb 落库会规范化（键序重排 + 冒号后带空格），断言按规范化形态
+        assertThat(stored.packageJson()).contains("\"schema_version\": 2");
         assertThat(stored.rawArtifactRef()).isEqualTo("ab/cdef");
         assertThat(stored.rawDigest()).isEqualTo(Digest.sha256Of("raw"));
         assertThat(stored.payloadDigest()).isEqualTo(Digest.sha256Of(packageJson));
@@ -236,7 +250,8 @@ class AlertM3RepositoryIT extends PostgresITBase {
     @Test
     @DisplayName("publication：一报告一记录（unique report_id → DuplicateKeyException），可按报告读回")
     void publicationUniquePerReport() {
-        UUID reportId = UUID.randomUUID();
+        Seed seed = seedChain(0);
+        UUID reportId = seedReport(seed);
         publications.insert(ReportPublication.ready(UUID.randomUUID(), reportId, Instant.now()));
 
         assertThatThrownBy(() -> publications.insert(
@@ -249,7 +264,8 @@ class AlertM3RepositoryIT extends PostgresITBase {
     @Test
     @DisplayName("outbox：(report, channel, template) 唯一防重；publication 维度读回一对多")
     void outboxDeliveryKeyDeduplicates() {
-        UUID reportId = UUID.randomUUID();
+        Seed seed = seedChain(0);
+        UUID reportId = seedReport(seed);
         UUID publicationId = UUID.randomUUID();
         publications.insert(ReportPublication.ready(publicationId, reportId, Instant.now()));
         UUID operationId = UUID.randomUUID();

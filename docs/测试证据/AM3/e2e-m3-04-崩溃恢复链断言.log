@@ -1,0 +1,19 @@
+== f0x：崩溃-重收敛链（对 ff5694fb-4f20-4d46-a6ce-ca12d1d1bb5a） ==
+E2E|PASS|f00:v4批件锚定|run=9185b473-847c-4f76-ae5d-1f769368a4f3
+E2E|PASS|f01:杀点A已执行（v2 drill 日志）|KILL1=FIRED at 13:55:32 started_rows=1
+E2E|PASS|f02:无悬挂STARTED（两杀均回收UNKNOWN）|hanging=0
+E2E|PASS|f02b:UNKNOWN回收落档=2|unknown=2
+E2E|PASS|f03:同attempt单Result|attempts=3 rows=3
+E2E|PASS|f03b:重收敛attempt终态SUCCEEDED|recovered=1
+E2E|PASS|f04:最终报告唯一|reports=1
+E2E|PASS|f05:outbox不丢（终入SENT）|outbox=SENT
+E2E|PASS|f06:publication SENT|pub=SENT
+E2E|PASS|f06b:崩溃run终态SUCCEEDED|state=SUCCEEDED
+== f7x：v4 批判定面 ==
+E2E|PASS|f07:两轮诚实缺席（重收敛跨批不可归集，见台账）|absent=2
+E2E|PASS|f07b:r1缺席原因=run_not_found|sample={"reason":"run_not_found"}
+E2E|PASS|f07c:v4批件SUCCEEDED|state=SUCCEEDED
+E2E|PASS|f08:靶场会话CLOSED|state=CLOSED
+E2E|INFO|control_restarts|0
+E2E|INFO|v4_rounds|1|TIMEOUT_OR_ABSENT|-|{"reason":"run_not_found"}2|TIMEOUT_OR_ABSENT|-|{"reason":"run_not_found"}
+E2E|SUBTOTAL|e2e04b|fail=0

@@ -136,7 +136,7 @@ public class EvalBatchRunner {
         ScenarioDriver.ActivationReceipt activation;
         Instant activatedAt = clock.now();
         try {
-            activation = driver.activate(golden);
+            activation = driver.activate(golden, round);
             activatedAt = clock.now();
         } catch (RuntimeException e) {
             log.warn("场景 {} 第 {} 轮注入失败: {}", golden.scenarioId(), round, e.getMessage());
@@ -161,8 +161,12 @@ public class EvalBatchRunner {
                 failures.add(new BaselineReportGenerator.CaseFailure(golden.scenarioId(), round,
                         "TIMEOUT_OR_ABSENT", "{\"reason\":\"alerts_not_firing\"}"));
             } else {
-                Optional<UUID> rcaRunId = rcaRunResolver.resolve(golden, activatedAt,
-                        golden.timing().maxFiringWaitSeconds());
+                // 等待窗口 = firing 等待 + hold（run 需到达终态才可评分——Holmes 调查
+                // 需数分钟，故障在窗口内保持激活，deactivate 在评分后执行）
+                int resolveTimeoutSeconds = golden.timing().maxFiringWaitSeconds()
+                        + golden.timing().holdSeconds();
+                Optional<UUID> rcaRunId = rcaRunResolver.resolve(golden, round,
+                        activatedAt, resolveTimeoutSeconds);
                 result = rcaRunId.flatMap(id -> scorer.score(evalRunId, golden, round, id))
                         .orElseGet(() -> absentCase(evalRunId, golden, round,
                                 "{\"reason\":\"run_not_found\"}"));

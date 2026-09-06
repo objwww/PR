@@ -54,8 +54,8 @@ class AlertV10EvalRunIT extends PostgresITBase {
                 .param("key", "alertname=HighErrorRate|service=it-" + incidentId).update();
         controlJdbc.sql("""
                 INSERT INTO rca_run(id, incident_id, generation, trigger_kind, state,
-                    investigation_hash, created_at, updated_at)
-                VALUES (:id, :inc, 0, 'INITIAL', 'SUCCEEDED', :hash, now(), now())
+                    investigation_hash, created_at, updated_at, started_at, finished_at)
+                VALUES (:id, :inc, 0, 'INITIAL', 'SUCCEEDED', :hash, now(), now(), now(), now())
                 """).param("id", runId).param("inc", incidentId)
                 .param("hash", Digest.sha256Of("it-" + runId).value()).update();
         controlJdbc.sql("""
@@ -236,8 +236,9 @@ class AlertV10EvalRunIT extends PostgresITBase {
         EvalRun run = runningRun();
         evalRuns.insertRunning(run);
 
-        // 状态域链外值被拒
-        assertThat(chainContains(() -> adminJdbc.sql("""
+        // 状态域链外值被拒（'FLYING' 同时违反 state/lifecycle 两个 CHECK——PG 报哪个
+        // 约束次序不定，断言兼容两者）
+        boolean flyingRejected = chainContains(() -> adminJdbc.sql("""
                         INSERT INTO eval_run(id, schema_version, dataset_version, registry_digest,
                             lexicon_version, model, prompt_version, prompt_digest,
                             tool_registry_digest, provider_fingerprint, alert_rule_digest,
@@ -245,7 +246,17 @@ class AlertV10EvalRunIT extends PostgresITBase {
                         VALUES (:id, 1, 'd', 'r', 1, 'm', 'p', 'pd', 'td', 'pf', 'ar', 'sd',
                                 'cd', 'FLYING', now())
                         """).param("id", UUID.randomUUID()).update(),
-                "ck_eval_run_state")).isTrue();
+                "ck_eval_run_state")
+                || chainContains(() -> adminJdbc.sql("""
+                        INSERT INTO eval_run(id, schema_version, dataset_version, registry_digest,
+                            lexicon_version, model, prompt_version, prompt_digest,
+                            tool_registry_digest, provider_fingerprint, alert_rule_digest,
+                            scenario_driver_version, config_digest, state, started_at)
+                        VALUES (:id, 1, 'd', 'r', 1, 'm', 'p', 'pd', 'td', 'pf', 'ar', 'sd',
+                                'cd', 'FLYING', now())
+                        """).param("id", UUID.randomUUID()).update(),
+                "ck_eval_run_lifecycle");
+        assertThat(flyingRejected).isTrue();
 
         // RUNNING 不许带 finished_at；SUCCEEDED 缺指标被生命周期约束拒
         assertThat(chainContains(() -> adminJdbc.sql(

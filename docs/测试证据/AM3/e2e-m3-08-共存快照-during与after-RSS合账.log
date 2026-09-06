@@ -1,0 +1,33 @@
+E2E-M3-08 共存终快照 · during 与 after 双拍 + RSS 合账（2026-09-06）
+====================================================================
+采集：195 现场，sh /tmp/cc-m330-m308-coexist.sh（during=旧版脚本 02:40 批中采；
+after=RSS awk 修复版，批后采）。 during 的 TOTAL 行系旧版 awk bug 显示 0.0，
+逐容器数据完整，合账以手工求和为准（3794.7 MiB）。
+
+【RSS 合账】
+  during（批 am3-e2e02c-0905 运行中，32 容器，含 eval-runner 228 MiB）：
+      手工合计 ≈ 3794.7 MiB
+  after（M3-30 全部 E2E 批结束后，31 容器，eval-runner 已退出）：
+      脚本合计 TOTAL = 3688.1 MiB（手工复核 ≈3696，差 8 MiB 系解析舍入）
+  结论：无泄漏信号。关键容器批中→批后 RSS 稳定：
+      control-app 204.4→204.1 MiB、notify-app 167.8→166.3 MiB、
+      litellm-am3 501→428.6 MiB（批后回落）、postgres 367.1→446 MiB（批后
+      写入落盘正常增长）、holmesgpt-am1 340.5→342.8 MiB。
+
+【关键容器重启计数（OOM/崩溃信号）】control-app / notify-app / alert-order-arena-1
+  / chaos-admin / litellm-am3 / holmesgpt-am1 / prometheus / alertmanager / flagd-admin
+  / postgres 全部 restarts=0 oom=false（两拍一致）。
+  注：notify-app restarts=0 系 docker kill 不计 RestartCount（M3-04 已证），
+  非无崩溃——M3-04/05 的 kill 均由 drill 显式 start 拉起。
+
+【live 流量存活】frontend_http=200（两拍一致）。
+
+【订单隔离】chaos- 前缀（评测）与 live- 前缀（正常）零串扰：
+  during：chaos_intents=11   live_intents=52773  cross_prefix_violations=0
+  after ：chaos_intents=35   live_intents=106018 cross_prefix_violations=0
+
+【故障残留 gauge（批间应归零）】两拍均 0：
+  oa_duplicate_orders_current=0、oa_state_violations_current=0、
+  oa_stuck_orders_current=0。
+
+判定：M3-08 共存与资源面 PASS（无 OOM、无泄漏、无串扰、无故障残留）。

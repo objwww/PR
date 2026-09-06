@@ -1,0 +1,7 @@
+# eval-runner profile（AM3 M3-15/M3-17）：一次性批作业进程，DB 身份 eval_app（V10/V11）。
+# 与 docker profile 互斥（PersistenceConfig 等生产装配 @Profile("docker")）；
+# 基线 yml 为无 DB 空跑显式排除了 DataSource 自动配置，本 profile 恢复（数据源全走
+# env 注入）；Flyway 维持基线关闭——迁移属部署面职责，eval-runner 不动库结构。
+spring:
+  autoconfigure:
+    exclude: []

@@ -1,0 +1,32 @@
+E2E-M3-04 崩溃恢复链 · 取证笔记（跨批证据链）
+====================================================
+杀点 A（KILL1）：2026-09-06T05:55:32Z，调查 STARTED 后 1 秒 docker kill deploy-control-app-1
+  （drill 日志 KILL1=FIRED at 13:55:32 started_rows=1，本目录 v2 证据文件）
+杀点 B（KILL2）：MISSED——"报告已写+outbox 未 SENT"窗口为亚秒级（notify worker 即领即发，
+  1s 轮询两次观察均 MISSED）。通知重试面由 E2E-M3-05 直接行使（杀 notify-app）。
+
+崩溃后果链（v2 批 am3-e2e04-0905，eval_run 860161cb）：
+- control-app 死亡后无人拉起：docker kill 不触发 unless-stopped 重启策略
+  （Exited(137)、RestartCount=0、躺尸 33 分钟）——harness 重大事实，v3 起 drill
+  以"kill 后显式 start"建模编排器。
+- rca_run ff5694fb（gen11）滞留 RUNNING；attempt1 STARTED 悬挂；r1/r2 诚实缺席。
+- webhook 接收方（control-app）死亡 → 后续告警零投递（alert_event 无新增）。
+
+重收敛链（产品行为，DB 证据）：
+- attempt1 e5ade8f9 → 回收 UNKNOWN/NOT_VALIDATED（悬挂回收语义落档）
+- attempt2 8c227036（06:31:46，v3 误启动窗口再被 kill）→ 同样回收 UNKNOWN
+- gen12 firing 重投递（06:37:14，control-app 拉起后 AM 补投）→ 处理器复用重驱
+  未完成 task（不开新 run）→ attempt3 20445d64 于 06:42:48 SUCCEEDED/
+  STRUCTURE_VALIDATED → run ff5694fb 06:43:07 SUCCEEDED
+- 报告唯一 9450def9 → outbox SENT → publication SENT → echo-receiver 已收到
+
+v4 批（am3-e2e04b-0906，eval_run 9185b473）：
+- r1/r2 均 TIMEOUT_OR_ABSENT/run_not_found，诚实缺席：
+  ① r1：重收敛 run 属 v2 会话（resolver 按 session 作用域认领，跨批不可归集）；
+  ② r2：r1-off→r2 gauge-up 间隔 40s < Prometheus 评估间隔 1m，resolve+重fire 在
+  AM 侧合并为 startsAt 更新（组内容无净变化）→ repeat 4h 锁死（同批1 r1 机制）。
+- 批件 SUCCEEDED 不受影响。
+
+断言：14/14 PASS（e2e-m3-04-崩溃恢复链断言.log，fail=0）。
+台账素材：docker kill 与 restart 策略、AM resolve/refire 合并陷阱、resolver 会话作用域
+  与 incident 作用域恢复的跨批耦合、KILL2 亚秒窗口。

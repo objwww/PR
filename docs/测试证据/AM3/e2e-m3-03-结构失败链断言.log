@@ -1,0 +1,23 @@
+== 断言（run=4bed6651-9dcb-44c7-bd8c-6ea2bc62c30f rca_run=674cf893-7d84-4716-ace3-59525fa4937e） ==
+E2E|PASS|d00:批件锚定|run=4bed6651-9dcb-44c7-bd8c-6ea2bc62c30f
+E2E|PASS|d01:REJECTED调查记录落档|rejected_results=1
+E2E|PASS|d01b:执行终态FAILED|failed_terminal=1
+E2E|PASS|d02:无可发布报告行|reports=0
+E2E|PASS|d03:无publication|publications=0
+E2E|PASS|d04:无notify_outbox|outbox=0
+E2E|PASS|d05:结构失败轮(r2)=1|rejected_cases=1
+E2E|PASS|d05z:r1=AM抑制诚实缺席|r1_run_not_found=1
+E2E|PASS|d05b:失败样本含验证状态|samples=1
+E2E|PASS|d06a:结构失败计1（进分母）|srej=1
+E2E|PASS|d06b:缺席列仅r1=1（REJECTED不入超时列）|to=1
+E2E|PASS|d07:零通知（echo计数不变）|before=20 after=20
+E2E|PASS|d08:靶场会话CLOSED|state=CLOSED
+== 恢复（无条件执行） ==
+badmodel-stub
+stub removed
+{"detail":[{"type":"missing","loc":["body","id"],"msg":"Field required","input":{"model_name":"badmodel"}}]}
+holmesgpt-am1
+holmesgpt-am1
+holmesgpt-am1 Up 8 seconds
+[92m04:57:10 - LiteLLM:WARNING[0m: get_model_cost_map.py:271 - LiteLLM: Failed to fetch remote model cost map from https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json: The read operation timed out. Falling back to local backup.
+E2E|SUBTOTAL|e2e03|fail=0

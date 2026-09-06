@@ -1,0 +1,25 @@
+== 断言（run=9cdccec7-0582-4825-8138-80f4953719a8 r1=807d6cd2-3678-4c72-b34d-802a9771cc8f r2=a1621af8-2f4a-4f4f-b769-ddf9787d2efe） ==
+E2E|PASS|e00:批件锚定|run=9cdccec7-0582-4825-8138-80f4953719a8
+E2E|PASS|e01:批件终态SUCCEEDED（对账失败不阻断）|state=SUCCEEDED
+E2E|PASS|e02:两轮TIMEOUT_OR_ABSENT（不得错误MATCHED）|absent_cases=2
+E2E|PASS|e02b:缺席原因=no_validated_report（run存在但无validated报告）|samples=2
+E2E|PASS|e02c:两轮均锚定调查run（增强面，批1为空）|anchored=2
+E2E|PASS|e02d:两个调查run均FAILED终态|failed_runs=2
+E2E|PASS|e02e:代际推进9/10（resolve/firing 全投递）|gens=2
+E2E|PASS|e03:零报告|reports=0
+E2E|PASS|e04:零通知|outbox=0
+E2E|PASS|e05:零成功调查|succeeded=0
+E2E|PASS|e06:事件全循环4行（firing9/resolved9/firing10/resolved10）|events=4
+-- usage ledger（对账降级面） --
+E2E|PASS|e07:对账降级UNMATCHED|ledger_state=UNMATCHED
+E2E|PASS|e07b:无伪造MATCHED|matched_lines=0
+E2E|PASS|e07c:6个attempt全落台账（expected=6）|attempts=6
+E2E|PASS|e08:control-app零崩溃循环|restarts=0
+E2E|PASS|e09:靶场会话CLOSED|state=CLOSED
+== 恢复（无条件）：litellm 拉起 + AM 配置还原 ==
+litellm-am3
+litellm-am3 Up 2 minutes (healthy)
+6:  group_interval: 5m
+AM restarted (config restored)
+runtime: group_interval: 5m
+E2E|SUBTOTAL|e2e06b|fail=0

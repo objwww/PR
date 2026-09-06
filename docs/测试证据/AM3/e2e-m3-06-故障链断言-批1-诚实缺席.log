@@ -1,0 +1,29 @@
+E2E-M3-06 批1（am3-e2e06-0905）· 诚实缺席面取证与根因链
+=========================================================
+批件：eval_run e44d4dfb-5ddf-49da-8cb5-87d5571a5f34
+启动 2026-09-06T04:59:06Z，SUCCEEDED @ 05:32:30（对账失败不阻断）
+
+结果：两轮 TIMEOUT_OR_ABSENT，failure_sample = {"reason":"run_not_found"}
+  S3|1|TIMEOUT_OR_ABSENT|-（无 rca_run 锚定）
+  S3|2|TIMEOUT_OR_ABSENT|-
+
+根因链（本轮 M3-30 新发现，两级产品机制叠加锁死多轮批件）：
+1) Alertmanager nflog 持久化：repeat_interval=4h 的"已通知"记录存
+   /alertmanager/nflog（volume），docker restart 不清除 → 同指纹
+   0d7404ae811ae84a 自 04:24:30（d批）通知后，r1 firing（04:59:43）被抑制
+   至 ~08:55。docker restart alertmanager-am0（05:07）无效即此因。
+2) 同代际幂等去重：清除 nflog（05:16:54 rm + SIGKILL 防优雅停机回写）后，
+   r2 firing（05:16:13 起）于 05:17:28 成功投递（webhook=1，inbox 行
+   ACCEPTED/PROCESSED）——但 incident 5552d241 因 resolve 从未投递而保持
+   FIRING@generation 8（gen8 已有 run 674cf893，M3-03 e批）→ control-app
+   对"同 incident 同 generation 已有调查"幂等去重，不开新 run。产品行为
+   正确，是测试面与两级收敛机制的冲突。
+
+铺路（batch-b 前置）：
+- 批1 退出后 gauge 归零，resolve@gen8 于 05:32:29 投递，incident → RESOLVED
+- AM group_interval 5m→10s（drill 临时放宽，事后还原）
+- 再次清 nflog（rm + SIGKILL + start）
+
+结论：批1 面 = "告警从未到达调查" 的诚实缺席（run_not_found）；
+      batch-b 面 = "告警到达、调查被 proxy 停机打挂"（no_validated_report）。
+      两份证据合起来覆盖 §12 E2E-M3-06 的两个缺席/失败面。

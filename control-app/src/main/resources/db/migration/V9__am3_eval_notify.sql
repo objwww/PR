@@ -29,6 +29,18 @@ begin
 end
 $$;
 
+-- ---------- 0.1 eval_app 角色幂等兜底 ----------
+-- 真实部署由 01-roles.sh 携密码创建（集群级）；但本迁移的 grant 面要求角色存在——
+-- control-only 干净库（如 IT 的 Testcontainers 库）没有 01-roles.sh，缺角色 grant 报
+-- 42704。此处幂等创建无密码占位角色（只作授权目标，不用于登录）。
+do $$
+begin
+    if not exists (select from pg_roles where rolname = 'eval_app') then
+        create role eval_app login;
+    end if;
+end
+$$;
+
 -- ---------- 1. rca_investigation_result：调查记录契约（§6.2 冻结 DDL 语义 + v1.1 栅栏列） ----------
 -- 只增不改（终态列除外）；一 attempt 恰一条（STARTED 先行 → 终态 CAS 回写）
 
@@ -211,7 +223,19 @@ grant select on notify_outbox to eval_app;
 -- 显式冻结（V2/V7 惯例：防未来 grant all 漂移）；PUBLIC 零权限
 revoke all on rca_investigation_result, rca_tool_call, report_publication, notify_outbox
     from publisher_app;
-revoke all on rca_investigation_result, rca_tool_call, report_publication, notify_outbox
-    from arena_app, chaos_admin_app;
+-- arena_app/chaos_admin_app 是 AM2 arena 侧角色，control-only 库（如 IT 的干净
+-- Testcontainers 库）可能不存在——REVOKE 对不存在角色报 42704，故条件化（幂等）
+do $$
+begin
+    if exists (select from pg_roles where rolname = 'arena_app') then
+        revoke all on rca_investigation_result, rca_tool_call, report_publication, notify_outbox
+            from arena_app;
+    end if;
+    if exists (select from pg_roles where rolname = 'chaos_admin_app') then
+        revoke all on rca_investigation_result, rca_tool_call, report_publication, notify_outbox
+            from chaos_admin_app;
+    end if;
+end
+$$;
 revoke all on rca_investigation_result, rca_tool_call, report_publication, notify_outbox
     from public;
