@@ -181,6 +181,12 @@
 - **HolmesGPT 工具审批**（`enable_tool_approval`/approval_required/恢复需重交 history）：适合交互客户端，不适合作审批事实源——审批必须落控制面（AA-19）。
   来源：http-api.md（E-12 同文档）【明示】
 
+## E-17 M5 发布门与运维源码级调研（2026-09-06，源码级）【AM5 设计素材】
+
+- **报告**：`docs/告警-调研-M5发布门与运维-v1.md`（12 仓浅克隆逐仓源码核查，commit 经 git rev-parse 核实；细节留档 `var/m5-research/src-detail.md`，克隆仓 `var/m5-research/repos/` 约 880M 未提交 git；取证经 127.0.0.1:7890 代理）。
+- 关键先例：Unleash murmur3(`groupId:id`) 稳定分桶 + flagd 无模偏公式 `(hash*totalWeight)>>32`（fractional.go:196-207）——**Unleash 无 stickiness key 时 random 回退是坑**（flexible-rollout-strategy.ts:26-28），本项目改拒绝放量；Inspect AI cluster bootstrap C/(C-1) 无偏校正（std.py:109-115）+ seed 仅部分 provider 支持须单列 provider fingerprint；OPA bundle 单事务原子激活（plugin.go:607-660）+ decision_id 审计 + EventV1 决策日志带 bundle revision；alerta ISA 18.2 action 驱动状态机（isa_18_2.py:99-140）+ keep (tenant,fingerprint) FOR UPDATE 幂等合并（db.py:5690-5706，但认领无并发保护须自加固 CAS）；PG NOTIFY 三边界（<8000B/8GB 队列/断连丢失）→ 只作唤醒、真身走表+after_seq 游标（Unleash delta API 回放先例）；`DETACH PARTITION CONCURRENTLY`+pg_partman keep_table 支撑"导出校验后 detach、失败不删热数据"，分区表唯一约束必须含分区键；Spring Cloud Config 兼容线已 EOL 不引入。
+- 未核实澄清：**RCA-100 数据集不存在**（phamquiluan/RCAEval 实为 RE1/2/3 共 735 例，microsoft/RCAEval 404）；中文分词 zhparser 现状、HNSW 内存需 195 实测定门。
+
 ## E-16 Harness 与 M4 机制源码级调研（2026-09-06，11 路并行 agent）【AM4 设计素材，源码级】
 
 - **Harness v3**（`docs/告警-调研-Harness设计-v3.md`，取代 v1/v2 为现役版）：13 对象源码级重调——Claude Code（闭源仅文档）/Codex/Pi/dsh/OpenHands/OpenClaw/HolmesGPT/Gemini CLI/OpenCode/Goose/Aider/Cline/Hermes Agent（NousResearch，实查 242k★，2025-07 创建——推翻此前"2026-02 发布十余万星"的传闻）。每条机制带 `路径:行号` 证据；含对 v1/v2 旧结论的印证/推翻总表（43 条）。分册留档 `var/m4-research/harness-src/h01~h07`。
