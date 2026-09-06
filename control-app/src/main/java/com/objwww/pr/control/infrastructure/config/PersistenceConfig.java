@@ -126,6 +126,14 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRunBudgetLedger(jdbc, tx);
     }
 
+    /** M4-09：Incident 跨 Run 窗口预算（消费方 = run 派生路径，阶段 C 接线） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.budget.IncidentBudgetLedger incidentBudgetLedger(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentBudgetLedger(jdbc, tx);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
