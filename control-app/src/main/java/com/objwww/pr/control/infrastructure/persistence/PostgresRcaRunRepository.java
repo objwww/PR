@@ -1,7 +1,7 @@
 package com.objwww.pr.control.infrastructure.persistence;
 
 import com.objwww.pr.control.alert.domain.model.RcaRun;
-import com.objwww.pr.control.alert.domain.model.RcaRunState;
+import com.objwww.pr.control.alert.domain.statemachine.RcaStateContract;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -109,7 +109,7 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 rs.getObject("incident_id", UUID.class),
                 rs.getInt("generation"),
                 RunTrigger.valueOf(rs.getString("trigger_kind")),
-                RcaRunState.valueOf(rs.getString("state")),
+                RcaStateContract.parseRunState(rs.getString("state")),
                 new com.objwww.pr.shared.Digest(rs.getString("investigation_hash")),
                 rs.getTimestamp("created_at").toInstant(),
                 rs.getTimestamp("updated_at").toInstant(),

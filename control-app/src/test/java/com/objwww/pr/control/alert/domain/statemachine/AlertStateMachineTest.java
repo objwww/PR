@@ -72,7 +72,7 @@ class AlertStateMachineTest {
         assertThat(IncidentStateMachine.nextGeneration(R, F, 3)).isEqualTo(4);
     }
 
-    // ---------------- UT-A02 RcaRun（六态） ----------------
+    // ---------------- UT-A02 RcaRun（AM1 六态 + AM4 三态 = 九态） ----------------
 
     @Test
     void utA02RcaRunMachineExhaustive() {
@@ -82,24 +82,31 @@ class AlertStateMachineTest {
         var F = com.objwww.pr.control.alert.domain.model.RcaRunState.FAILED;
         var C = com.objwww.pr.control.alert.domain.model.RcaRunState.CANCELLED;
         var P = com.objwww.pr.control.alert.domain.model.RcaRunState.SUPERSEDED;
+        var RP = com.objwww.pr.control.alert.domain.model.RcaRunState.REPORTING;
+        var PT = com.objwww.pr.control.alert.domain.model.RcaRunState.PARTIAL;
+        var EX = com.objwww.pr.control.alert.domain.model.RcaRunState.EXPIRED;
 
         Map<com.objwww.pr.control.alert.domain.model.RcaRunState,
                 Set<com.objwww.pr.control.alert.domain.model.RcaRunState>> expected = Map.of(
-                Q, Set.of(R, C, P, S, F),   // QUEUED→SUCCEEDED/FAILED：finishTask 退化路径（G0-06）
-                R, Set.of(S, F, C, P));
+                Q, Set.of(R, RP, C, P, S, F),   // QUEUED→SUCCEEDED/FAILED：finishTask 退化路径（G0-06）；→REPORTING 同款退化 AM4 形态
+                R, Set.of(RP, S, F, PT, EX, C, P),
+                RP, Set.of(S, F, PT, EX, C, P));
 
         assertExhaustive(com.objwww.pr.control.alert.domain.model.RcaRunState.class,
                 expected, RcaRunStateMachine::allowed);
         assertIllegalThrows(com.objwww.pr.control.alert.domain.model.RcaRunState.class,
                 expected, RcaRunStateMachine::requireTransition);
 
-        // 终态无出边（穷举已证），活跃判定对齐 V7 部分唯一索引谓词
+        // 终态无出边（穷举已证），活跃判定对齐 V12 部分唯一索引谓词（M4-02 同步）：REPORTING 计活跃
         assertThat(Q.isActive()).isTrue();
         assertThat(R.isActive()).isTrue();
+        assertThat(RP.isActive()).isTrue();
         assertThat(S.isActive()).isFalse();
+        assertThat(PT.isActive()).isFalse();
+        assertThat(EX.isActive()).isFalse();
     }
 
-    // ---------------- UT-A03 RcaTask（六态） ----------------
+    // ---------------- UT-A03 RcaTask（AM1 六态 + AM4 五态 = 十一态） ----------------
 
     @Test
     void utA03RcaTaskMachineExhaustive() {
@@ -109,17 +116,45 @@ class AlertStateMachineTest {
         var D = com.objwww.pr.control.alert.domain.model.RcaTaskState.DONE;
         var C = com.objwww.pr.control.alert.domain.model.RcaTaskState.CANCELLED;
         var X = com.objwww.pr.control.alert.domain.model.RcaTaskState.DEAD;
+        var BL = com.objwww.pr.control.alert.domain.model.RcaTaskState.BLOCKED;
+        var RN = com.objwww.pr.control.alert.domain.model.RcaTaskState.RUNNING;
+        var SK = com.objwww.pr.control.alert.domain.model.RcaTaskState.SKIPPED;
+        var FT = com.objwww.pr.control.alert.domain.model.RcaTaskState.FAILED_TERMINAL;
+        var ST = com.objwww.pr.control.alert.domain.model.RcaTaskState.STALE;
 
         Map<com.objwww.pr.control.alert.domain.model.RcaTaskState,
                 Set<com.objwww.pr.control.alert.domain.model.RcaTaskState>> expected = Map.of(
                 RD, Set.of(L, C, X),
-                L, Set.of(RD, RW, D, C, X),
+                L, Set.of(RD, RN, RW, D, C, X),
+                RN, Set.of(RD, RW, D, C, X),
+                BL, Set.of(RD, SK, C),
                 RW, Set.of(RD, X, C));
 
         assertExhaustive(com.objwww.pr.control.alert.domain.model.RcaTaskState.class,
                 expected, RcaTaskStateMachine::allowed);
         assertIllegalThrows(com.objwww.pr.control.alert.domain.model.RcaTaskState.class,
                 expected, RcaTaskStateMachine::requireTransition);
+
+        // AM4 新终态锚点：FAILED_TERMINAL 确定性失败不重试、STALE 不复活、SKIPPED 不回流
+        assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(FT, RN))
+                .isInstanceOf(IllegalTransitionException.class);
+        assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(ST, RD))
+                .isInstanceOf(IllegalTransitionException.class);
+        assertThatThrownBy(() -> RcaTaskStateMachine.requireTransition(SK, BL))
+                .isInstanceOf(IllegalTransitionException.class);
+        // WAITING_APPROVAL 属 AM5，本期枚举不引入（评审 v1.1 修正④）
+        assertThat(com.objwww.pr.control.alert.domain.model.RcaTaskState.values())
+                .containsExactly(com.objwww.pr.control.alert.domain.model.RcaTaskState.READY,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.LEASED,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.RETRY_WAIT,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.DONE,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.CANCELLED,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.DEAD,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.BLOCKED,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.RUNNING,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.SKIPPED,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.FAILED_TERMINAL,
+                        com.objwww.pr.control.alert.domain.model.RcaTaskState.STALE);
     }
 
     // ---------------- UT-A04 Inbox 六态 + 决策枚举三分 ----------------

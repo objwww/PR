@@ -16,17 +16,13 @@
 
 **里程碑序列**：AM0 平台拼装 → AM1 接入控制面（control-app 改造）→ AM2 交易域化（订单靶场 + 业务故障注入）→ AM3 评测 + 出口 → AM4+ 压力点驱动。
 
-## 当前状态（2026-09-05）
+## 当前状态（2026-09-06）
 
 **架构状态**：**已定格**（用户确认）。AA 系列封版于 v2.3；FUT 系列以 v1.2 为准；G0 已收口，冻结纪律继续：所有工作以代码与证据为中心。
 
-**当前阶段**：**AM1 已收官（2026-09-05 G2 用户终审通过 + 已推送 origin/main `4acebce..93d6445`），AM2 靶场动工中**。执行依据 = `docs/告警AM2-落码技术方案.md` v2.0r1（M2-01~28，已对照任务拆分原文逐行校准）；任务树总表 = `docs/告警Agent-增量实现任务拆解-v1.md`；AM1/AM2/AM3 技术方案为设计依据文档。
+**当前阶段**：**AM0~AM3 全部收官，AM4 正式开工（工序 3 编码）**。AM1 G2 ✅ 2026-09-05；AM2 G2 ✅ 2026-09-05；**AM3 G2 ✅ 2026-09-06 用户终审通过**（推送 `3be79d5..574c01f` 先于 G2 完成，符合推送纪律）；AM4 技术方案 v1.2 **G1 ✅ 2026-09-06**。执行依据 = `docs/告警AM4-落码技术方案.md` **v1.2**（M4-01~30 本期，迁移 V12~V17；M4-31~38 随 AM3 G2 通过已解锁，按序执行）；任务树总表 = `docs/告警Agent-增量实现任务拆解-v1.md`。
 
-**已备待启**：AM3 施工图 `docs/告警AM3-落码技术方案.md` v1.0（M3-01~30，主会话亲自读任务拆分原文后出具；动工硬前提 = AM2 G2）。
-
-**移交 AM2 的输入项**：BA-20（靶场设计先用探针实测 SLO 分子语义）、BA-21（severity 不裂单语义显式建模）。
-
-**后台进行中**：七项备料经 ZCode MCP 派发中——桥有客户端校验 bug（agent-start 报错但服务端部分创建会话）；P1 在跑（run_5430d9ee…，GLM-5.3-Flash）；P2~P7 因工作区独占租约串行，监控 cron `01M1PQ8RSPYZZ6SYNQPMX63ZVZ`（每 11 分钟检查并续派）；2026-09-06 13:00 一次性收取 cron `01M1PPQTMKYZ629H6QZ8F07ACJ`。
+**移交 AM4 的输入项（AM3 G2 切换清单）**：① eval 47 案例真实命中率 0（模型/词典校准面，Native Agent 质量的起点信号）；② 5 个 eval_run 滞留 RUNNING（被杀批件无 reap——M4-37 Reconciler 预算统一件的现实用例）；③ notify-app compose 无 healthcheck（部署面补强）；④ LITELLM_MASTER_KEY 轮换建议仍开放（安全事件遗留）；⑤ BA-20/21 开放观察项继续移交。
 
 **验证终局（G1~G7）**：
 - G1 镜像供应链 ✅（20/20，ghcr 直拉停滞 → 本机 crane 摆渡，记 INC-3）
@@ -38,9 +34,9 @@
 - G7 内存 ✅（全栈+存量同跑 available 5140M）
 
 **下一步动作**：
-1. 路线已定稿：Demo+flagd → collector → Prometheus(Sloth) → **Alertmanager 直打** →（AM1: control-app）→ HolmesGPT(deepseek-v3/百炼)
-2. 把实测结论回写 `docs/告警AM0-技术方案.md`（v1.0 草稿 → v1.1 实测修订：中台双出局、AM 直连、模型降级、crane 摆渡）→ 送 G1
-3. AM0 G2 确认后进 AM1 工序 1（control-app 告警入口+调度层改造方案）
+1. AM4 工序 3 编码中：按 `docs/告警AM4-落码技术方案.md` v1.2 从 M4-01 顺序执行（迁移 V12~V17，INV-AM4-8/9 红绿）
+2. M4-31~38（Holmes 对照/Replay/Shadow/Reconciler 族/AM4 G2）已随 AM3 G2 解锁，按序衔接
+3. 安全遗留：195 deploy/alert/.env 的 LITELLM_MASTER_KEY 轮换（建议择机执行，litellm-bootstrap 与 holmesgpt env 同步换）
 
 ## 六道工序状态（AM1）
 
@@ -181,3 +177,7 @@
 - 2026-09-06：**M3-08 共存终快照 + M3-30 八链最终部署门收官**：during/after 双拍 RSS 合账（during ≈3794.7 MiB@32 容器含 eval-runner 228 / after 3688.1 MiB@31 容器，关键容器批中→批后稳定：control-app 204.4→204.1、notify-app 167.8→166.3、litellm 501→428.6 回落、postgres 367.1→446 正常增长；during TOTAL 行系旧版脚本 awk bug 显示 0.0，以逐容器手工合账为准）；关键容器零重启零 OOM（notify-app restarts=0 系 kill 不计 RestartCount，M3-04 已证）；frontend live 200；chaos/live 流量零串扰（0 violations）；故障 gauge 三项归零。**八链 E2E M3-01~08 全部闭环** + 最终 mvn verify 全门 6 模块 **539 tests 全绿**（V10/V11 契约 IT 含）已归档。AM3 执行面至此收口，待 git 提交与用户验收。
 - 2026-09-06：**Harness+M4 机制源码级全量重调完成**（用户批评上轮"只看 README"，11 路并行 agent 浅克隆逐仓读源码）：产出 `docs/告警-调研-Harness设计-v3.md`（13 对象含新增 Hermes Agent——NousResearch，实查 242k★/2025-07 创建，推翻传闻；360 行，含对 v1/v2 的 43 条印证/推翻总表）与 `docs/告警-调研-M4机制调研-v1.md`（工具/证据/裁决/预算四册 50+ 项目，M4-13~23 与 M4-08/09/37 逐条裁定；221 行）。关键修正：LiteLLM 已演进事前预留制；三家框架超限后再调一次 LLM 收尾（M4-08 须断言耗尽路径零 LLM 调用）；重名静默覆盖×3 → M4-14 fail-fast；default-allow 陷阱×3 → M4-16 空策略拒绝启动。网络降级声明：GitHub 直连与本地代理均不通，经 gh-proxy/codeload 镜像取证、commit 逐仓核实。证据登记 E-16；分册留档 `var/m4-research/`（harness-src/h01~07 + src-part1~4，克隆仓约 4GB 未提交 git）。
 - 2026-09-06：**主会话 M3 独立抽检通过 + 推送完成**：不信测试报告重验四件套——① 本机 `mvn clean verify` 6 模块 BUILD SUCCESS、592 用例 0 失败（111 IT 本机无 docker 跳过，195 真跑过）；② 逐行读码抽检全过（ScenarioMetrics §6.4 公式/FinalReportSelector 禁挑最优/SingleCaseScorer verdict 分派/FencedNotifyExecutor 五分支/UsageLedgerReconciler 结构禁时间窗/NotificationRenderer 五处理面/V9~V11 迁移与仓储 insert-only/密钥卫生/eval profile 隔离）；③ 195 真栈三链端到端抽取全过（存活面 32 容器 + 成本链主动打针：proxy 实调 deepseek-v3 usage 10/2 与 SpendLogs 第 54 行精确对上 + 靶场链状态核验：32 chaos 会话全 CLOSED/故障 gauge 空/incident 5 RESOLVED/22 报告全 STRUCTURE_VALIDATED/网络隔离双向复测通过）；④ 非阻断诚实清单：eval 47 案例真实命中率 0（模型/词典校准面，AM4 起点信号）、5 个 eval_run 滞留 RUNNING（被杀批件无 reap）、EvalBatchRunner 预热 sleep 在 try/finally 外（生产不可达）、notify-app compose 无 healthcheck、台账"flagd 0600"措辞失准（644 系 E2E 实证刻意选择）、LITELLM_MASTER_KEY 轮换建议仍开放。推送 origin/main：`3be79d5..574c01f`（AM3 全部 feat + 复盘讲解 + 调研文档归档）。**AM3 待用户 G2 终审**。
+- 2026-09-06：**AM4 技术方案升 v1.2（E-16 落账）**：新增 §6.1 参照与修正清单（17 条任务级裁定）、INV-AM4-8/9（默认 fail-closed / 预算耗尽路径零 LLM 调用）、L4/L4.5 测试断言、P-45（AM3 实际占用至 V11，AM4 迁移起点顺延 V12 待裁定）；修正 §2 迁移编号旧口径冲突。状态仍 = 待 G1 评审；落码方案 v1.1 待同步。
+- 2026-09-06：**AM4 G1 用户通过 + 落码方案升 v1.2，M4 正式开工**：前置依赖 M3-30 已达成（574c01f），本期范围 = M4-01~30（阶段 D M4-31~38 待 AM3 不动）；落码方案 v1.2 关键变更 = 迁移顺延 **V12~V17**（P-45 裁定落账，避免与 AM3 V11 撞车）+ E-16 修正点落任务行（Token 三段式预留/PG 行锁扣减/doom_loop 熔断/耗尽零 LLM 调用/空策略 fail-closed/被拒工具裁清单/eventuous 事件骨架/(run_id,seq) 对拍主键/in-toto+rekor digest 纪律/snapshot_digest 显式列/Keep 双哈希/封闭枚举裁决出口）+ DoD 增 INV-AM4-8/9 红绿。已可转执行者。
+- 2026-09-06：**AM3 G2 用户终审通过（"AM3 G2 通过"），AM3 阶段正式收官**。G2 前置推送纪律已满足（`3be79d5..574c01f` 先于本门）。阶段切换清单执行：① AM3 压力点/遗留转 AM4 输入（eval 47 案例命中率 0=Native 质量起点信号；eval_run 滞留 RUNNING 无 reap=M4-37 现实用例；notify-app 无 healthcheck；LITELLM_MASTER_KEY 轮换仍开放；BA-20/21 继续观察）；② AM3 期缺陷 BA-22~26 已在 BUGLOG（G2 前随 AM2/AM3 收口登记）；③ **M4-31~38（Holmes 对照/Replay/Shadow/Reconciler 族/AM4 G2）正式解锁**——AM4 技术方案 §2 阶段 D 与落码方案 v1.2 阶段 D 的"待 AM3"约束解除，全 38 任务可按序执行；④ 当前阶段切换为 AM4 工序 3（编码）。
+- 2026-09-06：**M4-01 Task/Run 状态全集扩容 + 新旧双读契约落码**（AM4 编码第一单，按序执行）：① RcaTaskState 6→11 态（+BLOCKED/RUNNING/SKIPPED/FAILED_TERMINAL/STALE）、RcaRunState 6→9 态（+REPORTING/PARTIAL/EXPIRED；isActive() 扩含 REPORTING——报告组装期同 incident 不开新 run，与 M4-02 V12 部分唯一索引谓词同步）；两枚举 additive 冻结不改名（WAITING_APPROVAL 属 AM5 不引入，评审 v1.1 修正④）。② 两状态机扩边：Task +BLOCKED→{READY,SKIPPED,CANCELLED}、LEASED→RUNNING、RUNNING 五出边、SKIPPED/FAILED_TERMINAL/STALE 终态；Run +QUEUED/RUNNING→REPORTING、REPORTING 六收尾、PARTIAL/EXPIRED 终态；AM1 旧边零变动。③ 新建 `RcaStateContract`（statemachine 包）：LEGACY/AM4 互斥完备集 + fail-closed 字符串 allowlist 解析，替换 PostgresRcaRunRepository/PostgresRcaTaskRepository 两处 Enum.valueOf（契约外取值含 WAITING_APPROVAL/未知串/null 一律拒绝）。④ `DagTaskState.fromPersistent` 穷举投影闭合第一批备料留的接缝：LEASED/RUNNING/RETRY_WAIT→RUNNING、DONE→SUCCEEDED、CANCELLED/FAILED_TERMINAL/STALE→FAILED_TERMINAL，无 default switch 编译期强制后续同步。⑤ UT：utA02/utA03 期望集扩容更新 + 三新终态锚点 + 新建 RcaStateContractTest 8 案（V7 字面量旧 fixture 恒等回放/全集 roundtrip/互斥完备/fail-closed）+ DagTaskStateTest 3 案（11 值映射穷举+终态语义+禁伪造 BLOCKED）。**mvn test 416 用例 0 失败**（2 skipped 本机无 docker IT 自跳；DB CHECK 同步按序在 M4-02 V12 落地，此前运行时不写入任何新状态值）。

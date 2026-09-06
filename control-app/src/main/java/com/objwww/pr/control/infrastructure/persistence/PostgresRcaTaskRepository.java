@@ -1,7 +1,7 @@
 package com.objwww.pr.control.infrastructure.persistence;
 
 import com.objwww.pr.control.alert.domain.model.RcaTask;
-import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.statemachine.RcaStateContract;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -183,7 +183,7 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 rs.getObject("id", UUID.class),
                 rs.getObject("run_id", UUID.class),
                 rs.getString("task_key"),
-                RcaTaskState.valueOf(rs.getString("state")),
+                RcaStateContract.parseTaskState(rs.getString("state")),
                 rs.getInt("priority"),
                 rs.getTimestamp("available_at").toInstant(),
                 rs.getTimestamp("ready_since").toInstant(),
