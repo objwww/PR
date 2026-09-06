@@ -20,4 +20,11 @@ public class BudgetExhaustedException extends RuntimeException {
         return new BudgetExhaustedException("预算耗尽: TIME deadline=" + deadlineEpochMillis
                 + " 当前=" + nowEpochMillis);
     }
+
+    /** 账本路径（V13 BudgetKind 六维）：预留被拒即耗尽，余额不足本次请求 */
+    public static BudgetExhaustedException ofKind(BudgetKind kind, long consumed,
+            long remaining, long requested) {
+        return new BudgetExhaustedException("预算耗尽: " + kind + " 已扣=" + consumed
+                + " 余额=" + remaining + " 本次请求=" + requested);
+    }
 }

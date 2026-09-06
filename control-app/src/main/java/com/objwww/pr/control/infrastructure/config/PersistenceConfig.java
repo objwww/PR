@@ -117,6 +117,15 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository(jdbc);
     }
 
+    // ---------------- AM4 预算账本（V13，M4-08 装配；Gate/DoomLoopGuard 由消费方任务 M4-25/26 接线） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.budget.RunBudgetLedger runBudgetLedger(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRunBudgetLedger(jdbc, tx);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
