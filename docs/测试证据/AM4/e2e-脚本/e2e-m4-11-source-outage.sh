@@ -20,7 +20,12 @@ OUTAGE_SECS="${OUTAGE_SECS:-120}"
 PROM_CONTAINER="${PROM_CONTAINER:-prometheus-am0}"
 
 e4_begin
-echo "[E2E-M4-11] phase1 F1 注入"
+# 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零（否则告警不重发 webhook）
+echo "[E2E-M4-11] 注入前静止面（quiesce F1）"
+docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+# T0 时间窗（BA-36）：收敛等待只认本场景注入后的新 run
+T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+echo "[E2E-M4-11] phase1 F1 注入（T0=$T0）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F1
 sleep 20
 
@@ -35,10 +40,10 @@ e4_assert_eq "Prometheus 断网期间 control 存活（DB 面可查）" "$CONTRO
 echo "[E2E-M4-11] 恢复 Prometheus"
 docker unpause "$PROM_CONTAINER"
 
-# 恢复后等待链路收敛（存在终态 run）
+# 恢复后等待链路收敛（存在本场景注入后的终态 run，BA-36 T0 时间窗）
 i=0
 while [ $i -lt 120 ]; do
-    DONE=$(e4_sql "select count(*) from rca_run where state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')")
+    DONE=$(e4_sql "select count(*) from rca_run where created_at >= '$T0' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')")
     [ "$DONE" -gt 0 ] && break
     i=$((i + 5)); sleep 5
 done

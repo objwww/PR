@@ -18,7 +18,7 @@
 
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../../.." && pwd)"
+REPO="$(cd "$HERE/../../../.." && pwd)"
 APP="$1"
 [ -n "$APP" ] || APP="$REPO/control-app"
 

@@ -16,15 +16,23 @@ set -e
 POLL_MAX="${POLL_MAX:-240}"
 
 e4_begin
-echo "[E2E-M4-05] phase1 F1 第一轮注入（generation N）"
+# 注入前静止面（quiesce）：确保上一会话已恢复、告警处于 resolved——
+# 代际 N+1 的形成依赖 RESOLVED→FIRING 再点火（generation 只在恢复后再现时 +1）
+echo "[E2E-M4-05] 注入前静止面（quiesce F1）"
+docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+# T0 时间窗（BA-36）：代际对拍只认本场景注入后的新 run
+T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+echo "[E2E-M4-05] phase1 F1 第一轮注入（generation N）T0=$T0"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F1
-sleep 15
+# 轮间静止面：N 的告警 resolve（未等 N 调查收敛）→ 二次注入 re-fire 形成 N+1
+echo "[E2E-M4-05] 轮间静止面（quiesce F1，形成 resolve→refire 窗口）"
+docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
 echo "[E2E-M4-05] 二次注入（未等 N 收敛，形成 N+1）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F1
 
 i=0
 while [ $i -lt "$POLL_MAX" ]; do
-    DONE=$(e4_sql "select count(*) from rca_run where state in ('REPORTING','SUCCEEDED','PARTIAL','SUPERSEDED')")
+    DONE=$(e4_sql "select count(*) from rca_run where created_at >= '$T0' and state in ('REPORTING','SUCCEEDED','PARTIAL','SUPERSEDED')")
     [ "$DONE" -ge 1 ] && break
     i=$((i + 5)); sleep 5
 done
@@ -32,7 +40,8 @@ done
 # 同一 incident 两代 run 可独立审计（N 与 N+1 分行）
 TWO_GEN=$(e4_sql "
     select count(distinct generation) from rca_run r
-     where r.incident_id = (select incident_id from rca_run order by created_at desc limit 1)")
+     where r.incident_id = (select incident_id from rca_run where created_at >= '$T0'
+                            order by created_at desc limit 1)")
 echo "  同 incident 代际数=$TWO_GEN（≥2 时代际栅栏生效；=1 时二次注入未命中同键）"
 
 # 代际栅栏（INV-AM4-4）：死 run（superseded/expired/cancelled）零图推进——

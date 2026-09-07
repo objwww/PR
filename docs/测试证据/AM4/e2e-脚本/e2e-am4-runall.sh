@@ -24,7 +24,7 @@
 
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../../.." && pwd)"
+REPO="$(cd "$HERE/../../../.." && pwd)"
 
 # ---- 统一批次：12 场景共享一个 UTC 批次目录 -------------------------------
 E4_BATCH_ID="am4-$(date -u +%Y%m%dT%H%M%SZ)"

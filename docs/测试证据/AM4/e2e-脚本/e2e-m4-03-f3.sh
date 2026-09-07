@@ -15,12 +15,17 @@ set -e
 POLL_MAX="${POLL_MAX:-240}"
 
 e4_begin
-echo "[E2E-M4-03] phase1 F3 注入"
+# 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零（否则告警不重发 webhook）
+echo "[E2E-M4-03] 注入前静止面（quiesce F3）"
+docker exec arena-e2e-cli python3 /e2e/quiesce.py F3
+# T0 时间窗（BA-36）：收敛等待只认本场景注入后的新 run
+T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+echo "[E2E-M4-03] phase1 F3 注入（T0=$T0）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F3
 
 i=0
 while [ $i -lt "$POLL_MAX" ]; do
-    DONE=$(e4_sql "select count(*) from rca_run where state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')")
+    DONE=$(e4_sql "select count(*) from rca_run where created_at >= '$T0' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')")
     [ "$DONE" -gt 0 ] && break
     i=$((i + 5)); sleep 5
 done

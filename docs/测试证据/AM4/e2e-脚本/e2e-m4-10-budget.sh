@@ -17,6 +17,9 @@ REPEAT="${REPEAT:-5}"
 POLL_MAX="${POLL_MAX:-240}"
 
 e4_begin
+# 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零（否则告警不重发 webhook）
+echo "[E2E-M4-10] 注入前静止面（quiesce F1）"
+docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
 echo "[E2E-M4-10] 同一故障重复注入 ${REPEAT} 次（B5 重复告警 + 预算压边）"
 i=1
 while [ "$i" -le "$REPEAT" ]; do
