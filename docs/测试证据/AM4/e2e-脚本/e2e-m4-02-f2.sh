@@ -18,6 +18,13 @@
 # 面必须按主告警 incident 过滤，否则 desc limit 1 抓到 Stuck 的 run，其 incident
 # 上 orchestrator 又铸 RERUN，影子触发撞 uq_rca_run_active_incident；影子触发
 # 收编 common e4_trigger_shadow（等活跃 run 收敛 + 重试 + stderr 显错）。
+# v4（195 迭代修正，材料去重语义落地）：同 incident 新 firing 的材料 hash 与该
+# incident 最新 run 相同则不铸 run（确定性去重，195 实证：intake ACCEPTED 且
+# generation 推进而零 run）——影子 run 镜像 holmes hash 后成为该 incident 最新
+# run，轮 B 注入注定零 run。轮 B 改为直接复用 RUN_A 作影子镜像源（同一 input
+# snapshot、allowed-tools 裁掉 change.query，即"源移除"场景语义），不再注入
+# 轮 B、不再等新 holmes run；影子 A 先经 quiesce 回收（REPORTING 挂 uq）再触发
+# 影子 B。
 # ============================================================================
 
 set -e
@@ -68,19 +75,14 @@ SHADOW_A=$(e4_trigger_shadow "$RUN_A") || { echo "  FAIL: 影子轮 A 触发失�
 [ -n "$SHADOW_A" ] || { echo "  FAIL: 影子轮 A 触发失败（无 run id）"; exit 1; }
 echo "  shadowA=$SHADOW_A"
 
-# ---------------- 轮 B：F2 注入 + change 源移除 ----------------
-# 轮间静止面：轮 A 会话恢复归零后轮 B 才能形成新的 resolve→refire（新 run）
-echo "[E2E-M4-02] 轮间静止面（quiesce F2）"
+# ---------------- 轮 B：change 源移除（复用 RUN_A 镜像，见头部 v4 说明） ----------------
+# 轮间静止面 + 影子 A 回收（REPORTING 挂 uq_rca_run_active_incident，不回收则
+# 影子 B 触发必撞活跃约束）
+echo "[E2E-M4-02] 轮间静止面（quiesce F2，含影子 A 回收）"
 e4_quiesce F2
-T0B=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-echo "[E2E-M4-02] 轮 B：F2 注入 + change 源移除（T0B=$T0B）"
-docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F2
-wait_report_since "$T0B" || { echo "  FAIL: 轮 B 未收敛"; exit 1; }
-RUN_B=$(holmes_since "$T0B")
-echo "  runB=$RUN_B"
 
-echo "[E2E-M4-02] 触发影子轮 B（allowed-tools 裁掉 change.query）"
-SHADOW_B=$(e4_trigger_shadow "$RUN_B" \
+echo "[E2E-M4-02] 触发影子轮 B（镜像 RUN_A，allowed-tools 裁掉 change.query）"
+SHADOW_B=$(e4_trigger_shadow "$RUN_A" \
     --app.alert.am4.allowed-tools=prometheus.query,logs.query) \
     || { echo "  FAIL: 影子轮 B 触发失败"; exit 1; }
 [ -n "$SHADOW_B" ] || { echo "  FAIL: 影子轮 B 触发失败（无 run id）"; exit 1; }
