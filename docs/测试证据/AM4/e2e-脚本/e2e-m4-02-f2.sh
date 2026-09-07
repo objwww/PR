@@ -58,7 +58,7 @@ holmes_since() {
 # ---------------- 轮 A：F2 注入 + change fixture 在位 ----------------
 # 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零（否则告警不重发 webhook）
 echo "[E2E-M4-02] 注入前静止面（quiesce F2）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F2
+e4_quiesce F2
 T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "[E2E-M4-02] 轮 A：F2 注入 + change fixture 在位（T0=$T0）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F2
@@ -74,7 +74,7 @@ echo "  shadowA=$SHADOW_A"
 # ---------------- 轮 B：F2 注入 + change 源移除 ----------------
 # 轮间静止面：轮 A 会话恢复归零后轮 B 才能形成新的 resolve→refire（新 run）
 echo "[E2E-M4-02] 轮间静止面（quiesce F2）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F2
+e4_quiesce F2
 T0B=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "[E2E-M4-02] 轮 B：F2 注入 + change 源移除（T0B=$T0B）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F2

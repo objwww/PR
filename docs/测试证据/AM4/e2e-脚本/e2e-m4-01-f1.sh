@@ -30,7 +30,7 @@ e4_begin
 # 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零——否则告警持续
 # firing、alertmanager 不重发 webhook，本轮注入不产生新 incident/run（195 实证）
 echo "[E2E-M4-01] 注入前静止面（quiesce F1）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+e4_quiesce F1
 
 # T0 时间窗（BA-36）：run/报告认领只认本场景注入后的新行，防陈旧 run 冒充本轮
 T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)

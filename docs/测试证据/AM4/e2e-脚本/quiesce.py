@@ -8,10 +8,14 @@ AM4 E2E quiesce（注入前静止面，195 真栈迭代补充）。
 （repeat 语义）→ 本轮注入不产生新 incident/run，收敛轮询必然超时。
 
 用法（arena-e2e-cli 容器内）：
-  python3 /e2e/quiesce.py F1|F2|F3
+  python3 /e2e/quiesce.py F1|F2|F3 [scenario_id generation]
 
-步骤：读 /e2e/tag 推上一 scenarioId → 会话非 CLOSED/不存在则 off(expectedGeneration=0)
-→ 轮询等 gauge==0 且告警回落（resolve 后才可能再次 firing）。输出 E2E 行协议。
+v2：scenarioId 每轮按时钟生成（uq_chaos_scenario 全局唯一，同 id 不可二次
+激活），本脚本无法自行探测上一轮会话——活跃会话由调用方（e2e-am4-common.sh
+e4_quiesce）经 PG 查出后传参执行 off；未传参 = 上轮已收口，直接等静止面。
+
+步骤：（有参则 off(expectedGeneration=generation)）→ 轮询等 gauge==0 且告警
+回落（resolve 后才可能再次 firing）。输出 E2E 行协议。
 """
 import sys
 import time
@@ -26,10 +30,9 @@ POLL_INTERVAL_SECS = 5
 def main():
     fault = sys.argv[1].upper()
     sc = driver.SC[fault]
-    state, _ = driver.session_state(sc.scenario)
-    print("E2E|INFO|quiesce:%s|session=%s" % (fault, state), flush=True)
-    if state is not None and state != "CLOSED":
-        st, body = driver.deactivate(fault, sc.scenario, 0)
+    if len(sys.argv) >= 4:
+        scenario, gen = sys.argv[2], int(sys.argv[3])
+        st, body = driver.deactivate(fault, scenario, gen)
         print("E2E|INFO|quiesce:%s|off=%s %s" % (fault, st,
                                                  body.get("state", "")), flush=True)
     deadline = time.time() + QUIESCE_TIMEOUT_SECS

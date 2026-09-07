@@ -19,14 +19,14 @@ e4_begin
 # 注入前静止面（quiesce）：确保上一会话已恢复、告警处于 resolved——
 # 代际 N+1 的形成依赖 RESOLVED→FIRING 再点火（generation 只在恢复后再现时 +1）
 echo "[E2E-M4-05] 注入前静止面（quiesce F1）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+e4_quiesce F1
 # T0 时间窗（BA-36）：代际对拍只认本场景注入后的新 run
 T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "[E2E-M4-05] phase1 F1 第一轮注入（generation N）T0=$T0"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F1
 # 轮间静止面：N 的告警 resolve（未等 N 调查收敛）→ 二次注入 re-fire 形成 N+1
 echo "[E2E-M4-05] 轮间静止面（quiesce F1，形成 resolve→refire 窗口）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+e4_quiesce F1
 echo "[E2E-M4-05] 二次注入（未等 N 收敛，形成 N+1）"
 docker exec arena-e2e-cli python3 /e2e/driver.py phase1 F1
 

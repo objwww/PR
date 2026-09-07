@@ -20,7 +20,7 @@ DEPLOY_DIR="${DEPLOY_DIR:-/opt/build/pr/deploy}"
 e4_begin
 # 注入前静止面（quiesce）：上轮同 fault 会话必须先恢复归零（否则告警不重发 webhook）
 echo "[E2E-M4-04] 注入前静止面（quiesce F1）"
-docker exec arena-e2e-cli python3 /e2e/quiesce.py F1
+e4_quiesce F1
 # T0 时间窗（BA-36）：收敛 run 认领只认本场景注入后的新行
 T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "[E2E-M4-04] phase1 F1（执行者按配方构造与 logs/change 相反断言的指标面）T0=$T0"

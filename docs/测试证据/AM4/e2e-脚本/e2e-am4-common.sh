@@ -37,6 +37,62 @@ e4_sql() {
         -Atqc "$1"
 }
 
+# 环境自愈管理面 SQL（v3）：只用于轮间遗留物回收，非断言、非业务事实写入——
+# "断言只读"纪律的立法意图是场景断言不得伪造业务事实自证；本面不改任何断言
+# 依赖的本轮数据。
+e4_admin_sql() {
+    e4_note "ADMIN-SQL: $1"
+    docker exec "${AM4_PG_CONTAINER:?需要 AM4_PG_CONTAINER（195 部署侧 PG 容器名）}" \
+        psql -U "${AM4_PG_USER:-control_app}" -d "${AM4_PG_DB:-control}" \
+        -Atqc "$1"
+}
+
+# 注入前环境自愈（v4，195 迭代实证三教训）：
+#   a) quiesce 静止面——上轮同 fault 会话未收口时先 off。scenarioId 每轮按时钟
+#      生成且 uq_chaos_scenario 全局唯一（同 id 不可二次激活），quiesce.py 无法
+#      自行探测上轮 id，由本函数经 PG 查出活跃会话传参执行 off；
+#   b) resolved 落库等待——AM 组 flush 走 group_interval（最长 5m），仅等业务
+#      gauge 归零即注入时，新 firing 实例并入未 flush 的组（resolved+firing 相抵，
+#      AM 视为无净变化不投递，repeat 4h 内无 webhook）。必须等 resolved webhook
+#      真正落 alert_inbox（组已 flush 的端到端证据）才放行注入；
+#   c) 影子 run 轮间回收——影子 run 终点 REPORTING 挂 uq_rca_run_active_incident
+#      （QUEUED/RUNNING/REPORTING 部分唯一），不回收则同 incident 下一轮 firing
+#      intake 开 run 必撞 DuplicateKeyException → 告警死信（195 实证）。RERUN 仅
+#      由影子触发器产生，回收不触碰主链 INITIAL run。
+e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
+    fault="$1"
+    active=$(e4_sql "
+        select scenario_id || ' ' || generation from arena.oa_chaos_session
+         where fault_type = '$fault'
+           and state in ('PREPARED','ACTIVE','RECOVERING')
+         order by created_at desc limit 1")
+    if [ -n "$active" ]; then
+        # 故意词切分：quiesce.py F1 <scenario_id> <generation>
+        OFF_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault" $active
+        i=0
+        RESOLVED_N=0
+        while [ $i -lt 72 ]; do   # 72*5s=360s ≥ group_interval 5m + 投递余量
+            RESOLVED_N=$(e4_sql "
+                select count(*) from alert_inbox
+                 where group_status='resolved' and received_at > '$OFF_AT'")
+            [ "$RESOLVED_N" -ge 1 ] && break
+            sleep 5; i=$((i + 5))
+        done
+        if [ "$RESOLVED_N" -lt 1 ]; then
+            echo "  FAIL: quiesce 后 AM 组 resolved 未落 alert_inbox（组未 flush，注入将不投递）"
+            exit 1
+        fi
+        echo "  quiesce: resolved 已落库（组 flush 完成）"
+    else
+        docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
+    fi
+    e4_admin_sql "
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')"
+}
+
 # 计数断言：e4_assert_eq <描述> <实际> <期望>（流水同步落 assertions.tsv）
 e4_assert_eq() {
     desc="$1"; actual="$2"; expected="$3"
