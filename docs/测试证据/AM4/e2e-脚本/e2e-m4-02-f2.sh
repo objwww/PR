@@ -14,6 +14,10 @@
 # v2（195 迭代修正，合并 BA-36 T0 窗）：run 认领只认 T0 窗内新行（报告 join 面
 # 天然排除影子 run）；claim/证据/快照断言全部对齐影子面（holmes 主链不产
 # rca_claim/rca_evidence/rca_evidence_snapshot，v1 混查 holmes run 恒空真）。
+# v3（195 迭代修正）：F2 注入伴生 ArenaOrderStuck 告警链（195 实证）——holmes
+# 面必须按主告警 incident 过滤，否则 desc limit 1 抓到 Stuck 的 run，其 incident
+# 上 orchestrator 又铸 RERUN，影子触发撞 uq_rca_run_active_incident；影子触发
+# 收编 common e4_trigger_shadow（等活跃 run 收敛 + 重试 + stderr 显错）。
 # ============================================================================
 
 set -e
@@ -24,23 +28,14 @@ DEPLOY_DIR="${DEPLOY_DIR:-/opt/build/pr/deploy}"
 
 e4_begin
 
-trigger_shadow() {
-    HOLMES_ID="$1"
-    shift
-    TRIGGER_OUT=$( (cd "$DEPLOY_DIR" && docker compose run --rm --no-deps control-app \
-        --spring.profiles.active=docker,am4-shadow-trigger \
-        --spring.main.web-application-type=none \
-        --am4.shadow-trigger.holmes-run-id="$HOLMES_ID" "$@") </dev/null 2>&1 ) \
-        || { printf '%s\n' "$TRIGGER_OUT" | tail -30; return 1; }
-    printf '%s\n' "$TRIGGER_OUT" | grep "^AM4_SHADOW_RUN_ID=" | tail -1 | cut -d= -f2
-}
-
 wait_report_since() {
     i=0
     while [ $i -lt "$POLL_MAX" ]; do
         DONE=$(e4_sql "
             select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
-             where r.created_at >= '$1' and r.state in ('SUCCEEDED','PARTIAL')")
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '$1' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'")
         [ "$DONE" -ge 1 ] && return 0
         i=$((i + 5)); sleep 5
     done
@@ -50,7 +45,9 @@ wait_report_since() {
 holmes_since() {
     e4_sql "
         select r.id from rca_run r
+         join incident i on i.id = r.incident_id
          where r.created_at >= '$1' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaIllegalTransitions%'
            and exists (select 1 from rca_report rr where rr.run_id = r.id)
          order by r.created_at desc limit 1"
 }
@@ -67,8 +64,8 @@ RUN_A=$(holmes_since "$T0")
 echo "  runA=$RUN_A"
 
 echo "[E2E-M4-02] 触发影子轮 A（change 源在位）"
-SHADOW_A=$(trigger_shadow "$RUN_A")
-[ -n "$SHADOW_A" ] || { echo "  FAIL: 影子轮 A 触发失败"; exit 1; }
+SHADOW_A=$(e4_trigger_shadow "$RUN_A") || { echo "  FAIL: 影子轮 A 触发失败"; exit 1; }
+[ -n "$SHADOW_A" ] || { echo "  FAIL: 影子轮 A 触发失败（无 run id）"; exit 1; }
 echo "  shadowA=$SHADOW_A"
 
 # ---------------- 轮 B：F2 注入 + change 源移除 ----------------
@@ -83,9 +80,10 @@ RUN_B=$(holmes_since "$T0B")
 echo "  runB=$RUN_B"
 
 echo "[E2E-M4-02] 触发影子轮 B（allowed-tools 裁掉 change.query）"
-SHADOW_B=$(trigger_shadow "$RUN_B" \
-    --app.alert.am4.allowed-tools=prometheus.query,logs.query)
-[ -n "$SHADOW_B" ] || { echo "  FAIL: 影子轮 B 触发失败"; exit 1; }
+SHADOW_B=$(e4_trigger_shadow "$RUN_B" \
+    --app.alert.am4.allowed-tools=prometheus.query,logs.query) \
+    || { echo "  FAIL: 影子轮 B 触发失败"; exit 1; }
+[ -n "$SHADOW_B" ] || { echo "  FAIL: 影子轮 B 触发失败（无 run id）"; exit 1; }
 echo "  shadowB=$SHADOW_B"
 
 # ---------------- 断言（影子面） ----------------

@@ -68,16 +68,9 @@ echo "  report_status=$REPORT_STATUS（根因命中 GT 的判定归 eval 正式�
 # ---- Native 影子 run：部署配方 §5 方式 A 一次性入口触发（未显式传入时） ----
 if [ -z "$SHADOW_RUN_ID" ]; then
     echo "[E2E-M4-01] 触发 Native 影子 run（Am4ShadowTrigger，holmes=$H_RUN）"
-    TRIGGER_OUT=$( (cd "$DEPLOY_DIR" && docker compose run --rm --no-deps control-app \
-        --spring.profiles.active=docker,am4-shadow-trigger \
-        --spring.main.web-application-type=none \
-        --am4.shadow-trigger.holmes-run-id="$H_RUN") </dev/null 2>&1 ) \
-        || { printf '%s\n' "$TRIGGER_OUT" | tail -30
-             echo "  FAIL: 影子触发一次性入口失败"; exit 1; }
-    SHADOW_RUN_ID=$(printf '%s\n' "$TRIGGER_OUT" | grep "^AM4_SHADOW_RUN_ID=" \
-        | tail -1 | cut -d= -f2)
-    [ -n "$SHADOW_RUN_ID" ] || { printf '%s\n' "$TRIGGER_OUT" | tail -30
-        echo "  FAIL: 触发器未输出影子 run id"; exit 1; }
+    SHADOW_RUN_ID=$(e4_trigger_shadow "$H_RUN") \
+        || { echo "  FAIL: 影子触发一次性入口失败"; exit 1; }
+    [ -n "$SHADOW_RUN_ID" ] || { echo "  FAIL: 触发器未输出影子 run id"; exit 1; }
 fi
 echo "  shadow_run=$SHADOW_RUN_ID"
 

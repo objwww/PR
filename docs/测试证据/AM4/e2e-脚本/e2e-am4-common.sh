@@ -22,6 +22,51 @@ E4_RUN_DIR="${E4_RUN_DIR:-docs/测试证据/AM4/runs/$E4_BATCH_ID}"
 E4_PASS_COUNT=0
 E4_FAIL_COUNT=0
 
+POLL_MAX="${POLL_MAX:-240}"
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/build/pr/deploy}"
+
+# 影子触发统一入口（v1，195 实证）：等 incident 活跃 run 收敛（holmes 调查期
+# 材料变化时 orchestrator 会铸 RERUN——直接触发撞 uq_rca_run_active_incident）
+# → compose run 一次性入口触发（失败自动重试 ≤3 次）→ stdout 捕获影子 run id；
+# 全程诊断走 stderr（命令替换只捕获 stdout，错误不得被吞）。
+e4_trigger_shadow() {
+    holmes="$1"
+    shift
+    i=0
+    active_n=1
+    while [ $i -lt 12 ]; do   # 12*10s=120s
+        active_n=$(e4_sql "
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='$holmes')
+               and r.state in ('QUEUED','RUNNING','REPORTING')")
+        [ "$active_n" -eq 0 ] && break
+        sleep 10
+        i=$((i + 1))
+    done
+    if [ "$active_n" -ne 0 ]; then
+        echo "  FAIL: incident 活跃 run 未收敛（影子触发将撞 uq_rca_run_active_incident）" >&2
+        return 1
+    fi
+    attempt=0
+    trigger_out=""
+    while [ "$attempt" -lt 3 ]; do
+        trigger_out=$( (cd "$DEPLOY_DIR" && docker compose run --rm --no-deps control-app \
+            --spring.profiles.active=docker,am4-shadow-trigger \
+            --spring.main.web-application-type=none \
+            --am4.shadow-trigger.holmes-run-id="$holmes" "$@") </dev/null 2>&1 ) && break
+        attempt=$((attempt + 1))
+        echo "  WARN: 影子触发第 $attempt 次失败，20s 后重试" >&2
+        printf '%s\n' "$trigger_out" | tail -8 >&2
+        sleep 20
+    done
+    if [ "$attempt" -ge 3 ]; then
+        echo "  FAIL: 影子触发重试耗尽" >&2
+        printf '%s\n' "$trigger_out" | tail -20 >&2
+        return 1
+    fi
+    printf '%s\n' "$trigger_out" | grep "^AM4_SHADOW_RUN_ID=" | tail -1 | cut -d= -f2
+}
+
 # 批次/场景事件记账（commands.log 缺失可写时静默跳过——证据面不得反向阻断测试）
 e4_note() {
     printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" \

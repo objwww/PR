@@ -31,7 +31,9 @@ H_RUN=""
 while [ $i -lt "$POLL_MAX" ]; do
     H_RUN=$(e4_sql "
         select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
          where r.created_at >= '$T0' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
          order by r.created_at desc limit 1")
     [ -n "$H_RUN" ] && break
     i=$((i + 5)); sleep 5
@@ -41,15 +43,8 @@ echo "  holmes_run=$H_RUN"
 
 # 冲突证据面在影子链（holmes 主链不产 rca_evidence/rca_claim，v2 对齐分面）
 echo "[E2E-M4-04] 触发 Native 影子 run（Am4ShadowTrigger，holmes=$H_RUN）"
-TRIGGER_OUT=$( (cd "$DEPLOY_DIR" && docker compose run --rm --no-deps control-app \
-    --spring.profiles.active=docker,am4-shadow-trigger \
-    --spring.main.web-application-type=none \
-    --am4.shadow-trigger.holmes-run-id="$H_RUN") </dev/null 2>&1 ) \
-    || { printf '%s\n' "$TRIGGER_OUT" | tail -30
-         echo "  FAIL: 影子触发一次性入口失败"; exit 1; }
-S_RUN=$(printf '%s\n' "$TRIGGER_OUT" | grep "^AM4_SHADOW_RUN_ID=" | tail -1 | cut -d= -f2)
-[ -n "$S_RUN" ] || { printf '%s\n' "$TRIGGER_OUT" | tail -30
-    echo "  FAIL: 触发器未输出影子 run id"; exit 1; }
+S_RUN=$(e4_trigger_shadow "$H_RUN") || { echo "  FAIL: 影子触发一次性入口失败"; exit 1; }
+[ -n "$S_RUN" ] || { echo "  FAIL: 触发器未输出影子 run id"; exit 1; }
 echo "  shadow_run=$S_RUN"
 
 # 两方原始证据均保留（冲突不许删证据；影子面）
