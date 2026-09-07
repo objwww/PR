@@ -157,6 +157,25 @@ public class PersistenceConfig {
                 jdbc, tx);
     }
 
+    // ---------------- AM4 证据与快照（V16，M4-19/20 装配；消费方 = M4-27+ 执行器族） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEvidenceRepository(
+                jdbc, tx, objectMapper);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository evidenceSnapshotRepository(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEvidenceSnapshotRepository(
+                jdbc, tx);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
