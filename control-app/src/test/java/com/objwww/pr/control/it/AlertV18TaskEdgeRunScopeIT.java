@@ -72,10 +72,11 @@ class AlertV18TaskEdgeRunScopeIT extends PostgresITBase {
         assertThat(chainContains(() -> edges.insert(seed.runA(), seed.taskA1(),
                 seed.taskB2(), DependencyType.REQUIRED),
                 "fk_rca_task_edge_to_in_run")).isTrue();
-        // to 任务不存在 → FK 拒（无 (id, run_id) 配对）
+        // to 任务完全不存在 → V8 简单 FK（→rca_task.id）先拒，到不了 V18 组合 FK；
+        // V18 组合 FK 的专属场景是上一条（任务存在但挂别的 run）
         assertThat(chainContains(() -> edges.insert(seed.runA(), seed.taskA1(),
                 UUID.randomUUID(), DependencyType.OPTIONAL),
-                "fk_rca_task_edge")).isTrue();
+                "rca_task_edge_to_task_id_fkey")).isTrue();
         assertThat(count("rca_task_edge")).isZero();
     }
 

@@ -102,20 +102,18 @@ class AlertGenerationFenceIT extends PostgresITBase {
 
     @Test
     void staleFinishDoesNotPolluteNewRun() {
+        // 场景：worker 领取任务拿到租约 → 租约期内 run 被取代 → worker 携在期租约
+        // 直接收尾。必须先 claim 再 supersede——taskId 只有经 claimNext 才有租约，
+        // 无租约的行会先被 requireCurrentLease 拒成 LEASE_REJECTED，到不了代际栅栏
         Seed old = seedIncidentWithRun("fence-fin", 0);
         UUID taskId = insertTask(old.runId(), "OLD_WORK");
+        RcaTask leased = tasks.claimNext("it-worker", Instant.now(),
+                Duration.ofMinutes(5)).orElseThrow();
+        assertThat(leased.id()).as("先领取旧 run 任务（真实租约在手）").isEqualTo(taskId);
         supersede(old.runId(), 0);
         Seed fresh = seedIncidentWithRun("fence-new", 1);
-        insertTask(fresh.runId(), "NEW_WORK"); // 新 run 需有可领任务，claimNext 才有返回
+        insertTask(fresh.runId(), "NEW_WORK");
 
-        RcaTask claimed = tasks.claimNext("it-worker", Instant.now(),
-                Duration.ofMinutes(5)).orElseThrow();
-        assertThat(claimed.id()).as("死 run 任务被 claim 栅栏挡住，领取的是新 run 任务")
-                .isNotEqualTo(taskId);
-
-        // 领取者携在期租约直接对死 run 收尾（租约期内 run 被取代）：worker 名必须与
-        // claimNext 的租约持有人一致——否则 finishTask 先在租约校验返回 LEASE_REJECTED，
-        // 到不了本测试要验的代际栅栏
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, "it-worker",
                 RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null);
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(

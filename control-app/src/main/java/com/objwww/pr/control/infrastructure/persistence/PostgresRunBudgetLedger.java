@@ -178,6 +178,8 @@ public class PostgresRunBudgetLedger implements RunBudgetLedger {
                 .update();
     }
 
+    /** 读回判定面：有行给真实 consumed/remaining；无限额行（如未 ensureLimit 的 run）
+     *  fail-closed——拒绝时按零消费给出，放行时只可能是有行场景（reserve 先扣后探） */
     private BudgetProbe probe(ReservationKey key, boolean allowed) {
         return jdbc.sql("""
                 select consumed_units, limit_units - consumed_units as remaining
@@ -190,7 +192,9 @@ public class PostgresRunBudgetLedger implements RunBudgetLedger {
                     return allowed ? BudgetProbe.allowed(consumed, remaining)
                             : BudgetProbe.rejected(consumed, remaining);
                 })
-                .single();
+                .optional()
+                .orElseGet(() -> allowed ? BudgetProbe.allowed(0, 0)
+                        : BudgetProbe.rejected(0, 0));
     }
 
     @Override

@@ -230,13 +230,14 @@ class AlertRunBudgetLedgerIT extends PostgresITBase {
     void itB09_reportBudgetUsesNilUuidSentinelKey() {
         UUID run = UUID.randomUUID();
         ledger.ensureLimit(run, BudgetKind.REPORT, 1);
+        ledger.ensureLimit(run, BudgetKind.TOKEN, 10); // 任务维度限额行（独立性对照面）
         ReservationKey report = ReservationKey.forReport(run);
         assertThat(report.taskId()).isEqualTo(new UUID(0L, 0L));
         assertThat(report.attemptId()).isEqualTo(new UUID(0L, 0L));
         assertThat(ledger.reserve(report, 1).allowed()).isTrue();
         // 报告专项预算独立于任务维度预算：第二个报告键被拒（限额 1）
         assertThat(ledger.reserve(ReservationKey.forReport(UUID.randomUUID()), 1).allowed())
-                .isFalse(); // 别的 run 无限额行 → 条件 UPDATE 0 行即拒
+                .isFalse(); // 别的 run 无限额行 → 条件 UPDATE 0 行，fail-closed 拒
         assertThat(ledger.reserve(key(run, 1), 1).allowed()).isTrue(); // 同 run 任务维度不受影响
     }
 
