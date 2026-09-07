@@ -7,6 +7,8 @@ import com.objwww.pr.control.alert.application.agent.ChangeAgent;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,12 +44,15 @@ public class Am4ShadowTriggerConfig {
     @Bean
     public CommandLineRunner am4ShadowTrigger(DeterministicSupervisor am4DeterministicSupervisor,
             RcaRunRepository rcaRunRepository, RcaTaskRepository rcaTaskRepository,
+            EvidenceRepository evidenceRepository,
+            EvidenceSnapshotRepository evidenceSnapshotRepository,
             MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent, ChangeAgent am4ChangeAgent,
             NativeRcaAgent am4NativeRcaAgent,
             @Value("${am4.shadow-trigger.holmes-run-id}") UUID holmesRunId) {
         Am4ShadowTrigger trigger = new Am4ShadowTrigger(am4DeterministicSupervisor,
-                rcaRunRepository, rcaTaskRepository, am4MetricsAgent, am4LogsAgent,
-                am4ChangeAgent, am4NativeRcaAgent, AlertClock.system());
+                rcaRunRepository, rcaTaskRepository, evidenceRepository,
+                evidenceSnapshotRepository, am4MetricsAgent, am4LogsAgent, am4ChangeAgent,
+                am4NativeRcaAgent, AlertClock.system());
         return args -> {
             trigger.trigger(holmesRunId);
             // 影子池非 daemon 线程会挂住 JVM——一次性入口显式退出（Spring shutdown

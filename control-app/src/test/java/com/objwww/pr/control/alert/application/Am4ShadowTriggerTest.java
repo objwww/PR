@@ -20,6 +20,7 @@ import com.objwww.pr.control.alert.domain.dag.DependencyType;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
@@ -43,20 +44,21 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Am4ShadowTrigger 单测（M4-38 执行者工具面）：影子 run 镜像 holmes 身份
  * （同 incident/同 generation/同 investigation hash）+ DAG 三调查任务全 DONE →
- * REPORTING + 三源证据同快照盖章 + 影子零报告零发布 + stdout 输出
- * {@code AM4_SHADOW_RUN_ID=} 标记（E2E 脚本捕获锚点）。
+ * 证据快照冻结 → REPORTING + 三源证据同快照盖章 + 影子零报告零发布 + stdout
+ * 标记（{@code AM4_SHADOW_RUN_ID=} / {@code AM4_SHADOW_TASK=}）；降级案：
+ * 单源 FAILED → 任务 DEAD、run 继续终 REPORTING、快照只含存活源成员。
  *
  * @author wanghua
  * @date 2026-09-05
@@ -65,14 +67,17 @@ class Am4ShadowTriggerTest {
 
     private static final Instant NOW = Instant.parse("2026-09-05T10:00:00Z");
     private static final long GENERATION = 14L;
-    private static final String TOOL_RESPONSE_JSON =
+    private static final String TOOL_OK_JSON =
             "{\"status\":\"success\",\"data\":{\"result\":[{\"metric\":{},"
                     + "\"values\":[[1788781788,\"2\"]]}]}}";
-    private static final byte[] TOOL_RESPONSE = TOOL_RESPONSE_JSON.getBytes(StandardCharsets.UTF_8);
+    private static final String TOOL_ERROR_JSON = "{\"status\":\"error\",\"errorType\":\"x\"}";
+    private static final byte[] TOOL_OK = TOOL_OK_JSON.getBytes(StandardCharsets.UTF_8);
+    private static final byte[] TOOL_ERROR = TOOL_ERROR_JSON.getBytes(StandardCharsets.UTF_8);
 
     private final AlertInMemoryStores stores = new AlertInMemoryStores();
     private final TriggerEdgeStore edges = new TriggerEdgeStore();
     private final TriggerEvidence evidence = new TriggerEvidence();
+    private final TriggerSnapshots snapshots = new TriggerSnapshots();
     private final TriggerLedger ledger = new TriggerLedger();
     private final TriggerClaims claims = new TriggerClaims();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -85,15 +90,9 @@ class Am4ShadowTriggerTest {
         stores.runs.insert(new RcaRun(holmesId, incidentId, 14, RunTrigger.RERUN,
                 RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
 
-        PrintStream originalOut = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
-        UUID shadowId;
-        try {
-            shadowId = trigger().trigger(holmesId);
-        } finally {
-            System.setOut(originalOut);
-        }
+        ByteArrayOutputStream captured = captureStdout();
+        UUID shadowId = trigger(inv -> ok(inv)).trigger(holmesId);
+        resetStdout();
 
         assertThat(shadowId).isNotEqualTo(holmesId);
         RcaRun shadow = stores.runs.findById(shadowId).orElseThrow();
@@ -115,42 +114,105 @@ class Am4ShadowTriggerTest {
                 .containsExactlyInAnyOrder("prometheus", "logs", "change");
         assertThat(ledger.succeeded).isEqualTo(3);
 
+        assertThat(snapshots.byRun).hasSize(1);
+        var frozen = snapshots.byRun.values().iterator().next().frozen();
+        assertThat(frozen.observedGeneration()).isEqualTo(GENERATION);
+        assertThat(snapshots.byRun.values().iterator().next().members()).hasSize(3);
+
         assertThat(stores.reports.all()).isEmpty();
         assertThat(stores.publications.all()).isEmpty();
 
         assertThat(captured.toString(StandardCharsets.UTF_8))
-                .contains(Am4ShadowTrigger.RUN_ID_MARKER + shadowId);
+                .contains(Am4ShadowTrigger.RUN_ID_MARKER + shadowId)
+                .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + Am4ShadowTrigger.TASK_METRICS
+                        + "=EVIDENCE_PRODUCED")
+                .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + "snapshot=");
+    }
+
+    @Test
+    void failedSourceDegradesToDeadTaskAndSnapshotKeepsSurvivors() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, UUID.randomUUID(), 3, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        ByteArrayOutputStream captured = captureStdout();
+        UUID shadowId = trigger(Am4ShadowTriggerTest::denyChange).trigger(holmesId);
+        resetStdout();
+
+        RcaRun shadow = stores.runs.findById(shadowId).orElseThrow();
+        assertThat(shadow.state()).isEqualTo(RcaRunState.REPORTING);
+        assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_CHANGE))
+                .isEqualTo(RcaTaskState.DEAD);
+        assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_METRICS))
+                .isEqualTo(RcaTaskState.DONE);
+        assertThat(evidence.rows).extracting(EvidenceEnvelope::source)
+                .containsExactlyInAnyOrder("prometheus", "logs");
+        assertThat(snapshots.byRun.values().iterator().next().members()).hasSize(2);
+        assertThat(captured.toString(StandardCharsets.UTF_8))
+                .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + Am4ShadowTrigger.TASK_CHANGE
+                        + "=FAILED(REMOTE_UNAVAILABLE)");
     }
 
     // ------------------------------------------------------------------ 组装
 
-    private Am4ShadowTrigger trigger() {
+    private Am4ShadowTrigger trigger(ToolInvoker gateway) {
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(planAgents(), stores.tasks, edges, inPlaceTx()),
                 new DagExecutionService(edges, stores.tasks),
                 stores.runs, stores.tasks, inPlaceTx(), () -> NOW);
-        ToolInvoker stub = invocation -> new ToolGateway.ToolInvocationResult(
-                ToolGateway.ToolInvocationResult.Kind.EXECUTED, "ut-digest", TOOL_RESPONSE);
         ToolRegistry tools = new ToolRegistry(List.of(
                 new ToolRegistry.Registration(
                         MetricsAgent.toolDefinition(4_000L, 65_536L),
-                        new ReplayToolExecutor(TOOL_RESPONSE)),
+                        new ReplayToolExecutor(TOOL_OK)),
                 new ToolRegistry.Registration(
                         LogsAgent.toolDefinition(4_000L, 65_536L),
-                        new ReplayToolExecutor(TOOL_RESPONSE)),
+                        new ReplayToolExecutor(TOOL_OK)),
                 new ToolRegistry.Registration(
                         ChangeAgent.toolDefinition(4_000L, 65_536L),
-                        new ReplayToolExecutor(TOOL_RESPONSE))));
+                        new ReplayToolExecutor(TOOL_OK))));
         MetricsAgent metrics = new MetricsAgent(profile("metrics", MetricsAgent.TOOL_NAME),
-                tools, stub, evidence, ledger, mapper);
+                tools, gateway, evidence, ledger, mapper);
         LogsAgent logs = new LogsAgent(profile("logs", LogsAgent.TOOL_NAME),
-                tools, stub, evidence, ledger, mapper);
+                tools, gateway, evidence, ledger, mapper);
         ChangeAgent change = new ChangeAgent(profile("change", ChangeAgent.TOOL_NAME),
-                tools, stub, evidence, ledger, mapper);
+                tools, gateway, evidence, ledger, mapper);
         NativeRcaAgent nativeRca = new NativeRcaAgent(evidence, claims,
                 new ClaimReducer(Set.of("holmes", "prometheus"), "ut-policy"));
-        return new Am4ShadowTrigger(supervisor, stores.runs, stores.tasks,
-                metrics, logs, change, nativeRca, () -> NOW);
+        return new Am4ShadowTrigger(supervisor, stores.runs, stores.tasks, evidence,
+                snapshots, metrics, logs, change, nativeRca, () -> NOW);
+    }
+
+    /** 全部执行成功：恒回 EXECUTED + success 体 */
+    private static ToolGateway.ToolInvocationResult ok(ToolGateway.ToolInvocation invocation) {
+        return new ToolGateway.ToolInvocationResult(
+                ToolGateway.ToolInvocationResult.Kind.EXECUTED, "ut-digest", TOOL_OK);
+    }
+
+    /** change.query 源降级：恒回 error 体（REMOTE_4XX → FAILED） */
+    private static ToolGateway.ToolInvocationResult denyChange(
+            ToolGateway.ToolInvocation invocation) {
+        byte[] body = "change.query".equals(invocation.toolName()) ? TOOL_ERROR : TOOL_OK;
+        return new ToolGateway.ToolInvocationResult(
+                ToolGateway.ToolInvocationResult.Kind.EXECUTED, "ut-digest", body);
+    }
+
+    private RcaTaskState taskState(UUID runId, String key) {
+        return stores.tasks.findByRunId(runId).stream()
+                .filter(t -> t.taskKey().equals(key)).findFirst().orElseThrow().state();
+    }
+
+    private final PrintStream originalOut = System.out;
+    private ByteArrayOutputStream capturedOut;
+
+    private ByteArrayOutputStream captureStdout() {
+        capturedOut = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(capturedOut, true, StandardCharsets.UTF_8));
+        return capturedOut;
+    }
+
+    private void resetStdout() {
+        System.setOut(originalOut);
     }
 
     private static AgentProfile profile(String name, String toolName) {
@@ -221,6 +283,30 @@ class Am4ShadowTriggerTest {
         @Override
         public List<EvidenceEnvelope> findByRunId(UUID runId) {
             return rows.stream().filter(e -> e.runId().equals(runId)).toList();
+        }
+    }
+
+    private static final class TriggerSnapshots implements EvidenceSnapshotRepository {
+
+        private final Map<UUID, Frozen> byRun = new ConcurrentHashMap<>();
+
+        private record Frozen(FrozenSnapshot frozen, List<SnapshotMemberRow> members) {
+        }
+
+        @Override
+        public boolean freeze(FrozenSnapshot snapshot, List<SnapshotMemberRow> members) {
+            byRun.put(snapshot.runId(), new Frozen(snapshot, List.copyOf(members)));
+            return true;
+        }
+
+        @Override
+        public Optional<FrozenSnapshot> find(UUID runId, String snapshotDigest) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<SnapshotMemberRow> membersOf(UUID snapshotId) {
+            return List.of();
         }
     }
 
