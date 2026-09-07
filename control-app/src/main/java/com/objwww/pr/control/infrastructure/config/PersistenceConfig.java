@@ -309,4 +309,26 @@ public class PersistenceConfig {
                 operatorCommandRepository, rcaRunRepository, rcaEventAppender,
                 java.time.Instant::now);
     }
+
+    // ---------------- AM5 保留域（V28/V29，M5-18 装配；归档执行面 = M5-19 ArchiveService） ----------------
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.RetentionPolicyRepository retentionPolicyRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRetentionPolicyRepository(
+                jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.PartitionCatalog partitionCatalog(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresPartitionCatalog(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.application.RetentionService retentionService(
+            com.objwww.pr.control.ops.domain.repository.RetentionPolicyRepository retentionPolicyRepository,
+            com.objwww.pr.control.ops.domain.repository.PartitionCatalog partitionCatalog) {
+        return new com.objwww.pr.control.ops.application.RetentionService(
+                retentionPolicyRepository, partitionCatalog, java.time.Instant::now);
+    }
 }

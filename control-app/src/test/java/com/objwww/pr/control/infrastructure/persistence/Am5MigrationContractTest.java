@@ -37,6 +37,10 @@ class Am5MigrationContractTest {
             "src/main/resources/db/migration/V26__am5_operator_case.sql");
     private static final Path V27 = Path.of(
             "src/main/resources/db/migration/V27__am5_operator_command.sql");
+    private static final Path V28 = Path.of(
+            "src/main/resources/db/migration/V28__am5_monthly_partition.sql");
+    private static final Path V29 = Path.of(
+            "src/main/resources/db/migration/V29__am5_retention_archive.sql");
 
     private static String normalized() throws IOException {
         return normalized(V20);
@@ -385,5 +389,51 @@ class Am5MigrationContractTest {
                 .contains("revoke delete on operator_command from control_app")
                 .contains("revoke all on operator_command"
                         + " from publisher_app, notify_app, eval_app, public");
+    }
+
+    @Test
+    void v28PartitionsRcaEventByMonthWithPartitionKeyInEveryUniqueConstraint() throws IOException {
+        String sql = normalized(V28);
+
+        // E-17 坑 pin（落码方案 §M5-18② 原文）：分区表唯一约束必须含分区键
+        // created_at——(run_id,seq) 无洞单调由 M4-10 计数器行锁保证（应用面不变量），
+        // 约束放宽只为满足 PG 分区规则，不放松防重入语义
+        assertThat(sql)
+                .contains("partition by range (created_at)")
+                .contains("add constraint pk_rca_event primary key (id, created_at)")
+                .contains("add constraint uq_rca_event_run_seq unique (run_id, seq, created_at)")
+                .contains("add constraint uq_rca_event_run_event_id unique"
+                        + " (run_id, event_id, created_at)")
+                // default 分区兜底（边界外写入永不因缺分区失败）
+                .contains("create table rca_event_default partition of"
+                        + " rca_event_partitioned default")
+                // 换身序：视图按 oid 绑定旧表——先拆后建；授权随建重授（LIKE 不拷特权）
+                .contains("drop view rca_agent_event")
+                .contains("drop table rca_event")
+                .contains("alter table rca_event_partitioned rename to rca_event")
+                .contains("grant select, insert on rca_event to control_app")
+                .contains("grant select on rca_agent_event to control_app");
+    }
+
+    @Test
+    void v29PinsInsertOnlyPolicyChainHoldReleaseSingleColumnAndArchiveOnceFence() throws IOException {
+        String sql = normalized(V29);
+
+        // 保留域三表（落码方案 §M5-18②）：策略链 insert-only（无 update/delete 开口）；
+        // hold 唯一可变面 = released_at 单列；manifest state 单列推进 + 归档恰一次栅栏
+        assertThat(sql)
+                .contains("create table retention_policy")
+                .contains("create table legal_hold")
+                .contains("create table archive_manifest")
+                .contains("released_at timestamptz")
+                .contains("constraint ck_archive_manifest_state")
+                .contains("check (state in ('exported', 'verified', 'archived'))")
+                .contains("constraint uq_archive_manifest_partition unique (partition_name)")
+                .contains("grant select, insert on retention_policy to control_app")
+                .contains("revoke update, delete on retention_policy from control_app")
+                .contains("grant update (released_at) on legal_hold to control_app")
+                .contains("revoke delete on legal_hold from control_app")
+                .contains("grant update (state) on archive_manifest to control_app")
+                .contains("revoke delete on archive_manifest from control_app");
     }
 }
