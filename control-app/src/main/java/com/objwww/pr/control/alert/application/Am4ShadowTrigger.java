@@ -17,8 +17,11 @@ import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,6 +44,12 @@ import java.util.UUID;
  * 发明生产触发器——正式触发入口仍是 G2 终裁开放项（配方 §6.1），本类只调用
  * 组件公开入口，供 195 E2E 执行者一次性驱动。
  *
+ * <p>槽位避让（195 实证 2026-09-07）：一次性实例与主容器 {@link RcaWorker} 共享
+ * 同一 DB——影子 run 落图后 RcaWorker 可能抢先认领任务（transition CAS 失败 +
+ * Holmes 执行器串味产 attempt/报告，破坏影子零报告纪律）。驱动期间占满 worker
+ * 槽位租约（{@code claimWork} 无槽即 IDLE），结束（含异常路径）全部归还；
+ * RERUN 为生产材料变化语义，故不可在 claim SQL 过滤，只能槽位级互斥。
+ *
  * @author wanghua
  * @date 2026-09-05
  */
@@ -56,6 +65,15 @@ public class Am4ShadowTrigger {
     static final String TASK_METRICS = "investigate-metrics";
     static final String TASK_LOGS = "investigate-logs";
     static final String TASK_CHANGE = "investigate-change";
+
+    /** worker 槽位 scope（与 {@code app.alert.worker.slot-scope} 生产默认同值） */
+    public static final String WORKER_SLOT_SCOPE = "rca";
+
+    /** 影子驱动期间的槽位持有者名（区别于生产 worker owner） */
+    private static final String SLOT_OWNER = "am4-shadow-trigger";
+
+    /** 槽位租约时长（一次给足：影子全链秒级完成，120s 防 worker 到期回收） */
+    private static final Duration SLOT_LEASE = Duration.ofSeconds(120L);
 
     /** F1 症状指标（deploy/alert/prometheus/rules/arena.yml 冻结规则的真实数据源） */
     private static final String METRICS_EXPR = "oa_duplicate_orders_current{job=\"order-arena\"}";
@@ -76,13 +94,15 @@ public class Am4ShadowTrigger {
     private final LogsAgent logsAgent;
     private final ChangeAgent changeAgent;
     private final NativeRcaAgent nativeRcaAgent;
+    private final SchedulerSlotRepository slots;
+    private final String slotScope;
     private final AlertClock clock;
 
     public Am4ShadowTrigger(DeterministicSupervisor supervisor, RcaRunRepository runs,
             RcaTaskRepository tasks, EvidenceRepository evidence,
             EvidenceSnapshotRepository snapshots, MetricsAgent metricsAgent,
             LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
-            AlertClock clock) {
+            SchedulerSlotRepository slots, String slotScope, AlertClock clock) {
         this.supervisor = Objects.requireNonNull(supervisor);
         this.runs = Objects.requireNonNull(runs);
         this.tasks = Objects.requireNonNull(tasks);
@@ -92,6 +112,8 @@ public class Am4ShadowTrigger {
         this.logsAgent = Objects.requireNonNull(logsAgent);
         this.changeAgent = Objects.requireNonNull(changeAgent);
         this.nativeRcaAgent = Objects.requireNonNull(nativeRcaAgent);
+        this.slots = Objects.requireNonNull(slots);
+        this.slotScope = Objects.requireNonNull(slotScope);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -108,19 +130,36 @@ public class Am4ShadowTrigger {
         RcaRun shadow = new RcaRun(UUID.randomUUID(), holmes.incidentId(),
                 holmes.generation(), RunTrigger.RERUN, RcaRunState.QUEUED,
                 holmes.investigationHash(), clock.now(), clock.now(), null, null, null);
-        runs.insert(shadow);
-        DeterministicSupervisor.StartResult started = supervisor.startRun(shadow.id(),
-                proposal(), Set.of());
-        if (started.outcome() != DeterministicSupervisor.StartOutcome.STARTED) {
-            throw new IllegalStateException("影子 run 启动失败: " + started.outcome()
-                    + " reason=" + started.rejectReason());
+        List<SchedulerSlotRepository.AcquiredSlot> held = new ArrayList<>();
+        try {
+            holdAllSlots(held);
+            runs.insert(shadow);
+            DeterministicSupervisor.StartResult started = supervisor.startRun(shadow.id(),
+                    proposal(), Set.of());
+            if (started.outcome() != DeterministicSupervisor.StartOutcome.STARTED) {
+                throw new IllegalStateException("影子 run 启动失败: " + started.outcome()
+                        + " reason=" + started.rejectReason());
+            }
+            investigate(shadow.id(), holmes.generation(), snapshotDigest);
+            freezeSnapshot(shadow.id(), holmes.generation());
+            supervisor.advance(shadow.id());
+            nativeRcaAgent.investigate(shadow.id(), snapshotDigest, holmes.generation());
+        } finally {
+            for (SchedulerSlotRepository.AcquiredSlot slot : held) {
+                slots.release(slotScope, slot.slotNo(), SLOT_OWNER, slot.leaseEpoch());
+            }
         }
-        investigate(shadow.id(), holmes.generation(), snapshotDigest);
-        freezeSnapshot(shadow.id(), holmes.generation());
-        supervisor.advance(shadow.id());
-        nativeRcaAgent.investigate(shadow.id(), snapshotDigest, holmes.generation());
         System.out.println(RUN_ID_MARKER + shadow.id());
         return shadow.id();
+    }
+
+    /** 占满 worker 槽位（尽力而为：已被生产调查占用的槽跳过，不与之争抢） */
+    private void holdAllSlots(List<SchedulerSlotRepository.AcquiredSlot> held) {
+        int total = slots.totalSlots(slotScope);
+        for (int i = 0; i < total; i++) {
+            slots.tryAcquire(slotScope, SLOT_OWNER, null, clock.now(), SLOT_LEASE)
+                    .ifPresent(held::add);
+        }
     }
 
     // ------------------------------------------------------------------ 内部

@@ -28,6 +28,7 @@ import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
 import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
@@ -42,6 +43,7 @@ import org.springframework.transaction.support.TransactionOperations;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -80,6 +82,7 @@ class Am4ShadowTriggerTest {
     private final TriggerSnapshots snapshots = new TriggerSnapshots();
     private final TriggerLedger ledger = new TriggerLedger();
     private final TriggerClaims claims = new TriggerClaims();
+    private final TriggerSlots slots = new TriggerSlots();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
@@ -154,6 +157,24 @@ class Am4ShadowTriggerTest {
                         + "=FAILED(REMOTE_UNAVAILABLE)");
     }
 
+    @Test
+    void slotsHeldDuringShadowDriveAndReleasedAfterward() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, UUID.randomUUID(), 7, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        UUID shadowId = trigger(inv -> ok(inv)).trigger(holmesId);
+
+        // 影子驱动期间占满 worker 槽位（195 实证：主容器 RcaWorker 与一次性实例
+        // 抢同一影子 run 的任务 → transition CAS 失败 + Holmes 串味产报告），
+        // 结束（含异常路径）全部归还
+        assertThat(slots.acquired).isEqualTo(TriggerSlots.TOTAL);
+        assertThat(slots.released).isEqualTo(TriggerSlots.TOTAL);
+        assertThat(stores.runs.findById(shadowId).orElseThrow().state())
+                .isEqualTo(RcaRunState.REPORTING);
+    }
+
     // ------------------------------------------------------------------ 组装
 
     private Am4ShadowTrigger trigger(ToolInvoker gateway) {
@@ -180,7 +201,8 @@ class Am4ShadowTriggerTest {
         NativeRcaAgent nativeRca = new NativeRcaAgent(evidence, claims,
                 new ClaimReducer(Set.of("holmes", "prometheus"), "ut-policy"));
         return new Am4ShadowTrigger(supervisor, stores.runs, stores.tasks, evidence,
-                snapshots, metrics, logs, change, nativeRca, () -> NOW);
+                snapshots, metrics, logs, change, nativeRca, slots,
+                Am4ShadowTrigger.WORKER_SLOT_SCOPE, () -> NOW);
     }
 
     /** 全部执行成功：恒回 EXECUTED + success 体 */
@@ -240,6 +262,52 @@ class Am4ShadowTriggerTest {
     }
 
     // ------------------------------------------------------------------ 内存件
+
+    /** 固定槽位池（TOTAL 槽；acquire/release 调用计数供占槽断言） */
+    private static final class TriggerSlots implements SchedulerSlotRepository {
+
+        static final int TOTAL = 2;
+
+        private int acquired;
+        private int released;
+
+        @Override
+        public Optional<AcquiredSlot> tryAcquire(String scope, String owner, UUID taskId,
+                Instant now, Duration lease) {
+            if (acquired >= TOTAL) {
+                return Optional.empty();
+            }
+            acquired++;
+            return Optional.of(new AcquiredSlot(acquired, acquired));
+        }
+
+        @Override
+        public boolean release(String scope, int slotNo, String owner, long leaseEpoch) {
+            released++;
+            return true;
+        }
+
+        @Override
+        public void heartbeat(String scope, int slotNo, String owner, long leaseEpoch,
+                Instant now, Duration extend) {
+            // 影子占槽租约一次给足，测试面不消费心跳
+        }
+
+        @Override
+        public long reclaimExpired(Instant now) {
+            return 0;
+        }
+
+        @Override
+        public List<Integer> occupiedSlots(String scope) {
+            return List.of();
+        }
+
+        @Override
+        public int totalSlots(String scope) {
+            return TOTAL;
+        }
+    }
 
     private static final class TriggerEdgeStore implements TaskEdgeRepository {
 
