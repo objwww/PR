@@ -1,0 +1,39 @@
+﻿== com.objwww.pr.control.it.AlertClaimIT.txt
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.681 s -- in com.objwww.pr.control.it.AlertClaimIT
+== com.objwww.pr.control.it.AlertDagCycleGuardIT.txt
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in com.objwww.pr.control.it.AlertDagCycleGuardIT
+== com.objwww.pr.control.it.AlertDagPromotionIT.txt
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.194 s -- in com.objwww.pr.control.it.AlertDagPromotionIT
+== com.objwww.pr.control.it.AlertEvidenceIT.txt
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.600 s -- in com.objwww.pr.control.it.AlertEvidenceIT
+== com.objwww.pr.control.it.AlertEvidenceSnapshotIT.txt
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.194 s -- in com.objwww.pr.control.it.AlertEvidenceSnapshotIT
+== com.objwww.pr.control.it.AlertGenerationFenceIT.txt
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.184 s -- in com.objwww.pr.control.it.AlertGenerationFenceIT
+== com.objwww.pr.control.it.AlertIncidentBudgetIT.txt
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.354 s -- in com.objwww.pr.control.it.AlertIncidentBudgetIT
+== com.objwww.pr.control.it.AlertM3RepositoryIT.txt
+Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.655 s -- in com.objwww.pr.control.it.AlertM3RepositoryIT
+== com.objwww.pr.control.it.AlertRcaEventIT.txt
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.605 s -- in com.objwww.pr.control.it.AlertRcaEventIT
+== com.objwww.pr.control.it.AlertRunBudgetLedgerIT.txt
+Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.918 s -- in com.objwww.pr.control.it.AlertRunBudgetLedgerIT
+== com.objwww.pr.control.it.AlertToolInvocationLedgerIT.txt
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.353 s -- in com.objwww.pr.control.it.AlertToolInvocationLedgerIT
+== com.objwww.pr.control.it.AlertToolReplayStoreIT.txt
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.276 s -- in com.objwww.pr.control.it.AlertToolReplayStoreIT
+== com.objwww.pr.control.it.AlertV10EvalRunIT.txt
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.476 s -- in com.objwww.pr.control.it.AlertV10EvalRunIT
+== com.objwww.pr.control.it.AlertV12StateExpansionIT.txt
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.263 s -- in com.objwww.pr.control.it.AlertV12StateExpansionIT
+== com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT.txt
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.280 s -- in com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT
+== com.objwww.pr.control.it.AlertV7MigrationContractIT.txt
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.331 s -- in com.objwww.pr.control.it.AlertV7MigrationContractIT
+== com.objwww.pr.control.it.AlertV9MigrationContractIT.txt
+Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.687 s -- in com.objwww.pr.control.it.AlertV9MigrationContractIT
+== com.objwww.pr.control.it.Am4E2E08ReplayIT.txt
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.207 s -- in com.objwww.pr.control.it.Am4E2E08ReplayIT
+== com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT.txt
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.350 s -- in com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+== TOTALS ==
