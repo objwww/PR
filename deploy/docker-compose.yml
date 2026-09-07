@@ -122,7 +122,7 @@ services:
       HOLMES_BASE_URL: ${HOLMES_BASE_URL:-http://holmes:8080}
       HOLMES_API_KEY: ${HOLMES_API_KEY:?}
       # 账本/报告记录的调查模型(与 deploy/alert compose 的 MODEL 同值,请求显式携带)
-      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/deepseek-v3}
+      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/qwen3.7-plus}
       APP_CAS_DIR: /var/cas
     ports:
       # 默认仅绑 loopback（安全底线）；Alertmanager 在 docker 内网投递，公网零暴露

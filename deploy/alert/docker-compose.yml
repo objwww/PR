@@ -69,7 +69,7 @@ services:
     environment:
       HOLMES_PORT: "8080"
       HOLMES_API_KEY: "${HOLMES_API_KEY:?}"          # server 侧鉴权(control-app 同值外带 X-API-Key)
-      MODEL: "openai/deepseek-v3"                    # 默认模型;须与 litellm config.yaml model_name 对齐
+      MODEL: "openai/qwen3.7-plus"                   # 默认模型;须与 litellm config.yaml model_name 对齐
       # AM3（M3-24）：模型调用全部收口 LiteLLM proxy（§6.6）——原直连百炼的两变量移交 proxy
       OPENAI_API_BASE: "http://litellm:4000/v1"
       OPENAI_API_KEY: "${LITELLM_RUN_KEY:?}"         # per-EvalRun 虚拟 key（部署侧铸后写入 .env；
