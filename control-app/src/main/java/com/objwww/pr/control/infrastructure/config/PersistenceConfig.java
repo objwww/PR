@@ -236,4 +236,19 @@ public class PersistenceConfig {
             com.objwww.pr.control.release.domain.repository.ConfigBundleRepository repository) {
         return new com.objwww.pr.control.release.application.ConfigBundleService(repository);
     }
+
+    // ---------------- AM5 处置域（V26，M5-11 装配；HTTP 面 = M5-12 Operator API） ----------------
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository operatorCaseRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresOperatorCaseRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.application.OperatorCaseService operatorCaseService(
+            com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository repository) {
+        return new com.objwww.pr.control.ops.application.OperatorCaseService(repository,
+                java.time.Instant::now);
+    }
 }

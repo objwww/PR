@@ -155,6 +155,23 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M5-11：新顶层包 ops 域模型（ops.domain.model + statemachine + repository 端口）
+     * 零框架——OperatorCase 聚合/状态机的 jsonb 投影映射归 infrastructure.persistence
+     * （release 域同惯例）。
+     */
+    @Test
+    void am5OpsDomainZeroFrameworkDependency() {
+        noClasses().that().resideInAnyPackage("..control.ops.domain.model..",
+                        "..control.ops.domain.statemachine..",
+                        "..control.ops.domain.repository..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

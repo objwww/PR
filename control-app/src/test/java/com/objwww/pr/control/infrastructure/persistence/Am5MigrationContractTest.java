@@ -33,6 +33,8 @@ class Am5MigrationContractTest {
 
     private static final Path V25 = Path.of(
             "src/main/resources/db/migration/V25__am5_canary_route.sql");
+    private static final Path V26 = Path.of(
+            "src/main/resources/db/migration/V26__am5_operator_case.sql");
 
     private static String normalized() throws IOException {
         return normalized(V20);
@@ -315,6 +317,38 @@ class Am5MigrationContractTest {
                 .contains("grant select, insert on canary_route_decision to control_app")
                 .contains("revoke update, delete on canary_route_decision from control_app")
                 .contains("revoke all on canary_route_decision"
+                        + " from publisher_app, notify_app, eval_app, public");
+    }
+
+    @Test
+    void v26OperatorCasePinsMergeKeySnapshotFreezeAndAbsorbingResolved() throws IOException {
+        String sql = normalized(V26);
+
+        // 幂等合并键 + 快照冻结 + N≥1 证据（落码方案 §M5-11②）；RESOLVED 吸收态由状态机
+        // 管辖（DB 只锁值域）；rev CAS 列
+        assertThat(sql)
+                .contains("create table operator_case")
+                .contains("constraint uq_operator_case_tenant_fingerprint unique (tenant, fingerprint)")
+                .contains("snapshot_digest char(64)")
+                .contains("observed_generation integer not null default 0")
+                .contains("check (jsonb_typeof(evidence_refs) = 'array'")
+                .contains("jsonb_array_length(evidence_refs) >= 1")
+                .contains("status varchar(16) not null default 'open'")
+                .contains("check (status in ('open','acked','resolved'))")
+                .contains("revision bigint not null default 1");
+    }
+
+    @Test
+    void v26NotifyOutboxCaseAssociationColumnAndGrants() throws IOException {
+        String sql = normalized(V26);
+
+        // AM7 IN_APP 渠道预留缝：只落关联列不写通知行（落码方案 §M5-11① 原文）；
+        // 授权面：命令面 CAS 需 update，delete 零开口
+        assertThat(sql)
+                .contains("alter table notify_outbox add column case_id uuid references operator_case(id)")
+                .contains("grant select, insert, update on operator_case to control_app")
+                .contains("revoke delete on operator_case from control_app")
+                .contains("revoke all on operator_case"
                         + " from publisher_app, notify_app, eval_app, public");
     }
 }
