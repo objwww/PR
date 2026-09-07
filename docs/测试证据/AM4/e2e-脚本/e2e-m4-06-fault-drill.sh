@@ -32,12 +32,14 @@ if [ -n "${E4_RUN_DIR:-}" ]; then
     # runall 批次内：完整输出归档 raw/（附录 §一 runs/<UTC批次>/raw）
     mkdir -p "$E4_RUN_DIR/raw"
     LOG="$E4_RUN_DIR/raw/e2e-m4-06-fault-drill.log"
-    mvn verify -DskipITs=false -Dit.test=Am4E2E06FaultDrillIT \
-        -Dsurefire.failIfNoSpecifiedTests=false > "$LOG" 2>&1 || RC=$?
+    mvn clean verify -DskipITs=false -Dit.test=Am4E2E06FaultDrillIT \
+        -Dtest=Am4E2E06FaultDrillIT -Dsurefire.failIfNoSpecifiedTests=false \
+        -DfailIfNoTests=false > "$LOG" 2>&1 || RC=$?
     cat "$LOG"
 else
-    mvn verify -DskipITs=false -Dit.test=Am4E2E06FaultDrillIT \
-        -Dsurefire.failIfNoSpecifiedTests=false || RC=$?
+    mvn clean verify -DskipITs=false -Dit.test=Am4E2E06FaultDrillIT \
+        -Dtest=Am4E2E06FaultDrillIT -Dsurefire.failIfNoSpecifiedTests=false \
+        -DfailIfNoTests=false || RC=$?
 fi
 [ "$RC" -eq 0 ] || { echo "[E2E-M4-06] FAIL（IT 非零退出 rc=$RC）"; exit "$RC"; }
 

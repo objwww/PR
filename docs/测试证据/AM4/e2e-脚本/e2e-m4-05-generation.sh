@@ -38,10 +38,15 @@ while [ $i -lt "$POLL_MAX" ]; do
 done
 
 # 同一 incident 两代 run 可独立审计（N 与 N+1 分行）
+# 子查询按主告警 incident 过滤（F1 伴生 ArenaOrderStuck 的 run 落库更晚，
+# desc limit 1 不过滤会数错 incident，02 场景实证的同款伴生链问题）
 TWO_GEN=$(e4_sql "
     select count(distinct generation) from rca_run r
-     where r.incident_id = (select incident_id from rca_run where created_at >= '$T0'
-                            order by created_at desc limit 1)")
+     where r.incident_id = (select r2.incident_id from rca_run r2
+                             join incident i2 on i2.id = r2.incident_id
+                             where r2.created_at >= '$T0'
+                               and i2.incident_key like '%ArenaDuplicateOrders%'
+                             order by r2.created_at desc limit 1)")
 echo "  同 incident 代际数=$TWO_GEN（≥2 时代际栅栏生效；=1 时二次注入未命中同键）"
 
 # 代际栅栏（INV-AM4-4）：死 run（superseded/expired/cancelled）零图推进——

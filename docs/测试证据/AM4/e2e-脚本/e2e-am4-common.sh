@@ -121,17 +121,22 @@ E4_ANAME_F3="ArenaOrderStuck"
 e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     fault="$1"
     aname=$(eval echo "\$E4_ANAME_$fault")
-    active=$(e4_sql "
-        select scenario_id || ' ' || generation from arena.oa_chaos_session
-         where fault_type = '$fault'
-           and state in ('PREPARED','ACTIVE','RECOVERING')
-         order by created_at desc limit 1")
-    if [ -n "$active" ]; then
-        # 故意词切分：quiesce.py F1 <scenario_id> <generation>
-        docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault" $active
-    else
-        docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
-    fi
+    # v11：多轮注入会话可叠加（场景 10 同 fault 连注 5 次），v2 只 off 最新一条
+    # 会残留 gauge（11 实证 gauge=6 firing 未回落）——有界循环逐个 off-only
+    # （quiesce.py v3：只摘除不等待），最后无参调用统一等静止面。
+    i=0
+    while [ $i -lt 8 ]; do
+        active=$(e4_sql "
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = '$fault'
+               and state in ('PREPARED','ACTIVE','RECOVERING')
+             order by created_at desc limit 1")
+        [ -z "$active" ] && break
+        # 故意词切分：quiesce.py F1 off <scenario_id> <generation>
+        docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault" off $active || true
+        i=$((i + 1))
+    done
+    docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
     am_data=$(docker inspect "$E4_AM_CONTAINER" --format \
         '{{range .Mounts}}{{if eq .Destination "/alertmanager"}}{{.Source}}{{end}}{{end}}')
     docker stop "$E4_AM_CONTAINER" >/dev/null
@@ -190,6 +195,12 @@ e4_begin() {
         docker start arena-e2e-cli >/dev/null
         echo "[AM4-E2E] arena-e2e-cli 未运行，已 start（环境自愈）"
     fi
+    # 驱动面同步自愈（v11）：容器无 bind mount，quiesce.py/driver.py 靠 docker cp
+    # 进 /e2e——每次 begin 以宿主机 BASE 版本覆盖，脚本迭代即生效不依赖历史 cp
+    for py in quiesce.py driver.py; do
+        [ -f "$E4_SCRIPT_DIR/$py" ] && \
+            docker cp "$E4_SCRIPT_DIR/$py" "arena-e2e-cli:/e2e/$py" >/dev/null
+    done
     mkdir -p "$E4_RUN_DIR/sql" "$E4_RUN_DIR/raw"
     e4_note "BEGIN batch=$E4_BATCH_ID scenario=${0##*/} git=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
     echo "[AM4-E2E] batch=$E4_BATCH_ID dir=$E4_RUN_DIR"

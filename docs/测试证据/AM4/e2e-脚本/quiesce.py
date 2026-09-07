@@ -14,6 +14,11 @@ v2：scenarioId 每轮按时钟生成（uq_chaos_scenario 全局唯一，同 id 
 激活），本脚本无法自行探测上一轮会话——活跃会话由调用方（e2e-am4-common.sh
 e4_quiesce）经 PG 查出后传参执行 off；未传参 = 上轮已收口，直接等静止面。
 
+v3：off-only 模式（`quiesce.py <fault> off <scenario_id> <generation>`）——
+多轮注入会话可叠加（场景 10 同 fault 连注 5 次），v2 只 off 最新一条会残留
+gauge（11 实证 gauge=6 firing 未回落）；调用方先循环 off-only 逐个摘除活跃
+会话（不等待），最后以无参调用统一等静止面。
+
 步骤：（有参则 off(expectedGeneration=generation)）→ 轮询等 gauge==0 且告警
 回落（resolve 后才可能再次 firing）。输出 E2E 行协议。
 """
@@ -28,13 +33,22 @@ POLL_INTERVAL_SECS = 5
 
 
 def main():
-    fault = sys.argv[1].upper()
+    argv = sys.argv[1:]
+    off_only = False
+    # off 标志在 fault 之后的第二位（调用序 `quiesce.py F1 off <scenario> <gen>`）；
+    # 摘除后保持 fault 在 argv[0]，v2 旧序（F1 <scenario> <gen>）不受影响
+    if len(argv) >= 2 and argv[1].lower() == "off":
+        off_only = True
+        argv = [argv[0]] + argv[2:]
+    fault = argv[0].upper()
     sc = driver.SC[fault]
-    if len(sys.argv) >= 4:
-        scenario, gen = sys.argv[2], int(sys.argv[3])
+    if len(argv) >= 3:
+        scenario, gen = argv[1], int(argv[2])
         st, body = driver.deactivate(fault, scenario, gen)
         print("E2E|INFO|quiesce:%s|off=%s %s" % (fault, st,
                                                  body.get("state", "")), flush=True)
+        if off_only:
+            sys.exit(0)
     deadline = time.time() + QUIESCE_TIMEOUT_SECS
     while time.time() < deadline:
         firing = driver.prom_firing(sc.alertname) is not None

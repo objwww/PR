@@ -52,11 +52,11 @@ e4_sql "select state, count(*) from run_budget_entry group by state" | while rea
     echo "    $line"
 done
 
-# 幂等重试不二扣：同幂等键（run,task,attempt,call_seq,tool）不出现重复预留行
+# 幂等重试不二扣：同幂等键（run,task,attempt,call_seq,budget_kind，V13 uq_run_budget_entry_key）不出现重复预留行
 DUP_RESERVE=$(e4_sql "
     select count(*) from (
-        select run_id, task_id, attempt_id, call_seq, tool_name, count(*) c
-          from run_budget_entry group by run_id, task_id, attempt_id, call_seq, tool_name
+        select run_id, task_id, attempt_id, call_seq, budget_kind, count(*) c
+          from run_budget_entry group by run_id, task_id, attempt_id, call_seq, budget_kind
          having count(*) > 1) d")
 e4_assert_eq "幂等键零重复预留（不二扣）" "$DUP_RESERVE" "0"
 
