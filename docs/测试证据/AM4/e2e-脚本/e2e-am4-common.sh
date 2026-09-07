@@ -171,8 +171,15 @@ e4_assert_eq() {
     fi
 }
 
-# 批次/场景开始：建证据目录（sql/ 只读事实对拍、raw/ 脱敏组件输出）+ 记账
+# 批次/场景开始：建证据目录（sql/ 只读事实对拍、raw/ 脱敏组件输出）+ 记账；
+# 环境自愈：arena-e2e-cli 是 sleep 14400 常驻容器（/e2e 驱动面），到期退出后
+# 原地 start 续命（Cmd 重跑，2026-09-07 15:43 实证 sleep 到期 Exited 0 断驱动）
 e4_begin() {
+    cli_state=$(docker inspect arena-e2e-cli --format '{{.State.Running}}' 2>/dev/null || echo missing)
+    if [ "$cli_state" != "true" ]; then
+        docker start arena-e2e-cli >/dev/null
+        echo "[AM4-E2E] arena-e2e-cli 未运行，已 start（环境自愈）"
+    fi
     mkdir -p "$E4_RUN_DIR/sql" "$E4_RUN_DIR/raw"
     e4_note "BEGIN batch=$E4_BATCH_ID scenario=${0##*/} git=$(git rev-parse HEAD 2>/dev/null || echo unknown)"
     echo "[AM4-E2E] batch=$E4_BATCH_ID dir=$E4_RUN_DIR"
