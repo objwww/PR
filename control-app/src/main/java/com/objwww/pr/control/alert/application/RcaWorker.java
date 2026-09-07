@@ -227,7 +227,7 @@ public class RcaWorker {
         orchestrator.markRunRunning(work.run(), now);
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), work.task().id(),
                 work.task().attemptCount(), work.task().leaseEpoch(), owner,
-                RcaAttemptStatus.STARTED, null, null, null, now, null);
+                RcaAttemptStatus.STARTED, null, null, null, now, null, null);
         // M3-04 全程落档：attempt 铸造同事事务落 InvestigationResult(STARTED)——
         // 进程在外调后落库前被杀也留悬挂 STARTED 可查（回收标 UNKNOWN）。
         // id 复用 attempt.id()（一 attempt 一记录的 1:1 锚，executor 铸 tool_call 归属）

@@ -395,7 +395,7 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
 
     private RcaAttempt startedAttempt(UUID taskId) {
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, WORKER,
-                RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null);
+                RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null, null);
         new PostgresRcaAttemptRepository(controlJdbc).insert(attempt);
         return attempt;
     }
@@ -450,6 +450,6 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
     private static RcaTaskExecutor.AttemptArtifact artifact() {
         return new RcaTaskExecutor.AttemptArtifact(1, ValidationStatus.STRUCTURE_VALIDATED,
                 List.of(), "{\"schema_version\":\"1\"}", "raw", null, List.of(),
-                null, null, "deepseek-v3", null, null, null, true);
+                null, null, "deepseek-v3", null, null, null, true, null);
     }
 }

@@ -39,13 +39,17 @@ public interface RcaTaskExecutor {
      * 一次 attempt 的落档载体（M3-08；成功与 REJECTED_* 同权返回——验证失败也有完整落档，
      * INV-AM3-7）。rawText 为脱敏后原文；toolCalls 已按 attempt/run/generation 铸成域对象
      * （investigationResultId = attempt.id）。
+     *
+     * <p>samplingFingerprint（M5-04/V23）：采样指纹的 jsonb Map 形态（null = 无 LLM
+     * 响应现场，触网前失败），随收尾事务落 rca_attempt 行。
      */
     record AttemptArtifact(int schemaVersion, ValidationStatus validationStatus,
                            List<String> validationErrors, String packageJson, String rawText,
                            EvidencePackageV2 typedPackage, List<RcaToolCall> toolCalls,
                            Digest rawDigest, Digest payloadDigest, String model,
                            Integer promptTokens, Integer completionTokens,
-                           Integer totalTokens, boolean usageMissing) {
+                           Integer totalTokens, boolean usageMissing,
+                           java.util.Map<String, Object> samplingFingerprint) {
         public AttemptArtifact {
             validationErrors = validationErrors == null ? List.of() : List.copyOf(validationErrors);
             toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);

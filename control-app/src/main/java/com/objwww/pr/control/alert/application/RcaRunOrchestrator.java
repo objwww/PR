@@ -359,10 +359,13 @@ public class RcaRunOrchestrator {
             case FAILED_RETRYABLE -> RcaAttemptStatus.FAILED_RETRYABLE;
             case FAILED_TERMINAL -> RcaAttemptStatus.FAILED_TERMINAL;
         };
+        // M5-04：采样指纹随收尾事务落 attempt 行（触网前失败无响应现场 = null）
+        Map<String, Object> fingerprint = result.artifact()
+                .map(RcaTaskExecutor.AttemptArtifact::samplingFingerprint).orElse(null);
         return new RcaAttempt(started.id(), started.taskId(), started.attemptNo(),
                 started.leaseEpoch(), started.workerId(), status,
                 result.errorClass(), result.errorCode(), result.errorDetail(),
-                started.startedAt(), now);
+                started.startedAt(), now, fingerprint);
     }
 
     private static RcaTask withTaskState(RcaTask t, RcaTaskState state,

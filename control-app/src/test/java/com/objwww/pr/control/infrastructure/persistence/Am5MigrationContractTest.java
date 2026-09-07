@@ -25,6 +25,9 @@ class Am5MigrationContractTest {
     private static final Path V22 = Path.of(
             "src/main/resources/db/migration/V22__am5_golden_candidate.sql");
 
+    private static final Path V23 = Path.of(
+            "src/main/resources/db/migration/V23__am5_sampling_fingerprint.sql");
+
     private static String normalized() throws IOException {
         return normalized(V20);
     }
@@ -205,5 +208,23 @@ class Am5MigrationContractTest {
                 .doesNotContainPattern("grant [a-z ,]*delete on golden_review_event")
                 .contains("revoke all on golden_candidate, golden_review_event"
                         + " from control_app, publisher_app, notify_app, public");
+    }
+
+    @Test
+    void v23SamplingFingerprintLandsOnAttemptWithKeyContract() throws IOException {
+        String sql = normalized(V23);
+
+        // 落码方案 §M5-04② 方案甲：rca_attempt 直挂 sampling_fingerprint jsonb
+        //（两态/身份/trial 键集 DB 兜底；字段级完整性由域面 isGateEligible 把门，
+        // jsonb 键存在性检查对嵌套 null 值不过问——诚实留空与缺键在 DB 面不分家）
+        assertThat(sql)
+                .contains("alter table rca_attempt add column sampling_fingerprint jsonb")
+                .contains("constraint ck_rca_attempt_fingerprint_keys check (sampling_fingerprint is null")
+                .contains("sampling_fingerprint ? 'requested'")
+                .contains("sampling_fingerprint ? 'effective'")
+                .contains("sampling_fingerprint ? 'provider_fingerprint'")
+                .contains("sampling_fingerprint ? 'model'")
+                .contains("sampling_fingerprint ? 'trial_no'")
+                .contains("comment on column rca_attempt.sampling_fingerprint");
     }
 }

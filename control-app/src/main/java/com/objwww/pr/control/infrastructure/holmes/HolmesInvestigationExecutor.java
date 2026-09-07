@@ -18,6 +18,7 @@ import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
+import com.objwww.pr.control.eval.domain.model.SamplingFingerprint;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.observability.StructuredLog;
 import com.objwww.pr.shared.Digest;
@@ -54,6 +55,20 @@ import java.util.concurrent.TimeUnit;
 public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(HolmesInvestigationExecutor.class);
+
+    /**
+     * 采样声明（M5-04/V23）：本执行器发送/背书的采样参数 + provider 指纹。
+     * temperature/top_p/max_tokens/seed 未配置为 null（诚实留空 → 指纹不完整 →
+     * 门禁拒绝，INV-AM5-3 fail-closed）；providerFingerprint 必填（E-17：指纹单列）。
+     */
+    public record SamplingSpec(Double temperature, Double topP, Integer maxTokens, Long seed,
+                               String providerFingerprint) {
+        public SamplingSpec {
+            if (providerFingerprint == null || providerFingerprint.isBlank()) {
+                throw new IllegalArgumentException("providerFingerprint 不得为 blank");
+            }
+        }
+    }
 
     /**
      * 官方 response_format：strict json_schema 强约束 v2 类型化包（AM3 §6.3；M3-08 升版）——
@@ -107,6 +122,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
     private final ObjectMapper mapper;
     private final AlertClock clock;
     private final String model;
+    private final SamplingSpec samplingSpec;
     private final String holmesVersion;
     private final int maxEvents;
     private final Duration heartbeatInterval;
@@ -120,6 +136,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                                        EvidencePackageValidator validator,
                                        AlertClock clock,
                                        String model,
+                                       SamplingSpec samplingSpec,
                                        String holmesVersion,
                                        int maxEvents,
                                        Duration heartbeatInterval,
@@ -134,6 +151,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
         this.mapper = new ObjectMapper();
         this.clock = Objects.requireNonNull(clock, "clock");
         this.model = model;
+        this.samplingSpec = Objects.requireNonNull(samplingSpec, "samplingSpec");
         this.holmesVersion = holmesVersion;
         if (maxEvents < 1) {
             throw new IllegalArgumentException("maxEvents 从 1 起");
@@ -238,7 +256,7 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                 result.packageJson(), result.redactedRawText(), result.typedPackage(),
                 toolCalls, Digest.sha256Of(chat.body()), payloadDigest, model,
                 chat.promptTokens(), chat.completionTokens(), chat.totalTokens(),
-                chat.usageMissing());
+                chat.usageMissing(), samplingFingerprintMap());
 
         // M3-27/28：attempt 终态结构化事件 + 指标——标签为封闭枚举值，不含 ask 正文/原始工具参数
         StructuredLog.event(log, "rca_attempt_finished", Map.ofEntries(
@@ -257,6 +275,22 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                     String.join("; ", result.errors()), artifact);
         }
         return ExecutionResult.success(artifact);
+    }
+
+    /**
+     * 采样指纹（M5-04/V23）：请求态 = 配置声明值；生效态 = 成功调用背书的请求值
+     * （temperature/top_p/max_tokens 被 LiteLLM 接受，max_tokens 为 thinking 型实际
+     * 预算）；生效 seed 无回传渠道 → null（V10 诚实留空 → isGateEligible 恒 false，
+     * 门禁自然拒绝直到回传链路接通，INV-AM5-3 fail-closed）。trial_no = 0 = 非配对
+     * 试验（M5-05 起经 run 面携带真实轮次）。
+     */
+    private Map<String, Object> samplingFingerprintMap() {
+        return new SamplingFingerprint(
+                new SamplingFingerprint.Sampling(samplingSpec.temperature(), samplingSpec.topP(),
+                        samplingSpec.maxTokens(), samplingSpec.seed()),
+                new SamplingFingerprint.Sampling(samplingSpec.temperature(), samplingSpec.topP(),
+                        samplingSpec.maxTokens(), null),
+                samplingSpec.providerFingerprint(), model, 0).toMap();
     }
 
     /** tool_calls 解析 + 适配；解析失败（外层损坏/超限）返回空列表——验证链已给出 REJECTED 决策 */

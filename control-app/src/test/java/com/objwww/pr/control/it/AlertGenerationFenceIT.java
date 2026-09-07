@@ -115,7 +115,7 @@ class AlertGenerationFenceIT extends PostgresITBase {
         insertTask(fresh.runId(), "NEW_WORK");
 
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, "it-worker",
-                RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null);
+                RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null, null);
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(
                 tasks.findById(taskId).orElseThrow(), "it-worker", -1, -1,
                 RcaTaskExecutor.ExecutionResult.success(artifact()),
@@ -176,6 +176,6 @@ class AlertGenerationFenceIT extends PostgresITBase {
     private static RcaTaskExecutor.AttemptArtifact artifact() {
         return new RcaTaskExecutor.AttemptArtifact(1, ValidationStatus.STRUCTURE_VALIDATED,
                 List.of(), "{\"schema_version\":\"1\"}", "raw", null, List.of(),
-                null, null, "deepseek-v3", null, null, null, true);
+                null, null, "deepseek-v3", null, null, null, true, null);
     }
 }

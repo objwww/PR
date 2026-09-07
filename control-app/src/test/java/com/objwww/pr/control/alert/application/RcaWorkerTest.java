@@ -83,7 +83,7 @@ class RcaWorkerTest {
                             ValidationStatus.REJECTED_MALFORMED, List.of("缺 analysis"),
                             null, "plain text", null, List.of(),
                             Digest.sha256Of("plain text"), null, "deepseek-v3",
-                            null, null, null, true)));
+                            null, null, null, true, null)));
         }
     }
 
@@ -150,7 +150,7 @@ class RcaWorkerTest {
     private static RcaTaskExecutor.AttemptArtifact validatedArtifact() {
         return new RcaTaskExecutor.AttemptArtifact(1, ValidationStatus.STRUCTURE_VALIDATED,
                 List.of(), "{\"schema_version\":\"1\"}", "raw", null, List.of(),
-                null, null, "deepseek-v3", null, null, null, true);
+                null, null, "deepseek-v3", null, null, null, true, null);
     }
 
     private Incident soleIncidentOf(String service) {
@@ -250,7 +250,7 @@ class RcaWorkerTest {
 
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), work.get().task().id(),
                 work.get().task().attemptCount(), work.get().task().leaseEpoch(), "worker-a",
-                RcaAttemptStatus.STARTED, null, null, null, clock.now, null);
+                RcaAttemptStatus.STARTED, null, null, null, clock.now, null, null);
         stores.attempts.insert(attempt);
 
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(
@@ -341,7 +341,7 @@ class RcaWorkerTest {
         RcaRunOrchestrator staleOrchestrator = newOrchestrator();
         RcaAttempt staleAttempt = new RcaAttempt(UUID.randomUUID(), staleTask.id(),
                 staleTask.attemptCount(), staleTask.leaseEpoch(), "worker-a",
-                RcaAttemptStatus.STARTED, null, null, null, clock.now, null);
+                RcaAttemptStatus.STARTED, null, null, null, clock.now, null, null);
         RcaRunOrchestrator.FinishOutcome rejected = staleOrchestrator.finishTask(
                 staleTask, "worker-a", crashed.get().slotNo(), crashed.get().slotEpoch(),
                 RcaTaskExecutor.ExecutionResult.success(staticArtifact()), staleAttempt);
@@ -375,7 +375,7 @@ class RcaWorkerTest {
 
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), held.id(), held.attemptCount(),
                 held.leaseEpoch(), "worker-a", RcaAttemptStatus.STARTED, null, null, null,
-                clock.now, null);
+                clock.now, null, null);
         stores.attempts.insert(attempt);
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(held, "worker-a",
                 work.get().slotNo(), work.get().slotEpoch(),

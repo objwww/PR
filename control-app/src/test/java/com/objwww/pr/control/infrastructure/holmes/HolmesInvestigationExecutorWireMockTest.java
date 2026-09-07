@@ -88,8 +88,14 @@ class HolmesInvestigationExecutorWireMockTest {
                 Duration.ofSeconds(2), Duration.ofMillis(600), 1024 * 1024);
         executor = new HolmesInvestigationExecutor(client, stores.events,
                 stores.invocations, TransactionOperations.withoutTransaction(),
-                validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
+                validator, new FixedClock(), "deepseek-v3", samplingSpec(), "1.5.1", 20,
                 Duration.ofMillis(50), 1, AlertMetrics.NOOP);
+    }
+
+    /** M5-04：部分字段未配置（诚实留空）的采样声明——指纹可落库但门禁不可过 */
+    private HolmesInvestigationExecutor.SamplingSpec samplingSpec() {
+        return new HolmesInvestigationExecutor.SamplingSpec(0.2, null, 4096, null,
+                "litellm:deepseek-v3@test");
     }
 
     @AfterEach
@@ -154,7 +160,7 @@ class HolmesInvestigationExecutorWireMockTest {
 
     private RcaAttempt attempt(RcaTask task) {
         return new RcaAttempt(UUID.randomUUID(), task.id(), 1, 1L, "worker-a",
-                RcaAttemptStatus.STARTED, null, null, null, T0, null);
+                RcaAttemptStatus.STARTED, null, null, null, T0, null, null);
     }
 
     /** 投一条告警事件（prompt 材料；EX-A12 注入文本经 annotations 注入） */
@@ -235,6 +241,37 @@ class HolmesInvestigationExecutorWireMockTest {
         ExternalInvocation row = soleLedgerRow();
         assertThat(row.state()).isEqualTo(ExternalInvocationState.SUCCEEDED);
         assertThat(row.usageMissing()).isTrue();
+    }
+
+    @Test
+    @DisplayName("M5-04 采样指纹：每 Attempt 回写两态指纹 jsonb 形态（键集 = V23 ck）")
+    void m504_samplingFingerprintAttachedToArtifact() throws Exception {
+        stubOk(chatBody(validPackage(), 10, 5, 15));
+
+        RcaTaskExecutor.ExecutionResult result = executeWithMaterial("错误率 50%");
+
+        var artifact = result.artifact().orElseThrow();
+        Map<String, Object> fingerprint = artifact.samplingFingerprint();
+        // 键集与 ck_rca_attempt_fingerprint_keys 一一对应（V23 DB 兜底面）
+        assertThat(fingerprint.keySet()).containsExactly(
+                "requested", "effective", "provider_fingerprint", "model", "trial_no");
+        assertThat(fingerprint.get("provider_fingerprint"))
+                .isEqualTo("litellm:deepseek-v3@test");
+        assertThat(fingerprint.get("model")).isEqualTo("deepseek-v3");
+        assertThat(fingerprint.get("trial_no")).isEqualTo(0L);
+        // 两态分离：请求态 temperature 已声明；生效 seed 无回传渠道 → null（诚实留空）
+        assertSamplingState(fingerprint, "requested");
+        assertSamplingState(fingerprint, "effective");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void assertSamplingState(Map<String, Object> fingerprint, String state) {
+        Map<String, Object> inner = (Map<String, Object>) fingerprint.get(state);
+        assertThat(inner.keySet()).containsExactly("temperature", "top_p", "max_tokens", "seed");
+        assertThat(inner.get("temperature")).isEqualTo(0.2);
+        assertThat(inner.get("top_p")).isNull();
+        assertThat(inner.get("max_tokens")).isEqualTo(4096);
+        assertThat(inner.get("seed")).isNull();
     }
 
     // ------------------------------------------------------------------ 错误分类（EX-A04/A05/A06/A11）
@@ -383,7 +420,7 @@ class HolmesInvestigationExecutorWireMockTest {
         EvidencePackageValidator tight = new EvidencePackageValidator(200, 20, 4000);
         HolmesInvestigationExecutor tightExecutor = new HolmesInvestigationExecutor(client,
                 stores.events, stores.invocations, TransactionOperations.withoutTransaction(),
-                tight, new FixedClock(), "deepseek-v3", "1.5.1", 20, Duration.ofMillis(50), 1,
+                tight, new FixedClock(), "deepseek-v3", samplingSpec(), "1.5.1", 20, Duration.ofMillis(50), 1,
                 AlertMetrics.NOOP);
         stubOk("{\"analysis\": \"" + "x".repeat(500) + "\"}");
 
@@ -423,7 +460,7 @@ class HolmesInvestigationExecutorWireMockTest {
                 Duration.ofSeconds(2), Duration.ofSeconds(2), 200);
         HolmesInvestigationExecutor cappedExecutor = new HolmesInvestigationExecutor(capped,
                 stores.events, stores.invocations, TransactionOperations.withoutTransaction(),
-                validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
+                validator, new FixedClock(), "deepseek-v3", samplingSpec(), "1.5.1", 20,
                 Duration.ofMillis(50), 1, AlertMetrics.NOOP);
         // 完整响应合法且远超 200 字节——若 client 未截断，本用例会 STRUCTURE_VALIDATED
         stubOk(chatBody(validPackage(), 10, 5, 15));
@@ -552,7 +589,7 @@ class HolmesInvestigationExecutorWireMockTest {
                 Duration.ofSeconds(2), Duration.ofSeconds(2), 1024 * 1024);
         HolmesInvestigationExecutor failing = new HolmesInvestigationExecutor(client,
                 stores.events, failingLedger, TransactionOperations.withoutTransaction(),
-                validator, new FixedClock(), "deepseek-v3", "1.5.1", 20,
+                validator, new FixedClock(), "deepseek-v3", samplingSpec(), "1.5.1", 20,
                 Duration.ofMillis(50), 1, AlertMetrics.NOOP);
         holmes.stubFor(post(urlPathEqualTo("/api/chat"))
                 .willReturn(aResponse().withStatus(200).withBody("{}")));

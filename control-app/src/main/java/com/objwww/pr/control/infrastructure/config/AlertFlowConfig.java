@@ -143,6 +143,13 @@ public class AlertFlowConfig {
                                                        TransactionOperations tx,
                                                        EvidencePackageValidator validator,
                                                        @Value("${app.alert.holmes.model:}") String model,
+                                                       @Value("${app.alert.holmes.sampling.temperature:}") String samplingTemperature,
+                                                       @Value("${app.alert.holmes.sampling.top-p:}") String samplingTopP,
+                                                       @Value("${app.alert.holmes.sampling.max-tokens:}") String samplingMaxTokens,
+                                                       @Value("${app.alert.holmes.sampling.seed:}") String samplingSeed,
+                                                       // M5-04：采样指纹与 eval_run 头（V10）同源——
+                                                       // provider 指纹复用同一配置键，单一事实源
+                                                       @Value("${app.alert.eval.provider-fingerprint}") String providerFingerprint,
                                                        @Value("${app.alert.holmes.version:}") String holmesVersion,
                                                        @Value("${app.alert.holmes.max-events:20}") int maxEvents,
                                                        @Value("${app.alert.holmes.heartbeat-interval:PT30S}") Duration heartbeatInterval,
@@ -150,9 +157,27 @@ public class AlertFlowConfig {
                                                        // 包内显式 schema_version 缺失时按此版本兜底
                                                        @Value("${app.alert.holmes.expected-schema-version:2}") int expectedSchemaVersion,
                                                        AlertMetrics alertMetrics) {
+        // M5-04：未配置的采样参数 = null（诚实留空 → 指纹不完整 → 门禁拒绝，INV-AM5-3）
+        HolmesInvestigationExecutor.SamplingSpec samplingSpec =
+                new HolmesInvestigationExecutor.SamplingSpec(
+                        doubleOrNull(samplingTemperature), doubleOrNull(samplingTopP),
+                        integerOrNull(samplingMaxTokens), longOrNull(samplingSeed),
+                        providerFingerprint);
         return new HolmesInvestigationExecutor(client, events, ledger, tx, validator,
-                AlertClock.system(), model, holmesVersion, maxEvents, heartbeatInterval,
+                AlertClock.system(), model, samplingSpec, holmesVersion, maxEvents, heartbeatInterval,
                 expectedSchemaVersion, alertMetrics);
+    }
+
+    private static Double doubleOrNull(String value) {
+        return value == null || value.isBlank() ? null : Double.valueOf(value.trim());
+    }
+
+    private static Integer integerOrNull(String value) {
+        return value == null || value.isBlank() ? null : Integer.valueOf(value.trim());
+    }
+
+    private static Long longOrNull(String value) {
+        return value == null || value.isBlank() ? null : Long.valueOf(value.trim());
     }
 
     /** M3-08：STRUCTURE_VALIDATED 即铸 publication(READY) + 每渠道 outbox（候选标记） */

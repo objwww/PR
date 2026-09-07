@@ -1,5 +1,7 @@
 package com.objwww.pr.control.infrastructure.persistence;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaAttemptStatus;
 import com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository;
@@ -7,13 +9,20 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
  * rca_attempt 的 Postgres 实现（V1 step_attempt 同构）。
+ * sampling_fingerprint（M5-04/V23）：Map ↔ jsonb；insert 为 null（STARTED 行），
+ * 终态 update 随收尾事务写入。
  */
 public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     private final JdbcClient jdbc;
 
@@ -26,10 +35,12 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
         jdbc.sql("""
                 INSERT INTO rca_attempt (
                     id, task_id, attempt_no, lease_epoch, worker_id,
-                    status, error_class, error_code, error_detail, started_at
+                    status, error_class, error_code, error_detail, started_at,
+                    sampling_fingerprint
                 ) VALUES (
                     :id, :taskId, :attemptNo, :leaseEpoch, :workerId,
-                    :status, :errorClass, :errorCode, CAST(:errorDetail AS jsonb), :startedAt
+                    :status, :errorClass, :errorCode, CAST(:errorDetail AS jsonb), :startedAt,
+                    CAST(:samplingFingerprint AS jsonb)
                 )
                 """)
                 .param("id", attempt.id())
@@ -42,6 +53,7 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 .param("errorCode", attempt.errorCode())
                 .param("errorDetail", JsonbText.encode(attempt.errorDetail()))
                 .param("startedAt", Timestamp.from(attempt.startedAt()))
+                .param("samplingFingerprint", fingerprintJson(attempt.samplingFingerprint()))
                 .update();
     }
 
@@ -51,7 +63,8 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 UPDATE rca_attempt SET
                     status = :status, error_class = :errorClass,
                     error_code = :errorCode, error_detail = CAST(:errorDetail AS jsonb),
-                    finished_at = :finishedAt
+                    finished_at = :finishedAt,
+                    sampling_fingerprint = CAST(:samplingFingerprint AS jsonb)
                  WHERE id = :id
                 """)
                 .param("status", attempt.status().name())
@@ -59,6 +72,7 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 .param("errorCode", attempt.errorCode())
                 .param("errorDetail", JsonbText.encode(attempt.errorDetail()))
                 .param("finishedAt", ts(attempt.finishedAt()))
+                .param("samplingFingerprint", fingerprintJson(attempt.samplingFingerprint()))
                 .param("id", attempt.id())
                 .update() > 0;
     }
@@ -69,6 +83,28 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 .param("taskId", taskId)
                 .query(this::mapRow)
                 .list();
+    }
+
+    private static String fingerprintJson(Map<String, Object> fingerprint) {
+        if (fingerprint == null) {
+            return null;
+        }
+        try {
+            return MAPPER.writeValueAsString(fingerprint);
+        } catch (Exception e) {
+            throw new IllegalStateException("sampling_fingerprint 序列化失败", e);
+        }
+    }
+
+    private static Map<String, Object> fingerprintMap(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return MAPPER.readValue(json, MAP_TYPE);
+        } catch (Exception e) {
+            throw new IllegalStateException("sampling_fingerprint 反序列化失败", e);
+        }
     }
 
     private static Timestamp ts(java.time.Instant instant) {
@@ -88,6 +124,7 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 rs.getString("error_code"),
                 JsonbText.decode(rs.getString("error_detail")),
                 rs.getTimestamp("started_at").toInstant(),
-                finishedAt == null ? null : finishedAt.toInstant());
+                finishedAt == null ? null : finishedAt.toInstant(),
+                fingerprintMap(rs.getString("sampling_fingerprint")));
     }
 }
