@@ -100,6 +100,21 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M4-14（AM4 落码方案 v1.3 任务行）："禁运行时网络下载插件"的结构卡点——
+     * 工具注册/调度面（application.tool：Registry/Gateway/Executor 契约）禁触一切
+     * 网络 API；网络客户端只允许出现在具体工具执行器实现（M4-27+ 的 infra 面与
+     * WireMock 测试）中，经构造注入进 Registry。配合 Registry 构造后不可变（无运行时
+     * 注册 API），运行期装载插件在网络面上不可能。
+     */
+    @Test
+    void toolGatewaySurfaceNeverTouchesNetworkApis() {
+        noClasses().that().resideInAPackage("..control.alert.application.tool..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "java.net.http..", "org.apache.http..", "okhttp3..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

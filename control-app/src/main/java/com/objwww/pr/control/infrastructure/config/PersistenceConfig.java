@@ -148,6 +148,15 @@ public class PersistenceConfig {
                 jdbc, tx, independent);
     }
 
+    /** M4-18：只读工具调用账本（消费方 = ToolGateway 执行路径接线，M4-27 起） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger rcaToolInvocationLedger(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaToolInvocationLedger(
+                jdbc, tx);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
