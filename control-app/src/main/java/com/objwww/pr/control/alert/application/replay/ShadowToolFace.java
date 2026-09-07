@@ -33,6 +33,7 @@ public final class ShadowToolFace implements ToolInvoker {
     public static final String REDTEAM_NAMESPACE = "redteam";
     private static final String NAMESPACE_SUFFIX = ".";
 
+    private final ToolRegistry readOnlyRegistry;
     private final ToolGateway delegate;
     private final WindowRateLimiter limiter;
 
@@ -62,7 +63,8 @@ public final class ShadowToolFace implements ToolInvoker {
             throw new IllegalStateException("影子注册面为空（启动期硬失败）："
                     + "生产注册面无 R0/R1 只读工具，影子面拒绝构建");
         }
-        this.delegate = new ToolGateway(new ToolRegistry(readOnly), shadowPolicy,
+        this.readOnlyRegistry = new ToolRegistry(readOnly);
+        this.delegate = new ToolGateway(this.readOnlyRegistry, shadowPolicy,
                 shadowPool, clock, null);
         this.limiter = new WindowRateLimiter(maxCallsPerWindow, windowMillis, clock);
     }
@@ -84,6 +86,11 @@ public final class ShadowToolFace implements ToolInvoker {
             limiter.refund(); // 控制面拒绝（未执行）不耗影子配额
             throw e;
         }
+    }
+
+    /** 裁剪后只读注册面（与影子出口同源——Agent 侧校验看见的面 = 影子面可执行的面） */
+    public ToolRegistry readOnlyView() {
+        return readOnlyRegistry;
     }
 
     /** 固定窗口限流（独立额度；Clock 注入保测试确定性，非线程争用面） */
