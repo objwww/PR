@@ -2,17 +2,12 @@ package com.objwww.pr.control.ops.application;
 
 import com.objwww.pr.control.ops.domain.model.CaseStatus;
 import com.objwww.pr.control.ops.domain.model.OperatorCase;
-import com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository;
 import com.objwww.pr.control.ops.domain.statemachine.IllegalCaseActionException;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -222,7 +217,7 @@ class OperatorCaseServiceTest {
                 .isThrownBy(() -> service.escalate(missing, "system", "k"));
     }
 
-    // ------------------------------------------------------------------ 种子与 fake
+    // ------------------------------------------------------------------ 种子
 
     private CaseDraft draft(String fingerprint, String key) {
         return new CaseDraft("tenant-1", fingerprint, "Claim 冲突", "P0", "CLAIM_CONFLICT",
@@ -230,45 +225,5 @@ class OperatorCaseServiceTest {
                 Digest.sha256Of("snapshot-" + fingerprint), 13,
                 List.of("evidence#81"), CLOCK.get().plusSeconds(600), CLOCK.get().plusSeconds(3600),
                 key);
-    }
-
-    /** 单线程 CAS fake：update 以 revision 相等为准；lock 即直接读（单线程无线程语义）。 */
-    private static final class InMemoryOperatorCases implements OperatorCaseRepository {
-        private final Map<UUID, OperatorCase> rows = new HashMap<>();
-
-        OperatorCase byId(UUID id) {
-            return Optional.ofNullable(rows.get(id)).orElseThrow();
-        }
-
-        int size() {
-            return rows.size();
-        }
-
-        @Override
-        public void insert(OperatorCase operatorCase) {
-            rows.put(operatorCase.id(), operatorCase);
-        }
-
-        @Override
-        public Optional<OperatorCase> lockByTenantAndFingerprint(String tenant, String fingerprint) {
-            return rows.values().stream()
-                    .filter(c -> c.tenant().equals(tenant) && c.fingerprint().equals(fingerprint))
-                    .findFirst();
-        }
-
-        @Override
-        public Optional<OperatorCase> findById(UUID id) {
-            return Optional.ofNullable(rows.get(id));
-        }
-
-        @Override
-        public boolean update(OperatorCase operatorCase, long expectedRevision) {
-            OperatorCase current = rows.get(operatorCase.id());
-            if (current == null || current.revision() != expectedRevision) {
-                return false;
-            }
-            rows.put(operatorCase.id(), operatorCase);
-            return true;
-        }
     }
 }

@@ -122,6 +122,8 @@ services:
       # AM5 M5-09：ConfigBundle 发布/回滚 API 鉴权（release 角色共享凭证，
       # O-4 用户体系落地前形态；:? 必填防静默空值）
       APP_RELEASE_API_BEARER: ${APP_RELEASE_API_BEARER:?}
+      # AM5 M5-12：Operator Case API 鉴权（operator 角色共享凭证，同 O-4 形态）
+      APP_OPERATOR_API_BEARER: ${APP_OPERATOR_API_BEARER:?}
       HOLMES_BASE_URL: ${HOLMES_BASE_URL:-http://holmes:8080}
       HOLMES_API_KEY: ${HOLMES_API_KEY:?}
       # 账本/报告记录的调查模型(与 deploy/alert compose 的 MODEL 同值,请求显式携带)

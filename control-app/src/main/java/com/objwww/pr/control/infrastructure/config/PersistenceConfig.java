@@ -251,4 +251,11 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.ops.application.OperatorCaseService(repository,
                 java.time.Instant::now);
     }
+
+    @Bean
+    public com.objwww.pr.control.ops.application.OperatorQueryService operatorQueryService(
+            com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository repository) {
+        return new com.objwww.pr.control.ops.application.OperatorQueryService(repository,
+                java.time.Instant::now);
+    }
 }

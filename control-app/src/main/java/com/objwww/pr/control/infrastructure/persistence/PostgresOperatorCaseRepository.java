@@ -118,6 +118,13 @@ public class PostgresOperatorCaseRepository implements OperatorCaseRepository {
     }
 
     @Override
+    public List<OperatorCase> findAll() {
+        return jdbc.sql("SELECT * FROM operator_case ORDER BY created_at, id")
+                .query(this::mapRow)
+                .list();
+    }
+
+    @Override
     public boolean update(OperatorCase operatorCase, long expectedRevision) {
         return jdbc.sql(UPDATE_SQL)
                 .param("status", operatorCase.status().name())

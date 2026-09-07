@@ -2,6 +2,7 @@ package com.objwww.pr.control.ops.domain.repository;
 
 import com.objwww.pr.control.ops.domain.model.OperatorCase;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,6 +22,9 @@ public interface OperatorCaseRepository {
 
     /** 无锁读投影（M5-12 查询面共用） */
     Optional<OperatorCase> findById(UUID id);
+
+    /** 全量无锁扫描（M5-12 查询面：Case 规模有限，过滤/排序在查询服务内存做） */
+    List<OperatorCase> findAll();
 
     /** expected-revision CAS 全列更新；0 行命中 = 并发冲突（不改历史行） */
     boolean update(OperatorCase operatorCase, long expectedRevision);

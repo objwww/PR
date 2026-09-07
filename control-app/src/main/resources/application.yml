@@ -41,6 +41,10 @@ app:
   release:
     api:
       bearer: ${APP_RELEASE_API_BEARER:}
+  # AM5 M5-12：Operator Case API 鉴权（operator 角色共享凭证，O-4 用户体系落地前形态）
+  operator:
+    api:
+      bearer: ${APP_OPERATOR_API_BEARER:}
   # M3 模型治理配置（AM4 Java 替换 HolmesGPT 时复用；路由的模型/端点/密钥直接走环境变量
   # AGENT_MODEL / AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
   model:
