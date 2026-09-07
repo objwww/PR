@@ -22,6 +22,9 @@ class Am5MigrationContractTest {
     private static final Path V21 = Path.of(
             "src/main/resources/db/migration/V21__am5_dataset_partition.sql");
 
+    private static final Path V22 = Path.of(
+            "src/main/resources/db/migration/V22__am5_golden_candidate.sql");
+
     private static String normalized() throws IOException {
         return normalized(V20);
     }
@@ -167,5 +170,40 @@ class Am5MigrationContractTest {
                 .contains("before insert on dataset_version")
                 .contains("public_benchmark")
                 .contains("'holdout'");
+    }
+
+    @Test
+    void v22GoldenCandidateEncodesDualReviewAndStateMachine() throws IOException {
+        String sql = normalized(V22);
+
+        // INV-AM5-2：同人不能双签 DB 兜底 + 终态结论必须双签齐全 + 状态机值域
+        assertThat(sql)
+                .contains("create table golden_candidate")
+                .contains("constraint ck_golden_dual_review check (reviewer_a is null"
+                        + " or reviewer_b is null or reviewer_a <> reviewer_b)")
+                .contains("check ((state in ('published','rejected')")
+                .contains("or state in ('draft','review','withdrawn'))")
+                .contains("check (state in ('draft','review','published','rejected','withdrawn'))")
+                .contains("references case_version(id)")
+                .contains("revision bigint not null default 0");
+    }
+
+    @Test
+    void v22ReviewEventIsAppendOnlyAndIdempotencyKeyed() throws IOException {
+        String sql = normalized(V22);
+
+        assertThat(sql)
+                .contains("create table golden_review_event")
+                .contains("constraint uq_golden_review_event_idem unique (idempotency_key)")
+                .contains("check (action in ('proposed','submitted','published','rejected','withdrawn'))")
+                // eval_app 读写候选：候选列级 UPDATE 只开口迁移所需列（V7 惯例），
+                // 事件表 append-only 只授 select,insert
+                .contains("grant update ( state, reviewer_a, reviewer_b, revision, updated_at )"
+                        + " on golden_candidate to eval_app")
+                .contains("grant select, insert on golden_review_event to eval_app")
+                .doesNotContainPattern("grant [a-z ,]*update on golden_review_event")
+                .doesNotContainPattern("grant [a-z ,]*delete on golden_review_event")
+                .contains("revoke all on golden_candidate, golden_review_event"
+                        + " from control_app, publisher_app, notify_app, public");
     }
 }
