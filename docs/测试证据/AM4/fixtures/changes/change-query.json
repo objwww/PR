@@ -1,1 +1,1 @@
-{"status":"success","data":{"changes":[{"id":"ch-1","service":"order-svc","window":"2026-09-05T07:55:00Z/2026-09-05T07:58:00Z","summary":"config rollout"}]}}
+{"status":"success","data":{"result":[{"id":"ch-1","service":"order-svc","window":"2026-09-05T07:55:00Z/2026-09-05T07:58:00Z","summary":"config rollout"}]}}
