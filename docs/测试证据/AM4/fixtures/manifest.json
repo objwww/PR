@@ -1,0 +1,29 @@
+{
+  "manifest_version": "am4-fixtures-v1",
+  "frozen_at": "2026-09-07",
+  "discipline": "P0-7：无冻结实时日志/变更源，replay fixture 即数据面；E2E manifest 必须逐案声明 replay 限制（技术方案 §15.4）",
+  "classpath_binding": "control-app/src/main/resources/am4/fixtures/（AlertAm4Config 启动期读取，缺失/空=硬失败）；本目录为证据面副本，E2E 冻结时以 sha256 对拍两处一致",
+  "fixtures": [
+    {
+      "tool": "logs.query",
+      "tool_version": "1",
+      "evidence_type": "logs.query",
+      "agent": "logs@1",
+      "file": "logs/logs-query.json",
+      "sha256": "6e55a28d8bee5c520972b710cd710543a7f9426e15ab43e47eea1a51d797a7eb",
+      "frozen": true,
+      "note": "占位冻结样本（形态与 SingleToolEvidenceAgent 契约一致）；195 G2 前以真实冻结日志样本替换并更新 sha256"
+    },
+    {
+      "tool": "change.query",
+      "tool_version": "1",
+      "evidence_type": "change.query",
+      "agent": "change@1",
+      "file": "changes/change-query.json",
+      "sha256": "7dabec26439137e553997e647227db4c422930f70a9e4c0c32d94482a6d5e391",
+      "frozen": true,
+      "note": "占位冻结样本；195 G2 前以真实冻结变更记录替换并更新 sha256"
+    }
+  ],
+  "replay_injector": "REPLAY_MISS 注入器 = Am4E2E08ReplayIT 扰动矩阵（tool/version/args/timeRange/snapshot 五维）+ ReplayToolGatewayTest 穷举 UT"
+}

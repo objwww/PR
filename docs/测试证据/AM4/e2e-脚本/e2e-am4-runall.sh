@@ -3,13 +3,10 @@
 # e2e-am4-runall.sh —— AM4 E2E 总 runner（落码方案附录 §一：顺序执行，任一失败
 # 即非零退出；缺失或 SKIP 的场景一律总体失败——"无 skip"硬纪律）
 #
-# 当前状态（诚实标注）：
-#   - m4-08（REPLAY_ONLY）= Testcontainers IT（Am4E2E08ReplayIT），由
-#     `mvn -DskipTests=false verify -Dit.test=Am4E2E08ReplayIT` 在 docker 可用
-#     环境执行——不在本 runner 内重复；
-#   - m4-09 已就绪（本目录）；
-#   - m4-00~07/10/11 场景脚本待 195 环境逐场景补齐（触发入口归 G2 终裁开放项），
-#     在补齐前本 runner 以 FAIL 收场——不以骨架状态虚报绿。
+# 当前状态（诚实标注）：00~07/09/10/11 场景脚本全部就绪（断言面 SQL 已对齐
+# V13/V16/V17/V9 列名与冻结枚举），均未经 195 真栈执行验证——注入编排与轮询
+# 参数需在 195 上迭代；m4-08（REPLAY_ONLY）= Am4E2E08ReplayIT（Testcontainers），
+# 由 e2e-m4-08-replay.sh 独立执行，不在本 runner 内。
 # ============================================================================
 
 set -e

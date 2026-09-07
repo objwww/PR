@@ -27,15 +27,13 @@ SHADOW_RUN_ID="${SHADOW_RUN_ID:?需要 SHADOW_RUN_ID（Native 影子 run）}"
 e4_begin
 echo "[E2E-M4-09] holmes_run=$HOLMES_RUN_ID shadow_run=$SHADOW_RUN_ID"
 
-# ① 两路同一 input snapshot：rca_run.investigation_hash 所锚定的 snapshot 一致
-#    （snapshot digest 经 rca_evidence_snapshot 归属；此处对拍两 run 的冻结证据
-#    的 input_snapshot_digest——证据 scope 内印章）
+# ① 两路同一 input snapshot：证据 scope 内印章对拍（scope 列为 canonical json 文本）
 HOLMES_SNAP=$(e4_sql "
-    select scope->>'input_snapshot_digest' from rca_evidence
+    select scope::jsonb->>'input_snapshot_digest' from rca_evidence
      where run_id = '$HOLMES_RUN_ID'
      order by created_at, id limit 1")
 SHADOW_SNAP=$(e4_sql "
-    select scope->>'input_snapshot_digest' from rca_evidence
+    select scope::jsonb->>'input_snapshot_digest' from rca_evidence
      where run_id = '$SHADOW_RUN_ID'
      order by created_at, id limit 1")
 e4_assert_eq "① 影子侧证据存在" "$([ -n "$SHADOW_SNAP" ] && echo yes || echo no)" "yes"
@@ -64,19 +62,25 @@ HOLMES_REPORT=$(e4_sql "
     select count(*) from rca_report where run_id='$HOLMES_RUN_ID'")
 e4_assert_eq "③ Holmes 报告落库" "$([ "$HOLMES_REPORT" -gt 0 ] && echo yes || echo no)" "yes"
 
-# ④ Candidate 发布增量 0：影子 run 零 publication、零 outbox（不切主硬断言）
+# ④ Candidate 发布增量 0：影子 run 零 publication、零 outbox（不切主硬断言；
+#    发布面挂 report_id → rca_report(run_id)，影子 run 无报告即无发布行）
 SHADOW_PUB=$(e4_sql "
     select count(*) from report_publication rp
-     join rca_run r on r.id = rp.run_id where rp.run_id='$SHADOW_RUN_ID'")
+     join rca_report rr on rr.id = rp.report_id
+     where rr.run_id = '$SHADOW_RUN_ID'")
 SHADOW_OUTBOX=$(e4_sql "
-    select count(*) from notify_outbox where run_id='$SHADOW_RUN_ID'")
+    select count(*) from notify_outbox no
+     join rca_report rr on rr.id = no.report_id
+     where rr.run_id = '$SHADOW_RUN_ID'")
 e4_assert_eq "④ 影子 run 零发布（Candidate 增量 0）" "$SHADOW_PUB" "0"
 e4_assert_eq "④ 影子 run 零通知 outbox" "$SHADOW_OUTBOX" "0"
 
-# ⑤ 主报告未被影子改写：Holmes 报告只有一代（影子不回写主报告版本）
-HOLMES_REPORT_VERSIONS=$(e4_sql "
-    select count(distinct report_version) from rca_report where run_id='$HOLMES_RUN_ID'")
-e4_assert_eq "⑤ Holmes 报告版本未被影子推进" "$HOLMES_REPORT_VERSIONS" "1"
+# ⑤ 主报告未被影子改写：影子 run 零报告行（结构无报告出口的行为取证），
+#    Holmes run 报告恰一行（影子不产生新报告行、不推进主报告）
+SHADOW_REPORTS=$(e4_sql "select count(*) from rca_report where run_id='$SHADOW_RUN_ID'")
+HOLMES_REPORTS=$(e4_sql "select count(*) from rca_report where run_id='$HOLMES_RUN_ID'")
+e4_assert_eq "⑤ 影子 run 零报告行（不切主结构面）" "$SHADOW_REPORTS" "0"
+e4_assert_eq "⑤ Holmes run 报告恰一行（未被影子推进）" "$HOLMES_REPORTS" "1"
 
 {
     echo "holmes_run=$HOLMES_RUN_ID shadow_run=$SHADOW_RUN_ID"
