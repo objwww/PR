@@ -19,8 +19,15 @@ class Am5MigrationContractTest {
     private static final Path V20 = Path.of(
             "src/main/resources/db/migration/V20__am5_dataset_version.sql");
 
+    private static final Path V21 = Path.of(
+            "src/main/resources/db/migration/V21__am5_dataset_partition.sql");
+
     private static String normalized() throws IOException {
-        return Files.readString(V20).toLowerCase().replaceAll("\\s+", " ");
+        return normalized(V20);
+    }
+
+    private static String normalized(Path migration) throws IOException {
+        return Files.readString(migration).toLowerCase().replaceAll("\\s+", " ");
     }
 
     @Test
@@ -86,5 +93,79 @@ class Am5MigrationContractTest {
                 // arena 域角色条件化幂等 revoke（干净 IT 库可能不存在）
                 .contains("if exists (select from pg_roles where rolname = 'arena_app')")
                 .contains("if exists (select from pg_roles where rolname = 'chaos_admin_app')");
+    }
+
+    @Test
+    void v21DenormalizesPartitionOntoCaseVersionWithIntegrityAndCheck() throws IOException {
+        String sql = normalized(V21);
+
+        // case_version.partition_class 冗余直挂（V9 FUT-50 惯例：禁 JOIN 推导）
+        // + 四值封闭（落码方案 §M5-02② 点名 ck_case_version_partition）
+        // + 复合 FK 对 dataset_version(id, partition_class) 保冗余列与头表一致
+        assertThat(sql)
+                .contains("alter table case_version add column partition_class varchar(16) not null")
+                .contains("constraint ck_case_version_partition check (partition_class in "
+                        + "('tuning','validation','holdout','redteam'))")
+                .contains("constraint uq_dataset_version_partition unique (id, partition_class)")
+                .contains("constraint fk_case_version_dataset_partition foreign key "
+                        + "(dataset_version_id, partition_class) references "
+                        + "dataset_version (id, partition_class)");
+    }
+
+    @Test
+    void v21RegistryTableEnforcesWholeFamilySinglePartition() throws IOException {
+        String sql = normalized(V21);
+
+        // family 单分区登记面（insert-only）：PK(scenario_family_id) = 同族二次登记
+        // 不同分区 DuplicateKey 拒绝——落码方案 §M5-02② unique(scenario_family_id,
+        // partition_class) 直排 case_version 行面不可实施（同族多 Case 是设计常态 +
+        // 纠错=新 dataset_version 修正行），登记面表达成同一不变量（决策见 PROGRESS C-6）
+        assertThat(sql)
+                .contains("create table case_family_partition")
+                .contains("scenario_family_id text primary key")
+                .contains("constraint ck_case_family_partition_class check (partition_class in "
+                        + "('tuning','validation','holdout','redteam'))")
+                .contains("grant select, insert on case_family_partition to eval_app")
+                .doesNotContainPattern("grant [a-z ,]*update on case_family_partition")
+                .doesNotContainPattern("grant [a-z ,]*delete on case_family_partition")
+                .contains("revoke all on case_family_partition"
+                        + " from control_app, publisher_app, notify_app, public");
+    }
+
+    @Test
+    void v21RlsIsolatesHoldoutAndMapsFourPartitionRoles() throws IOException {
+        String sql = normalized(V21);
+
+        // RLS + 分区角色（落码方案 §M5-02② 落码建议）：case_version 启用行级安全
+        assertThat(sql)
+                .contains("alter table case_version enable row level security")
+                // 四分区角色（V9 条件化幂等建角色同构；NOLOGIN 纯授权目标）
+                .contains("eval_tuning_ro").contains("eval_validation_ro")
+                .contains("eval_holdout_gate").contains("eval_redteam_gate")
+                // 四角色各见单分区
+                .contains("using (partition_class = 'tuning')")
+                .contains("using (partition_class = 'validation')")
+                .contains("using (partition_class = 'holdout')")
+                .contains("using (partition_class = 'redteam')")
+                // 评分身份 eval_app：封存门前不见 HOLDOUT（select+insert 同谓词——
+                // RLS 对其写路径同样生效，无策略即默认拒绝）
+                .contains("for insert to eval_app with check (partition_class <> 'holdout')")
+                .contains("for select to eval_app using (partition_class <> 'holdout')")
+                // 四分区角色只读
+                .contains("grant select on case_version to eval_tuning_ro, "
+                        + "eval_validation_ro, eval_holdout_gate, eval_redteam_gate");
+    }
+
+    @Test
+    void v21PublicBenchmarkCanNeverClaimHoldoutPartition() throws IOException {
+        String sql = normalized(V21);
+
+        // INV-AM5-1 DB 兜底：公共 benchmark 不冒充私有 HOLDOUT（插入触发器硬拒绝；
+        // dataset_version insert-only，无 UPDATE 路径故只挂 before insert）
+        assertThat(sql)
+                .contains("create trigger trg_dataset_benchmark_not_holdout")
+                .contains("before insert on dataset_version")
+                .contains("public_benchmark")
+                .contains("'holdout'");
     }
 }

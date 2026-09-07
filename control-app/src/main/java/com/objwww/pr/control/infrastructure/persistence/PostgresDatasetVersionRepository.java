@@ -26,8 +26,10 @@ import java.util.UUID;
  * dataset_version / case_version 的 Postgres 实现（V20；M5-01）。
  *
  * <p>insert-only：类内不存在任何 UPDATE/DELETE 语句；授权面（eval_app 只
- * select,insert）由 V20 兜底。timestamptz 绑定显式 {@code Timestamp.from}
- * （BA-31：pgjdbc 不识别 Instant 直绑）；jsonb 走 CAST 字符串（V10 同构）。
+ * select,insert）由 V20 兜底。case_version.partition_class 由 INSERT..SELECT 自
+ * dataset_version 冗余直挂（V21，单一事实源、复合 FK 双保险）。timestamptz 绑定
+ * 显式 {@code Timestamp.from}（BA-31：pgjdbc 不识别 Instant 直绑）；jsonb 走
+ * CAST 字符串（V10 同构）。
  */
 public class PostgresDatasetVersionRepository implements DatasetVersionRepository {
 
@@ -45,13 +47,14 @@ public class PostgresDatasetVersionRepository implements DatasetVersionRepositor
 
     private static final String INSERT_CASE_SQL = """
             INSERT INTO case_version (
-                id, dataset_version_id, case_key, scenario_family_id,
+                id, dataset_version_id, case_key, scenario_family_id, partition_class,
                 valid_from, valid_to, content_digest, payload, source_artifact_ref
-            ) VALUES (
-                :id, :datasetVersionId, :caseKey, :scenarioFamilyId,
+            ) SELECT
+                :id, :datasetVersionId, :caseKey, :scenarioFamilyId, dv.partition_class,
                 :validFrom, :validTo, :contentDigest, CAST(:payload AS jsonb),
                 :sourceArtifactRef
-            )
+            FROM dataset_version dv
+            WHERE dv.id = :datasetVersionId
             """;
 
     private static final String FIND_DATASET_SQL = """
@@ -102,7 +105,7 @@ public class PostgresDatasetVersionRepository implements DatasetVersionRepositor
     @Override
     public boolean insertCaseVersion(CaseVersion version) {
         try {
-            jdbc.sql(INSERT_CASE_SQL)
+            int inserted = jdbc.sql(INSERT_CASE_SQL)
                     .param("id", version.id())
                     .param("datasetVersionId", version.datasetVersionId())
                     .param("caseKey", version.caseKey())
@@ -113,6 +116,12 @@ public class PostgresDatasetVersionRepository implements DatasetVersionRepositor
                     .param("payload", writePayload(version))
                     .param("sourceArtifactRef", version.sourceArtifactRef())
                     .update();
+            if (inserted != 1) {
+                // INSERT..SELECT 语义：dataset_version 不存在时静默 0 行——契约上
+                // true 只能表示真插入，此处 fail-loud（原 VALUES 形态由 FK 报错兜底）
+                throw new IllegalStateException(
+                        "case_version 插入 0 行：dataset_version 不存在 id=" + version.datasetVersionId());
+            }
             return true;
         } catch (DuplicateKeyException e) {
             return false;
