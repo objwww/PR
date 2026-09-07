@@ -114,9 +114,13 @@ e4_admin_sql() {
 #      由影子触发器产生，回收不触碰主链 INITIAL run。
 
 E4_AM_CONTAINER="${E4_AM_CONTAINER:-alertmanager-am0}"
+E4_ANAME_F1="ArenaDuplicateOrders"
+E4_ANAME_F2="ArenaIllegalTransitions"
+E4_ANAME_F3="ArenaOrderStuck"
 
 e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     fault="$1"
+    aname=$(eval echo "\$E4_ANAME_$fault")
     active=$(e4_sql "
         select scenario_id || ' ' || generation from arena.oa_chaos_session
          where fault_type = '$fault'
@@ -145,7 +149,16 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
         echo "  FAIL: AM 重启后未就绪（http=$code）"
         exit 1
     fi
-    echo "  quiesce: AM 已重启并清通知状态（就绪，放行注入）"
+    echo "  quiesce: AM 已重启并清通知状态（就绪）"
+    # episode 管理面收口：episode 依赖 resolved webhook 推进状态机，而清 AM 后
+    # 历史 resolved 通知不再投递，挂着 episode 的后续 firing 是同 episode
+    # re-firing，orchestrator 确定性去重零 run（195 实证：intake ACCEPTED 且
+    # generation 不推进）。显式收口让下轮 firing 必开新 episode。
+    e4_admin_sql "
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%$aname%'
+           and status <> 'RESOLVED'"
     e4_admin_sql "
         update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
          where trigger_kind='RERUN'
