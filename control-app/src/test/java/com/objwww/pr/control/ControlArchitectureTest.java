@@ -96,7 +96,8 @@ class ControlArchitectureTest {
         noClasses().that().resideInAnyPackage(
                         "..control.alert.domain.dag..", "..control.alert.domain.tool..",
                         "..control.alert.domain.budget..", "..control.alert.domain.claim..",
-                        "..control.alert.domain.evidence..", "..control.alert.domain.event..")
+                        "..control.alert.domain.evidence..", "..control.alert.domain.event..",
+                        "..control.alert.domain.agent..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "org.springframework..", "com.fasterxml..",
                         "java.net.http..", "java.sql..",
