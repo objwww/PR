@@ -54,8 +54,14 @@ class ToolGatewayWireMockTest {
         return WIREMOCK.baseUrl();
     }
 
-    /** 真 HTTP 执行器（GET 固定端点；自身请求超时 = deadline 剩余，异常交 Gateway 映射） */
+    /**
+     * 真 HTTP 执行器（GET 固定端点；自身请求超时 = deadline 剩余 + 2s 缓冲——
+     * 客户端超时必须确定性长于 Gateway 硬 deadline，否则两个几乎同窗的定时器竞争
+     * 会让 itW02 在客户端 HttpTimeoutException 分支 flaky（REMOTE_UNAVAILABLE 而非
+     * TIMEOUT_RETRYABLE）；被测语义就是 Gateway 先到先取消。
+     */
     private static final class HttpToolExecutor implements ToolExecutor {
+        private static final long CLIENT_TIMEOUT_BUFFER_MILLIS = 2_000;
         private final String url;
 
         HttpToolExecutor(String url) {
@@ -64,7 +70,8 @@ class ToolGatewayWireMockTest {
 
         @Override
         public byte[] execute(ToolExecution execution) throws Exception {
-            long remaining = execution.deadlineEpochMillis() - System.currentTimeMillis();
+            long remaining = execution.deadlineEpochMillis() - System.currentTimeMillis()
+                    + CLIENT_TIMEOUT_BUFFER_MILLIS;
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofMillis(Math.max(1, remaining)))
                     .GET()
