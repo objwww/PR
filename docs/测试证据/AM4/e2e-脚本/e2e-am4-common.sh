@@ -95,32 +95,26 @@ e4_admin_sql() {
         -Atqc "$1"
 }
 
-# 注入前环境自愈（v7，195 迭代实证）：
+# 注入前环境自愈（v8，195 迭代实证）：
 #   a) quiesce 静止面——上轮同 fault 会话未收口时先 off。scenarioId 每轮按时钟
 #      生成且 uq_chaos_scenario 全局唯一（同 id 不可二次激活），quiesce.py 无法
 #      自行探测上轮 id，由本函数经 PG 查出活跃会话传参执行 off；
-#   b) AM 组 resolved flush 等待（无条件）——AM repeat 语义：组内 alert 的
-#      resolved 未 flush 就 re-firing，会被视为"组内容与上次通知相同"零投递，
-#      且 re-fire 覆盖 resolved 使组锁死到 repeat_interval（4h）——195 两轮
-#      实证（02 轮 B 与 v6 轮 A 均零 webhook 零 run）。而 resolved 落库后再
-#      re-fire 是净变化必投递（15:05:43 resolved → 15:09:58 firing 投递实证）。
-#      故 v7 无论 off 分支还是 TTL 自愈分支，放行条件统一为：inbox 该
-#      alertname 最后一行 = resolved（无任何历史行 = 首轮干净直接放行）。
-#      等待本身无 re-fire 干扰，锁死的组也会在本轮 off 后自愈 flush。
-#      最坏链路 off → gauge 归零（F2 卡单清理 ~5m）→ resolved → 组 tick
-#      （5m）→ 落库，窗口取 600s。
+#   b) AM 重启清组状态——E2E 对同 fingerprint 反复 firing/resolved，AM 组对象
+#      会出现 notify 死锁：v7 轮间 600s 逐次轮询实证该组 resolved 永不 flush
+#      （对照批次 2 分钟即落库），组锁死到 repeat_interval(4h)，re-firing 被视为
+#      无净变化静默吞并。等 resolved 落库的方案（v6/v7）对死锁组无效——重启
+#      alertmanager 一次性清掉全部组状态（AM 无持久化，~5s 就绪），此后任何
+#      firing 必为新组首发投递；Prometheus 会对 AM 恢复后重发当前 firing
+#      alerts，不丢真告警。放行条件 = AM /-/ready 200。
 #   c) 影子 run 轮间回收——影子 run 终点 REPORTING 挂 uq_rca_run_active_incident
 #      （QUEUED/RUNNING/REPORTING 部分唯一），不回收则同 incident 下一轮 firing
 #      intake 开 run 必撞 DuplicateKeyException → 告警死信（195 实证）。RERUN 仅
 #      由影子触发器产生，回收不触碰主链 INITIAL run。
 
-E4_ANAME_F1="ArenaDuplicateOrders"
-E4_ANAME_F2="ArenaIllegalTransitions"
-E4_ANAME_F3="ArenaOrderStuck"
+E4_AM_CONTAINER="${E4_AM_CONTAINER:-alertmanager-am0}"
 
 e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     fault="$1"
-    aname=$(eval echo "\$E4_ANAME_$fault")
     active=$(e4_sql "
         select scenario_id || ' ' || generation from arena.oa_chaos_session
          where fault_type = '$fault'
@@ -132,27 +126,20 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     else
         docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
     fi
+    docker restart "$E4_AM_CONTAINER" >/dev/null
     i=0
-    last="pending"
-    while [ $i -lt 120 ]; do   # 120*5s=600s（gauge 归零 + resolved + 组 tick）
-        last=$(e4_sql "
-            select group_status from alert_inbox
-             where convert_from(payload_raw,'UTF8')::jsonb->'alerts'->0->'labels'->>'alertname' = '$aname'
-             order by received_at desc limit 1")
-        echo "  [quiesce-poll] i=$i last=$last"
-        case "$last" in
-            resolved|"") break ;;
-        esac
+    code="000"
+    while [ $i -lt 24 ]; do   # 24*5s=120s
+        code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:9093/-/ready" || echo 000)
+        [ "$code" = "200" ] && break
         sleep 5
         i=$((i + 5))
     done
-    case "$last" in
-        resolved|"")
-            echo "  quiesce: AM 组 resolved flush 完成（放行注入，last=$last）" ;;
-        *)
-            echo "  FAIL: quiesce 后该 alertname 最后一行仍非 resolved（last=$last，注入将被 repeat 吞并）"
-            exit 1 ;;
-    esac
+    if [ "$code" != "200" ]; then
+        echo "  FAIL: AM 重启后未就绪（http=$code）"
+        exit 1
+    fi
+    echo "  quiesce: AM 已重启清组状态（就绪，放行注入）"
     e4_admin_sql "
         update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
          where trigger_kind='RERUN'
