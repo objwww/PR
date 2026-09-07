@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
  * 重试循环）与 {@link ToolModelVisibleException}（模型可见族——结构化脱敏固定文案，
  * executor 异常文本一律不透传）。
  */
-public final class ToolGateway {
+public final class ToolGateway implements ToolInvoker {
 
     private final ToolRegistry registry;
     private final ToolPolicy policy;

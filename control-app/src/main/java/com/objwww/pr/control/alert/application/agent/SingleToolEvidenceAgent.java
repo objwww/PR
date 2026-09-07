@@ -2,6 +2,7 @@ package com.objwww.pr.control.alert.application.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.application.tool.ToolGateway;
+import com.objwww.pr.control.alert.application.tool.ToolInvoker;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
@@ -63,13 +64,13 @@ public class SingleToolEvidenceAgent {
 
     private final ToolSpec spec;
     private final ToolRegistry registry;
-    private final ToolGateway gateway;
+    private final ToolInvoker gateway;
     private final EvidenceRepository evidence;
     private final RcaToolInvocationLedger ledger;
     private final ObjectMapper mapper;
 
     protected SingleToolEvidenceAgent(AgentProfile profile, ToolSpec spec,
-            ToolRegistry registry, ToolGateway gateway, EvidenceRepository evidence,
+            ToolRegistry registry, ToolInvoker gateway, EvidenceRepository evidence,
             RcaToolInvocationLedger ledger, ObjectMapper mapper) {
         this.spec = Objects.requireNonNull(spec);
         this.registry = Objects.requireNonNull(registry);
@@ -173,6 +174,7 @@ public class SingleToolEvidenceAgent {
         return switch (reason) {
             case TIMEOUT_RETRYABLE -> ToolReasonCode.TIMEOUT;
             case RATE_LIMITED -> ToolReasonCode.RATE_LIMITED;
+            case REPLAY_MISS -> ToolReasonCode.REPLAY_MISS;
             case REMOTE_UNAVAILABLE, NO_DATA -> ToolReasonCode.TRANSPORT_UNKNOWN;
         };
     }

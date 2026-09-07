@@ -1,7 +1,7 @@
 package com.objwww.pr.control.alert.application.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.objwww.pr.control.alert.application.tool.ToolGateway;
+import com.objwww.pr.control.alert.application.tool.ToolInvoker;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
@@ -29,7 +29,7 @@ public class MetricsAgent extends SingleToolEvidenceAgent {
     public record MetricsQuery(String expr, String start, String end, String step) {
     }
 
-    public MetricsAgent(AgentProfile profile, ToolRegistry registry, ToolGateway gateway,
+    public MetricsAgent(AgentProfile profile, ToolRegistry registry, ToolInvoker gateway,
             EvidenceRepository evidence, RcaToolInvocationLedger ledger, ObjectMapper mapper) {
         super(profile, new ToolSpec(TOOL_NAME, TOOL_VERSION, EVIDENCE_TYPE, SOURCE),
                 registry, gateway, evidence, ledger, mapper);
