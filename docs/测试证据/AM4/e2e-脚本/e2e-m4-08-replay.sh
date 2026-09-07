@@ -24,6 +24,18 @@ APP="$1"
 
 echo "[E2E-M4-08] mvn verify -Dit.test=Am4E2E08ReplayIT（Testcontainers 真 PG）"
 cd "$APP"
-mvn verify -DskipITs=false -Dit.test=Am4E2E08ReplayIT -Dsurefire.failIfNoSpecifiedTests=false
+RC=0
+if [ -n "${E4_RUN_DIR:-}" ]; then
+    # runall 批次内：完整输出（含两轮语义 digest 对拍面）归档 raw/（M4-33 随件）
+    mkdir -p "$E4_RUN_DIR/raw"
+    LOG="$E4_RUN_DIR/raw/e2e-m4-08-replay.log"
+    mvn verify -DskipITs=false -Dit.test=Am4E2E08ReplayIT \
+        -Dsurefire.failIfNoSpecifiedTests=false > "$LOG" 2>&1 || RC=$?
+    cat "$LOG"
+else
+    mvn verify -DskipITs=false -Dit.test=Am4E2E08ReplayIT \
+        -Dsurefire.failIfNoSpecifiedTests=false || RC=$?
+fi
+[ "$RC" -eq 0 ] || { echo "[E2E-M4-08] FAIL（IT 非零退出 rc=$RC）"; exit "$RC"; }
 
 echo "[E2E-M4-08] PASS（两轮全命中语义一致 + 扰动全 MISS + 零回退零账本污染）"
