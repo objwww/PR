@@ -42,10 +42,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+        <!-- 驱动为 compile 可见（M5-19：归档 COPY 导出经 PGConnection#getCopyAPI，
+             耦合面收口在 PostgresPartitionArchiveGateway 单类） -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <!-- OpenAI 兼容端点适配（百炼等）；M0-T07 才写适配代码，先放依赖 -->

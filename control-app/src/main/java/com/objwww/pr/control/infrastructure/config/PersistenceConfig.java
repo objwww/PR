@@ -3,6 +3,7 @@ package com.objwww.pr.control.infrastructure.config;
 import com.objwww.pr.control.domain.service.ExecutionEventRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresExecutionEventRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -330,5 +331,40 @@ public class PersistenceConfig {
             com.objwww.pr.control.ops.domain.repository.PartitionCatalog partitionCatalog) {
         return new com.objwww.pr.control.ops.application.RetentionService(
                 retentionPolicyRepository, partitionCatalog, java.time.Instant::now);
+    }
+
+    // ---------------- AM5 冷归档（M5-19 装配；冷层形态开放项 O-5，本地盘卷先落） ----------------
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.ArchiveManifestRepository archiveManifestRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresArchiveManifestRepository(
+                jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.PartitionArchiveGateway partitionArchiveGateway(
+            javax.sql.DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresPartitionArchiveGateway(
+                new org.springframework.jdbc.core.JdbcTemplate(dataSource));
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.ColdArchiveStore coldArchiveStore(
+            @Value("${app.ops.archive.cold-dir:./var/archive}") String coldDir) {
+        return new com.objwww.pr.control.infrastructure.archive.LocalColdArchiveStore(
+                java.nio.file.Path.of(coldDir));
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.application.ArchiveService archiveService(
+            com.objwww.pr.control.ops.domain.repository.RetentionPolicyRepository retentionPolicyRepository,
+            com.objwww.pr.control.ops.application.RetentionService retentionService,
+            com.objwww.pr.control.ops.domain.repository.PartitionArchiveGateway partitionArchiveGateway,
+            com.objwww.pr.control.ops.domain.repository.ColdArchiveStore coldArchiveStore,
+            com.objwww.pr.control.ops.domain.repository.ArchiveManifestRepository archiveManifestRepository) {
+        return new com.objwww.pr.control.ops.application.ArchiveService(
+                retentionPolicyRepository, retentionService, partitionArchiveGateway,
+                coldArchiveStore, archiveManifestRepository);
     }
 }
