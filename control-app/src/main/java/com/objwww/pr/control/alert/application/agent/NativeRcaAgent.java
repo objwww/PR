@@ -74,7 +74,7 @@ public class NativeRcaAgent {
                     stringScope(envelope, "scope") == null
                             ? "" : stringScope(envelope, "scope"),
                     stringScope(envelope, "time_range") == null
-                            ? "" : stringScope(envelope, "time_range"),
+                            ? Claim.TIME_RANGE_UNKNOWN : stringScope(envelope, "time_range"),
                     envelope.observedGeneration(),
                     List.of(envelope.evidenceId().toString()),
                     envelope.source(), snapshotDigest));

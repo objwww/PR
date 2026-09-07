@@ -30,6 +30,12 @@ public record Claim(
         String source,
         String snapshotDigest) {
 
+    /**
+     * 上游无时间窗时的显式缺省（禁空串）——时间窗进裁决分组键与 claim_hash，
+     * {@code ClaimVerdict} 契约要求非空（M4-34 影子对照接线时补实的跨组件缺陷）。
+     */
+    public static final String TIME_RANGE_UNKNOWN = "unknown";
+
     public Claim {
         if (claimKey == null || claimKey.isBlank()) {
             throw new IllegalArgumentException("claimKey 不得为空/blank");

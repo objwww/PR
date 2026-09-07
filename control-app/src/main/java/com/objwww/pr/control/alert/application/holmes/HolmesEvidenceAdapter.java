@@ -105,8 +105,10 @@ public class HolmesEvidenceAdapter {
         return new Claim(claimKey, status,
                 textOrNull(node.get("fault_type")) == null
                         ? "holmes-claim" : textOrNull(node.get("fault_type")),
-                component == null ? "" : component, "", generation, List.copyOf(refs),
-                SOURCE, snapshotDigest);
+                component == null ? "" : component,
+                textOrNull(node.get("time_range")) == null
+                        ? Claim.TIME_RANGE_UNKNOWN : textOrNull(node.get("time_range")),
+                generation, List.copyOf(refs), SOURCE, snapshotDigest);
     }
 
     private static String requireText(JsonNode node, String field) {
