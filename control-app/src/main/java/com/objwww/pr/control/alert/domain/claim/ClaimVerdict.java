@@ -1,17 +1,29 @@
 package com.objwww.pr.control.alert.domain.claim;
 
+import com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1;
+
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeSet;
 
 /**
- * 裁决结果（AM4 M4-22 ClaimReducer 的输出契约）。
- * 身份字段（claimKey/scope/timeRange/observedGeneration/snapshotDigest）与裁决分组键一一对应——
- * 同一 claimKey 在不同时间窗/代际/快照下产出不同 verdict，不得混淆。
+ * 裁决后的断言投影（AM4 M4-21/22，v1.3 统一状态模型）。三正交字段 =
+ * 命题状态 {@link ClaimStatus} + 证据基础 {@link EvidenceBasis} + 生命周期
+ * {@link ClaimLifecycle}（lifecycle 落库默认 ACTIVE，由仓储面维护）；<b>无独立
+ * verdict 出口枚举</b>（v1.2 CONFIRMED/SUPPORTED 与 basis 重叠矛盾，评审作废）。
  *
- * <p>basis 记录裁决依据的规则（可审计；不存在"投票"依据）。
- * "确认级别"只有 corroborated() 一种判定：≥2 个独立 source 佐证的裁决才算确认
- * （UNANIMOUS / MULTI_SOURCE_CORROBORATION）；SINGLE_SOURCE 与 NEEDS_REVIEW 均非确认，
- * 权威源裁决是另一条独立路径（权威即契约，非佐证计数）。
+ * <p><b>双哈希</b>（M4-21/22）：
+ * <ul>
+ *   <li>{@link #fingerprint()} —— 身份 = 类型/键+scope+时间窗+generation+input snapshot
+ *       （与裁决分组键同集）；身份相同的内容演化走 REVISED，身份不同永不互相覆盖；</li>
+ *   <li>{@link #contentHash()} —— 内容 = 状态+原因+证据引用+来源+<b>策略版本</b>；
+ *       身份五元组不进内容哈希（正交：换代际/换快照不动内容哈希）。</li>
+ * </ul>
+ * 双哈希均对内部字段 map 做 InternalCanonicalJsonV1 规范化后 sha256（字段序无关；
+ * kind 标签分隔两个哈希空间）。sources/evidenceRefs 构造即排序去重——内容哈希与
+ * 输入顺序无关（可复现）。
  */
 public record ClaimVerdict(
         String claimKey,
@@ -20,34 +32,67 @@ public record ClaimVerdict(
         long observedGeneration,
         String snapshotDigest,
         ClaimStatus status,
-        Basis basis,
-        List<String> evidenceRefs) {
-
-    /** 裁决依据（规则驱动，可审计；不存在"投票"依据） */
-    public enum Basis {
-        /** ≥2 个独立 source 断言状态全一致（corroborated） */
-        UNANIMOUS,
-        /** 权威源规则裁决（配置的权威 source 的断言为准） */
-        AUTHORITATIVE_SOURCE,
-        /** ≥2 个独立 source 佐证同一状态（存在其他反对声音时） */
-        MULTI_SOURCE_CORROBORATION,
-        /** 单一来源单状态——仍为单一证据，<b>非确认级别</b>（corroborated()=false） */
-        SINGLE_SOURCE,
-        /** 无法裁决，升级人工（status 恒为 UNKNOWN） */
-        NEEDS_REVIEW
-    }
+        EvidenceBasis evidenceBasis,
+        List<String> sources,
+        String reason,
+        List<String> evidenceRefs,
+        String policyVersion) {
 
     public ClaimVerdict {
-        Objects.requireNonNull(claimKey, "claimKey");
-        Objects.requireNonNull(scope, "scope");
-        Objects.requireNonNull(timeRange, "timeRange");
+        requireNonBlank(claimKey, "claimKey");
+        requireNonBlank(scope, "scope");
+        requireNonBlank(timeRange, "timeRange");
+        requireNonBlank(reason, "reason");
+        requireNonBlank(policyVersion, "policyVersion");
+        if (observedGeneration < 0) {
+            throw new IllegalArgumentException("observedGeneration 不得为负: " + observedGeneration);
+        }
         Objects.requireNonNull(status, "status");
-        Objects.requireNonNull(basis, "basis");
-        evidenceRefs = List.copyOf(Objects.requireNonNull(evidenceRefs, "evidenceRefs"));
+        Objects.requireNonNull(evidenceBasis, "evidenceBasis");
+        // snapshotDigest 可为 null（无快照约束）；canonicalize 对 null 输出 "null"
+        sources = sortedDistinct(sources, "sources");
+        evidenceRefs = sortedDistinct(evidenceRefs, "evidenceRefs");
+        if (evidenceRefs.isEmpty()) {
+            throw new IllegalArgumentException("evidenceRefs 不得为空——无证据不成断言");
+        }
     }
 
-    /** 是否确认级别：仅 ≥2 独立 source 佐证的裁决（UNANIMOUS / MULTI_SOURCE_CORROBORATION） */
+    /** 断言身份（分组键五元组，去掉内容）；scope 归一（strip） */
+    public ClaimIdentity identity() {
+        return new ClaimIdentity(claimKey, scope.strip(), timeRange, observedGeneration,
+                snapshotDigest);
+    }
+
+    /** claim_fingerprint：身份五元组 canonical 后 sha256（hex 64） */
+    public String fingerprint() {
+        return identity().fingerprint();
+    }
+
+    /** claim_hash：内容（状态+原因+证据引用+来源+策略版本）canonical 后 sha256（hex 64） */
+    public String contentHash() {
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("kind", "claim-hash");
+        content.put("status", status.name());
+        content.put("reason", reason);
+        content.put("evidenceRefs", evidenceRefs);
+        content.put("sources", sources);
+        content.put("policyVersion", policyVersion);
+        return InternalCanonicalJsonV1.sha256(content);
+    }
+
+    /** 确认级别：仅 ≥2 独立来源一致的裁决（MULTI_SOURCE_CONSISTENT） */
     public boolean corroborated() {
-        return basis == Basis.UNANIMOUS || basis == Basis.MULTI_SOURCE_CORROBORATION;
+        return evidenceBasis == EvidenceBasis.MULTI_SOURCE_CONSISTENT;
+    }
+
+    private static List<String> sortedDistinct(List<String> values, String field) {
+        Objects.requireNonNull(values, field);
+        return List.copyOf(new TreeSet<>(values));
+    }
+
+    private static void requireNonBlank(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " 不得为空/blank");
+        }
     }
 }

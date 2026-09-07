@@ -176,6 +176,18 @@ public class PersistenceConfig {
                 jdbc, tx);
     }
 
+    // ---------------- AM4 断言投影（V17，M4-21/22 装配；消费方 = M4-26 Supervisor 裁决路径） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx,
+            ObjectMapper objectMapper,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresClaimStore(
+                jdbc, tx, objectMapper, rcaEventAppender);
+    }
+
     // ---------------- AM3 调查落档/通知编排仓储（V9，M3-04 装配） ----------------
 
     @Bean
