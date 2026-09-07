@@ -47,20 +47,27 @@ e4_admin_sql() {
         -Atqc "$1"
 }
 
-# 注入前环境自愈（v4，195 迭代实证三教训）：
+# 注入前环境自愈（v5，195 迭代实证）：
 #   a) quiesce 静止面——上轮同 fault 会话未收口时先 off。scenarioId 每轮按时钟
 #      生成且 uq_chaos_scenario 全局唯一（同 id 不可二次激活），quiesce.py 无法
 #      自行探测上轮 id，由本函数经 PG 查出活跃会话传参执行 off；
-#   b) resolved 落库等待——AM 组 flush 走 group_interval（最长 5m），仅等业务
-#      gauge 归零即注入时，新 firing 实例并入未 flush 的组（resolved+firing 相抵，
-#      AM 视为无净变化不投递，repeat 4h 内无 webhook）。必须等 resolved webhook
-#      真正落 alert_inbox（组已 flush 的端到端证据）才放行注入；
+#   b) AM 组 flush 等待——quiesce 只保证业务 gauge 归零；若 AM 侧该 fault 的组
+#      未 flush，新 firing 实例并入旧组被视为无净变化不投递（repeat 4h 内无
+#      webhook）。放行条件（任一）：组 resolved 已落 alert_inbox，或 AM
+#      /api/v2/alerts/groups 已无该 alertname 的组（组消失=新 firing 必为新组
+#      首发投递）。伴生告警（F2 连带 ArenaOrderStuck）由条件一覆盖，主告警组
+#      消失由条件二覆盖；实测 resolved 到达 = TTL 到期 +56s，窗口取 480s。
 #   c) 影子 run 轮间回收——影子 run 终点 REPORTING 挂 uq_rca_run_active_incident
 #      （QUEUED/RUNNING/REPORTING 部分唯一），不回收则同 incident 下一轮 firing
 #      intake 开 run 必撞 DuplicateKeyException → 告警死信（195 实证）。RERUN 仅
 #      由影子触发器产生，回收不触碰主链 INITIAL run。
+E4_ANAME_F1="ArenaDuplicateOrders"
+E4_ANAME_F2="ArenaIllegalTransitions"
+E4_ANAME_F3="ArenaOrderStuck"
+
 e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     fault="$1"
+    aname=$(eval echo "\$E4_ANAME_$fault")
     active=$(e4_sql "
         select scenario_id || ' ' || generation from arena.oa_chaos_session
          where fault_type = '$fault'
@@ -71,19 +78,35 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
         OFF_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
         docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault" $active
         i=0
-        RESOLVED_N=0
-        while [ $i -lt 72 ]; do   # 72*5s=360s ≥ group_interval 5m + 投递余量
-            RESOLVED_N=$(e4_sql "
+        flushed=0
+        while [ $i -lt 96 ]; do   # 96*5s=480s（组 flush + 伴生告警恢复余量）
+            rn=$(e4_sql "
                 select count(*) from alert_inbox
                  where group_status='resolved' and received_at > '$OFF_AT'")
-            [ "$RESOLVED_N" -ge 1 ] && break
-            sleep 5; i=$((i + 5))
+            if [ "$rn" -ge 1 ]; then
+                flushed=1
+                break
+            fi
+            gc=$(curl -s http://localhost:9093/api/v2/alerts/groups | python3 -c "
+import json, sys
+try:
+    gs = json.load(sys.stdin)
+    print(sum(1 for g in gs for a in g.get('alerts', [])
+              if a.get('labels', {}).get('alertname') == '$aname'))
+except Exception:
+    print(9)")
+            if [ "$gc" = "0" ]; then
+                flushed=1
+                break
+            fi
+            sleep 5
+            i=$((i + 5))
         done
-        if [ "$RESOLVED_N" -lt 1 ]; then
-            echo "  FAIL: quiesce 后 AM 组 resolved 未落 alert_inbox（组未 flush，注入将不投递）"
+        if [ "$flushed" -ne 1 ]; then
+            echo "  FAIL: quiesce 后 AM 组未 flush（resolved 未落库且组未消失，注入将不投递）"
             exit 1
         fi
-        echo "  quiesce: resolved 已落库（组 flush 完成）"
+        echo "  quiesce: AM 组 flush 完成（放行注入）"
     else
         docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
     fi
