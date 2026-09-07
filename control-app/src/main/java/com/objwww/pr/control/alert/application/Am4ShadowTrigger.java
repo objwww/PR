@@ -18,6 +18,7 @@ import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
+import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -167,6 +168,9 @@ public class Am4ShadowTrigger {
     /**
      * 三调查任务逐个领取执行（READY→LEASED→RUNNING→DONE 状态机链）；
      * FAILED = 缺源降级续跑：任务 DEAD 终态、run 继续（结局行留痕 stdout）。
+     * 工具控制面拒绝（{@link ToolControlPlaneException}，allowed-tools 裁剪/
+     * 未注册工具）同走 DEAD 降级——裁源不是触发器失败理由，残留活跃 run 反而
+     * 毒死同 incident 后续影子触发（195 实证）。
      */
     private void investigate(UUID runId, long generation, String snapshotDigest) {
         Instant end = clock.now();
@@ -181,15 +185,23 @@ public class Am4ShadowTrigger {
             SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
                     runId, task.id(), UUID.randomUUID(), callSeq, generation,
                     snapshotDigest, timeRange);
-            SingleToolEvidenceAgent.AgentResult result = switch (task.taskKey()) {
-                case TASK_METRICS -> metricsAgent.investigate(ctx,
-                        new MetricsAgent.MetricsQuery(METRICS_EXPR, startEpoch, endEpoch, STEP));
-                case TASK_LOGS -> logsAgent.investigate(ctx,
-                        new LogsAgent.LogsQuery(startEpoch, endEpoch));
-                case TASK_CHANGE -> changeAgent.investigate(ctx,
-                        new ChangeAgent.ChangeQuery(startEpoch, endEpoch));
-                default -> throw new IllegalStateException("未注册的影子调查任务: " + task.taskKey());
-            };
+            SingleToolEvidenceAgent.AgentResult result;
+            try {
+                result = switch (task.taskKey()) {
+                    case TASK_METRICS -> metricsAgent.investigate(ctx,
+                            new MetricsAgent.MetricsQuery(METRICS_EXPR, startEpoch, endEpoch, STEP));
+                    case TASK_LOGS -> logsAgent.investigate(ctx,
+                            new LogsAgent.LogsQuery(startEpoch, endEpoch));
+                    case TASK_CHANGE -> changeAgent.investigate(ctx,
+                            new ChangeAgent.ChangeQuery(startEpoch, endEpoch));
+                    default -> throw new IllegalStateException("未注册的影子调查任务: " + task.taskKey());
+                };
+            } catch (ToolControlPlaneException denied) {
+                transition(task.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+                System.out.println(TASK_OUTCOME_MARKER + task.taskKey()
+                        + "=FAILED(" + denied.reason() + ")");
+                continue;
+            }
             if (result.outcome() == SingleToolEvidenceAgent.AgentOutcome.FAILED) {
                 transition(task.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
                 System.out.println(TASK_OUTCOME_MARKER + task.taskKey()

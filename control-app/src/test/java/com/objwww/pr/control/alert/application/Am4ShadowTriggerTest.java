@@ -31,6 +31,8 @@ import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
+import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
+import com.objwww.pr.control.alert.domain.tool.ToolControlReason;
 import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
 import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
@@ -158,6 +160,33 @@ class Am4ShadowTriggerTest {
     }
 
     @Test
+    void policyDeniedSourceDegradesToDeadTaskInsteadOfEscaping() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, UUID.randomUUID(), 9, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        ByteArrayOutputStream captured = captureStdout();
+        UUID shadowId = trigger(Am4ShadowTriggerTest::policyDenyChange).trigger(holmesId);
+        resetStdout();
+
+        // allowed-tools 裁剪 = Gateway 层抛 ToolControlPlaneException(POLICY_DENIED)：
+        // 缺源降级语义要求任务 DEAD 续跑，异常不得逃出 trigger 把影子 run 永久挂在
+        // QUEUED（195 实证：残留活跃 run 毒死同 incident 后续影子触发）
+        RcaRun shadow = stores.runs.findById(shadowId).orElseThrow();
+        assertThat(shadow.state()).isEqualTo(RcaRunState.REPORTING);
+        assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_CHANGE))
+                .isEqualTo(RcaTaskState.DEAD);
+        assertThat(evidence.rows).extracting(EvidenceEnvelope::source)
+                .containsExactlyInAnyOrder("prometheus", "logs");
+        assertThat(snapshots.byRun.values().iterator().next().members()).hasSize(2);
+        assertThat(captured.toString(StandardCharsets.UTF_8))
+                .contains(Am4ShadowTrigger.RUN_ID_MARKER + shadowId)
+                .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + Am4ShadowTrigger.TASK_CHANGE
+                        + "=FAILED(POLICY_DENIED)");
+    }
+
+    @Test
     void slotsHeldDuringShadowDriveAndReleasedAfterward() {
         Digest snapshot = Digest.sha256Of("holmes-input");
         UUID holmesId = UUID.randomUUID();
@@ -217,6 +246,16 @@ class Am4ShadowTriggerTest {
         byte[] body = "change.query".equals(invocation.toolName()) ? TOOL_ERROR : TOOL_OK;
         return new ToolGateway.ToolInvocationResult(
                 ToolGateway.ToolInvocationResult.Kind.EXECUTED, "ut-digest", body);
+    }
+
+    /** change.query 被 allowed-tools 裁剪：Gateway 层直接拒绝（POLICY_DENIED 异常） */
+    private static ToolGateway.ToolInvocationResult policyDenyChange(
+            ToolGateway.ToolInvocation invocation) {
+        if ("change.query".equals(invocation.toolName())) {
+            throw new ToolControlPlaneException(ToolControlReason.POLICY_DENIED,
+                    "tool 未在 allowed-tools 白名单: change.query");
+        }
+        return ok(invocation);
     }
 
     private RcaTaskState taskState(UUID runId, String key) {
