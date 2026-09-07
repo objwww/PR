@@ -84,12 +84,11 @@ public class DagExecutionService {
         }
     }
 
-    /** 推进迁移过状态机（BA-11①纪律）+ CAS 落库；CAS 失败 = 并发已收敛，不报错 */
+    /** 推进迁移过状态机（BA-11①纪律）+ CAS 落库；CAS 失败 = 并发已收敛——本地视图
+     *  必须同步为终态（非 BLOCKED 即不再重评），否则不动点迭代会永远重评同一任务不终止 */
     private void transition(Map<String, DagTaskState> states, String taskId, RcaTaskState to) {
         RcaTaskStateMachine.requireTransition(RcaTaskState.BLOCKED, to);
-        if (!tasks.transitionState(UUID.fromString(taskId), RcaTaskState.BLOCKED, to)) {
-            return;
-        }
+        tasks.transitionState(UUID.fromString(taskId), RcaTaskState.BLOCKED, to);
         states.put(taskId, DagTaskState.fromPersistent(to));
     }
 }

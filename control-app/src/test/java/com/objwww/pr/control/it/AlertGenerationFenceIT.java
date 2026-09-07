@@ -113,11 +113,13 @@ class AlertGenerationFenceIT extends PostgresITBase {
         assertThat(claimed.id()).as("死 run 任务被 claim 栅栏挡住，领取的是新 run 任务")
                 .isNotEqualTo(taskId);
 
-        // 旧 worker 携旧租约直接对死 run 收尾（绕过 claim，模拟租约期内 run 被取代）
-        RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, "old-worker",
+        // 领取者携在期租约直接对死 run 收尾（租约期内 run 被取代）：worker 名必须与
+        // claimNext 的租约持有人一致——否则 finishTask 先在租约校验返回 LEASE_REJECTED，
+        // 到不了本测试要验的代际栅栏
+        RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, "it-worker",
                 RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null);
         RcaRunOrchestrator.FinishOutcome outcome = orchestrator.finishTask(
-                tasks.findById(taskId).orElseThrow(), "old-worker", -1, -1,
+                tasks.findById(taskId).orElseThrow(), "it-worker", -1, -1,
                 RcaTaskExecutor.ExecutionResult.success(artifact()),
                 attempt);
 

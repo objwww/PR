@@ -8,6 +8,7 @@ import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,10 +72,12 @@ class AlertToolInvocationLedgerIT extends PostgresITBase {
         assertThat(stateOf(id.operationId())).isEqualTo("PENDING"); // 进程死后悬挂可查
         assertThat(ledger.succeed(id.operationId())).isTrue();
         assertThat(stateOf(id.operationId())).isEqualTo("SUCCESS");
-        String reason = controlJdbc.sql(
+        // JdbcClient.single() 拒 NULL 列值（TypeMismatchDataAccessException），NULL 断言走行映射
+        List<String> reasonRows = controlJdbc.sql(
                         "SELECT reason_code FROM rca_tool_invocation WHERE id = :id")
-                .param("id", id.operationId()).query(String.class).single();
-        assertThat(reason).isNull(); // SUCCESS 无原因码（ck_rca_tool_invocation_success_no_reason）
+                .param("id", id.operationId())
+                .query((rs, n) -> rs.getString("reason_code")).list();
+        assertThat(reasonRows).containsExactly((String) null); // SUCCESS 无原因码（ck_success_no_reason）
     }
 
     @Test

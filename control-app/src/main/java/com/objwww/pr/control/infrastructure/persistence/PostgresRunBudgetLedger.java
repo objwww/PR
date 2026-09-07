@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.domain.budget.RunBudgetLedger;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
 
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -200,7 +201,8 @@ public class PostgresRunBudgetLedger implements RunBudgetLedger {
                  where state in ('RESERVED', 'PROVISIONAL') and created_at < :older
                  order by created_at, id
                 """)
-                .param("older", olderThan)
+                // pgjdbc 不识别 Instant 类型（setObject 直接抛），timestamptz 参数显式转 Timestamp
+                .param("older", Timestamp.from(olderThan))
                 .query((rs, n) -> new ReservationKey(
                         rs.getObject("run_id", UUID.class),
                         rs.getObject("task_id", UUID.class),

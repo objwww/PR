@@ -18,6 +18,7 @@ import com.objwww.pr.control.alert.domain.claim.ClaimVerdict;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.event.RcaEventAppender;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
+import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
 import com.objwww.pr.control.alert.domain.tool.ToolDefinition;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException;
 import com.objwww.pr.control.alert.domain.tool.ToolReplayStore;
@@ -146,8 +147,18 @@ class Am4E2E08ReplayIT extends PostgresITBase {
                     .isInstanceOf(ToolModelVisibleException.class)
                     .hasMessageContaining("REPLAY_MISS");
         }
+        assertThat(runner.stats().misses()).isEqualTo(4);
 
-        assertThat(runner.stats().misses()).isEqualTo(5);
+        // toolVersion 轴特例："2" 不在 registry 白名单，digest 判定前即被
+        // UNKNOWN_TOOL 拒绝（同样零执行）——拒绝面语义不同，单独断言
+        UUID runId = seedRun();
+        Map<String, Object> baseArgs = LogsAgent.argsOf(
+                new LogsAgent.LogsQuery("1757059200", "1757059260"));
+        assertThatThrownBy(() -> runner.invoke(invocation(runId, LogsAgent.TOOL_NAME,
+                "2", TIME_RANGE, baseArgs, SNAPSHOT)))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("UNKNOWN_TOOL");
+
         assertThat(executor.calls).isZero();
         assertThat(count("rca_tool_replay")).isEqualTo(ledgerRowsBefore);
     }
@@ -207,9 +218,10 @@ class Am4E2E08ReplayIT extends PostgresITBase {
     }
 
     /**
-     * 扰动矩阵（REPLAY_ONLY 断言：任一匹配字段变化即 MISS）——tool 名/toolVersion/
-     * args/timeRange/snapshot 各一。tool 名轴 = change 工具 + logs 的 args(260)：
+     * 扰动矩阵（REPLAY_MISS 断言：任一匹配字段变化即查无此键）——tool 名/args/
+     * timeRange/snapshot 各一。tool 名轴 = change 工具 + logs 的 args(260)：
      * change 键只录了 270 版，logs 键 tool 名不同——与任一录制键都不同键。
+     * toolVersion 轴因触发 registry 白名单拒绝（UNKNOWN_TOOL）单独在测试体断言。
      */
     private List<ToolGateway.ToolInvocation> perturbations() {
         UUID runId = seedRun();
@@ -218,8 +230,6 @@ class Am4E2E08ReplayIT extends PostgresITBase {
         List<ToolGateway.ToolInvocation> list = new ArrayList<>();
         list.add(invocation(runId, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
                 TIME_RANGE, baseArgs, SNAPSHOT));
-        list.add(invocation(runId, LogsAgent.TOOL_NAME, "2", TIME_RANGE, baseArgs,
-                SNAPSHOT));
         list.add(invocation(runId, LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
                 TIME_RANGE, LogsAgent.argsOf(
                         new LogsAgent.LogsQuery("1757059200", "1757059261")), SNAPSHOT));

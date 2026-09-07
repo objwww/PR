@@ -248,7 +248,8 @@ class AlertClaimIT extends PostgresITBase {
         // 双源一致（MULTI_SOURCE_CONSISTENT）的稳定 verdict；身份 = latency-high/scope/1h/gen
         return new ClaimVerdict("latency-high", "scope", "2026-09-05/1h", generation, null,
                 status, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
-                List.of("metrics-agent"), reason, List.of("ev-1", "ev-2"), policyVersion);
+                List.of("logs-agent", "metrics-agent"), reason, List.of("ev-1", "ev-2"),
+                policyVersion);
     }
 
     private long eventCount(String eventType) {

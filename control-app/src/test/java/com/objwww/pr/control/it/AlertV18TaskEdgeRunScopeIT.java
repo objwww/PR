@@ -123,12 +123,9 @@ class AlertV18TaskEdgeRunScopeIT extends PostgresITBase {
                 """).param("id", incident)
                 .param("key", "alertname=HighErrorRate|service=edge-" + incident).update();
         UUID runA = insertRun(incident);
-        UUID runB = insertRun(incident);
-        // V12 uq_rca_run_active_incident：同 incident 只容一条活跃 run——本夹具只测边域
-        // （roundtrip/组合外键/自环/重复边，与 run 状态无关），runB 置终态让位谓词
-        controlJdbc.sql("""
-                UPDATE rca_run SET state = 'SUPERSEDED', finished_at = now() WHERE id = :id
-                """).param("id", runB).update();
+        // V12 uq_rca_run_active_incident：同 incident 只容一条活跃 run，且 INSERT 瞬间即校验——
+        // 伴生 run 必须以终态出生（本夹具只测边域 roundtrip/组合外键/自环/重复边，与 run 状态无关）
+        UUID runB = insertSupersededRun(incident);
         Seed seed = new Seed(incident, runA, runB,
                 insertTask(runA), insertTask(runA), insertTask(runB), insertTask(runB));
         return seed;
@@ -142,6 +139,18 @@ class AlertV18TaskEdgeRunScopeIT extends PostgresITBase {
                 VALUES (:id, :inc, 0, 'INITIAL', 'QUEUED', :hash, now(), now())
                 """).param("id", runId).param("inc", incidentId)
                 .param("hash", Digest.sha256Of("it-" + runId).value()).update();
+        return runId;
+    }
+
+    /** 终态出生的伴生 run（SUPERSEDED 不占 uq_rca_run_active_incident 谓词） */
+    private UUID insertSupersededRun(UUID incidentId) {
+        UUID runId = UUID.randomUUID();
+        controlJdbc.sql("""
+                INSERT INTO rca_run(id, incident_id, generation, trigger_kind, state,
+                    investigation_hash, created_at, updated_at, finished_at)
+                VALUES (:id, :inc, 0, 'INITIAL', 'SUPERSEDED', :hash, now(), now(), now())
+                """).param("id", runId).param("inc", incidentId)
+                .param("hash", Digest.sha256Of("it-sup-" + runId).value()).update();
         return runId;
     }
 
