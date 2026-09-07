@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.model.InvestigationResult;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
@@ -28,6 +29,7 @@ import com.objwww.pr.control.alert.domain.statemachine.RcaTaskStateMachine;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.observability.StructuredLog;
+import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +91,7 @@ public class RcaRunOrchestrator {
     private final String slotScope;
     private final ObjectMapper mapper = new ObjectMapper();
     private final AlertMetrics metrics;
+    private final CanaryRouter canaryRouter;
 
     public RcaRunOrchestrator(RcaTaskRepository tasks,
                               RcaRunRepository runs,
@@ -104,6 +107,27 @@ public class RcaRunOrchestrator {
                               AlertClock clock,
                               String slotScope,
                               AlertMetrics metrics) {
+        this(tasks, runs, attempts, reports, incidents, slots, investigationResults,
+                toolCalls, notifier, artifacts, sla, clock, slotScope, metrics,
+                CanaryRouter.holmesOnly());
+    }
+
+    /** M5-10：CanaryRouter 注入构造（RERUN 铸造点路由决策 + 路由四列落行） */
+    public RcaRunOrchestrator(RcaTaskRepository tasks,
+                              RcaRunRepository runs,
+                              RcaAttemptRepository attempts,
+                              RcaReportRepository reports,
+                              IncidentRepository incidents,
+                              SchedulerSlotRepository slots,
+                              InvestigationResultRepository investigationResults,
+                              RcaToolCallRepository toolCalls,
+                              ReportCompletedNotifier notifier,
+                              ArtifactStore artifacts,
+                              SlaPolicy sla,
+                              AlertClock clock,
+                              String slotScope,
+                              AlertMetrics metrics,
+                              CanaryRouter canaryRouter) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -118,6 +142,7 @@ public class RcaRunOrchestrator {
         this.clock = Objects.requireNonNull(clock);
         this.slotScope = Objects.requireNonNull(slotScope);
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.canaryRouter = Objects.requireNonNull(canaryRouter);
     }
 
     /**
@@ -253,9 +278,13 @@ public class RcaRunOrchestrator {
 
     /** 铸下一轮 RERUN（generation 同 episode 代；priority 继承刚完成的 task；uq 兜底并发双铸） */
     private void castRunAndTask(Incident incident, Digest materialHash, int priority, Instant now) {
-        RcaRun run = new RcaRun(UUID.randomUUID(), incident.id(), incident.generation(),
+        // M5-10：RERUN 铸造点路由决策（路由四列随行落库，Run 启动固定不再变）
+        UUID runId = UUID.randomUUID();
+        RcaRunRouting routing = canaryRouter.route(
+                runId, incident.incidentKey(), incident.incidentKey());
+        RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null);
-        runs.insert(run);
+        runs.insertRouted(run, routing);
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.HOLMES_INVESTIGATE,
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);

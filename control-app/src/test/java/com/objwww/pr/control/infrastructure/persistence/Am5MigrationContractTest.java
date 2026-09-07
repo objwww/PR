@@ -31,6 +31,9 @@ class Am5MigrationContractTest {
     private static final Path V24 = Path.of(
             "src/main/resources/db/migration/V24__am5_config_bundle.sql");
 
+    private static final Path V25 = Path.of(
+            "src/main/resources/db/migration/V25__am5_canary_route.sql");
+
     private static String normalized() throws IOException {
         return normalized(V20);
     }
@@ -274,6 +277,44 @@ class Am5MigrationContractTest {
                 .contains("grant select, update on config_bundle_active to control_app")
                 .contains("revoke delete on config_bundle_active from control_app")
                 .contains("revoke all on config_bundle, config_bundle_active"
+                        + " from publisher_app, notify_app, eval_app, public");
+    }
+
+    @Test
+    void v25RunRoutingColumnsPinEngineAndDigestAtCastTime() throws IOException {
+        String sql = normalized(V25);
+
+        // 路由四列（落码方案 §M5-10②）：engine 默认 HOLMES 存量行为零变；
+        // config_digest = Run 启动固定快照（老 Run 固定旧 digest）；NATIVE 必带 digest
+        assertThat(sql)
+                .contains("alter table rca_run add column engine varchar(16) not null default 'holmes'")
+                .contains("alter table rca_run add column config_digest char(64)")
+                .contains("alter table rca_run add column stickiness_key text")
+                .contains("alter table rca_run add column canary_bucket integer")
+                .contains("constraint ck_rca_run_engine check (engine in ('holmes','native'))")
+                .contains("constraint ck_rca_run_native_digest")
+                .contains("check (engine <> 'native' or config_digest is not null)");
+    }
+
+    @Test
+    void v25ActiveIndexWidensToEngineGranularityAndDecisionTableIsAppendOnly() throws IOException {
+        String sql = normalized(V25);
+
+        // 唯一活跃索引 (incident_id, engine)——Shadow（默认 HOLMES）行为不变，
+        // NATIVE 候选获得独立槽位（C-2 矛盾消解面）；决策表 append-only 冻结值域
+        assertThat(sql)
+                .contains("drop index uq_rca_run_active_incident")
+                .contains("create unique index uq_rca_run_active_incident")
+                .contains("on rca_run(incident_id, engine) where state in ('queued','running')")
+                .contains("create table canary_route_decision")
+                .contains("run_id uuid not null references rca_run (id)")
+                .contains("check (percent between 0 and 100)")
+                .contains("'no_active_bundle','canary_disabled','no_stickiness_key'")
+                .contains("'whitelisted','bucketed_native','bucketed_holmes'")
+                .contains("'native_deferred','blast_radius_stopped'")
+                .contains("grant select, insert on canary_route_decision to control_app")
+                .contains("revoke update, delete on canary_route_decision from control_app")
+                .contains("revoke all on canary_route_decision"
                         + " from publisher_app, notify_app, eval_app, public");
     }
 }

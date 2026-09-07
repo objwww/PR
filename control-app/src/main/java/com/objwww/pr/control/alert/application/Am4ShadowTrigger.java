@@ -122,6 +122,11 @@ public class Am4ShadowTrigger {
      * 驱动一次影子 run：holmes run 须已终态（活跃 run 撞
      * uq_rca_run_active_incident 唯一约束即失败——影子 run 与 holmes 同 incident）。
      *
+     * <p>M5-10 说明：影子 run 不经 CanaryRouter（Canary 与 Shadow 的关系裁定 =
+     * 开放项 O-3），走普通 insert——engine 落 DB 默认 HOLMES，V25 把唯一活跃索引
+     * 升 (incident_id, engine) 粒度后本约束语义不变（同 incident 同引擎仍最多一个
+     * 活跃 run）；O-3 裁定 Shadow 是否转 NATIVE 桶后再接路由。
+     *
      * @return 影子 run id（同时以 {@value #RUN_ID_MARKER} 打印 stdout）
      */
     public UUID trigger(UUID holmesRunId) {

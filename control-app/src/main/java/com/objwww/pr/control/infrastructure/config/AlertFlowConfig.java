@@ -31,6 +31,9 @@ import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
 import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
+import com.objwww.pr.control.release.application.CanaryRouter;
+import com.objwww.pr.control.release.domain.repository.CanaryDecisionLogRepository;
+import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
@@ -40,6 +43,7 @@ import org.springframework.transaction.support.TransactionOperations;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -98,9 +102,10 @@ public class AlertFlowConfig {
                                                RcaTaskRepository tasks,
                                                AlertIdentityFactory identity,
                                                DeferredPolicy deferredPolicy,
-                                               SlaPolicy sla) {
+                                               SlaPolicy sla,
+                                               CanaryRouter canaryRouter) {
         return new IncidentProjector(events, incidents, runs, tasks,
-                identity, deferredPolicy, sla, AlertClock.system());
+                identity, deferredPolicy, sla, AlertClock.system(), canaryRouter);
     }
 
     @Bean
@@ -213,10 +218,24 @@ public class AlertFlowConfig {
                                                  ArtifactStore artifacts,
                                                  SlaPolicy sla,
                                                  AlertMetrics alertMetrics,
+                                                 CanaryRouter canaryRouter,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
-                sla, AlertClock.system(), slotScope, alertMetrics);
+                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter);
+    }
+
+    // ---------------- AM5 M5-09/10：发布与切流（release 域路由决策） ----------------
+
+    /**
+     * M5-10 CanaryRouter：nativeReady 恒 false——NATIVE 执行面未接线（O-3 裁定 +
+     * 生产 1% Canary 属 M6-01），NATIVE 意愿降级 HOLMES（立即回退为一等操作）；
+     * 路由决策与审计照记，放量语义待执行面就绪后放开本开关。
+     */
+    @Bean
+    public CanaryRouter canaryRouter(ConfigBundleRepository configBundleRepository,
+                                     CanaryDecisionLogRepository decisionLog) {
+        return new CanaryRouter(configBundleRepository, decisionLog, false, Instant::now);
     }
 
     @Bean

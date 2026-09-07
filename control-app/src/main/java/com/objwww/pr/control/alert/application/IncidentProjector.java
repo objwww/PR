@@ -5,6 +5,7 @@ import com.objwww.pr.control.alert.domain.model.AlertFiringStatus;
 import com.objwww.pr.control.alert.domain.model.Incident;
 import com.objwww.pr.control.alert.domain.model.IncidentStatus;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
@@ -17,6 +18,7 @@ import com.objwww.pr.control.alert.domain.service.AlertIdentityFactory;
 import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.alert.domain.statemachine.IncidentStateMachine;
+import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 
 import java.time.Instant;
@@ -59,6 +61,7 @@ public class IncidentProjector {
     private final DeferredPolicy deferredPolicy;
     private final SlaPolicy sla;
     private final AlertClock clock;
+    private final CanaryRouter canaryRouter;
 
     public IncidentProjector(AlertEventRepository events,
                              IncidentRepository incidents,
@@ -68,6 +71,20 @@ public class IncidentProjector {
                              DeferredPolicy deferredPolicy,
                              SlaPolicy sla,
                              AlertClock clock) {
+        this(events, incidents, runs, tasks, identity, deferredPolicy, sla, clock,
+                CanaryRouter.holmesOnly());
+    }
+
+    /** M5-10：CanaryRouter 注入构造（新 run 铸造点路由决策 + 路由四列落行） */
+    public IncidentProjector(AlertEventRepository events,
+                             IncidentRepository incidents,
+                             RcaRunRepository runs,
+                             RcaTaskRepository tasks,
+                             AlertIdentityFactory identity,
+                             DeferredPolicy deferredPolicy,
+                             SlaPolicy sla,
+                             AlertClock clock,
+                             CanaryRouter canaryRouter) {
         this.events = Objects.requireNonNull(events);
         this.incidents = Objects.requireNonNull(incidents);
         this.runs = Objects.requireNonNull(runs);
@@ -76,6 +93,7 @@ public class IncidentProjector {
         this.deferredPolicy = Objects.requireNonNull(deferredPolicy);
         this.sla = Objects.requireNonNull(sla);
         this.clock = Objects.requireNonNull(clock);
+        this.canaryRouter = Objects.requireNonNull(canaryRouter);
     }
 
     /**
@@ -266,9 +284,14 @@ public class IncidentProjector {
 
     private void castRunAndTask(Incident incident, ParsedAlert alert, Digest invHash,
                                 RunTrigger trigger, Instant now) {
-        RcaRun run = new RcaRun(UUID.randomUUID(), incident.id(), incident.generation(),
+        // M5-10：新 run 铸造点路由决策——路由四列随行落库（Run 启动固定不再变，
+        // 回滚只影响新 Run）；决策审计行随路由器必落（runId 与 run 行一致）
+        UUID runId = UUID.randomUUID();
+        RcaRunRouting routing = canaryRouter.route(
+                runId, incident.incidentKey(), incident.incidentKey());
+        RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 trigger, RcaRunState.QUEUED, invHash, now, now, null, null, null);
-        runs.insert(run);
+        runs.insertRouted(run, routing);
 
         int priority = sla.priority(alert.labels().get("severity"));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.HOLMES_INVESTIGATE,

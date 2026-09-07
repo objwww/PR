@@ -1,6 +1,7 @@
 package com.objwww.pr.control.infrastructure.persistence;
 
 import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
 import com.objwww.pr.control.alert.domain.statemachine.RcaStateContract;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
@@ -46,6 +47,42 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("startedAt", ts(run.startedAt()))
                 .param("finishedAt", ts(run.finishedAt()))
                 .param("lastError", JsonbText.encode(run.lastError()))
+                .update();
+    }
+
+    /**
+     * M5-10：路由四列随铸造落行（V25 engine/config_digest/stickiness_key/
+     * canary_bucket）——Run 启动固定不再变，回滚只影响新 Run。
+     */
+    @Override
+    public void insertRouted(RcaRun run, RcaRunRouting routing) {
+        jdbc.sql("""
+                INSERT INTO rca_run (
+                    id, incident_id, generation, trigger_kind, state, investigation_hash,
+                    created_at, updated_at, started_at, finished_at, last_error,
+                    engine, config_digest, stickiness_key, canary_bucket
+                ) VALUES (
+                    :id, :incidentId, :generation, :trigger, :state, :investigationHash,
+                    :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
+                    :engine, :configDigest, :stickinessKey, :bucket
+                )
+                """)
+                .param("id", run.id())
+                .param("incidentId", run.incidentId())
+                .param("generation", run.generation())
+                .param("trigger", run.trigger().name())
+                .param("state", run.state().name())
+                .param("investigationHash", run.investigationHash().value())
+                .param("createdAt", Timestamp.from(run.createdAt()))
+                .param("updatedAt", Timestamp.from(run.updatedAt()))
+                .param("startedAt", ts(run.startedAt()))
+                .param("finishedAt", ts(run.finishedAt()))
+                .param("lastError", JsonbText.encode(run.lastError()))
+                .param("engine", routing.engine().name())
+                .param("configDigest", routing.configDigest() == null
+                        ? null : routing.configDigest().hex())
+                .param("stickinessKey", routing.stickinessKey())
+                .param("bucket", routing.bucket())
                 .update();
     }
 
