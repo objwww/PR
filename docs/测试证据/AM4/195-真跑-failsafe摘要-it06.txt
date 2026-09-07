@@ -1,0 +1,36 @@
+> 生成方式：195 真跑日志（195-真跑-mvn-verify-it06.log）按 failsafe 摘要提取。
+> 提取时间：2026-09-07 19:17（本地 PowerShell，从归档日志过滤）
+
+=== 总结果 ===
+MVN_VERIFY_RC=0
+UT: Tests run: 634, Failures: 0, Errors: 0, Skipped: 0
+IT: Tests run: 6, Failures: 0, Errors: 0, Skipped: 0  -- Am4E2E06FaultDrillIT
+BUILD SUCCESS
+
+=== E2E-M4-06 故障演练（Am4E2E06FaultDrillIT，Testcontainers 真 PG） ===
+it06_1 plan落库后进程重启_任务零重建图同构可推进无永久BLOCKED        PASS
+it06_2 toolPENDING悬挂与预算悬挂_重启收口零重复副作用零透支          PASS
+it06_3 claim落行后进程死重放append_零重复行零重复事件                PASS
+it06_4 finish前中断重启_恰一份报告_重启侧预算实扣收口                PASS
+it06_5 finish完成后重放_终态不可改写零重复报告                        PASS
+it06_6 边界扰动重驱与直通对照_最终事实一致                            PASS
+
+=== 四轮迭代（IT 首次真 PG 暴露 → 修复 → 绿） ===
+R1: 包缺 3 个 reactor 模块目录 → 根 pom POM 读取失败（打包面错误，非代码）
+R2: -Dit.test 传至根聚合 pom 的 failsafe 无匹配即失败 → 补
+    -Dfailsafe.failIfNoSpecifiedTests=false（执行面错误，非代码）
+R3: Am4E2E06FaultDrillIT 6 案 5 Error —— **生产缺陷 #7（195 真跑暴露）**：
+    PostgresRcaTaskRepository.deadlineParam 以 Timestamp(Long.MAX_VALUE) 编码
+    Instant.MAX（"永不到期"），pgjdbc 写侧原样渲染 "292278994-…" 越界字符串，
+    服务端拒（ERROR: timestamp out of range）→ PlanCompiler DAG 任务
+    （deadlineAt=Instant.MAX）真 PG 落库必炸。V7 DDL 契约本就规定
+    "critical 用 'infinity'"；此前该写路径只被内存仓测试覆盖。
+    修复：写侧绑 PG 原生 'infinity' 字面量 + 语句侧 CAST(:deadlineAt AS
+    timestamptz)（INSERT/UPDATE 两处）；读侧 pgjdbc infinity→Long.MAX_VALUE
+    映射 + Instant.MAX 还原本就正确，未动。
+R4: 全绿（UT 634 + IT 6，MVN_VERIFY_RC=0，本文件即 R4 证据）。
+
+=== 涉及生产代码变更（R4 修复） ===
+control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresRcaTaskRepository.java
+  - deadlineParam: Instant.MAX → "infinity"（原 Timestamp(Long.MAX_VALUE)）
+  - INSERT/UPDATE: :deadlineAt → CAST(:deadlineAt AS timestamptz)

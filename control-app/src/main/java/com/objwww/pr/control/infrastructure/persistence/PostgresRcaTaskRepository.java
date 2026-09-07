@@ -62,7 +62,7 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                     attempt_count, max_attempts, created_at, updated_at
                 ) VALUES (
                     :id, :runId, :taskKey, :state, :priority,
-                    :availableAt, :readySince, :deadlineAt,
+                    :availableAt, :readySince, CAST(:deadlineAt AS timestamptz),
                     :leaseOwner, :leaseUntil, :leaseEpoch,
                     :attemptCount, :maxAttempts, :createdAt, :updatedAt
                 )
@@ -112,7 +112,8 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
         return jdbc.sql("""
                 UPDATE rca_task SET
                     state = :state, priority = :priority,
-                    available_at = :availableAt, ready_since = :readySince, deadline_at = :deadlineAt,
+                    available_at = :availableAt, ready_since = :readySince,
+                    deadline_at = CAST(:deadlineAt AS timestamptz),
                     lease_owner = :leaseOwner, lease_until = :leaseUntil, lease_epoch = :leaseEpoch,
                     attempt_count = :attemptCount, updated_at = :updatedAt
                  WHERE id = :id
@@ -192,13 +193,16 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
     }
 
     /**
-     * deadline 绑定：Instant.MAX（critical 永不到期，§6.2）必须走 pgjdbc 的 infinity 约定
-     * （Timestamp millis==Long.MAX_VALUE ⇔ timestamptz 'infinity'）。直接
-     * Timestamp.from(Instant.MAX) 会静默溢出环绕成负毫秒（实测 -5.3e18，落库为史前时刻），
-     * "永不到期"退化为"永远已过期"——BA-05。
+     * deadline 绑定：Instant.MAX（critical 永不到期，§6.2；V7 DDL 契约
+     * "critical 用 'infinity'"）必须绑 <b>PG 原生 'infinity' 字面量</b>并配合语句侧
+     * CAST(:deadlineAt AS timestamptz)。绑定 Timestamp(Long.MAX_VALUE) 行不通——
+     * pgjdbc 写侧把它原样渲染为 "292278994-…" 越界字符串遭服务端拒
+     * （timestamp out of range，195 真跑实测；读侧 infinity→Long.MAX_VALUE 映射仍成立，
+     * 见 {@link #deadline}）；直接 Timestamp.from(Instant.MAX) 则静默溢出环绕成负毫秒
+     * （BA-05，落库为史前时刻，"永不到期"退化为"永远已过期"）。
      */
     private static Object deadlineParam(Instant deadline) {
-        return Instant.MAX.equals(deadline) ? new Timestamp(Long.MAX_VALUE) : Timestamp.from(deadline);
+        return Instant.MAX.equals(deadline) ? "infinity" : Timestamp.from(deadline);
     }
 
     /** deadline 读回：infinity（millis==Long.MAX_VALUE）→ Instant.MAX 还原域语义 */
