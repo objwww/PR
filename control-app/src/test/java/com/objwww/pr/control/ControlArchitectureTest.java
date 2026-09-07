@@ -71,7 +71,8 @@ class ControlArchitectureTest {
     }
 
     /**
-     * INV-AM4-1（AM4 §3.0 R3）：AM4 新增 domain 子包（dag/tool/budget/claim）零框架——
+     * INV-AM4-1（AM4 §3.0 R3）：AM4 新增 domain 子包（dag/tool/budget/claim，
+     * 2026-09-07 M4-23 批次起扩 evidence/event）零框架——
      * Spring/Jackson/JDBC/HTTP 一律禁入（InternalCanonicalJsonV1 自实现规范化正是为了不引 Jackson）。
      *
      * <p>方法名说明：任务原拟名 alertDomainHasNoFrameworkDependency 与既有 AFT-A01 方法重名，
@@ -85,14 +86,17 @@ class ControlArchitectureTest {
      *       证明规则对 Jackson 依赖有判别力；</li>
      *   <li>绿：收窄到 AM4 四子包后通过；既有 AFT-A01（允许 jackson）保持原状不动。</li>
      * </ul>
-     * 遗留冲突：EvidencePackageValidator 为 AM1 既有类、本批次禁改既有文件，故暂不在
-     * 本规则覆盖面内；待其迁移到 InternalCanonicalJsonV1 后可将本规则扩至整个 alert.domain。
+     * 覆盖面扩展（2026-09-07，V16/V14 批次落码后的收口）：AM4 新建的 evidence/event
+     * 子包加入零框架面（两包现状零 Jackson/Spring，规则扩面即绿——预防性收紧，
+     * 非违规驱动）；EvidencePackageValidator 为 AM1 既有类仍在根包、不随子包通配
+     * 扩面进入覆盖（待其迁移到 InternalCanonicalJsonV1 后可将本规则扩至整个 alert.domain）。
      */
     @Test
     void am4AlertDomainZeroFrameworkDependency() {
         noClasses().that().resideInAnyPackage(
                         "..control.alert.domain.dag..", "..control.alert.domain.tool..",
-                        "..control.alert.domain.budget..", "..control.alert.domain.claim..")
+                        "..control.alert.domain.budget..", "..control.alert.domain.claim..",
+                        "..control.alert.domain.evidence..", "..control.alert.domain.event..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "org.springframework..", "com.fasterxml..",
                         "java.net.http..", "java.sql..",
