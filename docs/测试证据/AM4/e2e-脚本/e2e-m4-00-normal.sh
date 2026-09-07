@@ -28,9 +28,9 @@ echo "  基线: alert=$B_ALERT incident=$B_INC run=$B_RUN claim=$B_CLAIM pub=$B_
 
 # 正常业务请求（B0）：经 order-arena 对外业务 API（真实业务入口，禁直写事实表）。
 # API 形态见 order-arena 服务面；执行者也可手工完成正常下单后按回车继续。
+# 探测工具：arena-e2e-cli（python:alpine）无 curl，用 busybox wget（200→rc=0）
 if [ -z "$B0_SKIP_BUSINESS" ]; then
-    docker exec arena-e2e-cli sh -c \
-        "curl -s -o /dev/null -w '%{http_code}' -m 10 http://order-arena:8080/healthz" \
+    docker exec arena-e2e-cli wget -q -O /dev/null -T 10 http://order-arena:8080/healthz \
         || { echo "  FAIL: order-arena 不可达"; exit 1; }
     echo "  order-arena 可达（业务请求按 195 配方执行正常下单）"
 fi
