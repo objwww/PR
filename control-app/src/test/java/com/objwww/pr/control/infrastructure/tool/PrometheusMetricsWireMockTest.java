@@ -5,7 +5,7 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.objwww.pr.control.alert.application.tool.ToolGateway;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
-import com.objwww.pr.control.alert.application.agent.MetricsAgent.AgentOutcome;
+import com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent.AgentOutcome;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;

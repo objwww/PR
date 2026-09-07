@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "data": {
+    "result": [
+      {
+        "change_id": "CHG-2026-0901-04",
+        "deployed_at": 1757058000,
+        "service": "app-api",
+        "version": "2.41.0",
+        "actor": "deploy-bot"
+      }
+    ]
+  }
+}

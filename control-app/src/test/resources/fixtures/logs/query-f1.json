@@ -1,0 +1,19 @@
+{
+  "status": "success",
+  "data": {
+    "result": [
+      {
+        "timestamp": 1757059205,
+        "level": "ERROR",
+        "source": "app-srv-1",
+        "message": "connection refused to db-primary:5432 (retry 3/5)"
+      },
+      {
+        "timestamp": 1757059215,
+        "level": "WARN",
+        "source": "app-srv-1",
+        "message": "pool exhausted: active=20/20 waiters=7"
+      }
+    ]
+  }
+}
