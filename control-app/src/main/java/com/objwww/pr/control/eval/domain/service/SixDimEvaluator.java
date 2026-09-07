@@ -66,14 +66,20 @@ public final class SixDimEvaluator {
         List<EvalCaseInput.ToolCallObservation> calls = input.toolCalls();
         Set<String> seen = new HashSet<>();
         List<String> duplicateRefs = new ArrayList<>();
+        int errors = 0;
         for (int i = 0; i < calls.size(); i++) {
-            String key = calls.get(i).toolName() + "|" + calls.get(i).paramsDigest();
+            EvalCaseInput.ToolCallObservation call = calls.get(i);
+            String key = call.toolName() + "|" + call.paramsDigest();
             if (!seen.add(key)) {
                 duplicateRefs.add("tool_call:" + i);
             }
+            if (call.status() == ToolCallStatus.ERROR) {
+                errors++;
+            }
         }
         return new SixDimResult.Dim<>(
-                new DimensionCounts.Process(calls.size(), duplicateRefs.size()), duplicateRefs);
+                new DimensionCounts.Process(calls.size(), duplicateRefs.size(), errors),
+                duplicateRefs);
     }
 
     private SixDimResult.Dim<DimensionCounts.Tool> toolDim(EvalCaseInput input) {

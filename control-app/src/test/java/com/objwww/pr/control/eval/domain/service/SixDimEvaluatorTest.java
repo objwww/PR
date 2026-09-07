@@ -139,17 +139,19 @@ class SixDimEvaluatorTest {
     }
 
     @Test
-    @DisplayName("过程维：重复调用按 tool_name+params_digest 判定（同名异参不算重复），trace 指向重复发生位")
+    @DisplayName("过程维：重复调用按 tool_name+params_digest 判定（同名异参不算重复），错误调用单独计数，trace 指向重复发生位")
     void processDimDetectsDuplicatesByNameAndParamsDigest() {
         EvalCaseInput in = input(golden(List.of("PAYMENT_CHARGE_FAILURE")), pkg(List.of()),
                 List.of(call("logs", true, ToolCallStatus.SUCCESS, "d1"),
                         call("logs", true, ToolCallStatus.SUCCESS, "d1"),
                         call("k8s_events", true, ToolCallStatus.SUCCESS, "d2"),
-                        call("logs", true, ToolCallStatus.SUCCESS, "d3")));
+                        call("logs", true, ToolCallStatus.SUCCESS, "d3"),
+                        call("logs", true, ToolCallStatus.ERROR, "d4")));
         SixDimResult r = evaluator.evaluate(in);
 
-        assertThat(r.process().rawCounts().totalToolCalls()).isEqualTo(4);
+        assertThat(r.process().rawCounts().totalToolCalls()).isEqualTo(5);
         assertThat(r.process().rawCounts().duplicateToolCalls()).isEqualTo(1);
+        assertThat(r.process().rawCounts().errorToolCalls()).isEqualTo(1);
         assertThat(r.process().traceRefs()).containsExactly("tool_call:1");
     }
 

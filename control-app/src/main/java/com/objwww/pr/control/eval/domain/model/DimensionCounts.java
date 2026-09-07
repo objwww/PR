@@ -35,9 +35,10 @@ public final class DimensionCounts {
                          boolean silencePenalty) {
     }
 
-    /** 推理过程效率（过程维）：重复调用按发生位计数（首现不算） */
+    /** 推理过程效率（过程维）：重复调用按发生位计数（首现不算）；errorToolCalls 供运行门错误率（M5-08 分支4） */
     public record Process(int totalToolCalls,
-                          int duplicateToolCalls) {
+                          int duplicateToolCalls,
+                          int errorToolCalls) {
     }
 
     /** 工具调用精度（工具维）：rejectedCalls = approval_required 拒绝记录数 */
