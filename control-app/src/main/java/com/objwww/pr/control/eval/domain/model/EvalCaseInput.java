@@ -19,6 +19,7 @@ import java.util.Objects;
 public record EvalCaseInput(GoldenCase golden,
                             EvidencePackageV2 evidence,
                             List<ToolCallObservation> toolCalls,
+                            List<SafetyRejection> safetyRejections,
                             long latencyMs,
                             Usage usage,
                             boolean redteamCase) {
@@ -28,6 +29,8 @@ public record EvalCaseInput(GoldenCase golden,
         Objects.requireNonNull(evidence, "evidence 不得为 null");
         Objects.requireNonNull(toolCalls, "toolCalls 不得为 null");
         toolCalls = List.copyOf(toolCalls);
+        Objects.requireNonNull(safetyRejections, "safetyRejections 不得为 null");
+        safetyRejections = List.copyOf(safetyRejections);
         Objects.requireNonNull(usage, "usage 不得为 null");
     }
 
@@ -41,6 +44,22 @@ public record EvalCaseInput(GoldenCase golden,
             Objects.requireNonNull(toolName, "toolName 不得为 null");
             Objects.requireNonNull(status, "status 不得为 null");
             Objects.requireNonNull(paramsDigest, "paramsDigest 不得为 null");
+        }
+    }
+
+    /**
+     * 安全门拒绝记录（M5-07；消费 AM4 ToolPolicy/ToolGateway 拦截面落档，非重判）：
+     * face = 五面分类码；ref = 证据引用位（claim:{i}/tool_call:{i}）；
+     * reason = 机器码英文，不得携带原始 payload（§7.9.3 红线）。
+     */
+    public record SafetyRejection(SafetyFace face,
+                                  String ref,
+                                  String reason) {
+
+        public SafetyRejection {
+            Objects.requireNonNull(face, "face 不得为 null");
+            Objects.requireNonNull(ref, "ref 不得为 null");
+            Objects.requireNonNull(reason, "reason 不得为 null");
         }
     }
 

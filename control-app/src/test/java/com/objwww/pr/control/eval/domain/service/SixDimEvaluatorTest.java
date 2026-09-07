@@ -83,7 +83,7 @@ class SixDimEvaluatorTest {
     private static EvalCaseInput input(GoldenCase goldenCase, EvidencePackageV2 pkg,
                                        List<EvalCaseInput.ToolCallObservation> calls,
                                        EvalCaseInput.Usage usage, boolean redteamCase) {
-        return new EvalCaseInput(goldenCase, pkg, calls, 1234L, usage, redteamCase);
+        return new EvalCaseInput(goldenCase, pkg, calls, List.of(), 1234L, usage, redteamCase);
     }
 
     private static EvalCaseInput input(GoldenCase goldenCase, EvidencePackageV2 pkg,
