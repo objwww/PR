@@ -290,4 +290,23 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.alert.application.RunQueryService(
                 rcaRunRepository, rcaTaskRepository, taskEdgeRepository, java.time.Instant::now);
     }
+
+    // ---------------- AM5 命令域（V27，M5-14 装配；HTTP 面 = alert/interfaces RunCommandController） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository operatorCommandRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresOperatorCommandRepository(
+                jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.CommandService commandService(
+            com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository operatorCommandRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender) {
+        return new com.objwww.pr.control.alert.application.CommandService(
+                operatorCommandRepository, rcaRunRepository, rcaEventAppender,
+                java.time.Instant::now);
+    }
 }

@@ -6,16 +6,19 @@ import com.objwww.pr.control.alert.domain.model.ExternalInvocation;
 import com.objwww.pr.control.alert.domain.model.InboxDecision;
 import com.objwww.pr.control.alert.domain.model.InboxState;
 import com.objwww.pr.control.alert.domain.model.Incident;
+import com.objwww.pr.control.alert.domain.model.OperatorCommand;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.event.RcaEventAppender;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
 import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
+import com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
@@ -63,6 +66,8 @@ public final class AlertInMemoryStores {
     public final ToolCalls toolCalls = new ToolCalls();
     public final Publications publications = new Publications();
     public final Outboxes outboxes = new Outboxes();
+    public final Commands commands = new Commands();
+    public final RcaEventLog rcaEvents = new RcaEventLog();
     public final Cas cas = new Cas();
 
     // ------------------------------------------------------------------ alert_inbox
@@ -313,6 +318,12 @@ public final class AlertInMemoryStores {
         findRoutingById(UUID id) {
             // fake 不承载路由语义（insertRouted 默认落普通 insert）——如实返回 empty
             return Optional.empty();
+        }
+
+        @Override
+        public synchronized java.util.OptionalLong currentRevision(UUID id) {
+            // fake 无事件账本语义（计数器与事件同事务推进）——修订锚恒 0
+            return rows.containsKey(id) ? java.util.OptionalLong.of(0) : java.util.OptionalLong.empty();
         }
 
         public synchronized List<RcaRun> all() {
@@ -730,6 +741,73 @@ public final class AlertInMemoryStores {
 
         public synchronized List<com.objwww.pr.control.alert.domain.model.ReportPublication> all() {
             return List.copyOf(rows.values());
+        }
+    }
+
+    // ------------------------------------------------------------------ operator_command（M5-14）
+
+    /** uq (run_id, command_type, idempotency_key) 模拟；updateState 只认 PERSISTED 行 */
+    public static final class Commands implements OperatorCommandRepository {
+        private final Map<UUID, OperatorCommand> rows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insert(OperatorCommand command) {
+            boolean dup = rows.values().stream().anyMatch(r ->
+                    r.runId().equals(command.runId()) && r.type() == command.type()
+                            && r.idempotencyKey().equals(command.idempotencyKey()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_operator_command_idem 模拟");
+            }
+            rows.put(command.id(), command);
+        }
+
+        @Override
+        public synchronized Optional<OperatorCommand> find(UUID runId, OperatorCommand.Type type,
+                                                           String idempotencyKey) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.type() == type
+                            && r.idempotencyKey().equals(idempotencyKey))
+                    .findFirst();
+        }
+
+        @Override
+        public synchronized boolean updateState(UUID id, OperatorCommand.State state,
+                                                Instant appliedAt) {
+            OperatorCommand row = rows.get(id);
+            if (row == null || row.state().isTerminal()) {
+                return false;
+            }
+            rows.put(id, row.withState(state, appliedAt));
+            return true;
+        }
+
+        public synchronized List<OperatorCommand> all() {
+            return List.copyOf(rows.values());
+        }
+    }
+
+    // ------------------------------------------------------------------ rca_event 追加面（M5-14 命令生效事件）
+
+    public record AppendedEvent(UUID runId, String eventType, String payloadJson) {
+    }
+
+    /** seq 简化为追加序（命令面 UT 只关心"是否追加/追加了什么"） */
+    public static final class RcaEventLog implements RcaEventAppender {
+        private final List<AppendedEvent> events = new ArrayList<>();
+
+        @Override
+        public synchronized long append(UUID runId, EventDraft draft) {
+            events.add(new AppendedEvent(runId, draft.eventType(), draft.payloadJson()));
+            return events.size();
+        }
+
+        @Override
+        public synchronized long appendIndependent(UUID runId, EventDraft draft) {
+            return append(runId, draft);
+        }
+
+        public synchronized List<AppendedEvent> all() {
+            return List.copyOf(events);
         }
     }
 

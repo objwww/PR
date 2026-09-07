@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
@@ -154,6 +155,16 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                         rs.getString("stickiness_key"),
                         rs.getObject("canary_bucket", Integer.class)))
                 .optional();
+    }
+
+    @Override
+    public OptionalLong currentRevision(UUID id) {
+        return jdbc.sql("SELECT last_event_seq FROM rca_run WHERE id = :id")
+                .param("id", id)
+                .query((rs, n) -> rs.getLong("last_event_seq"))
+                .optional()
+                .map(OptionalLong::of)
+                .orElseGet(OptionalLong::empty);
     }
 
     private static Timestamp ts(java.time.Instant instant) {

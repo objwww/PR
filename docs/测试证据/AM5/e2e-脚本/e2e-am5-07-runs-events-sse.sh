@@ -62,4 +62,22 @@ log "phase5 慢客户端不拖慢 Run（INV-AM5-8）（[195]）"
 # [195] ① 客户端开流后挂住不读 → Run 照常推进至终态（时延对拍无流基线）
 log "  （骨架期占位：背压面待 195 部署段激活）"
 
-log "骨架校验完成（phase1~5 真栈断言待 195 部署段激活；游标/gap/ticket 语义已由 UT 锁定）"
+# ---------------------------------------------------------------------------
+# 命令面（M5-14 随件半脚本；POST /api/rca-runs/{id}/commands）
+# ---------------------------------------------------------------------------
+log "phase6 命令先持久化再生效 + 幂等/revision/越权（[195]）"
+# [195] ① CANCEL 生效：200 APPLIED → rca_run 行 CANCELLED（状态机迁移）+ RUN_CANCELLED
+#     事件落账 + operator_command 行 APPLIED（先持久化断言 = 命令行 created_at 先于
+#     applied_at，崩溃窗口由同键重放续走 apply 覆盖）；
+# [195] ② 幂等：同 (run_id,type,idempotency_key) 重放 → 原 commandId + replayed=true，
+#     事件不重放、run 不二次迁移；
+# [195] ③ 旧 expectedRevision（≠ rca_run.last_event_seq）→ 409 REJECTED_STALE，
+#     run/事件零副作用；
+# [195] ④ 终态 Run 上任何命令 → 403 REJECTED_FORBIDDEN；
+# [195] ⑤ HINT：命令行 payload 文本在库（进上下文消费面读表），事件 payload 只含
+#     UNTRUSTED 标注摘要、文本零泄漏（§17.9.3 + §3.2）；
+# [195] ⑥ FUT-33：命令提交连接中断（客户端超时断开）→ 命令行/Run 终态自洽
+#     （PERSISTED 行可重放，Run 状态不被半途改写）
+log "  （骨架期占位：命令面断言待 195 部署段激活）"
+
+log "骨架校验完成（phase1~6 真栈断言待 195 部署段激活；游标/gap/ticket/命令语义已由 UT 锁定）"

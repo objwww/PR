@@ -35,6 +35,8 @@ class Am5MigrationContractTest {
             "src/main/resources/db/migration/V25__am5_canary_route.sql");
     private static final Path V26 = Path.of(
             "src/main/resources/db/migration/V26__am5_operator_case.sql");
+    private static final Path V27 = Path.of(
+            "src/main/resources/db/migration/V27__am5_operator_command.sql");
 
     private static String normalized() throws IOException {
         return normalized(V20);
@@ -349,6 +351,39 @@ class Am5MigrationContractTest {
                 .contains("grant select, insert, update on operator_case to control_app")
                 .contains("revoke delete on operator_case from control_app")
                 .contains("revoke all on operator_case"
+                        + " from publisher_app, notify_app, eval_app, public");
+    }
+
+    @Test
+    void v27OperatorCommandPinsIdempotencyAnchorAndOneWayState() throws IOException {
+        String sql = normalized(V27);
+
+        // 幂等锚 + 命令值域 + 状态单向推进（落码方案 §M5-14②）；
+        // expected_revision 锚 rca_run.last_event_seq（C-19① 修订锚裁定）
+        assertThat(sql)
+                .contains("create table operator_command")
+                .contains("run_id uuid not null references rca_run(id)")
+                .contains("check (command_type in ('cancel','hint','feedback'))")
+                .contains("constraint uq_operator_command_idem unique "
+                        + "(run_id, command_type, idempotency_key)")
+                .contains("expected_revision bigint not null")
+                .contains("state varchar(16) not null default 'persisted'")
+                .contains("check (state in ('persisted','applied','rejected_stale','rejected_forbidden'))")
+                .contains("check (jsonb_typeof(payload) = 'object')")
+                .contains("comment on table operator_command");
+    }
+
+    @Test
+    void v27GrantsTerminalColumnUpdateOnlyAndZeroDelete() throws IOException {
+        String sql = normalized(V27);
+
+        // 授权面：账本行 insert 后正文不可改；终态推进只开口 state/applied_at 两列
+        //（V9 列级授权同构）；delete 零开口
+        assertThat(sql)
+                .contains("grant select, insert on operator_command to control_app")
+                .contains("grant update (state, applied_at) on operator_command to control_app")
+                .contains("revoke delete on operator_command from control_app")
+                .contains("revoke all on operator_command"
                         + " from publisher_app, notify_app, eval_app, public");
     }
 }

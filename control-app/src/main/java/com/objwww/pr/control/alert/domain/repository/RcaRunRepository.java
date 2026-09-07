@@ -6,6 +6,7 @@ import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
@@ -57,4 +58,10 @@ public interface RcaRunRepository {
     record RoutingView(RcaEngine engine, String configDigest, String stickinessKey,
                        Integer bucket) {
     }
+
+    /**
+     * run 修订锚（M5-14 命令面）：= rca_run.last_event_seq——M4-10 计数器在
+     * 状态事实推进时同行 +1，无洞单调，是 run 的天然修订号。run 不存在 → empty。
+     */
+    OptionalLong currentRevision(UUID id);
 }
