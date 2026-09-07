@@ -95,17 +95,19 @@ e4_admin_sql() {
         -Atqc "$1"
 }
 
-# 注入前环境自愈（v8，195 迭代实证）：
+# 注入前环境自愈（v9，195 迭代实证）：
 #   a) quiesce 静止面——上轮同 fault 会话未收口时先 off。scenarioId 每轮按时钟
 #      生成且 uq_chaos_scenario 全局唯一（同 id 不可二次激活），quiesce.py 无法
 #      自行探测上轮 id，由本函数经 PG 查出活跃会话传参执行 off；
-#   b) AM 重启清组状态——E2E 对同 fingerprint 反复 firing/resolved，AM 组对象
-#      会出现 notify 死锁：v7 轮间 600s 逐次轮询实证该组 resolved 永不 flush
-#      （对照批次 2 分钟即落库），组锁死到 repeat_interval(4h)，re-firing 被视为
-#      无净变化静默吞并。等 resolved 落库的方案（v6/v7）对死锁组无效——重启
-#      alertmanager 一次性清掉全部组状态（AM 无持久化，~5s 就绪），此后任何
-#      firing 必为新组首发投递；Prometheus 会对 AM 恢复后重发当前 firing
-#      alerts，不丢真告警。放行条件 = AM /-/ready 200。
+#   b) AM 重启 + 清存储面——E2E 对同 fingerprint 反复 firing/resolved，AM 组
+#      对象出现 notify 死锁：v7 轮间 600s 逐次轮询实证该组 resolved 永不 flush
+#      （对照批次 2 分钟即落库），组锁死到 repeat_interval(4h)。v8 仅 restart
+#      不够：AM 挂 RW volume（--storage.path=/alertmanager），nflog 通知去重
+#      状态跨重启持久化（195 实证：16:05:58 轮 A 投递被 nflog 记住，16:07:28
+#      轮 B 同 fingerprint 零投递）——v9 stop → 清 nflog/silences → start，
+#      通知状态彻底归零，任何 firing 必为新组首发投递；Prometheus 会对 AM 恢复
+#      后重发当前 firing alerts，不丢真告警；靶场无静默规则，清 silences 无副作用。
+#      放行条件 = AM /-/ready 200。
 #   c) 影子 run 轮间回收——影子 run 终点 REPORTING 挂 uq_rca_run_active_incident
 #      （QUEUED/RUNNING/REPORTING 部分唯一），不回收则同 incident 下一轮 firing
 #      intake 开 run 必撞 DuplicateKeyException → 告警死信（195 实证）。RERUN 仅
@@ -126,7 +128,11 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     else
         docker exec arena-e2e-cli python3 /e2e/quiesce.py "$fault"
     fi
-    docker restart "$E4_AM_CONTAINER" >/dev/null
+    am_data=$(docker inspect "$E4_AM_CONTAINER" --format \
+        '{{range .Mounts}}{{if eq .Destination "/alertmanager"}}{{.Source}}{{end}}{{end}}')
+    docker stop "$E4_AM_CONTAINER" >/dev/null
+    [ -n "$am_data" ] && rm -rf "${am_data:?AM 存储目录为空则不清}"/* 2>/dev/null
+    docker start "$E4_AM_CONTAINER" >/dev/null
     i=0
     code="000"
     while [ $i -lt 24 ]; do   # 24*5s=120s
@@ -139,7 +145,7 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
         echo "  FAIL: AM 重启后未就绪（http=$code）"
         exit 1
     fi
-    echo "  quiesce: AM 已重启清组状态（就绪，放行注入）"
+    echo "  quiesce: AM 已重启并清通知状态（就绪，放行注入）"
     e4_admin_sql "
         update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
          where trigger_kind='RERUN'
