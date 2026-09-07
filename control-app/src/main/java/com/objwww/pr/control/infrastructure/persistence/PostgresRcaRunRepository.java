@@ -134,6 +134,28 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    @Override
+    public List<RcaRun> findAll() {
+        return jdbc.sql("SELECT * FROM rca_run ORDER BY created_at DESC, id")
+                .query(this::mapRow)
+                .list();
+    }
+
+    @Override
+    public Optional<RcaRunRepository.RoutingView> findRoutingById(UUID id) {
+        return jdbc.sql("""
+                        SELECT engine, config_digest, stickiness_key, canary_bucket
+                          FROM rca_run WHERE id = :id
+                        """)
+                .param("id", id)
+                .query((rs, n) -> new RcaRunRepository.RoutingView(
+                        RcaStateContract.parseEngine(rs.getString("engine")),
+                        rs.getString("config_digest"),
+                        rs.getString("stickiness_key"),
+                        rs.getObject("canary_bucket", Integer.class)))
+                .optional();
+    }
+
     private static Timestamp ts(java.time.Instant instant) {
         return instant == null ? null : Timestamp.from(instant);
     }

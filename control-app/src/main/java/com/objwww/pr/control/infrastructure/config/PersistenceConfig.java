@@ -258,4 +258,36 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.ops.application.OperatorQueryService(repository,
                 java.time.Instant::now);
     }
+
+    // ---------------- AM5 观测域（M5-13 装配；HTTP 面 = alert/interfaces EventQueryController） ----------------
+
+    /** rca_event 只读面（表+游标真相源；append-only 由 V14/写侧保证，读侧零迁移） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RcaEventReader rcaEventReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaEventReader(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.EventQueryService eventQueryService(
+            com.objwww.pr.control.alert.domain.repository.RcaEventReader rcaEventReader) {
+        return new com.objwww.pr.control.alert.application.EventQueryService(rcaEventReader,
+                new com.objwww.pr.control.alert.application.EventPayloadSanitizer(64));
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.SseStreamService sseStreamService(
+            com.objwww.pr.control.alert.application.EventQueryService eventQueryService) {
+        return new com.objwww.pr.control.alert.application.SseStreamService(eventQueryService,
+                java.time.Duration.ofSeconds(30));
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.RunQueryService runQueryService(
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository) {
+        return new com.objwww.pr.control.alert.application.RunQueryService(
+                rcaRunRepository, rcaTaskRepository, taskEdgeRepository, java.time.Instant::now);
+    }
 }

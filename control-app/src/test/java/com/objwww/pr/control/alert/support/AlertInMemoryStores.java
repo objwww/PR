@@ -300,6 +300,21 @@ public final class AlertInMemoryStores {
                     .reduce((a, b) -> b);
         }
 
+        @Override
+        public synchronized List<RcaRun> findAll() {
+            return rows.values().stream()
+                    .sorted(Comparator.comparing(RcaRun::createdAt).reversed()
+                            .thenComparing(RcaRun::id))
+                    .toList();
+        }
+
+        @Override
+        public synchronized Optional<com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView>
+        findRoutingById(UUID id) {
+            // fake 不承载路由语义（insertRouted 默认落普通 insert）——如实返回 empty
+            return Optional.empty();
+        }
+
         public synchronized List<RcaRun> all() {
             return List.copyOf(rows.values());
         }

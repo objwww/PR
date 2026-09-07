@@ -1,5 +1,6 @@
 package com.objwww.pr.control.alert.domain.statemachine;
 
+import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 
@@ -79,6 +80,22 @@ public final class RcaStateContract {
             case "EXPIRED" -> RcaRunState.EXPIRED;
             default -> throw new IllegalArgumentException(
                     "rca_run.state 契约外取值: " + raw);
+        };
+    }
+
+    /**
+     * rca_run.engine 双读解析（M5-13 只读面引入；V25 字面量全集 HOLMES/NATIVE），
+     * 契约外取值抛 IllegalArgumentException（与 state 解析同 fail-closed 口径）。
+     */
+    public static RcaEngine parseEngine(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("rca_run.engine 为空，拒绝解析");
+        }
+        return switch (raw) {
+            case "HOLMES" -> RcaEngine.HOLMES;
+            case "NATIVE" -> RcaEngine.NATIVE;
+            default -> throw new IllegalArgumentException(
+                    "rca_run.engine 契约外取值: " + raw);
         };
     }
 }

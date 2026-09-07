@@ -1,8 +1,10 @@
 package com.objwww.pr.control.alert.domain.repository;
 
+import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,4 +39,22 @@ public interface RcaRunRepository {
 
     /** 当前活跃 run（QUEUED/RUNNING）；无则 empty */
     Optional<RcaRun> findActiveByIncidentId(UUID incidentId);
+
+    /**
+     * 只读全量（M5-13 runs 队列投影输入；created_at 降序、id 升序稳定排序）。
+     * 操作面规模（每 incident 一行）下无分页——游标分页列开放项 O-5。
+     */
+    List<RcaRun> findAll();
+
+    /**
+     * V25 路由四列只读投影（M5-13 detail 的 engine/config 面）。读视图独立于
+     * 写面 {@link RcaRunRouting}：后者是铸造校验面（decision 必带），存量行
+     * （plain insert → 引擎列默认 HOLMES、digest/key/bucket 可空）没有决策语义。
+     */
+    Optional<RoutingView> findRoutingById(UUID id);
+
+    /** rca_run 路由四列读视图（configDigest 十六进制或 null） */
+    record RoutingView(RcaEngine engine, String configDigest, String stickinessKey,
+                       Integer bucket) {
+    }
 }
