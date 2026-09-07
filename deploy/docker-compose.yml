@@ -128,6 +128,10 @@ services:
       HOLMES_API_KEY: ${HOLMES_API_KEY:?}
       # 账本/报告记录的调查模型(与 deploy/alert compose 的 MODEL 同值,请求显式携带)
       APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/qwen3.7-plus}
+      # AM5 M5-15：三支柱遥测出口——control 平面 collector（应用侧零代码变更，
+      # exporter 依赖不上类路径时此变量仅作声明面；trace 采样概率同面）
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otelcol-control:4317}
+      APP_TRACE_SAMPLING: ${APP_TRACE_SAMPLING:-0.1}
       APP_CAS_DIR: /var/cas
     ports:
       # 默认仅绑 loopback（安全底线）；Alertmanager 在 docker 内网投递，公网零暴露
@@ -188,6 +192,41 @@ services:
       - internal
       # 仅接 echo-receiver 所在网（测试机器人出口）；不接业务网/eval-mgmt（隔离面）
       - alert-ab
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+    logging: *logging
+
+  # AM5 M5-15 三支柱完整化：control 平面遥测 collector（metrics/trace/log 出口收敛）。
+  # 独立出口/独立凭据（OTEL_UPSTREAM_* 走 .env :? 必填，与 webhook/DB/模型凭据全独立）；
+  # 资源上限双面：容器 384M + 进程内 memory_limiter 256M；INV-AM5-8：本服务与业务
+  # 零双向依赖（control-app 不 depends_on、collector 挂只丢遥测），切断出口不改业务状态。
+  otelcol-control:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/otelcol-config.yml"]
+    volumes:
+      - ./otelcol-control/otelcol-config.yml:/etc/otelcol/otelcol-config.yml:ro
+    environment:
+      OTEL_UPSTREAM_ENDPOINT: ${OTEL_UPSTREAM_ENDPOINT:?}
+      OTEL_UPSTREAM_TOKEN: ${OTEL_UPSTREAM_TOKEN:?}
+      OTEL_UPSTREAM_INSECURE: ${OTEL_UPSTREAM_INSECURE:-true}
+    ports:
+      # 仅绑 loopback（INV-AM0-1）：OTLP 入口只服务 compose 内网（不发布），
+      # 本地拉面/健康面给宿主运维
+      - "127.0.0.1:9465:9465"
+      - "127.0.0.1:13133:13133"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
     deploy:
       resources:
         limits:

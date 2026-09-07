@@ -1,0 +1,88 @@
+# ============================================================================
+# AM5 M5-15 三支柱完整化：control 平面遥测 collector（deploy/docker-compose.yml
+# otelcol-control 服务加载；镜像 = otel/opentelemetry-collector-contrib，tail_sampling
+# 为 contrib 组件）
+#
+# 落码方案 §M5-15①：独立出口 / 独立凭据 / 资源上限；低基数指标 + 风险 trace 保留采样。
+# 红线 INV-AM5-8：遥测出口故障不影响业务状态——本 collector 与业务零双向依赖，
+#   挂掉/超限时只丢遥测面（memory_limiter 降级 + control-app 侧 exporter 异步丢弃），
+#   不改变任何业务/Run 状态（E2E-AM5-08 部署段实证）。
+# 密钥红线：上游凭据只经环境变量注入（compose :? 必填），不落本文件/不入库/不入日志。
+# 低基数纪律：指标标签白名单在应用侧收口（AlertMetrics + AlertMetricsLabelAllowlistTest，
+#   M3-28 惯例），本 collector 不做标签展开（resource_to_telemetry_conversion 仅按
+#   资源键平铺，不引入逐请求标签）。
+# ============================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  # 资源上限（落码方案原文）：内存超限先降级再拒收，collector 自身不拖垮 2C4G 宿主
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  # 风险 trace 保留：错误/慢 trace 全保，健康 trace 概率采样 10%——低量告警域
+  # 每条 trace 都可能成为事故复盘证据，采样只砍健康基线
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 5000
+    expected_new_traces_per_sec: 50
+    policies:
+      - name: keep-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: keep-slow
+        type: latency
+        latency:
+          threshold_ms: 5000
+      - name: sample-healthy
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  # 独立出口 + 独立凭据：上游 endpoint/token 全走环境变量（与 webhook/DB 凭据相互独立）
+  otlp/upstream:
+    endpoint: "${env:OTEL_UPSTREAM_ENDPOINT}"
+    tls:
+      insecure: ${env:OTEL_UPSTREAM_INSECURE}
+    headers:
+      authorization: "${env:OTEL_UPSTREAM_TOKEN}"
+  # 本地拉面（宿主 127.0.0.1 绑定由 compose 控制，INV-AM0-1）：metrics 支柱本地可见
+  prometheus/control:
+    endpoint: "0.0.0.0:9465"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check]
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/upstream]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus/control]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/upstream]

@@ -84,3 +84,8 @@ management:
   endpoint:
     health:
       show-details: never
+  # AM5 M5-15：应用侧 trace 采样第一道面（compose APP_TRACE_SAMPLING 注入）；风险
+  # trace 保留的最终裁决在 collector 侧 tail_sampling（错误/慢全保，健康 10%）
+  tracing:
+    sampling:
+      probability: ${APP_TRACE_SAMPLING:0.1}
