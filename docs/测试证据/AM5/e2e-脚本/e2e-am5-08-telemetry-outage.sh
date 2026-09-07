@@ -52,7 +52,16 @@ log "phase5 M5-16 防自噬：认证后 RCA_SYSTEM 告警只到独立值班通�
 #     alert_inbox 行 = PROCESSED+SUPPRESSED；incident/rca_run 计数增量恒 0（INV-AM5-4）；
 # [195] ② 伪造面：业务 bearer 携带 monitoring_scope=rca_system label → 401 零落库
 #     （body 同名 label 单独不作数，方案 §3.2）；route/scope 越白名单 → 400 零落库；
-# [195] ③ Gatus（M5-17，2C4G）合成告警同通道：阈值内告警与恢复，不进 Incident 管线
+# [195] ③ 控制面自产 RCA_SYSTEM 告警（预留自监控腿）经 M5-16 门直达值班通道；
+#     Gatus 外部腿不在此 phase（C-22 裁定：Gatus 走独立渠道不经本系统入口，见 phase6）
 log "  （骨架期占位：防自噬面对拍待 195 部署段激活）"
 
-log "骨架校验完成（phase1~5 真栈断言待 195 部署段激活；配置/路由面已由静态门+UT 锁定）"
+log "phase6 M5-17 Gatus 独立腿：停 195 control endpoint → 2C4G Gatus 阈值内告警与恢复（[195]）"
+# [195] ① 停 195 control endpoint（docker stop control-app）→ 2C4G Gatus
+#     RCA_SYSTEM_control_health 连续 3 败（failure-threshold=3，~90s 窗）→
+#     GATUS_ONCALL_WEBHOOK_URL 值班通道告警到达（独立渠道，非本系统 Incident 管线）；
+# [195] ② 恢复 control → 连续 2 胜（success-threshold=2）→ send-on-resolved 恢复通知；
+# [195] ③ 全程 195 业务/Run 状态零漂移（探针挂/恢复不牵连 195——无 depends_on 独立故障域）
+log "  （骨架期占位：Gatus 独立腿待 2C4G 部署段激活）"
+
+log "骨架校验完成（phase1~6 真栈断言待 195/2C4G 部署段激活；配置/路由面已由静态门+UT 锁定）"

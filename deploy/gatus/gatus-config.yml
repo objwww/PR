@@ -1,0 +1,53 @@
+# M5-17 Gatus 外部探针配置（2C4G 独立故障域，预算 96MiB——架构 §内存表）
+#
+# 红线（INV-AM5-4 外部腿，调研 §7 裁定）：
+#   - Gatus 告警走**独立渠道**直达值班接收器（GATUS_ONCALL_WEBHOOK_URL），恢复同报；
+#   - **永不进本系统 Incident 管线**——本配置不得出现 control-app webhook 入口；
+#   - 不承载 RCA：纯黑盒探测 + 合成告警。
+#
+# 真栈证据 = E2E-AM5-08：停 195 control endpoint → 本探针阈值内告警与恢复（部署段）。
+# 凭据/目标全部 env 注入（值只进 2C4G .env；${VAR} 缺失 = Gatus 启动即败，fail-closed）。
+
+storage:
+  type: file
+  path: /data
+
+ui:
+  title: PR-Agent 外部探针（2C4G 独立故障域）
+
+alerting:
+  webhook:
+    # 独立值班通道（webhook/邮件类接收器；永不指向 control-app）
+    url: ${GATUS_ONCALL_WEBHOOK_URL}
+    default-alert:
+      enabled: true
+      send-on-resolved: true   # 阈值内恢复通知（E2E-AM5-08 恢复半边）
+      failure-threshold: 3     # 连续 3 败才告警（单抖动不扰值班）
+      success-threshold: 2     # 连续 2 胜才恢复
+
+endpoints:
+  # 控制面黑盒 health（停 195 control endpoint 的主探测腿）
+  - name: RCA_SYSTEM_control_health
+    group: control-plane
+    url: ${CONTROL_HEALTH_URL}
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 3000"
+
+  # 告警链路自身（AM health；值班通道失明面独立可见）
+  - name: RCA_SYSTEM_alertmanager_health
+    group: control-plane
+    url: ${ALERTMANAGER_HEALTH_URL}
+    interval: 60s
+    conditions:
+      - "[STATUS] == 200"
+
+  # 合成 canary（业务面探针；arena 前端经 envoy 的黑盒健康）
+  - name: business_canary_arena_frontend
+    group: business-canary
+    url: ${ARENA_HEALTH_URL}
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"

@@ -1,0 +1,45 @@
+# M5-17 Gatus 外部探针 compose 单元（2C4G 独立故障域——不进 195 compose）
+#
+# 部署段（P-56 环境确认后）：cp .env.example .env && 填真值
+#   && docker compose -f compose.gatus.yml up -d
+#
+# 独立故障域红线：**无 depends_on**——195 全挂不牵连探针，探针挂不牵连 195
+# （INV-AM5-8 遥测/探针半边同构）；96MiB 预算 = 架构 §内存表。
+
+services:
+  gatus:
+    image: twinproduction/gatus:v5.17.0
+    restart: unless-stopped
+    # 探针目标与值班通道 env 注入（值在 2C4G .env；:? 必填防静默空探针）
+    environment:
+      GATUS_ONCALL_WEBHOOK_URL: ${GATUS_ONCALL_WEBHOOK_URL:?}
+      CONTROL_HEALTH_URL: ${CONTROL_HEALTH_URL:?}
+      ALERTMANAGER_HEALTH_URL: ${ALERTMANAGER_HEALTH_URL:?}
+      ARENA_HEALTH_URL: ${ARENA_HEALTH_URL:?}
+    volumes:
+      # 配置只读挂载；探针状态落本地卷（跨重启可追）
+      - ./gatus-config.yml:/config/config.yml:ro
+      - gatus-data:/data
+    ports:
+      # UI 仅 loopback（2C4G 本机运维面，公网零暴露）
+      - "127.0.0.1:8081:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+          cpus: "0.25"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gatus-data:
