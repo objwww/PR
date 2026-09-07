@@ -88,8 +88,9 @@ class AlertDagPromotionIT extends PostgresITBase {
             Future<?> first = pool.submit(() -> promoteAfterLatch(start));
             Future<?> second = pool.submit(() -> promoteAfterLatch(start));
             start.countDown();
-            first.get(10, TimeUnit.SECONDS);
-            second.get(10, TimeUnit.SECONDS);
+            // 30s：推进本身毫秒级，留足共享 CI 环境的调度毛刺余量（首跑 195 实测 10s 偶发不够）
+            first.get(30, TimeUnit.SECONDS);
+            second.get(30, TimeUnit.SECONDS);
 
             assertThat(stateOf(c)).as("并发回执收敛后 C 恰为 READY（终态唯一）")
                     .isEqualTo(RcaTaskState.READY);

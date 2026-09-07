@@ -50,14 +50,17 @@ public class PostgresIncidentBudgetLedger implements IncidentBudgetLedger {
         });
     }
 
+    /** 双窗口各自 SUM（window_kind 等值用 '24H'/'7D'，interval 字面量用 '24 hours'/'7 days'——
+     *  两值域不同，必须分开绑定，不可复用同一参数名） */
     private long sumWindow(UUID incidentId, String windowKind) {
         return jdbc.sql("""
                 select coalesce(sum(units), 0) from incident_budget_entry
-                 where incident_id = :incident and window_kind = :window
-                   and created_at > now() - CAST(:window AS interval)
+                 where incident_id = :incident and window_kind = :kind
+                   and created_at > now() - CAST(:span AS interval)
                 """)
                 .param("incident", incidentId)
-                .param("window", windowKind.equals("24H") ? "24 hours" : "7 days")
+                .param("kind", windowKind)
+                .param("span", windowKind.equals("24H") ? "24 hours" : "7 days")
                 .query(Long.class).single();
     }
 

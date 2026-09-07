@@ -71,10 +71,10 @@ class AlertToolInvocationLedgerIT extends PostgresITBase {
         assertThat(stateOf(id.operationId())).isEqualTo("PENDING"); // 进程死后悬挂可查
         assertThat(ledger.succeed(id.operationId())).isTrue();
         assertThat(stateOf(id.operationId())).isEqualTo("SUCCESS");
-        Object reason = controlJdbc.sql(
+        String reason = controlJdbc.sql(
                         "SELECT reason_code FROM rca_tool_invocation WHERE id = :id")
-                .param("id", id.operationId()).query(Object.class).single();
-        assertThat(reason).isNull(); // SUCCESS 无原因码
+                .param("id", id.operationId()).query(String.class).single();
+        assertThat(reason).isNull(); // SUCCESS 无原因码（ck_rca_tool_invocation_success_no_reason）
     }
 
     @Test

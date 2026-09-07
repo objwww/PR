@@ -124,6 +124,11 @@ class AlertV18TaskEdgeRunScopeIT extends PostgresITBase {
                 .param("key", "alertname=HighErrorRate|service=edge-" + incident).update();
         UUID runA = insertRun(incident);
         UUID runB = insertRun(incident);
+        // V12 uq_rca_run_active_incident：同 incident 只容一条活跃 run——本夹具只测边域
+        // （roundtrip/组合外键/自环/重复边，与 run 状态无关），runB 置终态让位谓词
+        controlJdbc.sql("""
+                UPDATE rca_run SET state = 'SUPERSEDED', finished_at = now() WHERE id = :id
+                """).param("id", runB).update();
         Seed seed = new Seed(incident, runA, runB,
                 insertTask(runA), insertTask(runA), insertTask(runB), insertTask(runB));
         return seed;

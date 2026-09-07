@@ -106,6 +106,7 @@ class AlertGenerationFenceIT extends PostgresITBase {
         UUID taskId = insertTask(old.runId(), "OLD_WORK");
         supersede(old.runId(), 0);
         Seed fresh = seedIncidentWithRun("fence-new", 1);
+        insertTask(fresh.runId(), "NEW_WORK"); // 新 run 需有可领任务，claimNext 才有返回
 
         RcaTask claimed = tasks.claimNext("it-worker", Instant.now(),
                 Duration.ofMinutes(5)).orElseThrow();

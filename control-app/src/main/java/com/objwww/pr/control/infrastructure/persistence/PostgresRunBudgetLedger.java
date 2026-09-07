@@ -143,16 +143,21 @@ public class PostgresRunBudgetLedger implements RunBudgetLedger {
                 .query(Long.class).single() > 0;
     }
 
-    /** entry 结案迁移（fromStates → targetState），返回原预留量；无满足行即抛（落空必显式） */
+    /** entry 结案迁移（fromStates → targetState），返回原预留量；无满足行即抛（落空必显式）。
+     *  V13 ck 分态约束 settled_at 可空性：PROVISIONAL 是悬挂态（settled_at 必空），
+     *  终态（RELEASED/UNMATCHED）结算时刻必填——按目标态条件化赋值 */
     private long settleFrom(ReservationKey key, String targetState, String fromStatesSql) {
+        String settledAssign = "PROVISIONAL".equals(targetState)
+                ? "settled_at = null"
+                : "settled_at = now()";
         return jdbc.sql(("""
                 update run_budget_entry
-                   set state = '%s', settled_at = now()
+                   set state = '%s', %s
                  where run_id = :run and task_id = :task and attempt_id = :attempt
                    and call_seq = :seq and budget_kind = :kind
                    and state in (%s)
                 returning reserved_units
-                """).formatted(targetState, fromStatesSql))
+                """).formatted(targetState, settledAssign, fromStatesSql))
                 .param("run", key.runId()).param("task", key.taskId())
                 .param("attempt", key.attemptId()).param("seq", key.callSeq())
                 .param("kind", key.budgetKind().name())

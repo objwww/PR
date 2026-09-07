@@ -136,8 +136,10 @@ public class PostgresClaimStore implements ClaimStore {
             String fingerprint, String claimHash, ClaimRow existing) {
         int updated = jdbc.sql("""
                 update rca_claim set claim_hash = :hash, status = :status,
-                    evidence_basis = :basis, reason = :reason, sources = :sources,
-                    evidence_refs = :refs, policy_version = :policy, updated_at = now()
+                    evidence_basis = :basis, reason = :reason,
+                    sources = cast(:sources as jsonb),
+                    evidence_refs = cast(:refs as jsonb),
+                    policy_version = :policy, updated_at = now()
                   where run_id = :run and claim_fingerprint = :fp and claim_hash = :prior
                 """)
                 .param("hash", claimHash)
@@ -230,7 +232,8 @@ public class PostgresClaimStore implements ClaimStore {
                     observed_generation, sources, evidence_refs, policy_version,
                     snapshot_digest)
                 values (:id, :run, :fp, :hash, :key, :status, :basis, 'ACTIVE', :reason,
-                    :scope, :timeRange, :gen, :sources, :refs, :policy, :snapshot)
+                    :scope, :timeRange, :gen, cast(:sources as jsonb),
+                    cast(:refs as jsonb), :policy, :snapshot)
                 """)
                 .param("id", UUID.randomUUID()).param("run", runId)
                 .param("fp", fingerprint).param("hash", claimHash)

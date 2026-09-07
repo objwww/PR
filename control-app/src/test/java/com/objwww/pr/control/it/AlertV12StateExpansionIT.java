@@ -116,8 +116,12 @@ class AlertV12StateExpansionIT extends PostgresITBase {
 
     @Test
     void runReportingCountsAsActiveAndPartiaExpiresFinish() {
-        // REPORTING 出生（活跃、finished_at 必空）
+        // REPORTING 出生（活跃、finished_at 必空）；seedAlertChain 的 QUEUED run 先置终态
+        // 释放 uq_rca_run_active_incident 谓词，让位给本测试的 REPORTING 生命周期
         Seed seed = seedAlertChain("runam4");
+        controlJdbc.sql("""
+                UPDATE rca_run SET state = 'SUCCEEDED', finished_at = now() WHERE id = :id
+                """).param("id", seed.runId()).update();
         UUID reportingRun = insertRun(seed.incidentId(), "REPORTING", null);
         assertThat(controlJdbc.sql("SELECT state FROM rca_run WHERE id = :id")
                 .param("id", reportingRun).query(String.class).single()).isEqualTo("REPORTING");

@@ -160,7 +160,12 @@ class Am4E2E08ReplayIT extends PostgresITBase {
         UUID runId = seedRun();
         gateway.record(metricsInvocation(runId), FIXTURE);
         gateway.record(logsInvocation(runId, LogsAgent.TOOL_NAME), FIXTURE);
-        gateway.record(logsInvocation(runId, ChangeAgent.TOOL_NAME), FIXTURE);
+        // change 键的 args 与 logs 键刻意错开（until=…270）：否则扰动矩阵的 tool 名轴
+        // （change + logs 同 schema args）会与 change 录制键完全同键 → HIT 而非 REPLAY_MISS
+        gateway.record(invocation(runId, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
+                TIME_RANGE, LogsAgent.argsOf(
+                        new LogsAgent.LogsQuery("1757059200", "1757059270")), SNAPSHOT),
+                FIXTURE);
     }
 
     /** 一轮完整回放：三 Agent 产证据 + Native RCA 出 Claim */
@@ -183,7 +188,8 @@ class Am4E2E08ReplayIT extends PostgresITBase {
                 new MetricsAgent.MetricsQuery("cpu_usage_percent", "1757059200",
                         "1757059260", "30s"));
         logs.investigate(ctx, new LogsAgent.LogsQuery("1757059200", "1757059260"));
-        change.investigate(ctx, new ChangeAgent.ChangeQuery("1757059200", "1757059260"));
+        // 与 recordOnce 的 change 键同 args（until=…270）→ 回放 HIT
+        change.investigate(ctx, new ChangeAgent.ChangeQuery("1757059200", "1757059270"));
 
         ClaimReducer reducer = new ClaimReducer(
                 Set.of("prometheus", "logs-agent", "change-agent"), POLICY_VERSION);
@@ -201,16 +207,16 @@ class Am4E2E08ReplayIT extends PostgresITBase {
     }
 
     /**
-     * 扰动矩阵（REPLAY_ONLY 断言：任一匹配字段变化即 MISS）——tool 名（logs↔change
-     * 同 schema 扰动，绕开 args 校验直达 digest 判定）/toolVersion/args/timeRange/
-     * snapshot 各一。
+     * 扰动矩阵（REPLAY_ONLY 断言：任一匹配字段变化即 MISS）——tool 名/toolVersion/
+     * args/timeRange/snapshot 各一。tool 名轴 = change 工具 + logs 的 args(260)：
+     * change 键只录了 270 版，logs 键 tool 名不同——与任一录制键都不同键。
      */
     private List<ToolGateway.ToolInvocation> perturbations() {
         UUID runId = seedRun();
         Map<String, Object> baseArgs = LogsAgent.argsOf(
                 new LogsAgent.LogsQuery("1757059200", "1757059260"));
         List<ToolGateway.ToolInvocation> list = new ArrayList<>();
-        list.add(invocation(runId, ChangeAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
+        list.add(invocation(runId, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
                 TIME_RANGE, baseArgs, SNAPSHOT));
         list.add(invocation(runId, LogsAgent.TOOL_NAME, "2", TIME_RANGE, baseArgs,
                 SNAPSHOT));
