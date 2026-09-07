@@ -18,7 +18,10 @@
 # ============================================================================
 
 E4_BATCH_ID="${E4_BATCH_ID:-am4-$(date -u +%Y%m%dT%H%M%SZ)}"
-E4_RUN_DIR="${E4_RUN_DIR:-docs/测试证据/AM4/runs/$E4_BATCH_ID}"
+# 证据目录锚定脚本位置（../runs/，绝对路径）：v1 相对路径以 cwd 解析，单场景
+# 从 e2e-脚本/ 目录运行时嵌套成 e2e-脚本/docs/...（195 实证），runall 汇总对不上
+E4_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+E4_RUN_DIR="${E4_RUN_DIR:-$E4_SCRIPT_DIR/../runs/$E4_BATCH_ID}"
 E4_PASS_COUNT=0
 E4_FAIL_COUNT=0
 
@@ -136,8 +139,9 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
             select group_status from alert_inbox
              where convert_from(payload_raw,'UTF8')::jsonb->'alerts'->0->'labels'->>'alertname' = '$aname'
              order by received_at desc limit 1")
+        echo "  [quiesce-poll] i=$i last=$last"
         case "$last" in
-            resolved|"") break ;;   # resolved flush 完成 / 首轮无历史
+            resolved|"") break ;;
         esac
         sleep 5
         i=$((i + 5))
