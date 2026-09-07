@@ -138,6 +138,23 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M5-09：新顶层包 release 域模型（release.domain.model + repository 端口）零框架
+     * ——Spring/Jackson/JDBC/HTTP 一律禁入（ConfigBundle 的 canonical JSON 复用
+     * InternalCanonicalJsonV1 自实现规范化，正是为了不引 Jackson；落库面归
+     * infrastructure.persistence）。预防性收紧，沿 am5Dataset 规则惯例。
+     */
+    @Test
+    void am5ReleaseDomainZeroFrameworkDependency() {
+        noClasses().that().resideInAnyPackage("..control.release.domain.model..",
+                        "..control.release.domain.repository..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

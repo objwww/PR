@@ -221,4 +221,19 @@ public class PersistenceConfig {
             JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresEvalRunRepository(jdbc);
     }
+
+    // ---------------- AM5 发布域（V24，M5-09 装配；消费方 = release/interfaces API） ----------------
+
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.ConfigBundleRepository configBundleRepository(
+            DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresConfigBundleRepository(
+                dataSource);
+    }
+
+    @Bean
+    public com.objwww.pr.control.release.application.ConfigBundleService configBundleService(
+            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository repository) {
+        return new com.objwww.pr.control.release.application.ConfigBundleService(repository);
+    }
 }

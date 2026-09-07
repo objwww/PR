@@ -28,6 +28,9 @@ class Am5MigrationContractTest {
     private static final Path V23 = Path.of(
             "src/main/resources/db/migration/V23__am5_sampling_fingerprint.sql");
 
+    private static final Path V24 = Path.of(
+            "src/main/resources/db/migration/V24__am5_config_bundle.sql");
+
     private static String normalized() throws IOException {
         return normalized(V20);
     }
@@ -226,5 +229,51 @@ class Am5MigrationContractTest {
                 .contains("sampling_fingerprint ? 'model'")
                 .contains("sampling_fingerprint ? 'trial_no'")
                 .contains("comment on column rca_attempt.sampling_fingerprint");
+    }
+
+    @Test
+    void v24ConfigBundleIsImmutableWithDigestIdempotencyAnchor() throws IOException {
+        String sql = normalized(V24);
+
+        // INV-AM5-5 DB 面：bundle 行不可变（digest 唯一 = 发布幂等锚；revision>0；
+        // content 只锁 JSON 对象形状——密钥检测归发布面键名扫描 fail-closed）
+        assertThat(sql)
+                .contains("create table config_bundle")
+                .contains("bundle_digest char(64) not null")
+                .contains("check (revision > 0)")
+                .contains("check (jsonb_typeof(content) = 'object')")
+                .contains("constraint uq_config_bundle_digest unique (bundle_digest)")
+                .contains("comment on table config_bundle");
+    }
+
+    @Test
+    void v24ActivePointerIsSingleRowCasFaceSeededUnactivated() throws IOException {
+        String sql = normalized(V24);
+
+        // 单行 pointer（id=1 唯一行）+ 未激活种子行 + 半激活态禁约束：
+        // digest 置位时 activated_at/by 必须同行齐备（回滚/激活 = CAS update 无第三态）
+        assertThat(sql)
+                .contains("create table config_bundle_active")
+                .contains("check (id = 1)")
+                .contains("references config_bundle (bundle_digest)")
+                .contains("constraint ck_config_bundle_active_unactivated")
+                .contains("check (bundle_digest is not null or (activated_at is null"
+                        + " and activated_by is null))")
+                .contains("insert into config_bundle_active (id) values (1)");
+    }
+
+    @Test
+    void v24GrantsFreezeImmutableHistoryAndPointer() throws IOException {
+        String sql = normalized(V24);
+
+        // 授权面：bundle 只 select,insert（历史行零 UPDATE/DELETE 路径，INV-AM5-5）；
+        // pointer 允许 update（激活/回滚唯一写面）禁 delete；eval/publisher/notify 全零
+        assertThat(sql)
+                .contains("grant select, insert on config_bundle to control_app")
+                .contains("revoke update, delete on config_bundle from control_app")
+                .contains("grant select, update on config_bundle_active to control_app")
+                .contains("revoke delete on config_bundle_active from control_app")
+                .contains("revoke all on config_bundle, config_bundle_active"
+                        + " from publisher_app, notify_app, eval_app, public");
     }
 }

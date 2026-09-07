@@ -36,6 +36,11 @@ app:
     holmes:
       base-url: ${HOLMES_BASE_URL:http://holmes:8080}
       api-key: ${HOLMES_API_KEY:}
+  # AM5 M5-09：ConfigBundle 发布/回滚 API 鉴权（release 角色共享凭证，O-4 用户体系
+  # 落地前的形态；键名与 compose 三方统一沿 alert.webhook.bearer 惯例）
+  release:
+    api:
+      bearer: ${APP_RELEASE_API_BEARER:}
   # M3 模型治理配置（AM4 Java 替换 HolmesGPT 时复用；路由的模型/端点/密钥直接走环境变量
   # AGENT_MODEL / AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
   model:
