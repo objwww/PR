@@ -120,6 +120,24 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * INV-AM5-1 / M5-01：AM5 数据集域模型与端口（eval.domain.model /
+     * eval.domain.port）零框架——Spring/Jackson/JDBC/HTTP 一律禁入；三适配器落
+     * infrastructure.adapter（纯转换亦不触网），JSON 落库面归
+     * infrastructure.persistence（PostgresDatasetVersionRepository）。
+     * 预防性收紧（非违规驱动），沿 am4AlertDomainZeroFrameworkDependency 扩面惯例。
+     */
+    @Test
+    void am5DatasetDomainZeroFrameworkDependency() {
+        noClasses().that().resideInAnyPackage("..control.eval.domain.model..",
+                        "..control.eval.domain.port..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {
