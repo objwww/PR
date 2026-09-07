@@ -4,6 +4,7 @@ import com.objwww.pr.control.alert.application.AlertClock;
 import com.objwww.pr.control.alert.application.AlertIntakeLimits;
 import com.objwww.pr.control.alert.application.AlertInboxProcessor;
 import com.objwww.pr.control.alert.application.AlertIntakeService;
+import com.objwww.pr.control.alert.application.ControlAlertRouter;
 import com.objwww.pr.control.alert.application.IncidentProjector;
 import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
@@ -45,6 +46,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 告警流装配（docker profile 手工装配；@Profile("docker") 惯例沿 PersistenceConfig）。
@@ -70,6 +72,25 @@ public class AlertFlowConfig {
     @Bean
     public AlertIntakeService alertIntakeService(AlertInboxRepository inbox, AlertIntakeLimits limits) {
         return new AlertIntakeService(inbox, limits, AlertClock.system());
+    }
+
+    /**
+     * M5-16 防自噬路由：独立控制面 bearer（compose :? 必填；配置空 = 恒拒 fail-closed）+
+     * AM route/monitoring_scope 白名单（逗号分隔；默认 rca-oncall/rca_system）。
+     * ROUTED 行直写 alert_inbox PROCESSED+SUPPRESSED（V7 预留枚举），不进投影器。
+     */
+    @Bean
+    public ControlAlertRouter controlAlertRouter(AlertInboxRepository inbox,
+                                                 AlertIntakeLimits limits,
+                                                 @Value("${app.alert.control-router.bearer:}")
+                                                 String controlBearer,
+                                                 @Value("${app.alert.control-router.allowed-receivers:rca-oncall}")
+                                                 String allowedReceivers,
+                                                 @Value("${app.alert.control-router.allowed-scopes:rca_system}")
+                                                 String allowedScopes) {
+        return new ControlAlertRouter(controlBearer,
+                Set.of(allowedReceivers.split(",")), Set.of(allowedScopes.split(",")),
+                inbox, AlertClock.system(), limits);
     }
 
     @Bean

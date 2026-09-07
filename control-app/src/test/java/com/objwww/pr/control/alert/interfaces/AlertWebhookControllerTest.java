@@ -2,6 +2,8 @@ package com.objwww.pr.control.alert.interfaces;
 
 import com.objwww.pr.control.alert.application.AlertIntakeLimits;
 import com.objwww.pr.control.alert.application.AlertIntakeService;
+import com.objwww.pr.control.alert.application.ControlAlertRouter;
+import com.objwww.pr.control.alert.domain.model.InboxDecision;
 import com.objwww.pr.control.alert.domain.model.InboxState;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.alert.domain.model.AlertInbox;
@@ -16,6 +18,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPOutputStream;
 
@@ -26,11 +29,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * L4 入口边界（EX-A01~A03/A09/A10；§6.4 四类状态码语义，standalone MockMvc + InMemory fake）。
+ * M5-16：控制面声明组走防自噬路由（ROUTED_ONCALL/REJECTED），无声明落业务路语义不变。
  * 真 PG 落库路径由 CT/DP 阶段覆盖。
  */
 class AlertWebhookControllerTest {
 
     private static final String BEARER = "test-bearer-token";
+    private static final String CONTROL_BEARER = "control-bearer-token";
     private static final Instant FIXED = Instant.parse("2026-09-03T10:00:00Z");
 
     private AlertInMemoryStores stores;
@@ -42,10 +47,21 @@ class AlertWebhookControllerTest {
         mvc = build(stores.inbox);
     }
 
+    private ControlAlertRouter router(AlertInboxRepository inbox) {
+        return router(inbox, AlertIntakeLimits.defaults());
+    }
+
+    private ControlAlertRouter router(AlertInboxRepository inbox, AlertIntakeLimits limits) {
+        return new ControlAlertRouter(CONTROL_BEARER,
+                Set.of("rca-oncall"), Set.of("rca_system"),
+                inbox, () -> FIXED, limits);
+    }
+
     private MockMvc build(AlertInboxRepository inbox) {
         AlertIntakeService intake = new AlertIntakeService(inbox, AlertIntakeLimits.defaults(),
                 () -> FIXED);
-        return MockMvcBuilders.standaloneSetup(new AlertWebhookController(intake, BEARER)).build();
+        return MockMvcBuilders.standaloneSetup(
+                new AlertWebhookController(intake, router(inbox), BEARER)).build();
     }
 
     private static String validBody() {
@@ -139,7 +155,8 @@ class AlertWebhookControllerTest {
         AlertIntakeLimits tight = new AlertIntakeLimits(200, 200, 2_000, 32_000, 32, 2 * 1024 * 1024);
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, tight, () -> FIXED);
         MockMvc tightMvc = MockMvcBuilders
-                .standaloneSetup(new AlertWebhookController(intake, BEARER)).build();
+                .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, tight),
+                        BEARER)).build();
 
         tightMvc.perform(post("/webhooks/alertmanager")
                         .header("Authorization", "Bearer " + BEARER)
@@ -189,7 +206,8 @@ class AlertWebhookControllerTest {
                 2 * 1024 * 1024);
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, shallow, () -> FIXED);
         MockMvc shallowMvc = MockMvcBuilders
-                .standaloneSetup(new AlertWebhookController(intake, BEARER)).build();
+                .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, shallow),
+                        BEARER)).build();
 
         String deep = "{\"version\":\"4\",\"receiver\":\"r\",\"groupKey\":\"g\",\"status\":\"firing\","
                 + "\"deep\":" + "[".repeat(64) + "]".repeat(64) + ",\"alerts\":[]}";
@@ -212,7 +230,8 @@ class AlertWebhookControllerTest {
         AlertIntakeLimits tight = new AlertIntakeLimits(512 * 1024, 200, 2_000, 32_000, 32, 16 * 1024);
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, tight, () -> FIXED);
         MockMvc tightMvc = MockMvcBuilders
-                .standaloneSetup(new AlertWebhookController(intake, BEARER)).build();
+                .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, tight),
+                        BEARER)).build();
 
         tightMvc.perform(post("/webhooks/alertmanager")
                         .header("Authorization", "Bearer " + BEARER)
@@ -236,6 +255,53 @@ class AlertWebhookControllerTest {
                         .content(gz.toByteArray()))
                 .andExpect(status().isAccepted());
         assertThat(stores.inbox.all()).hasSize(1);
+    }
+
+    // ---------------- M5-16：控制面声明组 → ROUTED_ONCALL 202（防自噬） ----------------
+
+    @Test
+    void m516ControlClaimWithControlBearerRoutesOnCall() throws Exception {
+        String controlGroup = """
+                {
+                  "version": "4", "receiver": "rca-oncall", "groupKey": "g:RCA_SYSTEM:collector",
+                  "groupLabels": {"alertname": "RCA_SYSTEM_CollectorDown"},
+                  "commonLabels": {"monitoring_scope": "rca_system"},
+                  "commonAnnotations": {}, "status": "firing",
+                  "alerts": [
+                    {"status": "firing",
+                     "labels": {"alertname": "RCA_SYSTEM_CollectorDown",
+                                "monitoring_scope": "rca_system"},
+                     "annotations": {}, "startsAt": "2026-09-03T09:00:00Z",
+                     "fingerprint": "fp-ctrl-1"}
+                  ],
+                  "truncatedAlerts": 0
+                }
+                """;
+
+        mvc.perform(post("/webhooks/alertmanager")
+                        .header("Authorization", "Bearer " + CONTROL_BEARER)
+                        .contentType("application/json")
+                        .content(controlGroup))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.routed").value("oncall"));
+
+        // 直写 PROCESSED+SUPPRESSED：审计在、claim 面不可达（不创建 Incident/Run）
+        assertThat(stores.inbox.all()).hasSize(1);
+        AlertInbox row = stores.inbox.all().get(0);
+        assertThat(row.state()).isEqualTo(InboxState.PROCESSED);
+        assertThat(row.decision()).isEqualTo(InboxDecision.SUPPRESSED);
+    }
+
+    @Test
+    void m516ForgedScopeWithBusinessBearerIs401ZeroPersistence() throws Exception {
+        mvc.perform(post("/webhooks/alertmanager")
+                        .header("Authorization", "Bearer " + BEARER)
+                        .contentType("application/json")
+                        .content(validBody().replace("\"severity\": \"critical\"",
+                                "\"severity\": \"critical\", \"monitoring_scope\": \"rca_system\"")))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(stores.inbox.all()).isEmpty();   // 伪造 label 零落库（INV-AM5-4）
     }
 
     // ---------------- EX-A09：DB 故障 → 503 整组可重试 ----------------

@@ -45,4 +45,14 @@ log "phase4 出口恢复 → 遥测恢复（[195]）"
 #     （错误/慢 trace 全在、健康 trace ≈10%）
 log "  （骨架期占位：恢复面待 195 部署段激活）"
 
-log "骨架校验完成（phase1~4 真栈断言待 195 部署段激活；配置面已由静态门锁定）"
+log "phase5 M5-16 防自噬：认证后 RCA_SYSTEM 告警只到独立值班通道且 Incident/Run 增量为 0（[195]）"
+# [195] ① 控制面合成告警（alertname=RCA_SYSTEM_*，monitoring_scope=rca_system）经 AM
+#     rca-oncall route（CONTROL_WEBHOOK_BEARER_TOKEN 身份）POST /webhooks/alertmanager
+#     → 202 routed=oncall；control-app 日志 CONTROL_ALERT_ONCALL 事件可追；
+#     alert_inbox 行 = PROCESSED+SUPPRESSED；incident/rca_run 计数增量恒 0（INV-AM5-4）；
+# [195] ② 伪造面：业务 bearer 携带 monitoring_scope=rca_system label → 401 零落库
+#     （body 同名 label 单独不作数，方案 §3.2）；route/scope 越白名单 → 400 零落库；
+# [195] ③ Gatus（M5-17，2C4G）合成告警同通道：阈值内告警与恢复，不进 Incident 管线
+log "  （骨架期占位：防自噬面对拍待 195 部署段激活）"
+
+log "骨架校验完成（phase1~5 真栈断言待 195 部署段激活；配置/路由面已由静态门+UT 锁定）"

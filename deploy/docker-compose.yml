@@ -119,6 +119,9 @@ services:
       # AM1 告警链路（§6.4/§6.5）：webhook bearer 与 Holmes 独立凭证
       # 键名与 application.yml / AlertSelfCheck 三方统一（BA-09①，G0-02）
       ALERTMANAGER_WEBHOOK_BEARER_TOKEN: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:?}
+      # AM5 M5-16：控制面防自噬路由独立 bearer（RCA_SYSTEM/monitoring_scope 声明组
+      # 经三面门直达值班通道，不建 Incident/Run——INV-AM5-4；:? 必填防静默空值恒拒）
+      CONTROL_WEBHOOK_BEARER_TOKEN: ${CONTROL_WEBHOOK_BEARER_TOKEN:?}
       # AM5 M5-09：ConfigBundle 发布/回滚 API 鉴权（release 角色共享凭证，
       # O-4 用户体系落地前形态；:? 必填防静默空值）
       APP_RELEASE_API_BEARER: ${APP_RELEASE_API_BEARER:?}

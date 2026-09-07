@@ -30,6 +30,12 @@ app:
   alert:
     webhook:
       bearer: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:}
+    # M5-16 防自噬路由：控制面合成告警（RCA_SYSTEM 家族/monitoring_scope 声明）的
+    # 独立身份与白名单——body 同名 label 单独不作数（方案 §3.2）；bearer 空 = 恒拒
+    control-router:
+      bearer: ${CONTROL_WEBHOOK_BEARER_TOKEN:}
+      allowed-receivers: rca-oncall
+      allowed-scopes: rca_system
     # Holmes 常驻容器凭证桥接（BA-10①/G0-03）：Spring 不会自动把 HOLMES_API_KEY
     # 环境变量映射成 app.alert.holmes.api-key 属性，必须在 yml 显式占位。
     # compose 注入 HOLMES_BASE_URL / HOLMES_API_KEY；AlertFlowConfig 读 app.alert.holmes.*
