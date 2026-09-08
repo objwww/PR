@@ -1,0 +1,45 @@
+/* AM7 设计系统 token：移植自线框图 v1.6（docs/告警-前端页面设计-wireframes-v1.html <style>），单一事实源 */
+:root {
+  --bg: #edf0f5; --card: #ffffff; --ink: #1f2733; --ink-2: #5b6572;
+  --line: #dfe4ec; --line-strong: #c3ccd9;
+  --brand: #1f6feb; --brand-deep: #1a56c4; --brand-soft: #e8f0fe;
+  --head: #1e2a3a;
+  --ok: #1e7e34; --ok-bg: #e7f5ec;
+  --bad: #c0362c; --bad-bg: #fdeceb;
+  --warn: #9a6a00; --warn-bg: #fff7e0;
+  --orange: #c25e10; --orange-bg: #fdf0e4;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(30,42,58,.06), 0 8px 24px -10px rgba(30,42,58,.14);
+  /* severity 行首色条（E-19 §4：色条=severity，badge=状态，分离表达） */
+  --sev-p0: #c0362c; --sev-p1: #c25e10; --sev-p2: #8a94a1;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #app { height: 100%; }
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.6;
+}
+a { color: var(--brand); text-decoration: none; }
+code { background: #edf1f6; padding: 0 5px; border-radius: 4px; font-size: .92em; }
+::selection { background: var(--brand-soft); }
+
+/* 通用件：状态 badge / severity 色条 / 按钮 / 卡片 */
+.tag { display: inline-block; border-radius: 999px; padding: 0 9px; font-size: 11px; line-height: 19px; font-weight: 600; }
+.t-red { background: var(--bad-bg); color: var(--bad); border: 1px solid #e5a19c; }
+.t-green { background: var(--ok-bg); color: var(--ok); border: 1px solid #9ed3ac; }
+.t-gray { background: #eef1f5; color: #5b6572; border: 1px solid var(--line-strong); }
+.t-blue { background: var(--brand-soft); color: var(--brand); border: 1px solid #a8c4f5; }
+.t-orange { background: var(--orange-bg); color: var(--orange); border: 1px solid #eec39b; }
+
+.btn {
+  display: inline-block; border: 1px solid var(--brand); color: var(--brand);
+  border-radius: 6px; padding: 3px 12px; font-size: 12px; background: #fff;
+  font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
+}
+.btn:hover { background: var(--brand); color: #fff; }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
+.btn.danger:hover { background: var(--bad); color: #fff; }
+.btn.primary { background: var(--brand); color: #fff; }
+.btn.primary:hover { background: var(--brand-deep); }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }

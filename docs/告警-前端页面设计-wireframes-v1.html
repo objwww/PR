@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>告警 RCA Agent — 前端页面设计线框图 v1.6</title>
+<style>
+  :root {
+    --bg: #edf0f5; --card: #ffffff; --ink: #1f2733; --ink-2: #5b6572;
+    --line: #dfe4ec; --line-strong: #c3ccd9;
+    --brand: #1f6feb; --brand-soft: #e8f0fe;
+    --head: #1e2a3a;
+    --ok: #1e7e34; --ok-bg: #e7f5ec;
+    --bad: #c0362c; --bad-bg: #fdeceb;
+    --warn-bg: #fff7e0;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(30,42,58,.06), 0 8px 24px -10px rgba(30,42,58,.14);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; background: var(--bg); color: var(--ink); padding: 28px 24px 64px; font-size: 14px; line-height: 1.6; }
+  body > * { max-width: 1520px; margin-left: auto; margin-right: auto; }
+  h1 { font-size: 24px; letter-spacing: .5px; margin-bottom: 8px; color: var(--head); }
+  .meta { color: var(--ink-2); font-size: 13px; line-height: 1.9; margin-bottom: 24px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 18px; }
+  .meta b { color: var(--head); }
+  .toc { position: sticky; top: 10px; z-index: 20; background: rgba(255,255,255,.94); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow); padding: 8px 14px; margin-bottom: 30px; font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .toc b { margin-right: 4px; color: var(--ink-2); font-size: 12.5px; }
+  .toc a { color: var(--brand); text-decoration: none; padding: 3px 11px; border-radius: 999px; transition: background .15s, color .15s; }
+  .toc a:hover { background: var(--brand); color: #fff; }
+  section.page { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); margin-bottom: 36px; overflow: hidden; scroll-margin-top: 78px; }
+  .page-head { background: linear-gradient(135deg, #22314a 0%, #2f4356 100%); color: #fff; padding: 14px 20px; }
+  .page-head h2 { font-size: 17px; letter-spacing: .3px; }
+  .page-head .sub { font-size: 12.5px; color: #aebdd2; margin-top: 4px; }
+  .page-body { display: flex; gap: 0; }
+  .wire { flex: 1; padding: 18px; min-width: 0; }
+  .annot { width: 360px; border-left: 1px solid var(--line); padding: 16px 18px; font-size: 12.5px; background: #f8fafc; }
+  .annot h3 { font-size: 13px; margin-bottom: 8px; color: var(--brand); }
+  .annot table { width: 100%; border-collapse: collapse; background: #fff; box-shadow: 0 0 0 1px var(--line); border-radius: 8px; }
+  .annot td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
+  .annot td:first-child { white-space: nowrap; font-weight: 600; width: 92px; background: #f1f4f9; color: var(--head); }
+  .annot p { margin: 8px 0; line-height: 1.7; }
+  .annot code { background: #edf1f6; padding: 0 5px; border-radius: 4px; font-size: 11.5px; }
+  /* 线框件 */
+  .frame { border: 2px solid #33404f; border-radius: 12px; background: #fff; min-height: 300px; overflow: hidden; box-shadow: 0 2px 12px -4px rgba(30,42,58,.18); }
+  .topbar { background: linear-gradient(135deg, #2b3b52, #3a4d68); color: #fff; padding: 9px 14px; font-size: 13px; display: flex; justify-content: space-between; flex-wrap:wrap; gap:4px 12px; }
+  .topbar span { overflow-wrap:anywhere; }
+  .navbar { background: #f1f4f9; border-bottom: 1px solid var(--line); padding: 8px 12px; font-size: 12.5px; }
+  .navbar span { display: inline-block; padding: 3px 12px; margin-right: 6px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff; color: var(--ink-2); }
+  .navbar span.cur { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+  .row { display: flex; gap: 12px; padding: 12px; }
+  .col { border: 1.5px dashed #b8c2d0; border-radius: 10px; padding: 10px; min-height: 60px; background: #fcfdfe; }
+  .col .lbl { font-size: 11.5px; color: var(--brand); font-weight: 700; margin-bottom: 6px; letter-spacing: .3px; }
+  .box { border: 1px solid var(--line); border-radius: 8px; background: #f7f9fc; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.55; }
+  .box.small { padding: 4px 8px; font-size: 11.5px; }
+  .btn { display: inline-block; border: 1px solid var(--brand); color: var(--brand); border-radius: 6px; padding: 2px 10px; font-size: 11.5px; margin: 2px 4px 2px 0; background: #fff; font-weight: 600; }
+  .btn.danger { border-color: var(--bad); color: var(--bad); }
+  .tag { display: inline-block; border-radius: 999px; padding: 0 9px; font-size: 11px; line-height: 19px; margin-right: 4px; font-weight: 600; }
+  .t-red { background: var(--bad-bg); color: var(--bad); border: 1px solid #e5a19c; }
+  .t-green { background: var(--ok-bg); color: var(--ok); border: 1px solid #9ed3ac; }
+  .t-gray { background: #eef1f5; color: #5b6572; border: 1px solid var(--line-strong); }
+  .t-blue { background: var(--brand-soft); color: var(--brand); border: 1px solid #a8c4f5; }
+  .bar { height: 10px; background: #e6eaf0; border: none; border-radius: 999px; position: relative; margin: 5px 0; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--brand), #5b8ff0); border-radius: 999px; }
+  .list-item { border-bottom: 1px solid #edf0f4; padding: 7px 4px; font-size: 12px; }
+  .list-item:last-child { border-bottom: none; }
+  .flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 20px; font-size: 13px; }
+  .flow .node { border: 2px solid #33404f; border-radius: 12px; padding: 12px 18px; background: #fff; text-align: center; box-shadow: 0 3px 0 #d7dee8; }
+  .flow .node b { display: block; font-size: 14px; color: var(--head); }
+  .flow .node small { color: var(--ink-2); }
+  .flow .arr { color: var(--brand); font-weight: 700; font-size: 14px; }
+  .note { background: var(--warn-bg); border: 1px solid #ecd9a0; border-left: 4px solid #e6b93f; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; margin: 12px 14px 16px; line-height: 1.7; }
+  .tabs { display:flex; flex-wrap:wrap; gap:5px; padding:9px 12px 0; border-bottom:1px solid var(--line); background:#f6f8fb; }
+  .tabs span { border:1px solid var(--line-strong); border-bottom:none; border-radius:8px 8px 0 0; padding:5px 12px; font-size:11.5px; background:#fff; color:var(--ink-2); }
+  .tabs span.cur { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+  .toolbar { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); background:#fafbfd; font-size:11.5px; }
+  .field { display:inline-block; border:1px solid var(--line-strong); border-radius:6px; background:#fff; padding:3px 8px; min-width:88px; color:var(--ink-2); }
+  .banner { margin:10px 12px 0; padding:7px 10px; border:1px solid #ecd9a0; border-left:4px solid #e6b93f; border-radius:8px; background:var(--warn-bg); font-size:11.5px; }
+  .drawer { border:2px solid var(--brand); border-radius:10px; background:#fff; box-shadow:-4px 0 0 var(--brand-soft); padding:10px; }
+  .metric { border-left:4px solid var(--brand); border-radius:6px; padding-left:8px; background:#f5f8fe; }
+  .split-title { margin:16px 0 8px; padding:7px 12px; background:#eef2f8; border-left:4px solid #33404f; border-radius:6px; font-size:12px; font-weight:700; color:var(--head); }
+  .state-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; padding:12px; }
+  .step-lane { display:flex; align-items:stretch; gap:8px; padding:10px; overflow-x:auto; }
+  .step { min-width:104px; flex:1; border:1px solid var(--line); border-top:4px solid var(--brand); border-radius:8px; padding:8px; background:#fff; font-size:11px; position:relative; box-shadow:0 1px 3px rgba(30,42,58,.06); }
+  .step.done { border-top-color:var(--ok); }
+  .step.wait { border-top-color:#9aa5b1; background:#f6f8fb; }
+  .step.fail { border-top-color:var(--bad); background:#fdf3f2; }
+  .step b { display:block; margin-bottom:3px; }
+  .step + .step:before { content:"→"; position:absolute; left:-9px; top:26px; color:#8a94a1; background:#fff; border-radius:50%; }
+  .facet-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:10px 12px; }
+  .facet-grid .box { margin:0; }
+  /* ===== v1.6 结构改版新增（依据 E-19 调研结论；沿用上方设计系统变量） ===== */
+  .appshell { display:flex; min-height:340px; background:#fff; }
+  .shell-side { width:172px; flex:none; background:linear-gradient(180deg,#1c2733,#263449); color:#c7d2e0; padding:12px 8px; display:flex; flex-direction:column; border-radius:10px 0 0 10px; }
+  .shell-side .logo { color:#fff; font-weight:700; font-size:13px; padding:4px 10px 14px; letter-spacing:.5px; }
+  .shell-side .nav-it { padding:7px 12px; border-radius:8px; font-size:12.5px; margin-bottom:2px; }
+  .shell-side .nav-it.cur { background:var(--brand); color:#fff; font-weight:600; }
+  .shell-side .nav-foot { margin-top:auto; }
+  .shell-main { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .crumb { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px 12px; padding:7px 14px; background:#f7f9fc; border-bottom:1px solid var(--line); font-size:12px; color:var(--ink-2); }
+  .crumb b { color:var(--head); font-weight:600; }
+  .crumb .sep { color:#9aa5b1; margin:0 4px; }
+  .crumb .env { font-size:11.5px; color:var(--ink-2); }
+  .stat-row { display:flex; gap:12px; padding:12px; }
+  .stat-card { flex:1; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px 14px; cursor:pointer; transition:border-color .15s, box-shadow .15s; }
+  .stat-card:hover { border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-soft), var(--shadow); }
+  .stat-card .num { font-size:22px; font-weight:700; color:var(--head); }
+  .stat-card .jump { font-size:11px; color:var(--brand); margin-top:5px; }
+  .facet-rail { width:180px; flex:none; border-right:1px solid var(--line); background:#fafbfd; padding:10px 12px; font-size:11.5px; }
+  .facet-rail h4 { font-size:11px; color:var(--ink-2); margin:9px 0 4px; letter-spacing:.4px; }
+  .facet-rail h4:first-child { margin-top:0; }
+  .facet-rail .f-it { display:flex; justify-content:space-between; gap:6px; padding:2px 6px; border-radius:5px; }
+  .facet-rail .f-it.cur { background:var(--brand-soft); color:var(--brand); font-weight:600; }
+  .facet-rail .f-it i { font-style:normal; color:var(--ink-2); }
+  .searchbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:8px 12px; border-bottom:1px solid var(--line); background:#fff; font-size:11.5px; }
+  table.grid { width:100%; border-collapse:collapse; font-size:11.5px; background:#fff; }
+  table.grid th { background:#f1f4f9; color:var(--head); text-align:left; padding:5px 8px; border-bottom:1px solid var(--line-strong); font-size:11px; white-space:nowrap; }
+  table.grid td { padding:6px 8px; border-bottom:1px solid #edf0f4; vertical-align:top; }
+  table.grid tr.sev-p0 td:first-child { border-left:4px solid var(--bad); }
+  table.grid tr.sev-p1 td:first-child { border-left:4px solid #d97706; }
+  table.grid tr.sev-p2 td:first-child { border-left:4px solid #9aa5b1; }
+  .runhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:9px 14px; background:#fff; border-bottom:1px solid var(--line); font-size:12px; }
+  .runhead .ops { margin-left:auto; }
+  .runhead .mini { font-size:11px; color:var(--ink-2); }
+  .runhead .bar { width:110px; margin:0; display:inline-block; vertical-align:middle; }
+  .cmp-reg { background:var(--bad-bg); color:var(--bad); font-weight:700; }
+  .cmp-imp { background:var(--ok-bg); color:var(--ok); font-weight:700; }
+  ::selection { background: var(--brand-soft); }
+  @media (max-width: 1100px) { .page-body { display:block; } .annot { width:auto; border-left:none; border-top:1px dashed var(--line-strong); } .row { flex-wrap:wrap; } .col { min-width:280px; } .toc { border-radius:14px; } }
+  @media (max-width: 700px) { body { padding:8px; } .wire { padding:8px; } .state-grid,.facet-grid { grid-template-columns:repeat(2,minmax(0,1fr)); padding:6px; } .col { min-width:0; flex-basis:100% !important; } .navbar span,.tabs span { margin-bottom:3px; } .annot { padding:8px; overflow-x:auto; } .step { min-width:130px; } }
+</style>
+</head>
+<body>
+
+<h1>告警 RCA Agent — 前端页面设计线框图 v1.6</h1>
+<div class="meta">2026-09-07 ｜ 状态：待评审（页面清单确认后才出正式技术方案，走 G1）｜ 技术形态：Vue3 SPA 独立构建 ｜ 通知口径：默认站内，钉钉渠道停用保留<br>
+<b>性质声明：本文件为静态视觉线框图，不可操作（无真实点击/切换交互）；交互语义以各页注释文字为准。第一期目标最小桌面宽度 1366×768。</b><br>
+v1.4：补开源告警 UI 对标、证据工作区与 Claim↔Evidence 引用矩阵。<b>v1.5（2026-09-07，分类/全步骤/历史档案/完整评测）</b>：① P2 增加业务、应用、依赖、基础设施、网络、数据、安全、平台、未分类九类告警视图及二级 facets；② 每个 Incident 可按代/Run/Task 查看端到端步骤轨迹；③ 历史调查摘要、报告、证据 manifest 与归档完整性可随机检索打开；④ P5 扩为数据集治理、运行配置、批次、六维分析、逐案例诊断、评分器校准、人工复核、实验比较与发布门。<b>v1.5.1（2026-09-07，纯视觉改版，内容语义不变）</b>：设计系统化——CSS 变量配色/圆角卡片/柔和阴影/吸顶胶囊目录/表格与标签层级优化；SVG 节点色并入新色板。<b>v1.6（2026-09-07，结构改版，注释契约不变）</b>：依据 E-19 前端 UI 对标调研（docs/告警-调研-前端UI对标-v1.md）——① 新增「⓪ 全局应用壳」（左侧深色导航+顶栏混合模型），各页面删除重复 topbar/navbar、改面包屑条；② P1 统计卡改可点击、带筛选参数深跳；③ P2 告警中心改行业标准「左 facet + 顶搜索栏 + 右表格」，行首 4px severity 色条、状态用文字 badge；④ P3-B 调查详情改「头部摘要条 + 多视图 tab」（DAG/事件流/Claim与证据/报告/历史Attempt），取消/Hint/Feedback 主操作上移；⑤ P5 实验对比改「实验为列、用例为行」对比矩阵，回归红/改进绿 + 只看回归 + 基准实验。</div>
+
+<div class="toc">
+  <b>目录：</b>
+  <a href="#shell">⓪ 全局应用壳</a>
+  <a href="#inventory">① 页面清单（多少个页面）</a>
+  <a href="#flow">② 操作员主路径</a>
+  <a href="#p0">P0 登录页</a>
+  <a href="#p1">P1 总览</a>
+  <a href="#p2">P2 告警中心</a>
+  <a href="#p3">P3 调查队列与审查</a>
+  <a href="#p4">P4 处置中心</a>
+  <a href="#p5">P5 评测中心</a>
+  <a href="#p6">P6 Agent 监控</a>
+  <a href="#states">③ 全局状态</a>
+  <a href="#constraints">④ 架构约束清单</a>
+  <a href="#research">⑤ 调研证据</a>
+</div>
+
+<!-- ==================== 全局应用壳 ==================== -->
+<section class="page" id="shell">
+  <div class="page-head"><h2>⓪ 全局应用壳（所有页面共享，v1.6 新增）</h2>
+  <div class="sub">左侧深色导航 + 顶栏的混合模型（E-19 §4-1/§4-12：Grafana / PagerDuty / incident.io / 腾讯云 / 华为云等国内外产品的一致收敛形态）；后续页面线框只画内容区，导航壳不再重复</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="frame" style="min-height:340px">
+        <div class="appshell">
+          <div class="shell-side">
+            <div class="logo">告警 RCA</div>
+            <div class="nav-it"> 总览</div>
+            <div class="nav-it cur"> 告警</div>
+            <div class="nav-it"> 审查台</div>
+            <div class="nav-it"> 处置</div>
+            <div class="nav-it"> 评测</div>
+            <div class="nav-it"> 监控</div>
+            <div class="nav-foot"><div class="nav-it">⚙ 设置</div></div>
+          </div>
+          <div class="shell-main">
+            <div class="topbar"><span>生产环境 ▾ ｜ 全局搜索 [Incident / Run / Task / Trace ________]</span><span>SSE <b style="color:#7ee2a0">●</b> 已连接 ｜ operator ▾</span></div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;border:1.5px dashed #b8c2d0;border-radius:10px;margin:14px;color:var(--ink-2);font-size:13px;min-height:200px">页面内容区（P1–P6 渲染于此；各页线框见下文，均只画此区域）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>应用壳说明</h3>
+      <table>
+        <tr><td>共享壳</td><td>P1–P6 所有页面共享此壳：左侧 7 个一级入口（总览/告警/审查台/处置/评测/监控 + 底部设置位），当前项高亮；顶栏 = 环境切换器 + 全局搜索 + SSE 连接状态点 + 用户菜单。P0 登录页在壳外。</td></tr>
+        <tr><td>线框约定</td><td>后续页面线框只画内容区：原每页重复的 topbar/navbar 删除，替换为面包屑条（.crumb：首页 / 栏目 / 对象），右侧保留该页必需的环境/时间信息；页面特有的 tabs/toolbar 保留。</td></tr>
+        <tr><td>对标依据</td><td>E-19 §4-12 中文控制台惯例（左导航 + 操作归组）与 §4-1 列表页收敛形态均以此为骨架；SSE 状态点呼应 §4-6「实时更新要可暂停/可见」。</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 页面清单 ==================== -->
+<section class="page" id="inventory">
+  <div class="page-head"><h2>① 页面清单：7 个一级入口 + 详情子路由</h2>
+  <div class="sub">一级导航保持稳定；把队列、详情、实验比较和发布门组织成子路由，覆盖操作员完整工作路径</div></div>
+  <div class="annot" style="width:auto;border:none;background:#fff">
+    <table>
+      <tr><td>P0 登录页</td><td>最小账号登录。架构 FUT-34 硬性要求：浏览器不得复用机器 Bearer，必须有用户会话。没有它，后面所有页面都没有合法身份。</td></tr>
+      <tr><td>P1 总览</td><td>行动首页：逾期 Case、卡住/失败 Run、最老 READY、发布失败与评测回归优先；计数卡作为补充。</td></tr>
+      <tr><td><b>P2 告警中心</b></td><td><code>/alerts</code> 分类分诊；<code>/alerts/{incident_id}</code> 展示实例、阈值、端到端调查步骤、证据与报告；<code>/history</code> 检索历史调查摘要与归档证据。</td></tr>
+      <tr><td><b>P3 调查队列与审查</b></td><td><code>/runs</code> 是全部 Run 的工作队列；<code>/runs/{run_id}</code> 是 DAG、任务诊断抽屉、Attempt、事件流、Claim/证据/报告及人工干预详情。</td></tr>
+      <tr><td><b>P4 处置中心</b></td><td><code>/cases</code> 管理 OperatorCase 的认领、SLA 和闭环；“通知”作为同页标签，仅表达投递与已读状态。</td></tr>
+      <tr><td><b>P5 评测中心</b></td><td>数据集治理 / 发起评测 / 批次运行 / 六维分析 / 案例诊断 / 人工复核 / 实验对比 / 发布门八个子视图；HOLDOUT 只返回聚合门禁结论。</td></tr>
+      <tr><td><b>P6 Agent 监控</b></td><td>预算与成本之外增加队列积压、最老 READY、Outbox 延迟、调和积压、worker/slot 饱和度和异常跳转。</td></tr>
+    </table>
+    <p><b>一级入口仍为 7 个</b>：告警历史、Run 详情与评测八个视图均为子路由；配置发布页（ConfigBundle/Canary，属 AM5 后期）和用户管理页仍不在第一期。</p>
+  </div>
+</section>
+
+<!-- ==================== 联动图 ==================== -->
+<section class="page" id="flow">
+  <div class="page-head"><h2>② 操作员主路径（发现 → 认领 → 定位 → 处置 → 验证）</h2>
+  <div class="sub">页面按操作问题组织：现在处理什么、Run 卡在哪里、由谁接手、修复是否有效、版本能否发布</div></div>
+  <div class="flow">
+    <div class="node"><b>P2 告警中心</b><small>incident FIRING</small></div>
+    <span class="arr">─ 触发调查 →</span>
+    <div class="node"><b>P3 调查队列</b><small>分派 / SLA / 卡点</small></div>
+    <span class="arr">─ 打开 Run →</span>
+    <div class="node"><b>P3 调查详情</b><small>DAG / Attempt / 证据</small></div>
+    <span class="arr">─ 需人工判断 →</span>
+    <div class="node"><b>P4 处置中心</b><small>OperatorCase 认领与闭环</small></div>
+  </div>
+  <div class="flow" style="padding-top:0">
+    <div class="node"><b>P5 实验对比</b><small>基线 / 候选 / 退化案例</small></div>
+    <span class="arr">─ 达到门槛 →</span>
+    <div class="node"><b>P5 发布门</b><small>HOLDOUT 聚合结论</small></div>
+    <span class="arr">← 异常联动 →</span>
+    <div class="node"><b>P6 Agent 监控</b><small>队列 / worker / outbox / 成本</small></div>
+  </div>
+  <div class="note"><b>对象链与基数（v1.5 冻结）</b>：AlertEvent N→1 Incident；Incident 1→N Run；Run 1→N Task / Evidence / Claim；Claim N↔N Evidence（每个 Claim 至少 1 条 evidenceRef）；OperatorCase N→1 subject，并至少绑定 1 个来源引用。AlertClassification 是从 labels/alertname/service/source 派生的版本化投影，不改写 AlertEvent；Report 与 ArchiveManifest 冻结 Claim、Evidence、配置 digest 和 CAS 引用。所有对象通过稳定 ID 深链。</div>
+</section>
+
+<!-- ==================== P0 登录 ==================== -->
+<section class="page" id="p0">
+  <div class="page-head"><h2>P0 登录页 /login</h2><div class="sub">全站唯一入口；会话 Cookie（HttpOnly）后续所有 API 与 SSE 携带</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="frame" style="display:flex;align-items:center;justify-content:center;min-height:240px">
+        <div style="width:280px">
+          <div class="box" style="text-align:center;font-weight:bold">告警 RCA 控制台</div>
+          <div class="box">账号 [_______________]</div>
+          <div class="box">密码 [_______________]</div>
+          <div style="text-align:center"><span class="btn">登 录</span></div>
+          <div class="box small" style="color:#888">失败 N 次锁定 ｜ 会话 8h 过期</div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:10px"><b>P0 在应用壳外</b>（无左侧导航/顶栏，全屏居中卡片）；登录成功默认落地 P1 行动首页（PagerDuty 以 Incidents 页为登录首屏的先例，E-19 §3-P0）。</div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>后端</td><td>新增：用户账号表 + 登录端点（当前系统无任何用户体系，需新建最小实现）</td></tr>
+        <tr><td>冻结约束</td><td>FUT-34：浏览器禁止复用 Alertmanager 机器 Bearer；必须用户会话或 stream ticket</td></tr>
+        <tr><td>范围控制</td><td>第一期不做注册/找回密码/SSO；账号由运维在配置侧预置</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P1 总览 ==================== -->
+<section class="page" id="p1">
+  <div class="page-head"><h2>P1 总览 /</h2><div class="sub">登录后的行动首页：先展示需要处理和已经逾期的事项，再展示规模与健康概览</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>总览</span><span class="env">生产环境 ｜ Asia/Shanghai ｜ 数据更新至 10:43:08</span></div>
+        <div class="stat-row">
+          <div class="stat-card"><div class="lbl"> 逾期待办</div><div class="num">2 <span class="tag t-red">超 SLA</span></div><div class="jump">最老已逾期 18m ｜ 点击 → 带筛选参数跳 P4 处置</div></div>
+          <div class="stat-card"><div class="lbl"> 卡住/失败 Run</div><div class="num">5</div><div class="jump">卡住 3 ｜ 失败 2 ｜ 点击 → 带筛选参数跳 P3 调查队列</div></div>
+          <div class="stat-card"><div class="lbl"> 最老 READY</div><div class="num">18m</div><div class="jump">run#1fa0 ｜ 未分配 ｜ 点击 → 跳 P3 队列（按等待排序）</div></div>
+          <div class="stat-card"><div class="lbl"> 评测回归</div><div class="num" style="font-size:16px">1 case ｜ <span class="tag t-red">阻断候选</span></div><div class="jump">eval#0907 vs #0906 ｜ 点击 → 跳 P5 实验对比</div></div>
+          <div class="stat-card"><div class="lbl"> 发布/投递失败</div><div class="num">1</div><div class="jump">outbox 最老 7m ｜ 点击 → 跳 P6 监控</div></div>
+        </div>
+        <div class="note" style="margin-top:0"><b>统计卡可点击（E-19 §3-P1：腾讯云概览→列表三级下钻 §2.3.2、Alerta ASI 计数卡点击过滤 §2.2.6）</b>：hover 高亮边框，点击带筛选参数深跳对应工作队列——各卡下方文字即深跳目标。</div>
+        <div class="row">
+          <div class="col" style="flex:2"><div class="lbl"> 交接视图：自上次值班以来的变化</div>
+            <div class="list-item">10:42 新增 P0 Case：run#8c1d Claim 冲突，尚未分配 <span class="btn">认领</span></div>
+            <div class="list-item">10:31 payment-failure 再次 FIRING，已创建 run#3f2a</div>
+            <div class="list-item">09:58 候选 eval#0907 出现 1 个退化案例，发布门未发起</div>
+          </div>
+          <div class="col" style="flex:1"><div class="lbl"> 系统健康</div>
+            <div class="box small">control-app <span class="tag t-green">UP</span></div>
+            <div class="box small">notify-app <span class="tag t-green">UP</span></div>
+            <div class="box small">litellm <span class="tag t-green">UP</span> holmes <span class="tag t-gray">对照</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>数据源</td><td>聚合自 incident / rca_run/task / operator_case / outbox / eval_run / run_budget_state（新增行动摘要只读 API）</td></tr>
+        <tr><td>实时性</td><td>轮询 30s 即可，不接 SSE（SSE 只留给审查台）</td></tr>
+        <tr><td>定位</td><td>卡片均跳入已带筛选条件的工作队列；仅允许低风险“认领”，其余命令进入对象详情完成。</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P2 告警中心 ==================== -->
+<section class="page" id="p2">
+  <div class="page-head"><h2>P2 告警中心 /alerts + /alerts/{incident_id} + /history</h2><div class="sub">先按异常域分诊，再看实例和完整调查过程；历史 Incident 可随机检索并校验归档证据</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="split-title">P2-A 分类分诊 /alerts</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>告警<span class="sep">/</span>分类分诊</span><span class="env">生产环境 ｜ 数据更新至 10:43:08 ｜ operator ▾</span></div>
+        <div class="state-grid">
+          <div class="box metric"><b>P0 严重</b><br><span style="font-size:20px">2</span> ｜ 未确认 1</div>
+          <div class="box metric"><b>P1 高</b><br><span style="font-size:20px">5</span> ｜ 新增 2</div>
+          <div class="box metric"><b>待处理 Incident</b><br><span style="font-size:20px">7</span> ｜ Case 12</div>
+          <div class="box metric"><b>重复/风暴</b><br><span style="font-size:20px">48</span> 次接收 / 6 事件</div>
+          <div class="box metric"><b>来源异常</b><br><span style="font-size:20px">1</span> ｜ NoData/Error</div>
+          <div class="box metric"><b>平均恢复</b><br><span style="font-size:20px">26m</span> ｜ 近 24h</div>
+        </div>
+        <div class="tabs"><span class="cur">当前告警 9</span><span>历史告警</span><span>我负责的 3</span><span>未分类 1</span><span>保存的视图 ▾</span></div>
+        <div class="box small" style="margin:8px 12px 0">上方 severity/规模计数卡点击即过滤下方列表（Alerta ASI 先例，E-19 §2.2.6）；下方列表区为行业标准「左 facet + 顶搜索栏 + 右表格」形态（E-19 §0-1 / §4-1：Datadog / Keep / Alerta / PagerDuty 四家收敛）。</div>
+        <div class="searchbar">🔍 搜索 DSL <span class="field" style="min-width:250px">service:order AND status:FIRING</span> <span class="btn">查询</span><span class="btn">存为视图</span> ｜ 刷新频率 <span class="field">手动 ▾</span> <span style="color:var(--ink-2)">（搜索表达式可存预设视图、列配置按视图记忆——Keep / PagerDuty 先例；活动/历史切换见上方 tabs）</span></div>
+        <div style="display:flex">
+          <div class="facet-rail">
+            <h4>分类（taxonomy v1）</h4>
+            <div class="f-it cur"><span>业务 BUSINESS</span><i>3</i></div>
+            <div class="f-it"><span>应用 APPLICATION</span><i>2</i></div>
+            <div class="f-it"><span>依赖 DEPENDENCY</span><i>1</i></div>
+            <div class="f-it"><span>基础设施 INFRA</span><i>2</i></div>
+            <div class="f-it"><span>网络 NETWORK</span><i>0</i></div>
+            <div class="f-it"><span>数据 DATA</span><i>0</i></div>
+            <div class="f-it"><span>安全 SECURITY</span><i>0</i></div>
+            <div class="f-it"><span>平台/未分类</span><i>1</i></div>
+            <h4>严重度</h4>
+            <div class="f-it"><span>P0</span><i>2</i></div>
+            <div class="f-it"><span>P1</span><i>5</i></div>
+            <div class="f-it"><span>P0–P2 范围</span><i>▾</i></div>
+            <h4>状态</h4>
+            <div class="f-it cur"><span>FIRING</span><i>7</i></div>
+            <div class="f-it"><span>NoData</span><i>1</i></div>
+            <div class="f-it"><span>已解决</span><i>—</i></div>
+            <h4>来源</h4>
+            <div class="f-it"><span>Prometheus</span><i>3</i></div>
+            <div class="f-it"><span>全部来源</span><i>▾</i></div>
+            <h4>服务 / 团队</h4>
+            <div class="f-it"><span>service=payment</span><i>2</i></div>
+            <div class="f-it"><span>service=checkout</span><i>1</i></div>
+            <div class="f-it"><span>team=支付</span><i>2</i></div>
+            <div class="f-it"><span>team=订单</span><i>1</i></div>
+            <h4>其他 facets</h4>
+            <div class="f-it"><span>region=cn-east</span><i>2</i></div>
+            <div class="f-it"><span>region=cn-north</span><i>1</i></div>
+            <div class="f-it"><span>资源类型</span><i>全部 ▾</i></div>
+            <div class="f-it"><span>环境</span><i>prod ▾</i></div>
+            <div class="f-it"><span>时间</span><i>近 24h ▾</i></div>
+          </div>
+          <div style="flex:1;min-width:0;padding:10px 12px">
+            <table class="grid">
+              <tr><th style="width:24px"></th><th>severity ｜ 状态</th><th>分类</th><th>告警</th><th>最近</th><th>计数 / 指标</th><th>服务</th><th>归属</th><th>操作</th></tr>
+              <tr class="sev-p0"><td>☑</td><td><span class="tag t-red">P0</span> <span class="tag t-red">FIRING</span></td><td><span class="tag t-blue">业务</span></td><td><b>payment-failure</b><br><small><span class="tag t-blue">分类规则命中 0.98</span></small></td><td>10:42</td><td>48接收/6事件/3通知<br>error_rate=52%</td><td>order-arena</td><td>owner=operator</td><td><span class="btn">打开 →</span></td></tr>
+              <tr class="sev-p1"><td>☐</td><td><span class="tag t-red">P1</span> <span class="tag t-red">FIRING</span></td><td><span class="tag t-blue">业务</span> <span class="tag t-gray">依赖标签</span></td><td><b>checkout-slo-burn</b></td><td>10:39</td><td>SLO 14.2×</td><td>payment-api</td><td>未分配 ｜ run#77aa</td><td></td></tr>
+              <tr class="sev-p2"><td>☐</td><td><span class="tag t-gray">P2</span> <span class="tag t-gray">NoData</span></td><td><span class="tag t-gray">未分类</span></td><td><b>delivery-lag</b></td><td>10:35</td><td>value=— ｜ 规则未命中，进入归类队列</td><td>—</td><td>—</td><td><span class="btn">人工归类</span></td></tr>
+            </table>
+            <div class="box small" style="margin-top:8px">行首 4px severity 色条 + 状态用文字 badge，不整行着色（E-19 §4-4 / §4-5：incident.io / Grafana 高密度表格惯例）；勾选行首复选框出顶部批量操作条，高 severity 恒置顶（PagerDuty urgency 排序）。分类口径：业务=订单失败率/SLO/交易损失；应用=异常/延迟/状态机/进程；依赖=DB/MQ/缓存/下游 API；基础设施=主机/容器/K8s/CPU/内存/盘；网络=连接/DNS/TLS/丢包；数据=质量/新鲜度/流水线；安全=越权/泄露/策略违规；平台/未分类=控制面异常/待人工归类。</div>
+            <div class="box small">主分类只承担分诊，每条告警仍保留 team/service/resource_type/env/source/severity 等 facets；复合问题用一个主分类 + 多个标签表达。</div>
+            <div class="box"><b>分类说明与修正（选中行 payment-failure）</b><br><b>主分类：业务异常 / BUSINESS</b>　<small>taxonomy=v1 ｜ rule=TX-BIZ-004 ｜ source=labels+alertname+service ｜ confidence=0.98 ｜ mapped_at=10:31:04</small><br><b>命中依据</b>：alertname=PaymentFailureRateHigh；labels.domain=checkout；service=payment；SLO burn-rate 14.2×<br><b>与根因分类分开</b>：告警主分类是入口分诊；RCA 最终 fault_type 可能是 BUSINESS_ERROR_RATE，也可能是 DEPENDENCY_UNREACHABLE，不提前偷填答案。<br><span class="btn">修正为应用异常</span><span class="btn">增加“依赖”标签</span> <small>人工修正写 override 审计和新投影版本；原始 labels/AlertEvent 永不改写。</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="split-title">P2-B Incident 详情与“每一步”可视化 /alerts/inc#9ab2</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>告警<span class="sep">/</span>业务异常<span class="sep">/</span><b>payment-failure</b><span class="sep">/</span>generation 13</span><span class="env"><span class="tag t-red">P0 FIRING</span> 首次 10:31 ｜ 最近 10:42 ｜ owner=operator</span></div>
+        <div class="tabs"><span>概览</span><span>实例与阈值</span><span class="cur">调查过程</span><span>证据与 RCA</span><span>报告</span><span>状态历史</span><span>通知</span><span>源数据</span></div>
+        <div class="toolbar">轨迹范围 <span class="field">本代全景 ▾</span> Run <span class="field">run#3f2a ▾</span> Task <span class="field">全部 ▾</span> ｜ <span class="btn">仅看异常步骤</span><span class="btn">展开耗时与输入输出引用</span> ｜ 实时 ● seq=184</div>
+        <div class="step-lane">
+          <div class="step done"><b>1 接收</b>AlertEvent×6<br>48 次接收<br>10:31:02 ✓</div>
+          <div class="step done"><b>2 归并</b>Incident inc#9ab2<br>gen 13<br>0.12s ✓</div>
+          <div class="step done"><b>3 准入</b>ADMITTED<br>policy v4<br>0.08s ✓</div>
+          <div class="step done"><b>4 建 Run</b>run#3f2a<br>config 9c1e…<br>0.21s ✓</div>
+          <div class="step done"><b>5 规划 DAG</b>4 Tasks / 3 Edges<br>plan v2<br>1.3s ✓</div>
+          <div class="step done"><b>6 执行工具</b>8 calls / 1 retry<br>metrics+logs<br>2m08s ✓</div>
+          <div class="step"><b>7 汇聚证据</b>Evidence 6<br>snapshot gen13<br>RUNNING</div>
+          <div class="step wait"><b>8 Claim/报告</b>Claims 2<br>1 条冲突<br>WAITING</div>
+          <div class="step wait"><b>9 发布/处置</b>Report —<br>Case c91 OPEN<br>WAITING</div>
+        </div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl">选中步骤 6：执行工具（可继续下钻 Task / Attempt）</div>
+            <div class="list-item"><b>6.1 metrics/query</b> ｜ task#t21 attempt#1 ｜ 10:31:09–10:31:11 ｜ SUCCESS ｜ output Evidence e-41 <span class="btn">查看证据</span></div>
+            <div class="list-item"><b>6.2 logs/search</b> ｜ task#t22 attempt#1 ｜ TIMEOUT ｜ 10s ｜ reason=REMOTE_TIMEOUT <span class="btn">查看错误</span></div>
+            <div class="list-item"><b>6.3 logs/search</b> ｜ task#t22 attempt#2 ｜ backoff 2s ｜ SUCCESS ｜ output Evidence e-42/e-43 <span class="btn">查看 Attempt</span></div>
+            <div class="box small">每一步显示：状态、开始/结束/耗时、触发事件、责任组件、输入引用、输出对象、错误码、重试/回退、关联 Task/Attempt/Evidence/Claim；点击才展开安全参数摘要。</div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl">调查摘要（结构化过程，不展示模型 Thought）</div>
+            <div class="box small"><b>问题</b>：支付失败率为何在 10:31 后升至 52%？</div>
+            <div class="box small"><b>已验证</b>：① checkout 三实例同时升高；② payment 网络可达；③ 扣款返回业务失败；④ 发布/配置窗口匹配。</div>
+            <div class="box small"><b>排除</b>：网络中断（e-42）；DB 锁等待（e-44）。<br><b>当前假设</b>：paymentFailure 开关异常，置信度 0.78，仍待配置证据 e-46。</div>
+            <div class="box small"><b>关联</b>：Evidence 6 ｜ Claims 2 ｜ Report draft ｜ Case c91<br><span class="btn">打开 DAG 任务图</span><span class="btn">打开证据矩阵</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="split-title">P2-C 历史调查与证据档案 /history</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>告警<span class="sep">/</span>历史告警档案（热数据 + 归档目录统一检索）</span><span class="env">搜索 Incident / 根因码 / 服务 / Evidence digest [________]</span></div>
+        <div class="toolbar">分类 <span class="field">全部 ▾</span> 根因 <span class="field">全部 ▾</span> 服务 <span class="field">全部 ▾</span> 结论 <span class="field">已发布 ▾</span> 存储层 <span class="field">热/冷 ▾</span> 时间 <span class="field">近 180 天 ▾</span> <span class="btn">随机打开一条</span></div>
+        <div class="row">
+          <div class="col" style="flex:2">
+            <div class="lbl">历史 Incident（可随机点开，不只看统计）</div>
+            <div class="list-item"><span class="tag t-blue">业务</span> <span class="tag t-green">热数据</span> <b>inc#81a / gen 7 payment-failure</b><br>2026-08-31 ｜ 根因 PAYMENT_CHARGE_FAILURE ｜ 18m ｜ Evidence 7 ｜ Report published <span class="btn">打开</span></div>
+            <div class="list-item"><span class="tag t-gray">基础设施</span> <span class="tag t-gray">已归档</span> <b>inc#6bd / gen 2 pod-restart-loop</b><br>2026-05-14 ｜ 根因 OOM_KILLED ｜ 42m ｜ Evidence 11 ｜ manifest m-62d… <span class="btn">从归档打开</span></div>
+            <div class="list-item"><span class="tag t-gray">依赖</span> <span class="tag t-red">归档不可用</span> <b>inc#4ce / gen 5 mq-timeout</b><br>2026-02-03 ｜ catalog 命中，CAS 暂不可读 ｜ ARCHIVE_UNAVAILABLE <span class="btn">查看目录元数据</span></div>
+          </div>
+          <div class="col" style="flex:3">
+            <div class="lbl">随机打开：inc#6bd / generation 2（只读历史快照）</div>
+            <div class="box"><b>排查总结</b>：订单服务 3 个 Pod 在扩容后持续重启。内存工作集越过 limit，kubelet 记录 OOMKilled；排除节点压力与镜像拉取。最终调整 limit 并回滚批量缓存后恢复。</div>
+            <div class="box small"><b>排查路径</b>：告警实例 → Pod 状态 → 容器退出原因 → 内存曲线 → 发布变更 → Claim 交叉验证 → 修复后观察 15m<br><b>耗时拆分</b>：准入 8s ｜ 调查 31m ｜ 人工确认 7m ｜ 恢复验证 4m</div>
+            <div class="box small"><b>最终结论</b>：fault_type=OOM_KILLED ｜ reason_code=CONTAINER_MEMORY_LIMIT ｜ reviewer=operator-17 ｜ report_digest=7e3a…</div>
+            <div class="box small"><b>证据清单 11 条（ArchiveManifest m-62d…）</b><br>e-301 metrics_range ｜ 09:10–09:45 ｜ SHA-256 a81… ｜ CAS ✓<br>e-302 kube_event ｜ gen2 ｜ SHA-256 b92… ｜ CAS ✓<br>e-303 deploy_change ｜ release#214 ｜ SHA-256 c03… ｜ CAS ✓<br><span class="btn">逐条查看快照</span><span class="btn">核验全部 digest</span><span class="btn">打开已发布报告</span></div>
+            <div class="box small"><b>归档证明</b>：policy=RetentionPolicyV1 ｜ archived_at=2026-06-14 ｜ object_count=48 ｜ schema=v4 ｜ reread_validation=PASS<br><small>历史相似案例只可提出假设；若用于当前 Incident，必须在当前时间窗重新取证，不能把旧 Evidence 直接当新证据。</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>分类模型</td><td><b>新增 AlertTaxonomyV1 投影</b>：主分类 BUSINESS/APPLICATION/DEPENDENCY/INFRASTRUCTURE/NETWORK/DATA/SECURITY/PLATFORM/UNKNOWN；从 AlertEvent labels、alertname、service、source 规则化派生，记录 taxonomy_version/rule_id/confidence/source。它与 RCA 的 fault_type/reason_code 是两个概念，不能用预分类冒充根因。</td></tr>
+        <tr><td>分类修正</td><td>一个主分类用于分诊，team/service/resource/env/source/severity 和跨域 tag 用于多维筛选。人工修正写 versioned override + actor + reason 审计，不改原始 AlertEvent；UNKNOWN 必须有独立队列和覆盖率指标。</td></tr>
+        <tr><td>列表投影</td><td>新增 GET /api/v1/incidents：incident 二态/generation/三计数 + 当前代 alert_event labels/annotations/实例聚合 + 分类/Run/Case 摘要；严重度取当前代活动实例最高级别，不新增 incident.severity 权威列。</td></tr>
+        <tr><td>全步骤</td><td>新增 IncidentTimelineProjection：接收→去重归并→准入→Run→DAG→ToolCall/Attempt→EvidenceSnapshot→Claim/Report→发布/Case。按 generation/run/task 切换，数据来自 rca_event、task/attempt、tool ledger、Evidence/Claim/Report，不另写一套状态；SSE 增量遇 seq 缺口即全量重建。</td></tr>
+        <tr><td>过程摘要</td><td>保存并展示结构化 InvestigationSummary：问题、已执行步骤、支持/排除的假设、EvidenceRef、Claim 修订、决定原因码、结论、修复与验证。禁止展示模型 Thought、原始 prompt、secret 或完整工具参数。</td></tr>
+        <tr><td>历史档案</td><td>历史查询先查热表，再查 archive_catalog；终态对象按 RetentionPolicyV1 生成 ArchiveManifest（对象计数、时间范围、digest、schema、CAS refs）并异地复读校验后归档。详情 API 返回只读快照与短时受控内容；CAS 不可用明确返回 ARCHIVE_UNAVAILABLE，不能伪装“无历史”。</td></tr>
+        <tr><td>历史复用</td><td>历史 Incident/Runbook 仅用于提出调查假设和相似路径；旧 Evidence 不得成为当前 Claim 的 evidenceRef，必须在当前 Incident 时间窗重新取证。</td></tr>
+        <tr><td>详情分层</td><td>概览 / 实例与阈值 / 调查过程 / 证据与 RCA / 报告 / 状态历史 / 通知 / 源数据八标签。AlertEvent 是上游事实，Evidence 是观察，Claim 是有证据引用的判断。</td></tr>
+        <tr><td>联动</td><td>「打开 DAG 任务图」= /runs/{run_id}；Run 未创建时显示准入/排队步骤与原因，不给空白页。</td></tr>
+        <tr><td>归属</td><td>Incident 的 owner/SLA/Case 数来自关联 OperatorCase 聚合投影；认领/转派/解决统一跳转 P4 执行，本页不另造一套状态。</td></tr>
+        <tr><td>开源结论</td><td>Grafana 以 labels 唯一标识、检索和路由，常见 severity/team/service；OpenObserve 用 folders/tags/type 和 per-group；Alerta 用 environment/service/resource/event/facet。它们证明要做多维组织，却没有通用“业务/机器”标准，因此本项目补领域 taxonomy，仍保留开放 facets。</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P3 调查队列与审查 ==================== -->
+<section class="page" id="p3">
+  <div class="page-head"><h2>P3 调查队列 /runs + 调查详情 /runs/{run_id}（核心页）</h2><div class="sub">先从全局队列找到需要处理的 Run，再进入任务级诊断；一级导航不再是无入口的详情页</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="split-title">P3-A 调查队列 /runs</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>审查台<span class="sep">/</span>调查队列</span><span class="env">生产环境 ｜ Asia/Shanghai ｜ 数据更新至 10:43:08 ｜ 全局搜索：Incident / Run / Task / Trace [________] ｜ operator ▾</span></div>
+        <div class="tabs"><span class="cur">待我处理 4</span><span>执行中 9</span><span>卡住 3</span><span>失败 2</span><span>待审查 5</span><span>已完成</span><span>保存的视图 ▾</span></div>
+        <div class="toolbar">状态 <span class="field">全部 ▾</span> 严重度 <span class="field">P0–P2 ▾</span> 负责人 <span class="field">我 / 未分配 ▾</span> 时间 <span class="field">近 24h ▾</span> <span class="btn">刷新</span></div>
+        <div class="banner">⚠ 2 个 Run 超过 SLA，最老 READY 已等待 18m；SSE 已连接，列表投影延迟 1.2s。</div>
+        <div style="padding:12px">
+          <div class="lbl"> 调查工作队列（默认按风险与等待时间排序；复用 P2 列表范式——表格 + 行首 4px severity 色条，E-19 §3-P3）</div>
+          <table class="grid">
+            <tr><th>severity</th><th>Run / Incident</th><th>阶段 ｜ 状态</th><th>任务进度</th><th>卡点 / 错误</th><th>负责人</th><th>时长 / SLA</th><th>操作</th></tr>
+            <tr class="sev-p0"><td><span class="tag t-red">P0</span></td><td><b>run#8c1d</b><br>payment-failure</td><td>NEEDS_REVIEW <span class="tag t-red">卡住</span></td><td>—</td><td>Claim 冲突</td><td>未分配</td><td>SLA 已超 6m</td><td><span class="btn">认领并查看 →</span></td></tr>
+            <tr class="sev-p1"><td><span class="tag t-red">P1</span></td><td><b>run#77aa</b><br>inventory-timeout</td><td>DEAD <span class="tag t-red">失败</span></td><td>1/6 tasks</td><td>—</td><td>王工</td><td>运行 24m</td><td><span class="btn">查看 →</span></td></tr>
+            <tr class="sev-p1"><td><span class="tag t-red">P1</span></td><td><b>run#3f2a</b><br>payment-failure</td><td>RUNNING <span class="tag t-blue">执行中</span></td><td>3/4</td><td>根因 Agent 2m31s</td><td>operator</td><td>—</td><td><span class="btn">查看 →</span></td></tr>
+            <tr class="sev-p2"><td><span class="tag t-gray">P2</span></td><td><b>run#1fa0</b><br>delivery-delay</td><td>READY <span class="tag t-gray">等待</span></td><td>—</td><td>oldest 18m</td><td>未分配</td><td>—</td><td><span class="btn">认领 →</span></td></tr>
+          </table>
+          <div class="box small" style="margin-top:8px">列：严重度｜Run/Incident｜阶段｜任务进度｜卡点/错误｜负责人｜运行时长｜SLA｜预算｜最近事件；支持分页与 URL 持久化筛选</div>
+        </div>
+      </div>
+      <div class="split-title">P3-B 调查详情 /runs/run#3f2a</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>审查台<span class="sep">/</span>调查队列<span class="sep">/</span><b>run#3f2a</b>（Incident payment-failure）</span><span class="env">生产环境 ｜ engine native ｜ config 9c1e…</span></div>
+        <div class="runhead">
+          <span class="tag t-blue">RUNNING</span> <span class="tag t-red">P1</span> <b>run#3f2a</b>
+          <span class="mini">任务进度 2/4（完成 2 / 运行 1 / 阻塞 1）</span>
+          <span class="mini">预算 <span class="bar"><i style="width:30%"></i></span> step 6/20 ｜ token 8.2k/50k ｜ tool 9/30</span>
+          <span class="ops"><span class="btn danger">取消 Run</span><span class="btn">提交 Hint（标 UNTRUSTED）</span><span class="btn">报告 Feedback</span></span>
+        </div>
+        <div class="box small" style="margin:8px 12px 0">头部摘要条（E-19 §0-2 / §4-2：FireHydrant Command Center、ARMS 告警详情形态）：Run 状态 badge + 严重度 + 任务进度 + 预算微条；主操作按钮组右置、文案随状态机流转切换；原底部「人工干预（命令先落库再生效）」按钮组上移至此，语义不变。</div>
+        <div class="tabs"><span class="cur">DAG 图</span><span>事件流</span><span>Claim与证据</span><span>报告</span><span>历史Attempt</span></div>
+        <div class="toolbar">← 返回调查队列 ｜ <span class="btn">适应画布</span><span class="btn">仅看异常</span><span class="btn">上游/下游</span> ｜ 任务：4（完成 2 / 运行 1 / 阻塞 1）｜ 实时 ●</div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl"> 任务 DAG（DAG 图 tab 默认视图；节点=任务，边=依赖；颜色+边框+图标+节点内原始状态标签四重编码；同一数据多视图切换，E-19 §0-3：Langfuse Tree/Timeline/Graph/Log）</div>
+            <svg viewBox="0 0 320 200" style="width:100%;background:#fdfdfd;border:1px solid #ccc">
+              <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#888"/></marker></defs>
+              <line x1="85" y1="56" x2="130" y2="98" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+              <line x1="235" y1="56" x2="190" y2="98" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+              <line x1="160" y1="136" x2="160" y2="152" stroke="#888" stroke-width="1.5" marker-end="url(#arr)"/>
+              <g><rect x="30" y="18" width="110" height="38" rx="6" fill="#e6f4ea" stroke="#1e7e34"/><text x="85" y="34" text-anchor="middle" font-size="12">指标 Agent ✓</text><text x="85" y="49" text-anchor="middle" font-size="10" fill="#1e7e34">DONE 完成</text></g>
+              <g><rect x="180" y="18" width="110" height="38" rx="6" fill="#e6f4ea" stroke="#1e7e34"/><text x="235" y="34" text-anchor="middle" font-size="12">日志 Agent ✓</text><text x="235" y="49" text-anchor="middle" font-size="10" fill="#1e7e34">DONE 完成</text></g>
+              <g><rect x="105" y="98" width="110" height="38" rx="6" fill="#e8f0fe" stroke="#1f6feb" stroke-width="2"/><text x="160" y="114" text-anchor="middle" font-size="12">根因 Agent ▶</text><text x="160" y="129" text-anchor="middle" font-size="10" fill="#1f6feb">RUNNING 运行中</text></g>
+              <g><rect x="105" y="152" width="110" height="38" rx="6" fill="#eceff1" stroke="#999" stroke-dasharray="4 3"/><text x="160" y="168" text-anchor="middle" font-size="12" fill="#666">报告任务 ⊘</text><text x="160" y="183" text-anchor="middle" font-size="10" fill="#666">BLOCKED 阻塞</text></g>
+            </svg>
+            <div class="box small">点击节点 → 事件流切"仅当前任务"；SSE 事件驱动节点实时变色</div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
+              <tr style="background:#f0f2f5"><td style="border:1px solid #ddd;padding:2px 5px"><b>状态（节点内原文）</b></td><td style="border:1px solid #ddd;padding:2px 5px"><b>图形约定</b></td><td style="border:1px solid #ddd;padding:2px 5px"><b>含义</b></td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">READY 就绪</td><td style="border:1px solid #ddd;padding:2px 5px">白底 ○ 灰实线框</td><td style="border:1px solid #ddd;padding:2px 5px">依赖已满足，待领取</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">LEASED 已领取</td><td style="border:1px solid #ddd;padding:2px 5px">浅蓝底 ◔ 蓝实线框</td><td style="border:1px solid #ddd;padding:2px 5px">worker 已领，未开始</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">RUNNING 运行中</td><td style="border:1px solid #ddd;padding:2px 5px">蓝底 ▶ 蓝粗框</td><td style="border:1px solid #ddd;padding:2px 5px">执行中</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">RETRY_WAIT 等待重试</td><td style="border:1px solid #ddd;padding:2px 5px">黄底 ↻ 橙实线框</td><td style="border:1px solid #ddd;padding:2px 5px">可重试失败，等退避</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">DONE 完成</td><td style="border:1px solid #ddd;padding:2px 5px">绿底 ✓ 绿实线框</td><td style="border:1px solid #ddd;padding:2px 5px">成功终态</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">BLOCKED 阻塞</td><td style="border:1px solid #ddd;padding:2px 5px">灰底 ⊘ 灰虚线框</td><td style="border:1px solid #ddd;padding:2px 5px">依赖未完成</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">SKIPPED 已跳过</td><td style="border:1px solid #ddd;padding:2px 5px">灰底 ⇥ 灰框+删除线</td><td style="border:1px solid #ddd;padding:2px 5px">上游失败跳过</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">CANCELLED 已取消</td><td style="border:1px solid #ddd;padding:2px 5px">灰底 ✕ 灰框</td><td style="border:1px solid #ddd;padding:2px 5px">人工/系统取消</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">FAILED_TERMINAL 确定性失败</td><td style="border:1px solid #ddd;padding:2px 5px">红底 ✗ 红实线框</td><td style="border:1px solid #ddd;padding:2px 5px">不可重试失败</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">DEAD 死信</td><td style="border:1px solid #ddd;padding:2px 5px">深红底 ✗✗ 红粗框</td><td style="border:1px solid #ddd;padding:2px 5px">重试耗尽</td></tr>
+              <tr><td style="border:1px solid #ddd;padding:2px 5px">STALE 过期</td><td style="border:1px solid #ddd;padding:2px 5px">灰斜纹底 ⌛ 灰点线框</td><td style="border:1px solid #ddd;padding:2px 5px">generation 已换代</td></tr>
+            </table>
+          </div>
+          <div class="col drawer" style="flex:2">
+            <div class="lbl"> 任务诊断抽屉：根因 Agent　×</div>
+            <div class="box small"><b>RUNNING 运行中</b> ｜ task#root-cause ｜ priority=20<br>持续 2m31s ｜ deadline 10:48 ｜ lease worker-03 / epoch 7</div>
+            <div class="box small"><b>依赖</b>：指标 Agent ✓ REQUIRED ｜ 日志 Agent ✓ REQUIRED<br><b>下游</b>：报告任务 BLOCKED</div>
+            <div class="lbl" style="margin-top:6px"> Attempt 时间轴</div>
+            <div class="list-item">#2 RUNNING ｜ worker-03 ｜ 10:40:37 → 现在</div>
+            <div class="list-item">#1 RETRYABLE_FAILED ｜ 10:38:11–10:38:42<br><small>REMOTE_5XX / METRICS_QUERY_FAILED ｜ 退避 90s</small></div>
+            <div class="box small"><b>安全输出</b>：input digest=1a2b… ｜ output refs=claim#17,evidence#11<br><span class="btn">复制任务链接</span> <span class="btn">仅看此任务事件</span></div>
+          </div>
+        </div>
+        <div class="split-title">事件流 tab 内容（同 v1.5 事件流面板，筛选语义不变；此处平铺展示仅为保留全部信息元素，实际 UI 为 tab 切换）</div>
+        <div class="row" style="padding-top:0">
+          <div class="col" style="flex:1">
+            <div class="lbl"> 实时事件流（SSE，after_seq 续传）</div>
+            <div class="box small">范围：[ 全部 Run ] [ <b>当前任务：根因 Agent</b> ✓ ] ｜ [仅错误] [事件类型 ▾] [搜索码/seq] ｜ <span class="btn">暂停滚动</span> <span class="btn">下载白名单事件</span></div>
+            <div class="list-item">seq38 <b>工具调用开始</b> <small>TOOL_CALL_STARTED</small> ｜ metrics/query ｜ task=根因Agent</div>
+            <div class="list-item">seq41 <b>工具调用完成</b> <small>TOOL_CALL_FINISHED</small> ｜ metrics/query ✓ 182ms ｜ task=根因Agent</div>
+            <div class="list-item">seq42 <b>新 Claim 产生</b> <small>CLAIM_CREATED</small> ｜ CPU 限流（cpu-throttle）｜ 多源一致 ｜ task=根因Agent</div>
+            <div class="list-item">seq43 <b>预算扣减</b> <small>BUDGET_COMMIT</small> ｜ token +1240 ｜ task=根因Agent</div>
+            <div class="box small">● 连接中（Last-Event-ID=43）｜ 延迟 0.8s ｜ 断线自动回放；检测到 seq 缺口或超窗时停止增量并提示“重新同步” ｜ 点击事件展开白名单 payload/关联对象</div>
+          </div>
+        </div>
+        <div class="split-title">Claim与证据 / 报告 tab 内容示意（预算微条已上移至头部摘要条；历史Attempt 内容见 DAG tab 右侧抽屉的 Attempt 时间轴）</div>
+        <div class="row" style="padding-top:0">
+          <div class="col" style="flex:3">
+            <div class="lbl"> Claim 与证据（结论可逐条追溯）</div>
+            <div class="box small"><b>根因 Claim</b>：CPU 限流 <small>(cpu-throttle)</small> ｜ 成立 ｜ 多源一致 ｜ 当前有效 <span class="btn">证据 2 条 →</span></div>
+            <div class="box small">e#11 指标曲线 digest… [10:31–10:38] ｜ e#14 日志摘要 digest… ｜ 来源/时间窗/采集状态可展开</div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl"> 报告与发布状态</div>
+            <div class="box small">未生成——报告任务阻塞中；完成后分别展示 VALIDATED / SEALED / PUBLISHED，旧版本显示“已被取代”。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>调查队列</td><td>新增 <code>GET /rca-runs</code> 只读投影：状态/严重度/负责人/时间/SLA/最老 READY/预算筛选，游标分页和稳定排序；现有 RcaRunRepository 无此列表能力，正式方案必须列为新增后端配套。</td></tr>
+        <tr><td>任务诊断</td><td>rca_task + rca_attempt 投影 Attempt、错误码、worker/lease、retry/backoff、deadline 和上下游；前端只收白名单摘要、引用与 digest，不读取原始 prompt/工具参数。</td></tr>
+        <tr><td>事件流</td><td>初次读取用 <code>?after_seq=</code>；SSE 每条消息写 <code>id: seq</code>，浏览器重连由 Last-Event-ID 续传，服务端统一转换为同一 after_seq 游标。任务事件带 task_id，Run 级事件只在“全部 Run”范围出现；检测缺口先停止追加再全量同步。</td></tr>
+        <tr><td>实时鉴权</td><td>stream ticket（TTL 30s 单次，绑 run+主体）；禁止 URL 带长效 token</td></tr>
+        <tr><td>脱敏红线</td><td>§17.9.3：thought/原始 prompt/secret/完整工具参数<b>永不进前端</b>；payload 只含白名单字段</td></tr>
+        <tr><td>DAG 图</td><td>rca_task + rca_task_edge（已有表）只读投影；<b>渲染选型：Vue Flow + dagre 自动布局</b>（E-18 v1.1：Vue3 原生/MIT/节点事件；布局非内置需外接 dagre——维护者明示+官方 dagre 示例）；<b>11 态完整图例映射表</b>：颜色可聚类，但边框/虚线/图标/节点内原始状态标签必须区分，取消、跳过、过期、确定性失败不得混同</td></tr>
+        <tr><td>中文口径</td><td><b>机器码英文 + 人文文本中文，已升级为契约（v1.2，原为经验现象）</b>：event_type/reason_code/canonical 根因码英文不变（稳定契约）；UI 中文名来自版本化词典新增 display_name_zh 字段；<b>prompt 增硬指令要求 summary/impact/remediation/evidence 用简体中文</b>（评审坐实现状：源码仅中文字段说明、硬指令只要求纯 JSON）；新增中文输出契约测试 + 非中文降级（违规→按预算重试一次→仍违规原文展示+落 language 诊断事件）</td></tr>
+        <tr><td>干预</td><td>取消/Hint/Feedback（AM5 M5-14 命令 API，未落码，标注依赖；幂等键+旧 revision 拒绝）</td></tr>
+        <tr><td>断线语义</td><td>FUT-33：断线不得改变 Run 状态；重连带 after_seq 续传</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P4 处置中心 ==================== -->
+<section class="page" id="p4">
+  <div class="page-head"><h2>P4 处置中心 /cases（含通知标签）</h2><div class="sub">OperatorCase 是需要负责人和 SLA 的工作对象；通知只表达投递与已读状态</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>处置中心</span><span class="env">生产环境 ｜ 数据更新至 10:43:08 ｜ 搜索 Case / Run / Incident [________] ｜ operator ▾</span></div>
+        <div class="tabs"><span class="cur">我的待办 4</span><span>全部待办 12</span><span>未分配 3</span><span>已逾期 2</span><span>通知 5</span></div>
+        <div class="toolbar">状态 <span class="field">OPEN/ACKED ▾</span> 优先级 <span class="field">P0–P2 ▾</span> 原因 <span class="field">全部 ▾</span> <span class="btn">批量认领</span></div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl"> OperatorCase 队列（按 SLA 风险排序）</div>
+            <div class="list-item"><span class="tag t-red">P0 已逾期</span> <b>case#c91 Claim 冲突</b><br>run#8c1d / payment-failure ｜ 未分配 ｜ ACK 超时 6m <span class="btn">认领</span><span class="btn">查看 Run →</span></div>
+            <div class="list-item"><span class="tag t-red">P1 12m</span> <b>case#c77 预算即将耗尽</b><br>run#7e00 ｜ owner=operator ｜ resolve_due 10:55 <span class="btn">打开 →</span></div>
+            <div class="list-item"><span class="tag t-gray">P2 1h</span> <b>case#c62 报告需要复核</b><br>run#62aa ｜ owner=operator ｜ evidence 3 条 <span class="btn">打开 →</span></div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl"> Case 详情：case#c91</div>
+            <div class="tabs" style="padding-left:0"><span>摘要</span><span class="cur">证据 6</span><span>Claim 2</span><span>活动</span><span>审计</span></div>
+            <div class="box"><b>Claim 冲突，需要人工裁决</b><br><small>reason_code=CLAIM_CONFLICT ｜ revision=4</small></div>
+            <div class="box small">状态 OPEN ｜ owner 未分配 ｜ 来源 run#8c1d/task#root-cause<br>first_seen 09:55 ｜ ack_due 10:05 ｜ resolve_due 10:35<br><b>Case 来源引用 7 项</b>：Evidence×6 + rca_event#442；snapshot=71ac… / generation=13</div>
+            <div class="lbl" style="margin-top:6px"> 证据工作区（Case 1:N EvidenceRef，N≥1）</div>
+            <div class="list-item"><b>e#81 METRIC</b> ｜ prometheus ｜ 10:31–10:38 ｜ gen13 <span class="tag t-green">新鲜/校验通过</span><br><small>CPU throttle 92%；payload_digest=1a2b… ｜ 来自 task#metrics</small> <span class="btn">展开安全摘要</span></div>
+            <div class="list-item"><b>e#83 LOG</b> ｜ loki ｜ 10:33–10:37 ｜ gen13 <span class="tag t-green">校验通过</span><br><small>cgroup throttled 1842ms；payload_digest=3c4d… ｜ 来自 task#logs</small></div>
+            <div class="list-item"><b>e#84 TRACE</b> ｜ tempo ｜ 10:36 ｜ gen13 <span class="tag t-gray">待复核</span><br><small>downstream inventory timeout；payload_digest=5e6f…</small></div>
+            <div class="box small"><b>Claim ↔ Evidence 引用矩阵</b><br>claim#21 “CPU 限流” TRUE → e#81, e#83<br>claim#24 “下游超时” TRUE → e#84, e#86<br><span class="tag t-red">冲突原因</span> 两个候选均有证据，Reducer 无法唯一裁决；不是“无证据”。</div>
+            <div class="box small"><span class="btn">比较两个 Claim</span> <span class="btn">查看全部 6 条证据</span> <span class="btn">打开调查详情</span></div>
+            <div class="box small"><span class="btn">认领</span> <span class="btn">标记处理中</span> <span class="btn">解决并填写原因</span> <span class="btn">转派</span></div>
+            <div class="box small" style="color:#888">所有状态变更带 expected_revision + idempotency_key，操作写入审计事件。</div>
+          </div>
+        </div>
+        <div class="banner">“通知”标签示意：报告就绪 / Case 分配 / 系统异常；通知可标已读并跳转对象，但不会因此关闭 OperatorCase。</div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>Case 投影</td><td>新增 OperatorCase 列表/详情 API，字段覆盖 subject、priority、reason_code、status、owner、first_seen、ack/resolve SLA、evidence_refs、revision；每个 Case 至少有 1 个可核验来源引用，RCA Case 通常为 N 条 rca_evidence，系统 Case 可引用 rca_event/ledger/outbox 记录。</td></tr>
+        <tr><td>证据关系</td><td>不是“一 Case 一 Evidence”。Case 通过不可变 ID 引用 1..N 条来源；Claim.evidenceRefs 在现有 Java 契约中强制非空且可多条。rca_evidence 本身归属 run，可选 task_id，包含 type/source/scope/time/generation/payload_digest；页面默认展示安全摘要与 provenance，不直接返回 canonical payload。</td></tr>
+        <tr><td>一致性</td><td>证据详情必须校验 observed_generation、schema_version 与 payload_digest；Case 固定展示创建时 snapshot/generation。迟到证据进入新快照，不悄悄改写旧裁决上下文。</td></tr>
+        <tr><td>Case 命令</td><td>认领、转派、ACK、解决均使用 expected_revision + idempotency_key，旧 revision 返回冲突并刷新；解决必须填写结构化 reason 与备注。</td></tr>
+        <tr><td>通知侧</td><td>notify-app 新增 IN_APP 渠道并复用 outbox；新增通知查询 API + 已读标记表。已读不改变 Case 状态，Case 关闭也不回写通知历史。</td></tr>
+        <tr><td>钉钉口径</td><td>已定：默认站内；webhook 渠道代码与配置<b>停用保留</b>（tier 配置关掉即可恢复）</td></tr>
+        <tr><td>渲染安全</td><td>沿用 NotificationRenderer 白名单/截断/[REDACTED] 遮蔽防线，前端不再二次信任</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P5 评测中心 ==================== -->
+<section class="page" id="p5">
+  <div class="page-head"><h2>P5 评测中心 /eval/*</h2><div class="sub">从“跑一次看三个数”扩为数据治理、实验运行、六维诊断、人工校准、版本比较和发布审计</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="split-title">P5-A 数据集治理 + 发起评测 /eval/datasets /eval/new</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>评测中心<span class="sep">/</span>数据集治理 + 发起评测</span><span class="env">评测环境 ｜ 数据更新至 10:42:50 ｜ 搜索数据集 / 实验 / 配置 digest [________] ｜ evaluator ▾</span></div>
+        <div class="tabs"><span class="cur">数据集</span><span>发起评测</span><span>批次 3</span><span>分析</span><span>案例诊断</span><span>人工复核 7</span><span>实验对比</span><span>发布门 🔒</span></div>
+        <div class="row">
+          <div class="col" style="flex:2">
+            <div class="lbl"> 数据集（版本化，insert-only）</div>
+            <div class="box"><b>订单域私有集 v3</b> <span class="tag t-blue">私有</span><br><small>47 案例 ｜ 5 个 scenario_family ｜ digest=9c1e… ｜ review=APPROVED ｜ drift=低</small></div>
+            <div class="box small">├ <b>调优集 TUNING</b>（≈训练集）28 例 ｜ coverage 5/5 故障族 <span class="btn">查看案例</span></div>
+            <div class="box small">├ <b>验证集 VALIDATION</b> 14 例 ｜ 2 例待复核 <span class="btn">查看案例</span></div>
+            <div class="box small">├ <b>测试集 HOLDOUT</b> 5 例 🔒 <span class="btn">发起发布门（需 release 权限）</span><br><small>页面永不返回题目/真值/逐案例详情，只显示批次进度+聚合门禁结论；RBAC + 幂等键 + 访问审计；与普通批量评测是<b>两个命令</b></small></div>
+            <div class="box small">└ <b>对抗集 REDTEAM</b>（安全用例）🔒 随发布门触发</div>
+            <div class="box" style="margin-top:6px"><b>RCA-100 外部集 v1.1</b> <span class="tag t-gray">公开 benchmark</span><br><small>103 例 ｜ 辅助一致性门，不冒充私有测试集</small></div>
+            <div class="box small"><b>治理检查</b>：family 泄漏 0 ｜ 重复输入 0 ｜ 真值缺失 0 ｜ 分布漂移 4.1% ｜ HOLDOUT 使用 2 次<br><span class="btn">版本差异</span><span class="btn">质量报告</span><span class="btn">来源/审批记录</span></div>
+          </div>
+          <div class="col" style="flex:3">
+            <div class="lbl">新建实验：先冻结“测什么、怎么跑、怎么判”</div>
+            <div class="box small"><b>① 数据</b>　订单域私有集 v3 / VALIDATION / 14 例 ｜ family 整组 ｜ rounds=2 ｜ seed=20260907</div>
+            <div class="box small"><b>② 被测候选</b>　model=deepseek-v3 ｜ prompt=rca-v12 ｜ lexicon=v8 ｜ tool_registry=5d2… ｜ config=b92…</div>
+            <div class="box small"><b>③ 回放级别</b>　Agent Replay ▾<br><small>Scorer Replay（只重算评分）/ Agent Replay（冻结观测重跑 Agent）/ Live E2E（真实注入+恢复，slot=1）/ Schema / Red-team</small></div>
+            <div class="box small"><b>④ 评分套件</b>　Deterministic RCA v3 ｜ Schema v2 ｜ Safety v4 ｜ cost/latency spans<br><small>root_cause_hit 只读 EvidencePackageV2 类型化字段 + 版本化同义词白名单，不让自由文本或 LLM judge 决定 canonical 命中。</small></div>
+            <div class="box small"><b>⑤ 执行约束</b>　并发=1 ｜ timeout=20m ｜ retry=1 ｜ budget=¥10 ｜ 失败继续并落档 ｜ 上轮恢复+resolved 后才进下一轮</div>
+            <div class="box small"><b>⑥ 预检</b>　权限 ✓ ｜ digest 齐全 ✓ ｜ family 泄漏 0 ✓ ｜ Live E2E slot ✓ ｜ 预计 42m / ¥6.8<br><span class="btn">保存草稿</span><span class="btn">发起批量评测</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="split-title">P5-B 批次运行 + 六维分析 /eval/runs/{eval_run_id}</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>评测<span class="sep">/</span>批次运行<span class="sep">/</span><b>eval#0907</b>（Agent Replay ｜ VALIDATION v3）</span><span class="env"><span class="tag t-green">COMPLETED 28/28</span> elapsed 32m ｜ ¥6.84/¥10</span></div>
+        <div class="toolbar">状态 <span class="field">全部 ▾</span> 场景族 <span class="field">全部 ▾</span> verdict <span class="field">FAIL/ERROR ▾</span> 根因类 <span class="field">全部 ▾</span> 轮次 <span class="field">全部 ▾</span> ｜ <span class="btn">暂停</span><span class="btn">取消剩余</span><span class="btn">导出失败样本</span></div>
+        <div class="bar"><i style="width:55%"></i></div>
+        <div class="state-grid">
+          <div class="box metric"><b>结论准确性</b><br>Top1 0.71 ｜ E2E 0.64<br><small>Macro-F1 0.68 / cases 28</small></div>
+          <div class="box metric"><b>推理效率</b><br>有效步骤 82%<br><small>无效工具 0.7 / case ｜ Claim 修订 0.3</small></div>
+          <div class="box metric"><b>工具精确性</b><br>registry hit 100%<br><small>schema 98% ｜ 时间窗 94%</small></div>
+          <div class="box metric"><b>成本与时延</b><br>P50 38s ｜ P95 104s<br><small>token 11.2k/case ｜ ¥0.11/case</small></div>
+          <div class="box metric"><b>多 Agent 效率</b><br>任务覆盖 91%<br><small>冗余委派 6% ｜ 证据消费 84%</small></div>
+          <div class="box metric"><b>鲁棒性与安全</b><br>utility 0.88<br><small>越权执行 0 ｜ secret leak 0 ｜ recovery 92%</small></div>
+        </div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl">指标切片（总分之外必须定位“哪类问题”）</div>
+            <div class="box small"><b>按 fault_type</b>　BUSINESS_ERROR_RATE 0.83 ｜ DEPENDENCY_UNREACHABLE 0.67 ｜ IDEMPOTENCY_BYPASS 0.50 <span class="tag t-red">最低</span></div>
+            <div class="box small"><b>按 scenario_family / component / severity / replay / round</b>　S4 × order-arena × round2 flip rate=0.25 <span class="btn">钻取 4 例</span></div>
+            <div class="box small"><b>统计口径</b>　TP=18 / FP=5 / FN=6 / support=29 ｜ 95% bootstrap CI [0.56,0.77] ｜ 样本不足类明确标记，不以 0 代替。</div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl">运行健康与可复现</div>
+            <div class="box small">queue 2m ｜ model 11m ｜ tool 4m ｜ validation 1m ｜ error 2 ｜ retry 3 ｜ provider drift 0</div>
+            <div class="box small">dataset=9c1e… ｜ registry=1 ｜ lexicon=1 ｜ model/provider fingerprint=31a… ｜ prompt=b92… ｜ tools=5d2… ｜ config=0ff… ｜ seed=20260907 <span class="btn">复制复现清单</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="split-title">P5-C 逐案例诊断 + 评分器/人工复核 /eval/cases/{result_id}</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>评测<span class="sep">/</span>案例诊断<span class="sep">/</span>eval#0907 ＞ S4 / round 2 / <b>result#7ac</b></span><span class="env"><span class="tag t-red">FAIL</span> root_hit=false ｜ latency=91s ｜ cost=¥0.14</span></div>
+        <div class="row">
+          <div class="col" style="flex:2">
+            <div class="lbl">案例列表（可过滤 Pass / Fail / Error / Flip / 待复核）</div>
+            <div class="list-item"><span class="tag t-red">FAIL</span> S4 round2 ｜ expected ILLEGAL_STATE_TRANSITION ｜ actual DB_CPU_HIGH <span class="btn">打开</span></div>
+            <div class="list-item"><span class="tag t-gray">FLIP</span> S3 round2 ｜ r1 PASS / r2 FAIL ｜ inconsistent tool window</div>
+            <div class="list-item"><span class="tag t-green">PASS</span> S1 round1 ｜ PAYMENT_CHARGE_FAILURE ｜ 38s</div>
+            <div class="list-item"><span class="tag t-red">ERROR</span> S2 round1 ｜ SCENARIO_RECOVERY_TIMEOUT ｜ 已落档、未中断批次</div>
+          </div>
+          <div class="col" style="flex:3">
+            <div class="tabs" style="padding-left:0"><span>输入/真值</span><span>输出</span><span class="cur">评分明细</span><span>Trace/步骤</span><span>证据</span><span>元数据</span><span>复核历史</span></div>
+            <div class="box small"><b>期望</b> component=order-arena ｜ fault_type=ILLEGAL_STATE_TRANSITION ｜ reason_code=STATE_ROLLBACK_DIRECT_WRITE<br><b>实际</b> component=order-arena ✓ ｜ fault_type=DB_CPU_HIGH ✕ ｜ reason_code=QUERY_SATURATION ✕</div>
+            <div class="box small"><b>确定性判分说明</b>：component exact/whitelist=PASS；fault_type 不在 S4 允许集合=NO_MATCH；reason_code=NO_MATCH。TP=1 / FP=2 / FN=2；verdict=FAIL。<span class="btn">查看 scorer 输入</span></div>
+            <div class="box small"><b>证据与运行轨迹</b>：rca_run#7d2 ｜ Tasks 5 ｜ ToolCalls 9 ｜ Evidence 7 ｜ Claims 2<br>关键缺口：未查询 order_state_history；evidence e-811 的时间窗晚于故障注入 6m。<span class="btn">打开完整步骤</span></div>
+            <div class="box small"><b>人工复核</b>　队列原因：机器判分与 reviewer 不一致 / 未知枚举 / 抽样校准<br><span class="field">确认机器判分 ▾</span> 说明 [________________] <span class="btn">提交复核事件</span><br><small>复核追加 review_event，不改写 eval_case_result；词典修订另发新版本并重跑 Scorer Replay。</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="split-title">P5-D 实验比较 + 发布门 /eval/compare /eval/gates</div>
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>评测<span class="sep">/</span>实验比较<span class="sep">/</span>候选 <b>eval#0907</b> vs 基线 <b>eval#0906</b></span><span class="env">同 dataset_version=3 ｜ partition=VALIDATION ｜ paired samples=28</span></div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl">配对比较（先看退化，再看平均数）</div>
+            <div class="box small"><b>端到端命中</b> 0.64 → 0.71，Δ +0.07，95% paired bootstrap CI [-0.01,+0.16] <span class="tag t-gray">尚不显著</span></div>
+            <div class="box small"><b>覆盖率</b> 0.79 → 0.86 ｜ 未决率 0.21 → 0.14 ｜ P95 88s → 104s <span class="tag t-red">时延退化</span> ｜ cost +9%</div>
+            <div class="box small"><b>案例迁移</b>：改进 4 ｜ 退化 1 ｜ flip 2 ｜ 不变 21<br><span class="tag t-red">退化</span> S4 round2：正确“状态回跳” → 错误“DB CPU” <span class="btn">并排输出/Trace/证据</span></div>
+            <div class="box small"><b>唯一配置差异</b>：prompt a81…→b92… ｜ model/lexicon/tools/dataset 相同 <span class="btn">查看完整 digest diff</span></div>
+            <div class="toolbar" style="border:1px solid var(--line);border-radius:6px;margin:8px 0">☐ 只看回归 ｜ 视图 <span class="field">Compact ▾</span> <span class="btn">设为基准实验</span><span class="btn">导出矩阵</span></div>
+            <div class="lbl">对比矩阵（实验为列、用例为行，单元格 ✓/✗，回归红 / 改进绿；列头计数、点击列头只显示回归/改进行——LangSmith Compare 蓝本，E-19 §0-4 / §4-8）</div>
+            <table class="grid">
+              <tr><th>用例</th><th>eval#0906 基线<br><small>本列更差 1</small></th><th>eval#0907 候选<br><small>更好 4 ｜ 更差 1</small></th><th>判定 / 操作</th></tr>
+              <tr><td>S1 round1</td><td>✓ PASS</td><td>✓ PASS</td><td><span class="tag t-gray">不变</span></td></tr>
+              <tr><td>S2 round1</td><td>✗ ERROR</td><td class="cmp-imp">✓ PASS</td><td><span class="cmp-imp" style="padding:0 6px;border-radius:4px">改进</span></td></tr>
+              <tr><td>S3 round2</td><td>✓ PASS（r1）</td><td>✗ FAIL（r2）</td><td><span class="tag t-gray">FLIP</span> inconsistent tool window</td></tr>
+              <tr class="sev-p0"><td>S4 round2</td><td>✓ 正确「状态回跳」</td><td class="cmp-reg">✗ 错误「DB CPU」</td><td><span class="cmp-reg" style="padding:0 6px;border-radius:4px">退化</span> <span class="btn">并排输出/Trace/证据</span></td></tr>
+              <tr><td>S5 round1</td><td>✗ FAIL</td><td class="cmp-imp">✓ PASS</td><td><span class="cmp-imp" style="padding:0 6px;border-radius:4px">改进</span></td></tr>
+            </table>
+            <div class="box small" style="margin-top:8px">点行开详情面板（两实验并排 + 关键字段差异徽标），可再跳单条 Run 的 P3 视图（LangSmith 详情面板 / Phoenix trace 联动）；「只看回归」开关是发布门审查的主路径。</div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl">发布门（独立命令与权限）</div>
+            <div class="box small"><span class="tag t-green">VALIDATION 质量门通过</span><br>准确性非劣 ✓ ｜ 安全硬门 0 违规 ✓ ｜ P95 时延预算 ✕（需豁免/优化）</div>
+            <div class="box small"><span class="btn">发起 HOLDOUT 发布门</span><br><small>release 角色 + 幂等键 + 审批原因；服务端读题。UI 只显示进度、聚合指标、门槛和审计，不返回案例/真值。</small></div>
+            <div class="box small"><b>发布审计</b> gate#218 ｜ requested_by=release-02 ｜ config=b92… ｜ HOLDOUT wear=2 ｜ REDTEAM=PASS ｜ decision=BLOCKED_LATENCY ｜ signed_at=—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>四分区</td><td>架构 FUT-42 冻结：TUNING（调优集，≈你说的训练集——调 prompt/词典/规则用）/ VALIDATION（验证集）/ HOLDOUT（测试集）/ REDTEAM（对抗集）；物理隔离属 AM5 M5-01/02（未落码，标注依赖）</td></tr>
+        <tr><td>数据治理</td><td>DatasetVersion/EvalCase insert-only；同 scenario_family 整组分区；显示来源、审批、版本 diff、重复/缺失/泄漏检查、与生产分布漂移和 HOLDOUT 使用次数。生产失败样本进入候选集前必须脱敏、人工复核并重新分区。</td></tr>
+        <tr><td>发起评测</td><td><b>新增"发起批量评测"命令 API</b>（现状只有 CLI 批作业 EvalRunnerMain；<b>该命令不在任务拆解 M5-14 的 Cancel/Hint/Feedback 范围内，正式方案须先在任务拆解增补编号</b>）：UI 选定数据集版本+分区+采样参数 → 控制面入队跑批 → eval_run RUNNING 进度轮询。API 必备：<b>幂等键、并发配额、排队、终止状态、取消、RBAC、审计、执行指纹</b>；TUNING/VALIDATION 可页面发起</td></tr>
+        <tr><td>回放类型</td><td>Scorer Replay / Agent Replay / Live E2E / Schema / Red-team 必须显式区分；不同回放级别覆盖面不同，不把冻结观测回放的成绩冒充线上 E2E。Live E2E 串行，上一轮恢复且 resolved 归并后才可继续。</td></tr>
+        <tr><td>六维指标</td><td>按架构固定为：结论准确性、推理效率、工具精确性、成本与时延、多 Agent 效率、鲁棒性与安全。UI 同时展示原始 TP/FP/FN/support、按类 F1/Macro/Micro/Weighted、区间、样本不足、失败原因和 fault_type/scenario_family/component/round 切片。</td></tr>
+        <tr><td>案例诊断</td><td>逐项展示输入/期望/实际、scorer component results 与 reason、Trace/步骤、工具调用、Evidence/Claim、成本时延和复现 digest。当前 V10 eval_case_result 已有 verdict/root_hit/expected/actual/TP-FP-FN/latency/failure_sample；更细 Trace 需由 rca_run_id 联查。</td></tr>
+        <tr><td>评分校准</td><td>canonical 根因命中使用 EvidencePackageV2 类型化字段 + 版本化白名单的确定性匹配；人工复核写 append-only review_event，不覆盖原结果。未知值进入失败样本；词典/评分器更新生成新版本并用 Scorer Replay 对比。</td></tr>
+        <tr><td>HOLDOUT 红线</td><td>FUT-42 原文=不参与调优、只用于发布门和对外数字；架构正文禁止其进入 Agent/RAG/Prompt 调试/人工调优界面——<b>但未禁止有权限操作者从 UI 发起「发布门」</b>（v1.2 修正 v1.1「UI 禁止发起」的过度表述）：HOLDOUT 行提供 RBAC 受控「发起发布门」，<b>与普通批量评测是两个独立命令</b>；案例由服务端读取，页面只显示批次进度与聚合门禁结论，永不返回题目/真值/逐案例详情；操作带幂等键+访问审计</td></tr>
+        <tr><td>对比投影</td><td>新增实验比较 API：强制同 dataset_version/partition 与兼容采样口径；返回 paired bootstrap 区间、改进/退化/flip/不变、六维 delta、成本时延与配置 digest diff。无 Ground Truth 的 shadow 只显示 disagreement，不给准确率。</td></tr>
+        <tr><td>结果数据</td><td>eval_run / eval_case_result（V10 已落库）；复现抽屉展示 dataset/registry/lexicon/model/prompt/tool/config digest、seed 与 provider fingerprint。</td></tr>
+        <tr><td>权限</td><td>eval 表现属 eval_app 独占、生产角色零权限——<b>后端查询 API 获得受限服务端权限</b>（随 AM5 V19/V20 一并设计）；<b>浏览器不得直接访问评测数据库</b></td></tr>
+        <tr><td>第一期落地</td><td>四分区表未落库前：先展示现有 eval-scenarios 注册表（5 场景枚举）+ eval_run 结果；"发起评测"先只放开当前场景集</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== P6 Agent 监控 ==================== -->
+<section class="page" id="p6">
+  <div class="page-head"><h2>P6 Agent 监控 /agent-ops</h2><div class="sub">从资源计数扩展为队列、执行、投递与调和链路的运行健康；异常均可下钻</div></div>
+  <div class="page-body">
+    <div class="wire">
+      <div class="frame">
+        <div class="crumb"><span><b>首页</b><span class="sep">/</span>Agent 监控</span><span class="env">生产环境 ｜ 近 6h ▾ ｜ 数据延迟 4s ｜ 搜索 Run / worker / operation [________] ｜ operator ▾</span></div>
+        <div class="state-grid">
+          <div class="box metric"><b>最老 READY</b><br><span style="font-size:20px">18m</span> <span class="tag t-red">SLO 5m</span><br><small>run#1fa0 → 调查队列</small></div>
+          <div class="box metric"><b>Worker 槽位</b><br><span style="font-size:20px">14/16</span> 88%<br><small>worker-03 backlog 7</small></div>
+          <div class="box metric"><b>Outbox 延迟</b><br><span style="font-size:20px">7m</span> <span class="tag t-red">DEGRADED</span><br><small>失败投递 1 → 对账</small></div>
+          <div class="box metric"><b>调和积压</b><br><span style="font-size:20px">23</span><br><small>最老 11m</small></div>
+          <div class="box metric"><b>开放 Case</b><br><span style="font-size:20px">12</span><br><small>逾期 2 → 处置中心</small></div>
+          <div class="box metric"><b>评测队列</b><br><span style="font-size:20px">3</span><br><small>运行 1 / 排队 2</small></div>
+        </div>
+        <div class="row">
+          <div class="col" style="flex:3">
+            <div class="lbl"> 活跃 Run 与预算风险（点击下钻）</div>
+            <div class="list-item">run#3f2a RUNNING ｜ step <div class="bar"><i style="width:30%"></i></div> token <div class="bar"><i style="width:41%"></i></div></div>
+            <div class="list-item">run#8c1d RUNNING ｜ step <div class="bar"><i style="width:55%"></i></div> token <div class="bar"><i style="width:90%;background:#b3261e"></i></div> <span class="tag t-red">90%</span></div>
+            <div class="lbl" style="margin-top:8px"> doom-loop 熔断记录</div>
+            <div class="box small">run#77aa ｜ metrics/query 同签名连续 3 次无进展 → 熔断 ｜ 10:02</div>
+          </div>
+          <div class="col" style="flex:2">
+            <div class="lbl"> 工具调用（近 24h）</div>
+            <div class="box small">metrics/query 142 次 ✓97% ｜ logs/search 88 次 ✓94%</div>
+            <div class="box small">失败原因码分布：TIMEOUT 6 ｜ RATE_LIMITED 3 ｜ REMOTE_5XX 1</div>
+            <div class="lbl" style="margin-top:8px"> 模型调用成本</div>
+            <div class="box small">deepseek-v3：312 次 ｜ 412k token ｜ ¥3.86（external_invocation_ledger + LiteLLM 对账）</div>
+            <div class="lbl" style="margin-top:8px"> 控制面健康与数据新鲜度</div>
+            <div class="box small">control ✓ ｜ notify <span class="tag t-red">DEGRADED</span> ｜ litellm ✓ ｜ PG ✓<br>metrics last_seen=4s ｜ outbox projector lag=7m</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annot">
+      <h3>数据来源与约束</h3>
+      <table>
+        <tr><td>预算</td><td>run_budget_state / run_budget_entry（V13 已落库，六维 kind + 五态预留）</td></tr>
+        <tr><td>工具</td><td>rca_tool_call（V9 已有）；AM4 V15 工具账本落库后切新表（标注依赖）</td></tr>
+        <tr><td>熔断</td><td>DoomLoopGuard 事件（AM4 已落码，经 rca_event 透出）</td></tr>
+        <tr><td>成本</td><td>external_invocation_ledger（已有）+ LiteLLM SpendLogs 对账结果</td></tr>
+        <tr><td>队列健康</td><td>展示 rca_oldest_ready_age_seconds、worker/slot 饱和度、rca_outbox_lag_seconds、rca_reconciliation_backlog、rca_operator_case_open 与 eval job backlog；阈值必须显示单位和窗口。</td></tr>
+        <tr><td>定位</td><td>只读大盘；指标卡深链到带筛选条件的 Run/Case/投递对账视图，手动熔断复位本期不做。</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 全局状态 ==================== -->
+<section class="page" id="states">
+  <div class="page-head"><h2>③ 全站必须画出的非理想状态</h2><div class="sub">运维控制台不能只设计“正常且有数据”；每个投影都要表达新鲜度、完整性与恢复动作</div></div>
+  <div class="state-grid">
+    <div class="box"><b>加载中</b><br><small>保留页面骨架；超过 3s 显示当前步骤和取消请求。</small></div>
+    <div class="box"><b>空数据</b><br><small>区分“确实为空”和“筛选无结果”，给出清除筛选入口。</small></div>
+    <div class="box"><b>无权限</b><br><small>说明缺少的资源权限与申请路径，不泄露对象内容。</small></div>
+    <div class="box"><b>部分失败</b><br><small>可用区域继续展示；失败区标来源、时间和单独重试。</small></div>
+    <div class="box"><b>数据过期</b><br><small>显示“截至 10:43:08 / 延迟 2m”，禁止把旧值伪装成实时。</small></div>
+    <div class="box"><b>SSE 重连/缺口</b><br><small>重连显示进度；seq 缺口停止增量拼接并触发全量同步。</small></div>
+    <div class="box"><b>命令冲突</b><br><small>expected_revision 过旧时展示服务端新状态，再允许重新提交。</small></div>
+    <div class="box"><b>命令结果未知</b><br><small>网络中断后凭 idempotency_key 查询结果，禁止直接重复执行。</small></div>
+    <div class="box"><b>大图/窄屏</b><br><small>DAG 保持二维滚动；侧栏可折叠，正文在 200% 缩放时仍可阅读。</small></div>
+    <div class="box"><b>告警未分类</b><br><small>归入 UNKNOWN 队列，展示规则未命中原因；不得猜成业务或机器异常。</small></div>
+    <div class="box"><b>步骤轨迹不完整</b><br><small>指出缺失 seq/来源与最后完整步骤；补齐前不生成伪造的连续时间线。</small></div>
+    <div class="box"><b>归档不可用</b><br><small>catalog 元数据照常显示，内容区返回 ARCHIVE_UNAVAILABLE 和重试入口。</small></div>
+  </div>
+</section>
+
+<!-- ==================== 约束清单 ==================== -->
+<section class="page" id="constraints">
+  <div class="page-head"><h2>④ 架构约束清单（设计必须遵守的冻结项）</h2></div>
+  <div class="annot" style="width:auto;border:none;background:#fff">
+    <table>
+      <tr><td>FUT-33</td><td>SSE/WS 只是 PG 事件流的投影；断线不得改变 Run 状态</td></tr>
+      <tr><td>FUT-34</td><td>浏览器不得复用机器 Bearer；用户会话 + 短时单次 stream ticket，逐次校验 Origin 与资源权限</td></tr>
+      <tr><td>FUT-35</td><td>取消/Hint/Feedback 先持久化再生效；Hint 永远标 UNTRUSTED；Feedback 经人工复核才进 Dataset</td></tr>
+      <tr><td>FUT-41</td><td>UI 实时流是 rca_event 账本的视图，不双写</td></tr>
+      <tr><td>§17.9.3</td><td>thought / 原始 prompt / secret / 完整工具参数永不进前端 payload</td></tr>
+      <tr><td>证据基数</td><td><b>Case 不是 Evidence 的一对一容器</b>：每个 Case 至少绑定 1 个可核验来源引用，RCA Case 为 1:N evidence_refs；每个 Claim 的 evidenceRefs 由现有领域对象强制非空。UI 展示引用关系、代际、时间窗、来源和 digest，不复制或改写 Evidence。</td></tr>
+      <tr><td>告警分类</td><td>AlertTaxonomyV1 是版本化派生投影：主分类服务于分诊，facets 服务于筛选；与 RCA fault_type/reason_code 分离。人工 override 留 actor/reason/version 审计，原始 AlertEvent 与 labels 不变。</td></tr>
+      <tr><td>过程可视化</td><td>每个 Incident generation 可查看端到端步骤，并按 Run/Task/Attempt 下钻；步骤来自账本投影。只展示行动、输入输出引用和决定原因码，不展示 Thought/原始 prompt。</td></tr>
+      <tr><td>历史归档</td><td>已发布 Report、Evidence manifest、digest 与 archive_catalog 不得丢失；随机打开历史项时热/冷统一查询，冷存储失败返回 ARCHIVE_UNAVAILABLE。历史证据只能形成假设，当前告警必须重新取证。</td></tr>
+      <tr><td>HOLDOUT</td><td>FUT-42 原文=不参与调优、只用于发布门和对外数字；架构禁止其进入 Agent/RAG/Prompt 调试/人工调优界面——<b>但不禁止有权限操作者从 UI 发起「发布门」</b>（v1.2 修正过度表述）：RBAC 受控单独命令；页面永不返回题目/真值/逐案例详情，只显示批次进度与聚合门禁结论</td></tr>
+      <tr><td>现状缺口</td><td>全系统当前 0 个面向人的查询 API、0 用户体系、0 静态托管；operator_case 尚是架构冻结目标。P2 告警投影、P3 Run/Task/Attempt、P4 Case/Evidence/Claim 关系、P5 实验对比及命令 API 都是正式方案必须显式编号的后端配套。</td></tr>
+      <tr><td>数据集分区</td><td>FUT-42：TUNING/VALIDATION 可页面发起批量评测；HOLDOUT 行 = RBAC 受控「发起发布门」（见上行约束）；REDTEAM 随安全门触发</td></tr>
+      <tr><td>评测命令 API</td><td>不在现有任务拆解 M5-14（Cancel/Hint/Feedback）范围内——<b>须先在任务拆解增补编号</b>；契约必备：幂等键、并发配额、排队、终止状态、取消、RBAC、审计、执行指纹</td></tr>
+      <tr><td>中文口径</td><td><b>已升级为契约（v1.2，原为经验现象）</b>：机器码（事件类型/原因码/canonical 根因码）英文不变——稳定契约、评分不受影响；UI 中文名来自版本化词典 display_name_zh 字段；prompt 硬指令要求 summary/impact/remediation/evidence 简体中文；中文输出契约测试 + 非中文降级策略</td></tr>
+      <tr><td>会话安全</td><td>HttpOnly/SameSite Cookie 之外，所有状态变更命令校验 CSRF token 与 Origin；取消 Run 还要展示影响范围并填写原因。SSE ticket 的签发、一次性消费、过期和重连流程在正式 API 契约冻结。</td></tr>
+      <tr><td>可访问性</td><td>状态不得只靠颜色；同时使用文本、图标和边框。除 DAG 等二维画布外，200%/400% 缩放时正文与操作区应重排，左右抽屉可折叠。</td></tr>
+      <tr><td>交付性质</td><td>本文件为<b>静态视觉线框图，不可操作</b>（交互语义以各页注释为准）；若后续要可点击原型另行补脚本；第一期目标最小桌面宽度 <b>1366×768</b></td></tr>
+    </table>
+    <p>下一步：页面清单确认后，出具正式《前端技术方案》（含任务拆解/类设计/API 契约/测试矩阵），走 G1 评审后才动代码。</p>
+  </div>
+</section>
+
+<!-- ==================== 调研结论 ==================== -->
+<section class="page" id="research">
+  <div class="page-head"><h2>⑤ 调研证据与设计落点（E-18 v1.5，2026-09-07）</h2>
+  <div class="sub">覆盖 DAG、告警分类/历史、端到端调查轨迹、证据归档、评测运行/诊断/比较与发布门</div></div>
+  <div class="annot" style="width:auto;border:none;background:#fff">
+    <table>
+      <tr><td>Vue Flow + dagre</td><td><b>采纳</b>。Vue3 原生组件（MIT），dagre 负责自动分层布局；只读 DAG 状态投影场景最轻——节点色=任务状态、点击节点过滤事件流、SSE 驱动实时变色。证据：vueflow.dev 官方站 + 维护者在 GitHub Discussions #1039 明示布局非内置、需外接 dagre/ELK，并给出 dagre 组合示例（React Flow 的 auto-layout 页是 Pro 付费示例，不作为 Vue Flow 证据）</td></tr>
+      <tr><td>AntV X6</td><td>不采用。定位图编辑引擎（拖拽建图/连线桩），我们只读投影用不上；且 Shai-Hulud mini 供应链攻击波及 @antv/x6 恶意版本 3.2.7 / 3.3.7——供应链风险记账（来源：OSV MAL-2026-3839、Microsoft 安全博客 2026-05-20）</td></tr>
+      <tr><td>mermaid</td><td>不采用。官方支持节点 click callback，并非"做不到点击"；出局理由：状态频繁更新需重新生成/额外维护 SVG，与 Vue 状态、选中态、事件流联动不自然</td></tr>
+      <tr><td>cytoscape.js</td><td>不采用。支持事件、运行时样式与多种布局，并非"偏科研做不了"；出局理由：API 面与能力规模过大，只读 DAG 投影用不上，学习与维护成本高</td></tr>
+      <tr><td>备选</td><td>若后期需要"任务状态机本身"的转移图（11 态教学/排障用），可用同一 Vue Flow 画一张静态状态转移小图，非优先级</td></tr>
+      <tr><td>Prometheus Alertmanager UI</td><td><a href="https://pkg.go.dev/github.com/prometheus/alertmanager/ui/app">官方 UI 包说明</a>：Alerts 页支持 receiver、label matcher、silenced/inhibited 过滤，并有 Alerts / Silences / Status 页面。借鉴 matcher 与来源抑制状态展示；本项目无上游写权限时不照搬 Silence 命令。</td></tr>
+      <tr><td>Alerta Web UI</td><td><a href="https://docs.alerta.io/webui/alerts.html">Alerts View</a>：主页面按 severity/status/last receive/duplicate count/environment/service/resource/event/value 展示，支持环境标签、查询 DSL、facet、批量操作、关注、密度和 CSV；详情含属性、标签、历史、备注和 Raw JSON。P2 的汇总列表主要对标它。</td></tr>
+      <tr><td>Grafana Alerting OSS</td><td><a href="https://grafana.com/docs/grafana/latest/alerting/monitor-status/view-alert-state/">Alert state UI</a>：区分 Rule state、Instance state 与 Rule health；详情按 Query and conditions / Instances / History / Details 分页，范围查询展示图形与中间值。P2 据此拆出实例、阈值和状态历史。</td></tr>
+      <tr><td>Grafana 分类方式</td><td><a href="https://grafana.com/docs/grafana/latest/alerting/fundamentals/alert-rules/annotation-label/">Labels and annotations</a>：完整 label set 标识实例并用于搜索、静默和路由，常见自定义维度为 severity、priority、team、service；annotation 提供 summary/description/runbook/dashboard。结论：保留开放 facets，不能只做一棵固定分类树。</td></tr>
+      <tr><td>SigNoz</td><td><a href="https://signoz.io/docs/alerts-management/alerts-history/">Triggered alerts history</a>：页面包含触发次数、平均恢复时长、Top contributors、状态时间线和事件表，并能跳转关联 logs/traces/metrics。P2 据此增加恢复指标、贡献实例、时间线和遥测下钻。</td></tr>
+      <tr><td>OpenObserve</td><td><a href="https://openobserve.ai/docs/user-guide/analytics/alerts/">Alerts</a> 与 <a href="https://openobserve.ai/docs/user-guide/analytics/alerts/advanced-alert-configuration/">Advanced alerts</a>：用 folder、type、tag 组织规则；level 与 outcome 分轴；每组有独立状态和 transition history，历史行含 actual/threshold/operator/group。P2 据此保留多维分类并展示实例 N/M 与值上下文。</td></tr>
+      <tr><td>分类调研结论</td><td>Alerta、Grafana、OpenObserve 都提供标签/分面/文件夹/服务等组织面，却没有可直接套用的“业务异常 vs 机器异常”标准。v1.5 因此新增项目自己的 AlertTaxonomyV1 主分类，并把 team/service/resource/env/source 等作为正交 facets；分类投影和最终 RCA 根因严格分开。</td></tr>
+      <tr><td>历史与档案</td><td>SigNoz 的时间线、Top contributors 和事件跳转证明“历史”应可下钻到单次事件。仓内 RetentionPolicyV1 又冻结 archive_manifest、CAS refs、复读校验和 archive_catalog；v1.5 据此补 /history 随机检索、调查摘要、报告、Evidence manifest/digest 和 ARCHIVE_UNAVAILABLE 状态。</td></tr>
+      <tr><td>运行工作台</td><td><a href="https://github.com/temporalio/documentation/blob/main/docs/web-ui.mdx">Temporal Web UI</a> 与 <a href="https://master.dagster.dagster-docs.io/concepts/webserver/ui">Dagster UI</a> 都以可筛选的全部运行列表为一级入口，详情再提供历史、关系、日志和错误；据此增加 /runs 调查队列与任务/Attempt 诊断。</td></tr>
+      <tr><td>人工处置</td><td><a href="https://support.pagerduty.com/main/docs/navigate-the-incidents-page">PagerDuty Incidents</a> 把分配给我、状态/优先级过滤、认领/转派/解决放在同一工作区；据此将通知箱升级为 OperatorCase 处置中心。</td></tr>
+      <tr><td>Inspect AI</td><td><a href="https://inspect.aisi.org.uk/log-viewer.html">Log Viewer</a> 支持评测历史、运行中实时查看、逐 sample 钻取 message/scoring/metadata、按 score 过滤及跨 epoch 看不一致；任务信息还含 dataset/solver/scorer/git revision/token。P5 据此补逐案例步骤、scorer 说明、元数据和稳定性诊断。</td></tr>
+      <tr><td>Promptfoo</td><td><a href="https://www.promptfoo.dev/docs/usage/web-ui/">Web viewer</a> 提供 All/Failures/Passes/Errors/Different/Highlights、指标/metadata 过滤、单元格详情、人工评分/评论、eval diff、分布图和导出。P5 据此补失败/错误/flip/待复核队列、逐项评分组件、人工复核事件与失败样本导出。</td></tr>
+      <tr><td>Langfuse</td><td><a href="https://langfuse.com/docs/evaluation/experiments/experiments-via-ui">Experiments via UI</a> 从 dataset 选择 prompt/model/schema/evaluator 发起实验，并在实验表看聚合分和并排比较；<a href="https://langfuse.com/docs/evaluation/experiments/data-model">data model</a> 区分 dataset item、run item、item-level score 与 run-level score。P5 据此补新建实验向导和两级分数。</td></tr>
+      <tr><td>Phoenix</td><td><a href="https://arize.com/docs/phoenix/learn/datasets-and-experiments/datasets-concepts">Datasets</a> 对每次 insert/update/delete 版本化，可将生产 span 和人工复核样本加入数据集并固定版本运行实验；<a href="https://arize.com/docs/phoenix/evaluation/server-evals/overview">Server Evals</a> 把 evaluator suite 绑定到 dataset。P5 据此补版本差异、来源/审批、评分套件和评审队列。</td></tr>
+      <tr><td>实验比较</td><td><a href="https://docs.langchain.com/langsmith/compare-experiment-results">LangSmith Compare</a> 与 Phoenix/Langfuse 均以同一数据集的版本并排比较和逐例 Trace 为核心；v1.5 再按仓内架构增加 paired bootstrap、flip rate、原始 support、六维切片、复现 digest 与 HOLDOUT 磨损审计。</td></tr>
+      <tr><td>实时与无障碍</td><td><a href="https://html.spec.whatwg.org/dev/server-sent-events.html">WHATWG SSE</a> 定义 Last-Event-ID 重连语义；<a href="https://www.w3.org/WAI/WCAG21/Understanding/use-of-color.html">WCAG Use of Color</a> 要求颜色不是唯一信息载体。两者分别落到断线补放与 DAG 四重状态编码。</td></tr>
+      <tr><td>E-19 前端 UI 对标</td><td><b>v1.6 结构改版依据</b>：20 款产品（PagerDuty / incident.io / FireHydrant / Grafana / Datadog / SigNoz / OpenObserve / Keep / Alerta / 阿里云 ARMS / 腾讯云 / 华为云 AOM / Langfuse / LangSmith / Phoenix / Jaeger / HolmesGPT 等）逐页对标，详见 <code>docs/告警-调研-前端UI对标-v1.md</code>。本次落点与结论编号对应：⓪ 全局壳=左导航+顶栏混合模型（§4-1 / §4-12）；P1 统计卡点击深跳（§3-P1：腾讯 §2.3.2 / Alerta §2.2.6）；P2 左 facet+右表格（§0-1 / §4-1）、行首 severity 色条+状态文字 badge（§0-6 / §4-4 / §4-5）；P3-B 头部摘要条+主操作右置（§0-2 / §4-2）、多视图 tab（§0-3 / §4-7，Langfuse）；P3-A 复用 P2 列表范式（§3-P3）；P5 实验对比矩阵+回归红/改进绿+只看回归+基准实验（§0-4 / §4-8，LangSmith）。</td></tr>
+    </table>
+    <p>布局数据流：rca_task + rca_task_edge（已有表）→ 查询 API 出节点/边 JSON → dagre 算坐标 → Vue Flow 渲染 → SSE 事件驱动节点变色。前端零布局算法自研。</p>
+  </div>
+</section>
+
+</body>
+</html>
+
+
+

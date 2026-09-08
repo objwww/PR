@@ -568,3 +568,13 @@
 - 转入项落账：AM6 技术方案 §8 新增 **P-70**（Gatus 部署/AM5_LLM_BUDGET_CAP 设值/RCA-100 授权 + E2E-AM5 场景骨架填实连带项；M6-01 前 glm-5 基线重测须先清点阻塞面）；AM6 落码方案 O 表新增 **O-66/67/68**（含归属建议：预算上限=M6-01 live 前必须落值；授权=用户/法务面；场景填实=M6 期测试工序排期）。
 - AM6 两方案头部同步：动工硬前提"M5-22 G2 签署"已达成；剩余前提=AM6 其余 P0 闭环（C-66~69 等）+ 用户 G1 复审签署。
 - 仍待用户：本轮全部文档改动未 commit（BUGLOG/PROGRESS/AM5 方案/AM6 两方案/OSS 清单/AM5 证据包 README 等）+ 本地未 push 积压（含执行者线束 c7fc14e/8f16821）；AM6 v1.1r1 G1 复审时机。
+
+## 2026-09-08 — M7-10 部署门（195）：alert-web 静态托管 + control-app 联调冒烟绿
+
+- **部署形态**：195 宿主 nginx（/usr/sbin/nginx，本已存在）托管 `/opt/projects/pr_agent/alert-web`（VITE_USE_MOCK=false 生产构建，dist 无 mock 痕迹抽查确认），监听 **127.0.0.1:8088**（沿用"端口只绑 localhost、访问走 SSH 隧道"安全姿态）；`/api/` 反代 `127.0.0.1:8080`（control-app），SSE 面 proxy_buffering off + 长读超时；SPA history 模式 try_files 回退 index.html。
+- **过程缺陷留痕（教训）**：vite dev proxy 的 `^/api` strip 重写是后端落码前的旧假设——后端全部端点自带 `/api` 前缀（EventQuery/Operator/ConfigBundle 全系），nginx 首版照抄 strip 导致 /api/rca-runs 404；修正为整径透传后全通。**前后端路径契约以后端 @GetMapping 实际前缀为准，代理层不得发明重写规则。**
+- **冒烟结果**：index 200 / SPA fallback(/runs) 200 / js asset 200 / `/api/rca-runs` 与 `/api/cases/summary` 401（bearer 门活着=反代链通）/ stream-ticket GET 405（端点为 POST，方法语义正确）。nginx -t 通过、reload 零中断；变更前已备份 /etc/nginx 至 `backups/nginx-conf-20260908T132734Z.tar.gz`。
+- **传输验证**：dist tarball sha256 双侧一致（081cd16c…，BA-34⑧ 纪律）。
+- **访问路径**：`ssh -i ~/.ssh/id_ed25519 -L 8088:127.0.0.1:8088 root@146.56.195.225` → http://localhost:8088。
+- **边界（诚实留痕）**：登录态联调受 O-61（用户体系 0 状态/FUT-34 禁复用机器 Bearer）限制——真实登录后端尚不存在，生产模式页面登录后 API 仍 401 属预期；operator bearer 的 UI 注入面待 O-61 裁定。M7-10 部署门（构建产物+部署验证+关键链路冒烟）本身达成；工序 5 全量页面联调测试需 O-61 落地后补。
+- AM5 push 已完成（8aff72d，经本机 7890 代理一次性参数）；AM7/AM6 产物提交随本条目后落。

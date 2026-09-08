@@ -17,3 +17,4 @@ var/
 # 会话与后台任务工作区
 .zcode/
 .scheduler-research/
+alert-web/dist/
