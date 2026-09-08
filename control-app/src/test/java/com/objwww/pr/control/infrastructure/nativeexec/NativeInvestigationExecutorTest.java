@@ -132,7 +132,7 @@ class NativeInvestigationExecutorTest {
                 stores.runs, evidence, snapshots, metrics, logs, change, nativeRcaAgent,
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
                 "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                clock);
+                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP);
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls,

@@ -179,7 +179,7 @@ public class RcaRunOrchestrator {
                     Map.entry("attempt_id", startedAttempt.id().toString()),
                     Map.entry("decision", FinishOutcome.STALE_GENERATION.name()),
                     Map.entry("run_state", run.state().name())));
-            metrics.taskDecision(FinishOutcome.STALE_GENERATION.name());
+            metrics.taskDecision(FinishOutcome.STALE_GENERATION.name(), engineOf(run));
             log.warn("task {} 旧代结果作废（run {} state={}），task→STALE 零落档",
                     task.id(), run.id(), run.state());
             return FinishOutcome.STALE_GENERATION;
@@ -223,7 +223,7 @@ public class RcaRunOrchestrator {
                 Map.entry("attempt_id", startedAttempt.id().toString()),
                 Map.entry("decision", outcome.name()),
                 Map.entry("latency_ms", Duration.between(startedAttempt.startedAt(), now).toMillis())));
-        metrics.taskDecision(outcome.name());
+        metrics.taskDecision(outcome.name(), engineOf(run));
 
         if (slotEpoch >= 0) {
             slots.release(slotScope, slotNo, owner, slotEpoch);
@@ -424,6 +424,13 @@ public class RcaRunOrchestrator {
                 lastInvestigation, pending,
                 i.receivedCount(), i.distinctEventCount(), i.notificationCount(),
                 currentRunId, i.firstSeenAt(), i.lastEventAt(), i.createdAt(), now);
+    }
+
+    /** engine 指标标签（M6-02 观察面成账；路由面缺失的历史 run 归 unknown） */
+    private String engineOf(RcaRun run) {
+        return runs.findRoutingById(run.id())
+                .map(routing -> routing.engine().name())
+                .orElse(AlertMetrics.ENGINE_UNKNOWN);
     }
 
     private void clearIncidentRunPointer(RcaRun run, Instant now) {

@@ -29,6 +29,7 @@ import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
 import com.objwww.pr.shared.Digest;
@@ -92,6 +93,7 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private final NativeRcaAgent nativeRcaAgent;
     private final ClaimStore claims;
     private final EvidencePackageValidator validator;
+    private final AlertMetrics metrics;
     private final String metricsExpr;
     private final String toolRegistryDigest;
     private final AlertClock clock;
@@ -102,7 +104,8 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             EvidenceSnapshotRepository snapshots, MetricsAgent metricsAgent,
             LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
             ClaimStore claims, EvidencePackageValidator validator,
-            String metricsExpr, String toolRegistryDigest, AlertClock clock) {
+            String metricsExpr, String toolRegistryDigest, AlertClock clock,
+            AlertMetrics metrics) {
         this.bundles = Objects.requireNonNull(bundles, "bundles");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
@@ -124,11 +127,13 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         }
         this.toolRegistryDigest = toolRegistryDigest;
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     @Override
     public ExecutionResult execute(RcaTask task, RcaRun run, Incident incident,
             RcaAttempt attempt, Runnable heartbeat) {
+        long beginNanos = System.nanoTime();
         // ① 身份/提案源 fail-closed：无路由 digest = 快照身份面缺失；无提案段 = 终态失败
         String configDigest = runs.findRoutingById(run.id())
                 .map(RcaRunRepository.RoutingView::configDigest).orElse(null);
@@ -178,6 +183,9 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         // ⑦ 自家包过自家验证链；SUCCEEDED 与 REJECTED_* 同权落档（INV-AM3-7）
         EvidencePackageValidator.Result validated = validator.validate(adapted.outerJson());
         boolean ok = validated.status() == ValidationStatus.STRUCTURE_VALIDATED;
+        // M6-02 观察面成账：NATIVE 侧 attempt 指标与 HOLMES 同名同维（engine 分桶）
+        metrics.attemptFinished(validated.status().name(), "NATIVE");
+        metrics.attemptLatency((System.nanoTime() - beginNanos) / 1_000_000L, "NATIVE");
         log.info("native 全链完成 run={} reportOutcome={} claims={} validation={} 快照={}",
                 run.id(), assembled.outcome(), nativeResult.verdicts().size(),
                 validated.status(), snapshotDigest);

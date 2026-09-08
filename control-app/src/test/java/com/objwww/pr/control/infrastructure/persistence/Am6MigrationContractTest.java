@@ -107,4 +107,50 @@ class Am6MigrationContractTest {
                 .doesNotContain("uq_rca_run_active_incident")
                 .doesNotContain("drop index");
     }
+
+    // ---------------- V32（M6-02 engine_comparison；原 V31 号位——BA-53 顺延） ----------------
+
+    private static String normalizedV32() throws IOException {
+        return Files.readString(Path.of(
+                        "src/main/resources/db/migration/V32__am6_engine_comparison.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+    }
+
+    @Test
+    void v32CreatesEngineComparisonWithPairIdempotencyAnchor() throws IOException {
+        String sql = normalizedV32();
+
+        // 观察面结论表：native run + comparison_key（两侧身份+snapshot+候选 digest）
+        // 幂等锚；shadow_exec_ref 审计引用（M6-02 am4-shadow / M6-05 shadow work）；
+        // 无 GT 只记 disagreement 不判对错（架构 :736/739）
+        assertThat(sql)
+                .contains("create table engine_comparison")
+                .contains("native_run_id uuid not null")
+                .contains("comparison_key char(64) not null")
+                .contains("shadow_exec_ref text not null")
+                .contains("snapshot_digest char(64) not null")
+                .contains("holmes_outcome jsonb")
+                .contains("native_outcome jsonb")
+                .contains("disagree_flags jsonb not null default '[]'")
+                .contains("noise_baseline jsonb")
+                .contains("cost_compare jsonb")
+                .contains("constraint uq_ec_pair unique (native_run_id, comparison_key)")
+                // native_run_id 无 FK：对照行是观察面结论，不绑 run 生命周期
+                .doesNotContain("references rca_run");
+    }
+
+    @Test
+    void v32GrantsInsertOnlyToControlAppWithSequenceUsage() throws IOException {
+        String sql = normalizedV32();
+
+        // 授权纪律同 V25/V30：证据表只 select,insert；BA-42① 序列 USAGE 面同律
+        assertThat(sql)
+                .contains("grant select, insert on engine_comparison to control_app")
+                .contains("revoke update, delete on engine_comparison from control_app")
+                .contains("grant usage on sequence engine_comparison_id_seq to control_app")
+                .contains("revoke all on engine_comparison"
+                        + " from publisher_app, notify_app, eval_app, public")
+                .doesNotContainPattern("grant [a-z ,]*update on engine_comparison")
+                .doesNotContainPattern("grant [a-z ,]*delete on engine_comparison");
+    }
 }

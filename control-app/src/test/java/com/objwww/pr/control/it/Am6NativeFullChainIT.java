@@ -145,7 +145,7 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 metrics, logs, change, nativeRcaAgent, claims,
                 new EvidencePackageValidator(65_536, 32, 4_096),
                 "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                AlertClock.system());
+                AlertClock.system(), AlertMetrics.NOOP);
         orchestrator = new RcaRunOrchestrator(tasks, runs, attempts,
                 new PostgresRcaReportRepository(jdbc), incidents,
                 new PostgresSchedulerSlotRepository(jdbc),

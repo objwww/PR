@@ -37,6 +37,8 @@ import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
 import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.infrastructure.tool.ReplayToolExecutor;
+import com.objwww.pr.control.release.application.EngineComparisonRecorder;
+import com.objwww.pr.control.release.domain.repository.EngineComparisonRepository;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionCallback;
@@ -85,6 +87,7 @@ class Am4ShadowTriggerTest {
     private final TriggerLedger ledger = new TriggerLedger();
     private final TriggerClaims claims = new TriggerClaims();
     private final TriggerSlots slots = new TriggerSlots();
+    private final RecorderStore comparisons = new RecorderStore();
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
@@ -204,6 +207,32 @@ class Am4ShadowTriggerTest {
                 .isEqualTo(RcaRunState.REPORTING);
     }
 
+    @Test
+    void shadowConclusionRecordedAgainstHolmesRunForEngineComparison() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, UUID.randomUUID(), 14, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        captureStdout();
+        UUID shadowId = trigger(inv -> ok(inv)).trigger(holmesId);
+        resetStdout();
+
+        // M6-02 观察面成账：影子结论对照 holmes run 落 V32（对照行不是报告/发布）
+        assertThat(comparisons.rows).hasSize(1);
+        EngineComparisonRepository.ComparisonRow row = comparisons.rows.get(0);
+        assertThat(row.nativeRunId()).isEqualTo(shadowId);
+        assertThat(row.shadowExecRef()).isEqualTo("am4-shadow-trigger");
+        assertThat(row.snapshotDigest()).isEqualTo(snapshot.hex());
+        // holmes 侧无报告行（零发布纪律的镜像面）→ 诚实 report_missing，不臆造结论
+        assertThat(row.holmesOutcome()).containsEntry("report_missing", true);
+        // 双侧缺数维度不标记（缺数≠差异；无 GT 不判对错）
+        assertThat(row.disagreeFlags()).isEmpty();
+        // comparison_key = sha256(holmes\nnative\nsnapshot\n候选 digest)（无 bundle = 空串）
+        assertThat(row.comparisonKey()).isEqualTo(Digest.sha256Of(
+                holmesId + "\n" + shadowId + "\n" + snapshot.hex() + "\n" + "").hex());
+    }
+
     // ------------------------------------------------------------------ 组装
 
     private Am4ShadowTrigger trigger(ToolInvoker gateway) {
@@ -229,9 +258,12 @@ class Am4ShadowTriggerTest {
                 tools, gateway, evidence, ledger, mapper);
         NativeRcaAgent nativeRca = new NativeRcaAgent(evidence, claims,
                 new ClaimReducer(Set.of("holmes", "prometheus"), "ut-policy"));
+        EngineComparisonRecorder recorder = new EngineComparisonRecorder(
+                new NoBundles(), stores.runs, stores.reports, claims, comparisons,
+                com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP);
         return new Am4ShadowTrigger(supervisor, stores.runs, stores.tasks, evidence,
                 snapshots, metrics, logs, change, nativeRca, slots,
-                Am4ShadowTrigger.WORKER_SLOT_SCOPE, () -> NOW);
+                Am4ShadowTrigger.WORKER_SLOT_SCOPE, () -> NOW, recorder);
     }
 
     /** 全部执行成功：恒回 EXECUTED + success 体 */
@@ -458,6 +490,62 @@ class Am4ShadowTriggerTest {
         @Override
         public List<ClaimRow> findByRunId(UUID runId) {
             return List.of();
+        }
+    }
+
+    /** 对照落账捕集（V32 观察面断言面） */
+    private static final class RecorderStore implements EngineComparisonRepository {
+
+        private final List<EngineComparisonRepository.ComparisonRow> rows = new ArrayList<>();
+
+        @Override
+        public boolean append(EngineComparisonRepository.ComparisonRow row) {
+            rows.add(row);
+            return true;
+        }
+
+        @Override
+        public List<EngineComparisonRepository.ComparisonRow> findByNativeRunId(UUID runId) {
+            return rows.stream().filter(r -> r.nativeRunId().equals(runId)).toList();
+        }
+    }
+
+    /** 无激活 bundle（候选 digest 记空串——comparison_key 输入面诚实为空） */
+    private static final class NoBundles
+            implements com.objwww.pr.control.release.domain.repository.ConfigBundleRepository {
+
+        @Override
+        public long nextRevision() {
+            return 1;
+        }
+
+        @Override
+        public boolean insert(
+                com.objwww.pr.control.release.domain.model.ConfigBundle bundle) {
+            return true;
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.control.release.domain.model.ConfigBundle>
+                findByDigest(Digest digest) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<Digest> activeDigest() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.control.release.domain.repository.ConfigBundleRepository.ActivePointer>
+                findActivePointer() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public boolean activate(Digest toDigest, Digest expectedCurrent, String by,
+                Instant at) {
+            return true;
         }
     }
 }

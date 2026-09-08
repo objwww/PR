@@ -19,6 +19,7 @@ import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
+import com.objwww.pr.control.release.application.EngineComparisonRecorder;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,7 +44,9 @@ import java.util.UUID;
  * 与 G2 套件终态一致）；单任务 FAILED = 缺源降级续跑（任务 DEAD 终态，run 继续，
  * 对齐 ClaimReducer 降级白名单语义），缺源面由场景脚本按证据计数断言；本类不
  * 发明生产触发器——正式触发入口仍是 G2 终裁开放项（配方 §6.1），本类只调用
- * 组件公开入口，供 195 E2E 执行者一次性驱动。
+ * 组件公开入口，供 195 E2E 执行者一次性驱动。M6-02 起影子结论对照 holmes 主
+ * 路径 run 落 {@link com.objwww.pr.control.release.application.EngineComparisonRecorder}
+ * （V32 观察面成账——对照行不是报告/发布，零报告纪律不变）。
  *
  * <p>槽位避让（195 实证 2026-09-07）：一次性实例与主容器 {@link RcaWorker} 共享
  * 同一 DB——影子 run 落图后 RcaWorker 可能抢先认领任务（transition CAS 失败 +
@@ -98,12 +101,14 @@ public class Am4ShadowTrigger {
     private final SchedulerSlotRepository slots;
     private final String slotScope;
     private final AlertClock clock;
+    private final EngineComparisonRecorder comparisonRecorder;
 
     public Am4ShadowTrigger(DeterministicSupervisor supervisor, RcaRunRepository runs,
             RcaTaskRepository tasks, EvidenceRepository evidence,
             EvidenceSnapshotRepository snapshots, MetricsAgent metricsAgent,
             LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
-            SchedulerSlotRepository slots, String slotScope, AlertClock clock) {
+            SchedulerSlotRepository slots, String slotScope, AlertClock clock,
+            EngineComparisonRecorder comparisonRecorder) {
         this.supervisor = Objects.requireNonNull(supervisor);
         this.runs = Objects.requireNonNull(runs);
         this.tasks = Objects.requireNonNull(tasks);
@@ -116,6 +121,7 @@ public class Am4ShadowTrigger {
         this.slots = Objects.requireNonNull(slots);
         this.slotScope = Objects.requireNonNull(slotScope);
         this.clock = Objects.requireNonNull(clock);
+        this.comparisonRecorder = Objects.requireNonNull(comparisonRecorder);
     }
 
     /**
@@ -157,6 +163,10 @@ public class Am4ShadowTrigger {
             freezeSnapshot(shadow.id(), holmes.generation());
             supervisor.advance(shadow.id());
             nativeRcaAgent.investigate(shadow.id(), snapshotDigest, holmes.generation());
+            // M6-02 观察面成账：影子结论对照 HOLMES 主路径 run 落 V32 engine_comparison
+            // （HOLMES 侧守卫的落账动作；无 GT 只记 disagreement 不判对错）
+            comparisonRecorder.compareHolmesNative(holmesRunId, shadow.id(),
+                    "am4-shadow-trigger");
         } finally {
             for (SchedulerSlotRepository.AcquiredSlot slot : held) {
                 slots.release(slotScope, slot.slotNo(), SLOT_OWNER, slot.leaseEpoch());

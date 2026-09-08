@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>形态：
  * <ul>
  *   <li>静态容器全 IT 类共享一个 PG 实例；每个测试方法前 TRUNCATE 全部业务表清场
- *       （V1~V31 全表，见 ALL_TABLES，RESTART IDENTITY CASCADE 兜底）；</li>
+ *       （V1~V32 全表，见 ALL_TABLES，RESTART IDENTITY CASCADE 兜底）；</li>
  *   <li>admin（容器超级用户）先执行与 deploy/db/01-roles.sh 等价的 DO 块创建
  *       control_app / publisher_app 两角色（V2/V3 的 grant 依赖两角色存在），
  *       再以 admin 身份跑 Flyway；</li>
@@ -48,7 +48,7 @@ public abstract class PostgresITBase {
     protected static final String NOTIFY_PASSWORD = "it-notify-pass";
     protected static final String EVAL_PASSWORD = "it-eval-pass";
 
-    /** V1~V31 全业务表清单（BA-41，195 真 PG 实证）：原清单冻结在 AM2 时代，V20~V29
+    /** V1~V32 全业务表清单（BA-41，195 真 PG 实证）：原清单冻结在 AM2 时代，V20~V29
      *  的 AM5 表不在列——跨类污染在 195 类序（GoldenCandidate 先于 DatasetVersion）
      *  下以 FK 违约爆出。TRUNCATE 单语句 + CASCADE 顺序无关；config_bundle /
      *  config_bundle_active 除外（V24 种子行 id=1 是激活 CAS 的依赖面，
@@ -71,7 +71,9 @@ public abstract class PostgresITBase {
             // V16~V17（AM4 证据/Claim 面）+ V30（AM6 canary 两表）——BA-41 同律：
             // 业务表必须入清单，缺表 = 跨类污染在类序变化下以脏数据爆出
             "rca_evidence", "rca_evidence_snapshot", "rca_snapshot_member",
-            "rca_claim", "canary_evidence_sample", "canary_window_verdict");
+            "rca_claim", "canary_evidence_sample", "canary_window_verdict",
+            // V32（AM6 M6-02 引擎对照结论）——BA-41 同律
+            "engine_comparison");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

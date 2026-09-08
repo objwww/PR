@@ -266,8 +266,8 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
                 Map.entry("validation_status", result.status().name()),
                 Map.entry("latency_ms", latency),
                 Map.entry("usage_missing", chat.usageMissing())));
-        metrics.attemptFinished(result.status().name());
-        metrics.attemptLatency(latency);
+        metrics.attemptFinished(result.status().name(), "HOLMES");
+        metrics.attemptLatency(latency, "HOLMES");
 
         if (result.status() != ValidationStatus.STRUCTURE_VALIDATED) {
             // REJECTED_* 同权落档（INV-AM3-7）：结构问题是策略违约，重试同形状概率高

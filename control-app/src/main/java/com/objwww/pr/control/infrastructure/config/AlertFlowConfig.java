@@ -310,6 +310,7 @@ public class AlertFlowConfig {
             ObjectProvider<com.objwww.pr.control.alert.domain.claim.ClaimStore> claims,
             ObjectProvider<EvidencePackageValidator> validator,
             NativeCapabilityProbe probe,
+            com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
@@ -321,7 +322,7 @@ public class AlertFlowConfig {
                 metricsAgent.getIfAvailable(), logsAgent.getIfAvailable(),
                 changeAgent.getIfAvailable(), nativeRcaAgent.getIfAvailable(),
                 claims.getIfAvailable(), validator.getIfAvailable(),
-                metricsExpr, toolRegistryDigest, AlertClock.system());
+                metricsExpr, toolRegistryDigest, AlertClock.system(), alertMetrics);
     }
 
     /** 状态观察面（C-64）的能力快照：装配时定格，interfaces 不触探针类型（分层缝） */

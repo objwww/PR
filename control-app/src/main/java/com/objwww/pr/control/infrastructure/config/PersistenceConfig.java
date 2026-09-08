@@ -255,6 +255,14 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    // M6-02 引擎对照结论追加面（V32；消费方 = EngineComparisonRecorder，M6-05 反向影子复用）
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.EngineComparisonRepository engineComparisonRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEngineComparisonRepository(
+                jdbc);
+    }
+
     // ---------------- AM5 处置域（V26，M5-11 装配；HTTP 面 = M5-12 Operator API） ----------------
 
     @Bean
