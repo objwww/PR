@@ -245,10 +245,36 @@ public class AlertFlowConfig {
                                                  SlaPolicy sla,
                                                  AlertMetrics alertMetrics,
                                                  CanaryRouter canaryRouter,
+                                                 com.objwww.pr.control.alert.application
+                                                         .FallbackService fallback,
+                                                 com.objwww.pr.control.alert.domain.repository
+                                                         .ReportWinnerRepository winners,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
-                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter);
+                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter,
+                fallback, winners);
+    }
+
+    /**
+     * M6-04 run 级 fallback（V33）：NATIVE run 安全/运行故障恰一次铸 HOLMES RERUN。
+     * 开关面 {@code app.alert.fallback.enabled} 是 M6-06/07 退场的 sanctioned 闸；
+     * 独立预算 {@code app.alert.fallback.daily-budget}（滚动 24h 窗）与 canary 预算分账。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.FallbackService fallbackService(
+            RcaRunRepository runs,
+            IncidentRepository incidents,
+            RcaTaskRepository tasks,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            com.objwww.pr.control.alert.domain.repository.RunFallbackRepository fallbacks,
+            SlaPolicy sla,
+            AlertMetrics alertMetrics,
+            @Value("${app.alert.fallback.enabled:true}") boolean enabled,
+            @Value("${app.alert.fallback.daily-budget:20}") int dailyBudget) {
+        return new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
+                tasks, events, fallbacks, sla, AlertClock.system(), alertMetrics, enabled,
+                dailyBudget);
     }
 
     // ---------------- AM5 M5-09/10：发布与切流（release 域路由决策） ----------------

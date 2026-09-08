@@ -73,7 +73,9 @@ public abstract class PostgresITBase {
             "rca_evidence", "rca_evidence_snapshot", "rca_snapshot_member",
             "rca_claim", "canary_evidence_sample", "canary_window_verdict",
             // V32（AM6 M6-02 引擎对照结论）——BA-41 同律
-            "engine_comparison");
+            "engine_comparison",
+            // V33（AM6 M6-04 run 级 fallback 栅栏 + 发布赢家）——BA-41 同律
+            "run_fallback", "report_generation_winner");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

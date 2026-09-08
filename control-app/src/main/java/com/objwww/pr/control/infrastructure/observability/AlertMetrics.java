@@ -56,6 +56,12 @@ public final class AlertMetrics {
                 "disagree", Boolean.toString(hasDisagreement)).increment();
     }
 
+    /** run 级 fallback 裁定（M6-04）：outcome = FallbackService.CastOutcome 封闭集 */
+    public void fallbackDecision(String outcome) {
+        registry.counter("rca_fallback_decision_total",
+                "outcome", safe(outcome)).increment();
+    }
+
     private static String safe(String value) {
         if (value == null || value.isBlank()) {
             return "unknown";

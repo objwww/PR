@@ -215,6 +215,20 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository(jdbc);
     }
 
+    // ---------------- AM6 run 级 fallback 栅栏（V33，M6-04 装配；消费方 = RcaRunOrchestrator） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RunFallbackRepository runFallbackRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRunFallbackRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository reportWinnerRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresReportWinnerRepository(jdbc);
+    }
+
     // ---------------- AM3 评测持久化（V10，M3-14 装配；生产消费方 = M3-15 eval profile） ----------------
 
     @Bean

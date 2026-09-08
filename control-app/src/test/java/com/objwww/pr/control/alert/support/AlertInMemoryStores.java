@@ -69,6 +69,8 @@ public final class AlertInMemoryStores {
     public final Commands commands = new Commands();
     public final RcaEventLog rcaEvents = new RcaEventLog();
     public final Cas cas = new Cas();
+    public final Fallbacks fallbacks = new Fallbacks();
+    public final Winners winners = new Winners();
 
     // ------------------------------------------------------------------ alert_inbox
 
@@ -841,6 +843,60 @@ public final class AlertInMemoryStores {
 
         public synchronized List<AppendedEvent> all() {
             return List.copyOf(events);
+        }
+    }
+
+    // ------------------------------------------------------------------ run_fallback 占位栅栏（M6-04）
+
+    /** uq_rf_source(source_native_run_id) 模拟：同源重复占位 = 败者 false（ON CONFLICT DO NOTHING 同语义） */
+    public static final class Fallbacks implements com.objwww.pr.control.alert.domain.repository.RunFallbackRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.repository.RunFallbackRepository.OccupancyRow> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized boolean insertOccupancy(
+                com.objwww.pr.control.alert.domain.repository.RunFallbackRepository.OccupancyRow row) {
+            return rows.putIfAbsent(row.sourceNativeRunId(), row) == null;
+        }
+
+        @Override
+        public synchronized long countCreatedSince(Instant after) {
+            return rows.values().stream().filter(r -> !r.createdAt().isBefore(after)).count();
+        }
+
+        @Override
+        public synchronized Optional<com.objwww.pr.control.alert.domain.repository.RunFallbackRepository.OccupancyRow> findBySourceRunId(
+                UUID sourceNativeRunId) {
+            return Optional.ofNullable(rows.get(sourceNativeRunId));
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.repository.RunFallbackRepository.OccupancyRow> all() {
+            return List.copyOf(rows.values());
+        }
+    }
+
+    // ------------------------------------------------------------------ report_generation_winner（M6-04）
+
+    /** PK (incident_id, generation) CAS 模拟：先插者赢，重插返回 false（非错误） */
+    public static final class Winners implements com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository {
+        private record WinnerKey(UUID incidentId, int generation) {
+        }
+
+        private final Map<WinnerKey, UUID> rows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized boolean claimWinner(UUID incidentId, int generation,
+                UUID reportId, UUID runId, Instant decidedAt) {
+            return rows.putIfAbsent(new WinnerKey(incidentId, generation), reportId) == null;
+        }
+
+        @Override
+        public synchronized Optional<UUID> findWinnerReportId(UUID incidentId, int generation) {
+            return Optional.ofNullable(rows.get(new WinnerKey(incidentId, generation)));
+        }
+
+        public synchronized int size() {
+            return rows.size();
         }
     }
 

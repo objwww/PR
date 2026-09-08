@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.service.AlertIdentityFactory;
 import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
@@ -79,6 +80,11 @@ class NativeEngineWiringTest {
             script.add(RcaTaskExecutor.ExecutionResult.success(validatedArtifact()));
         }
 
+        /** M6-04：终态失败（错误类可控——fallback 封闭集正/反例用） */
+        void failTerminalNext(String errorClass) {
+            script.add(RcaTaskExecutor.ExecutionResult.terminal(errorClass, "终态失败"));
+        }
+
         private static RcaTaskExecutor.AttemptArtifact validatedArtifact() {
             return new RcaTaskExecutor.AttemptArtifact(1, com.objwww.pr.control.alert.domain.model.ValidationStatus.STRUCTURE_VALIDATED,
                     List.of(), "{\"schema_version\":\"1\"}", "raw", null, List.of(),
@@ -115,7 +121,11 @@ class NativeEngineWiringTest {
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier(), stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP, nativeRouter);
+                AlertMetrics.NOOP, nativeRouter,
+                new FallbackService(stores.runs, stores.incidents, stores.tasks,
+                        stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(), clock,
+                        AlertMetrics.NOOP, true, 20),
+                stores.winners);
     }
 
     private ReportCompletedNotifier notifier() {
@@ -248,6 +258,61 @@ class NativeEngineWiringTest {
         assertThat(holmes.calls).isZero();
         assertThat(stores.tasks.all().get(0).state()).isEqualTo(RcaTaskState.DEAD);
         assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.FAILED);
+    }
+
+    // ------------------------------------------------------------------ M6-04 fallback hook（worker 失败路径接线证明）
+
+    @Test
+    @DisplayName("M6-04 hook：NATIVE run 终态失败（封闭错误类）→ finishTask 内自动铸 HOLMES fallback")
+    void fallbackHookFiresOnEligibleNativeTerminalFailure() {
+        ScriptedExecutor nativeExec = new ScriptedExecutor();
+        RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
+
+        deliverFiring("checkout", "材料一");
+        nativeExec.failTerminalNext("PROPOSAL_MISSING");
+        assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        // 源 run 终态失败、task DEAD、错误类留痕
+        RcaRun source = stores.runs.all().get(0);
+        assertThat(source.state()).isEqualTo(RcaRunState.FAILED);
+        assertThat(source.lastError()).isEqualTo("PROPOSAL_MISSING");
+        assertThat(stores.tasks.all().get(0).state()).isEqualTo(RcaTaskState.DEAD);
+
+        // 恰一次 fallback：占位 + HOLMES RERUN QUEUED run + READY task + 指针上移 + 审计事件
+        assertThat(stores.fallbacks.all()).hasSize(1);
+        assertThat(stores.fallbacks.all().get(0).sourceNativeRunId()).isEqualTo(source.id());
+        assertThat(stores.fallbacks.all().get(0).depth()).isEqualTo(1);
+        RcaRun cast = stores.runs.all().get(1);
+        assertThat(cast.trigger()).isEqualTo(RunTrigger.RERUN);
+        assertThat(cast.state()).isEqualTo(RcaRunState.QUEUED);
+        assertThat(cast.generation()).isEqualTo(source.generation());
+        assertThat(stores.runs.findRoutingById(cast.id()).orElseThrow().engine())
+                .isEqualTo(RcaEngine.HOLMES);
+        assertThat(stores.tasks.all()).hasSize(2);
+        assertThat(stores.tasks.all().get(1).taskKey()).isEqualTo(RcaTask.HOLMES_INVESTIGATE);
+        assertThat(stores.tasks.all().get(1).state()).isEqualTo(RcaTaskState.READY);
+        assertThat(stores.incidents.findById(source.incidentId()).orElseThrow().currentRcaRunId())
+                .isEqualTo(cast.id());
+        assertThat(stores.rcaEvents.all()).hasSize(1);
+        assertThat(stores.rcaEvents.all().get(0).eventType()).isEqualTo("fallback_of");
+        assertThat(stores.rcaEvents.all().get(0).payloadJson()).contains(source.id().toString());
+    }
+
+    @Test
+    @DisplayName("M6-04 反例：低质量终态失败（ADAPTER_PACKAGE_REJECTED）不触发 fallback")
+    void lowQualityNativeFailureLeavesNoFallback() {
+        ScriptedExecutor nativeExec = new ScriptedExecutor();
+        RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
+
+        deliverFiring("checkout", "材料一");
+        nativeExec.failTerminalNext("ADAPTER_PACKAGE_REJECTED");
+        assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.FAILED);
+        assertThat(stores.fallbacks.all()).isEmpty();
+        assertThat(stores.runs.all()).hasSize(1);
+        assertThat(stores.tasks.all()).hasSize(1);
+        assertThat(stores.rcaEvents.all()).isEmpty();
     }
 
     // ------------------------------------------------------------------ 迷你认账面（CanaryRouterTest 同构）

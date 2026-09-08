@@ -36,6 +36,12 @@ app:
       bearer: ${CONTROL_WEBHOOK_BEARER_TOKEN:}
       allowed-receivers: rca-oncall
       allowed-scopes: rca_system
+    # M6-04 run 级 fallback（V33）：NATIVE run 的安全/运行故障恰一次铸 HOLMES RERUN。
+    # enabled 是 M6-06/07 Holmes 退场预演/下线的 sanctioned 闸（缺省开）；
+    # daily-budget = 独立 fallback 预算（滚动 24h 占位窗计数，与 canary 预算分账）
+    fallback:
+      enabled: ${APP_ALERT_FALLBACK_ENABLED:true}
+      daily-budget: ${APP_ALERT_FALLBACK_DAILY_BUDGET:20}
     # Holmes 常驻容器凭证桥接（BA-10①/G0-03）：Spring 不会自动把 HOLMES_API_KEY
     # 环境变量映射成 app.alert.holmes.api-key 属性，必须在 yml 显式占位。
     # compose 注入 HOLMES_BASE_URL / HOLMES_API_KEY；AlertFlowConfig 读 app.alert.holmes.*

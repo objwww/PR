@@ -156,7 +156,16 @@ class Am6NativeFullChainIT extends PostgresITBase {
                         new PostgresNotifyOutboxRepository(jdbc),
                         List.of("test"), "am6-native-it", 280),
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
-                AlertClock.system(), "rca", AlertMetrics.NOOP);
+                AlertClock.system(), "rca", AlertMetrics.NOOP,
+                com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
+                new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
+                        tasks, new PostgresRcaEventAppender(jdbc, controlTx, controlTx),
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresRunFallbackRepository(jdbc),
+                        SlaPolicy.defaults(), AlertClock.system(), AlertMetrics.NOOP,
+                        true, 20),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresReportWinnerRepository(jdbc));
     }
 
     // ------------------------------------------------------------------ 案① 全链

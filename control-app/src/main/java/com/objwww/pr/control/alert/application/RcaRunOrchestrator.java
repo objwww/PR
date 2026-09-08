@@ -92,27 +92,15 @@ public class RcaRunOrchestrator {
     private final ObjectMapper mapper = new ObjectMapper();
     private final AlertMetrics metrics;
     private final CanaryRouter canaryRouter;
+    private final FallbackService fallback;
+    private final com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners;
 
-    public RcaRunOrchestrator(RcaTaskRepository tasks,
-                              RcaRunRepository runs,
-                              RcaAttemptRepository attempts,
-                              RcaReportRepository reports,
-                              IncidentRepository incidents,
-                              SchedulerSlotRepository slots,
-                              InvestigationResultRepository investigationResults,
-                              RcaToolCallRepository toolCalls,
-                              ReportCompletedNotifier notifier,
-                              ArtifactStore artifacts,
-                              SlaPolicy sla,
-                              AlertClock clock,
-                              String slotScope,
-                              AlertMetrics metrics) {
-        this(tasks, runs, attempts, reports, incidents, slots, investigationResults,
-                toolCalls, notifier, artifacts, sla, clock, slotScope, metrics,
-                CanaryRouter.holmesOnly());
-    }
-
-    /** M5-10：CanaryRouter 注入构造（RERUN 铸造点路由决策 + 路由四列落行） */
+    /**
+     * M6-04 全量构造（生产装配面）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
+     * + FallbackService（run 级 fallback 恰一次铸 Holmes）+ 发布赢家仓储
+     * （generation 发布 CAS）。栅栏依赖无默认值——装配缺失即启动失败（fail-closed，
+     * 不允许静默无栅栏的发布/回退面）。
+     */
     public RcaRunOrchestrator(RcaTaskRepository tasks,
                               RcaRunRepository runs,
                               RcaAttemptRepository attempts,
@@ -127,7 +115,9 @@ public class RcaRunOrchestrator {
                               AlertClock clock,
                               String slotScope,
                               AlertMetrics metrics,
-                              CanaryRouter canaryRouter) {
+                              CanaryRouter canaryRouter,
+                              FallbackService fallback,
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -143,6 +133,8 @@ public class RcaRunOrchestrator {
         this.slotScope = Objects.requireNonNull(slotScope);
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
+        this.fallback = Objects.requireNonNull(fallback, "fallback");
+        this.winners = Objects.requireNonNull(winners, "winners");
     }
 
     /**
@@ -247,6 +239,13 @@ public class RcaRunOrchestrator {
                     result.errorClass()));
             if (runFailed) {
                 clearIncidentRunPointer(run, now);
+                // M6-04 run 级 fallback：仅 NATIVE 源 + 安全/运行封闭错误类进入
+                // FallbackService（服务内二次裁定 + uq_rf_source 唯一占位 + 同事务铸
+                // HOLMES RERUN）；取消/过期/人工终止走上方 STALE/非 DEAD 分支结构性
+                // 不触发，UNRESOLVED/低质量被封闭集排除（FUT-12 语义分歧不回退）。
+                fallback.tryCastFromFailedNative(
+                        withRunState(run, RcaRunState.FAILED, now, result.errorClass()),
+                        result.errorClass(), fresh.priority());
             }
             return outcome;
         }
@@ -343,10 +342,25 @@ public class RcaRunOrchestrator {
                     artifact.packageJson(), artifact.rawText(), artifact.model(),
                     artifact.promptTokens(), artifact.completionTokens(), artifact.totalTokens(),
                     artifact.usageMissing(), now));
-            PayloadFields fields = payloadFields(artifact);
-            notifier.onReportValidated(reportId, run.id(), attempt.id(),
-                    fields.summary(), fields.component(), fields.faultType(), fields.reasonCode(),
-                    fields.impact(), fields.remediation(), now);
+            // M6-04 generation 发布赢家 CAS（C-68）：所有报告发布先争夺 (incident,
+            // generation) 唯一发布权——赢家写 READY publication + 每渠道一条 outbox；
+            // 败者报告仍落档（INV-AM3-7 诚实记账）但不发布不通知。claim 与发布面
+            // 同事务：收尾回滚则栅栏一并回滚，不虚占。
+            if (winners.claimWinner(run.incidentId(), run.generation(), reportId, run.id(),
+                    now)) {
+                PayloadFields fields = payloadFields(artifact);
+                notifier.onReportValidated(reportId, run.id(), attempt.id(),
+                        fields.summary(), fields.component(), fields.faultType(),
+                        fields.reasonCode(), fields.impact(), fields.remediation(), now);
+            } else {
+                StructuredLog.event(log, "report_publication_loser", Map.ofEntries(
+                        Map.entry("report_id", reportId.toString()),
+                        Map.entry("run_id", run.id().toString()),
+                        Map.entry("incident_id", run.incidentId().toString()),
+                        Map.entry("generation", run.generation())));
+                log.info("report {} 输给 generation 发布赢家（incident={}, gen={}），"
+                                + "落档不发布", reportId, run.incidentId(), run.generation());
+            }
         }
     }
 

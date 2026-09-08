@@ -13,9 +13,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * M3-28：指标面 allowlist——tag 键只允许 decision/validation/engine/disagree，
+ * M3-28：指标面 allowlist——tag 键只允许 decision/validation/engine/disagree/outcome，
  * 值只允许封闭枚举名；UUID/任意串进 tag 的高基数爆炸被结构性钉死。
  * M6-02 观察面成账：engine 维度（HOLMES/NATIVE 分桶）+ rca_engine_comparison_total。
+ * M6-04：rca_fallback_decision_total（outcome = CastOutcome 封闭集）。
  */
 class AlertMetricsLabelAllowlistTest {
 
@@ -56,6 +57,13 @@ class AlertMetricsLabelAllowlistTest {
                 "disagree", "true").count()).isEqualTo(1.0);
         assertThat(registry.counter("rca_engine_comparison_total",
                 "disagree", "false").count()).isEqualTo(2.0);
+        metrics.fallbackDecision("CAST");
+        metrics.fallbackDecision("ALREADY_CAST");
+        metrics.fallbackDecision("ALREADY_CAST");
+        assertThat(registry.counter("rca_fallback_decision_total",
+                "outcome", "CAST").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_fallback_decision_total",
+                "outcome", "ALREADY_CAST").count()).isEqualTo(2.0);
     }
 
     @Test
@@ -67,8 +75,10 @@ class AlertMetricsLabelAllowlistTest {
         metrics.attemptFinished("REJECTED_MALFORMED", "NATIVE");
         metrics.attemptLatency(5, "HOLMES");
         metrics.engineComparison(true);
+        metrics.fallbackDecision("INELIGIBLE_ERROR_CLASS");
 
-        List<String> allowlist = List.of("decision", "validation", "engine", "disagree");
+        List<String> allowlist = List.of("decision", "validation", "engine", "disagree",
+                "outcome");
         for (Meter meter : registry.getMeters()) {
             for (Tag tag : meter.getId().getTags()) {
                 assertThat(allowlist).contains(tag.getKey());
@@ -86,6 +96,7 @@ class AlertMetricsLabelAllowlistTest {
             AlertMetrics.NOOP.attemptFinished("STRUCTURE_VALIDATED", "NATIVE");
             AlertMetrics.NOOP.attemptLatency(3, "HOLMES");
             AlertMetrics.NOOP.engineComparison(true);
+            AlertMetrics.NOOP.fallbackDecision("CAST");
         }).doesNotThrowAnyException();
     }
 }

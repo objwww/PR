@@ -20,6 +20,7 @@ import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.alert.support.TestFixtures;
+import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 import com.objwww.pr.shared.Digests;
 import org.junit.jupiter.api.BeforeEach;
@@ -114,10 +115,13 @@ class RcaWorkerTest {
     }
 
     private RcaRunOrchestrator newOrchestrator() {
+        FallbackService fallback = new FallbackService(stores.runs, stores.incidents,
+                stores.tasks, stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(),
+                clock, AlertMetrics.NOOP, true, 20);
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP);
+                AlertMetrics.NOOP, CanaryRouter.holmesOnly(), fallback, stores.winners);
     }
 
     private RcaWorker newWorker(String owner) {

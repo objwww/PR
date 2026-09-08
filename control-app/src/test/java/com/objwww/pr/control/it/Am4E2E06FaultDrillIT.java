@@ -296,7 +296,17 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
                         new PostgresNotifyOutboxRepository(controlJdbc),
                         List.of("test"), "am3-candidate-v1", 280),
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
-                AlertClock.system(), "rca", AlertMetrics.NOOP);
+                AlertClock.system(), "rca", AlertMetrics.NOOP,
+                com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
+                new com.objwww.pr.control.alert.application.FallbackService(runs,
+                        new PostgresIncidentRepository(controlJdbc), tasks,
+                        new PostgresRcaEventAppender(controlJdbc, controlTx, controlTx),
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresRunFallbackRepository(controlJdbc),
+                        SlaPolicy.defaults(), AlertClock.system(), AlertMetrics.NOOP,
+                        true, 20),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresReportWinnerRepository(controlJdbc));
     }
 
     private AgentRegistry agentRegistry() {

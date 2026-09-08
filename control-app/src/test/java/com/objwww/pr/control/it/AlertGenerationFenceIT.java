@@ -23,6 +23,7 @@ import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresRcaEventAppender;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaReportRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaTaskRepository;
@@ -78,7 +79,15 @@ class AlertGenerationFenceIT extends PostgresITBase {
                 new ReportCompletedNotifier(publications, outboxes, List.of("test"),
                         "am3-candidate-v1", 280),
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
-                Instant::now, "rca", AlertMetrics.NOOP);
+                Instant::now, "rca", AlertMetrics.NOOP,
+                com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
+                new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
+                        tasks, new PostgresRcaEventAppender(controlJdbc, controlTx, controlTx),
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresRunFallbackRepository(controlJdbc),
+                        SlaPolicy.defaults(), Instant::now, AlertMetrics.NOOP, true, 20),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresReportWinnerRepository(controlJdbc));
     }
 
     @Test
