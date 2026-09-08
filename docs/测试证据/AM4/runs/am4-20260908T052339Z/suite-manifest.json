@@ -1,0 +1,27 @@
+{
+  "batch_id": "am4-20260908T052339Z",
+  "generated_at": "2026-09-08T06:00:51Z",
+  "git_commit": "unknown",
+  "control_image_digest": "
+pr-agent/control-app:0.0.1-SNAPSHOT",
+  "model_id": "glm-5",
+  "provider": "bailian-dashscope",
+  "config_digest": "unset",
+  "agent_registry_digest": "unset",
+  "tool_registry_digest": "unset",
+  "fixtures_sha256_match": true,
+  "scenarios": [
+    {"script": "e2e-m4-00-normal.sh", "result": "PASS"},
+    {"script": "e2e-m4-01-f1.sh", "result": "PASS"},
+    {"script": "e2e-m4-02-f2.sh", "result": "PASS"},
+    {"script": "e2e-m4-03-f3.sh", "result": "PASS"},
+    {"script": "e2e-m4-04-f4.sh", "result": "PASS"},
+    {"script": "e2e-m4-05-generation.sh", "result": "PASS"},
+    {"script": "e2e-m4-07-injection.sh", "result": "PASS"},
+    {"script": "e2e-m4-09-shadow.sh", "result": "PASS"},
+    {"script": "e2e-m4-10-budget.sh", "result": "PASS"},
+    {"script": "e2e-m4-06-fault-drill.sh", "result": "PASS"},
+    {"script": "e2e-m4-08-replay.sh", "result": "PASS"},
+    {"script": "e2e-m4-11-source-outage.sh", "result": "PASS"}
+  ]
+}

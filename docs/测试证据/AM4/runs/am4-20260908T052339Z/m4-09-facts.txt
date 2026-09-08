@@ -1,0 +1,4 @@
+holmes_run=f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0 shadow_run=96a36e14-b51e-4dd6-86c7-980f5332911e
+holmes_snapshot=3e8f815fbf6f52adafc3ae2c89d9951266983f0971466598c732740b9c720802 shadow_snapshot=3e8f815fbf6f52adafc3ae2c89d9951266983f0971466598c732740b9c720802
+holmes_evidence=(主链不产 rca_evidence，v2 锚=investigation_hash) shadow_evidence=3
+holmes_tool_rows=0 shadow_tool_rows=3

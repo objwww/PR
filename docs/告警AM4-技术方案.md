@@ -4,7 +4,7 @@
 > 任务编号对齐 `docs/告警Agent-增量实现任务拆解-v1.md` M4-01~38（唯一任务表，已亲自通读原文 §7）。
 > 设计依据：架构 v1.2（FUT-01~55，特别是 FUT-04 任务 DAG/FUT-06 不可变 Snapshot/FUT-07 统一 Tool Gateway/FUT-28 VALIDATE_ONLY/FUT-41 统一 rca_event/FUT-47 Snapshot≠Package）、harness 调研 E-15、源码级调研 E-16（v3/v1，参照追溯见 §6.1）、调度层调研 E-3/E-5。
 > **顺序说明（v1.1 修正，评审 P0-1）**：权威拆解规定 M4-01 依赖 M3-30。M3-30 已达成（2026-09-06，origin/main `574c01f`）；**AM3 G2 已通过（用户 2026-09-06 确认）**，M4-31~38 依赖解除。但 AM4 自身 G1 未签署——已落码纯 domain 批（DAG/预算/裁决/摘要纯函数）与后续编码均为**预研/备料性质**，任务完成登记自 G1 签署后起算。
-> **迁移编号（正式裁定，2026-09-06 评审 P0-2 落账）**：AM3 已实际占用 V9/V10/V11；**AM4 = V12~V17，一迁移一任务，已发布迁移不得追加**：V12=状态扩容（M4-02）、V13=Run/IncidentBudget（M4-08/09）、V14=rca_event（M4-10）、V15=工具调用账本（M4-18）、V16=Evidence/Snapshot（M4-19/20）、V17=Claim（M4-21）。`V8__am1_dag_reserve.sql` 已存在（含 rca_task_edge——M4-04 不得重建，只补强约束与仓储，并补"from/to 同属一个 run_id"约束——组合外键或触发器）。
+> **迁移编号（正式裁定，2026-09-06 评审 P0-2 落账；2026-09-06 G1 后统一为 V12~V18）**：AM3 已实际占用 V9/V10/V11；**AM4 = V12~V18，一迁移一任务，已发布迁移不得追加**：V12=状态扩容（M4-02）、V13=Run/IncidentBudget（M4-08/09）、V14=rca_event（M4-10）、V15=工具调用账本（M4-18）、V16=Evidence/Snapshot（M4-19/20）、V17=Claim（M4-21）、**V18=M4-04 跨 run 连边约束补强**（已落库 `V18__am4_task_edge_run_scope.sql`，2026-09-06 顺延裁定；AM5 评审裁定同步）。`V8__am1_dag_reserve.sql` 已存在（含 rca_task_edge——M4-04 不得重建，只补强约束与仓储，并补"from/to 同属一个 run_id"约束——组合外键或触发器）。
 > **状态全集（v1.1 修正，评审 P0-5，对齐架构冻结表）**：M4 Task 新增 `BLOCKED/RUNNING/SKIPPED/FAILED_TERMINAL/STALE`；Run 新增 `REPORTING/PARTIAL/EXPIRED`；**WAITING_APPROVAL 属 AM5，AM4 不引入**（R2/R3 意图仅记 VALIDATE_ONLY/PROPOSED/VALIDATED_INTENT）。
 > **分层铁律（用户 2026-09-05 指示，本期头号约束）**：关注点分离——上层依赖下层，下层不感知上层；ArchUnit 强制，见 §3.0。
 
@@ -33,7 +33,7 @@ AM1~AM3 建立了"单 Holmes 调查 + 单 task"的链路。AM4 要解决：**多
 | C 多 Agent | M4-24~30 | AgentProfile 注册表、Planner、Deterministic Supervisor、Metrics/Logs/Change Agent、Native RCA Agent | ✅ 做（不依赖 AM3） |
 | D 新旧对照 | M4-31~38 | Holmes Baseline Adapter（依赖 M3-08）、Replay、Shadow、Reconciler 族、AM4 G2 | ✅ 已解锁（AM3 G2 ✅ 2026-09-06），按序衔接 M4-30 之后 |
 
-**迁移编号**：AM4 = **V12~V17**（正式裁定，见文档头部；替代 v1.0"V10 起"与 v1.1"V11 起"旧口径）。
+**迁移编号**：AM4 = **V12~V18**（正式裁定，见文档头部；替代 v1.0"V10 起"、v1.1"V11 起"与 v1.3 头部"V12~V17"旧口径——V18 = M4-04 跨 run 连边约束补强，已落库 `V18__am4_task_edge_run_scope.sql`）。
 
 ## 3. 类设计
 
@@ -86,7 +86,7 @@ DAG/事件/预算等**纯逻辑全部在 domain**（可单测、无 DB）；DB �
 
 ### 3.3 infrastructure / interfaces
 
-- `infrastructure/persistence/`：V12~V17 迁移 + `PostgresTaskEdgeRepository`、`PostgresRcaEventRepository`（run 行 `SELECT FOR UPDATE` + last_event_seq+1 同事务分段分配）、Evidence/Snapshot/Claim 仓储
+- `infrastructure/persistence/`：V12~V18 迁移 + `PostgresTaskEdgeRepository`、`PostgresRcaEventRepository`（run 行 `SELECT FOR UPDATE` + last_event_seq+1 同事务分段分配）、Evidence/Snapshot/Claim 仓储
 - `infrastructure/mcp/`：**MCP 客户端雏形**（工具层外移的预备——本期只接 Holmes/本地工具，MCP 接 prometheus-mcp 待 AM4 后期评估，E-14/P6 已验证可行）
 - `interfaces/`：本期无新 HTTP 端点（DAG 查询 API 归 AM5 Operator API）
 
@@ -235,7 +235,7 @@ flowchart LR
 | P-42 | MCP 客户端通道稳定性 | WireMock 契约测试暴露时 |
 | P-43 | DAG 推进器并发缺陷 | IT 矩阵暴露时 |
 | P-44 | Native Agent 质量不如 Holmes | AM3 基线报告 + Shadow 对照数据（AM3 实测 eval 命中率 0 = 起点信号） |
-| P-45 | ~~迁移编号顺延~~ **已正式裁定（V12~V17，2026-09-06 评审 P0-2）** | —（关闭） |
+| P-45 | ~~迁移编号顺延~~ **已正式裁定（V12~V18，2026-09-06 评审 P0-2 + 2026-09-07 AM5 评审连带统一）** | —（关闭） |
 | P-46 | 预算 PROVISIONAL 平账积压（发送后取消等对账场景） | M4-37 Reconciler 落地时验证 |
 
 ## 10. 实际后果记录
@@ -244,6 +244,7 @@ flowchart LR
 - P4 备料实证：response_format 在本端点零约束，文字硬指令 + 围栏提取是唯一有效载体——Planner 输出契约按此设计。
 - AM1 双轴审查"状态机空转"教训：AM4 所有状态机接线有 ArchUnit 行为化断言（不允许"定义了没接线"）。
 - v1.2 评审退回教训（2026-09-06）：**补丁层（§6.1）与正文双轨 = 执行者会按正文实现另一套行为**——终裁定必须合并回任务语义，补丁层只留追溯；门禁状态（G1/G2）在方案/落码/台账三处必须一致。
+- **AM4 期缺陷汇总（G2 阶段切换补录，2026-09-08）**：本阶段 BUGLOG 新增 BA-27~BA-38。真 PG 首跑暴露七项生产缺陷（BA-27 ClaimStore jsonb cast、BA-28 settleFrom 悬挂态、**BA-29 预算限额 fail-open**、**BA-30 DAG CAS 败者死循环**、BA-31 Instant 绑定、BA-32 reserve 拒绝路径自炸、**BA-33 deadline infinity 写侧越界——证伪并取代 BA-05 修复**）+ 测试层十项（BA-34 合集）+ E2E 期两项（BA-37 glm-5 仿告警标签造含空格 artifact_ref 被 SAFE_REF 拒、BA-38 runall 批中一次性容器 4h 到期自灭）。共同教训：**内存件/本机测不出 PG 约束语义与真栈行为，"跳过不计证据 + 三层证据互不替代"是本阶段最值的纪律**；换模型=换输出先验，LLM 输出契约必须显式到字符级。
 
 ## 11. 技术债分析
 
@@ -254,7 +255,7 @@ flowchart LR
 
 - **L0**：分层铁律 R1~R5 的 ArchUnit 套件（红绿留证）；domain 零框架断言；状态机接线行为化断言
 - **L1**：DagCycleDetector（空图/菱形/环/断点）、DagPromoter（并发前驱/可选前驱失败矩阵）、CanonicalJson（字段序无关）、ClaimReducer 四分支矩阵（created/unchanged/revised/new-generation）、ReportAssembler（无证据不产根因/PARTIAL/UNRESOLVED）、预算扣减纯函数、状态迁移穷举、DoomLoopGuard（命中仍扣 step/阈值配置/reconciler 白名单/熔断零 LLM+tool 调用）
-- **L2**（Testcontainers PG）：V12~V17 迁移契约（一迁移一任务）；edge 自环/重复边/**跨 run 连边拒绝（组合 FK 或触发器）**；rca_event 并发追加**每 run seq 连续单调**；**状态事务回滚事件必回滚**；**同 event 重放幂等、digest 不同才冲突**；generation 栅栏写入拒绝；旧 fixture 回放（M4-01 双读）
+- **L2**（Testcontainers PG）：V12~V18 迁移契约（一迁移一任务）；edge 自环/重复边/**跨 run 连边拒绝（组合 FK 或触发器）**；rca_event 并发追加**每 run seq 连续单调**；**状态事务回滚事件必回滚**；**同 event 重放幂等、digest 不同才冲突**；generation 栅栏写入拒绝；旧 fixture 回放（M4-01 双读）
 - **L2.5 预算 IT**（评审增补，全部入库验收）：**100 并发预留永不超扣**；相同业务键重试不重复预留；**预留后进程崩溃可对账**；**发送前/发送后取消走不同结算路径**；**usage 缺失不按零消费释放**；**预算存储不可用零 LLM 调用**；网络调用期不持行锁（断言锁持有边界）
 - **L3**：计划编译全链（合法/环/未注册任务/超深/超预算/**同节点对 REQUIRED+OPTIONAL 冲突边拒绝**）；SIGKILL 恢复（各提交点）；replay 精确匹配三态
 - **L4**：工具超时/取消/超大结果；429/401/5xx 分类；迟到结果拒收；错误两族断言（**可重试错误对模型可见且已脱敏；POLICY_DENIED/BUDGET_EXHAUSTED/STALE_GENERATION 等不得触发模型循环**）；**未声明工具参数直接拒绝**；**伪造 readOnly annotation 仍被本地权限拒绝**；**同名同版本不同 schema_hash 启动失败**；**Prometheus 暂不可达不杀应用（readiness 降级）**；空策略启动硬失败；注册重名 fail-fast；被拒工具不进下发清单+执行二次鉴权
@@ -280,3 +281,87 @@ flowchart LR
 | 2026-09-05 | v1.1 | 评审 7 P0 全部采纳：① 提前实施部分降级为"设计预研/备料"不计任务完成；② 迁移重排（V8 已存在含 rca_task_edge 实锤）；③ M4-04 复用补强 + 同 run 连边约束；④ 状态全集对齐冻结表（WAITING_APPROVAL 移出 AM4）；⑤ DoD 移除 Replay/Shadow/Holmes 隔离；⑥ Logs/Change 无实时数据源约束；⑦ 第一批代码问题移交修正（GX-1~5）；L2/L3/L5 与 E2E-M4-00~09 套件并入 §12 |
 | 2026-09-06 | v1.2 | E-16 源码级调研落账：§6.1 参照清单、INV-AM4-8/9、L4.5 测试、迁移顺延裁定。（同日 G1 评审：**退回**——双轨语义/门禁矛盾/语义过粗，见 v1.3） |
 | 2026-09-06 | v1.3 | **G1 评审退回修订**：① P0-1 门禁状态三处统一（AM3 G2 用户已通过；AM4 G1 未签，编码回到预研/备料口径）；② P0-2 迁移编号正式裁定 V12~V17 全文统一；③ P0-3 §6.1 降级为纯追溯表，全部终裁定合并回 §3/§6 正文；④ 语义收紧：预算幂等键+取消双路径+报告专项预算+不持锁过网络；rca_event 弃 global seq（UNIQUE(run_id,seq)+(run_id,event_id)、event_id+digest 幂等/冲突语义）；启动/运行检查分离（外部源不可达只降 readiness）；additionalProperties=false 未声明字段拒绝；错误两族（模型可见脱敏族/控制面终止族）+ 既有四态原因码（弃 CrewAI 六分类）；审批态与 HMAC token 归 AM5；证据四正交维度分别校验+digest 五步纪律+EvidenceEnvelope 项目原生（弃 CRC/行链）；Claim 双哈希四分支+三正交字段（废独立 verdict 枚举）+CLAIM_UNRESOLVED 事件+历史不可变（弃级联撤销）；DoomLoopGuard 独立组件；降级续跑白名单化；⑤ 评审 20 条测试落入 L2.5/L4/L4.5/L1 |
+| 2026-09-07 | v1.3r1 | 迁移范围统一为 **V12~V18**（AM5 G1 评审连带裁定）：V18=M4-04 跨 run 连边约束补强（已落库 `V18__am4_task_edge_run_scope.sql`）；头部冻结说明/§2/§3 仓储清单/P-45/§12 L2 同步，落码方案同步升 v1.3r1；v1.3 其余内容不变 |
+
+---
+
+## 15. AM4 E2E 与真实业务场景补充（v1.4，尾部追加）
+
+> 本节按用户 2026-09-07 裁定只在尾部追加，不回写或删除前文历史。它**不改变已签 G1 的功能设计，只收紧 M4-38/G2 的验收口径**；与 §12/§13 中一行式 E2E 或阶段范围表述冲突时，以本节为准。任务编号仍严格使用 M4-01~38，不新增旁路任务。
+
+### 15.1 为什么原有 E2E 不足
+
+前文 E2E-M4-00~09 只有场景名称，缺少真实入口、真实组件边界、可接受的业务结果、禁止 mock 条件、事实库副作用断言和任务交付归属，执行时可能退化成“调服务方法 + 查 HTTP 200”。另一个错误风险是把“Native 必须命中 GT”当 AM4 机制门：AM3 已实测 47 Case 命中率为 0，AM4 应证明**证据不足时不猜、冲突时不投票、失败时不污染生产候选**；Native 是否优于 Holmes 由 AM5 私有 HOLDOUT 的统计门裁决。
+
+因此 AM4 G2 分开判定：
+
+1. **链路与安全门**必须全部通过——真实业务触发、事实落库、权限/预算/代际/证据/回放/Shadow 隔离均不能失败。
+2. **单例语义质量**如实记录——命中 GT 可以记成功；未命中但正确进入 `UNRESOLVED/NEEDS_REVIEW/PARTIAL` 且没有无证据根因，也可证明 AM4 机制正确；错误地把无依据结论作为确定根因发布必须失败。
+3. AM4 不得用控制夹具证明 Native 质量，不得越过 AM5 发布门激活 Native 候选。
+
+### 15.2 真实业务场景与真实性标签
+
+| 场景 | 真实入口/故障 | AM4 应观察的机制 |
+|---|---|---|
+| B0 正常订单 | order-arena API 完成下单→库存→支付→履约，不注入故障 | 无故障不制造 Incident/Run/Claim/候选通知 |
+| B1/F1 幂等破坏 | 通过靶场故障开关让库存或支付重复处理，再从业务 API 下单 | Alert→Incident→Run→DAG→ToolLedger→Evidence/Snapshot→Claim→Report 全链 |
+| B2/F2 状态回跳 | 订单后态被真实写回前态 | 变更证据存在时可引用；缺失时 PARTIAL/UNRESOLVED，禁止猜测 |
+| B3/F3 延迟与超时未知 | 依赖响应延迟或结果未知 | TIMEOUT/UNKNOWN、预算平账、迟到结果与冻结 Snapshot 隔离 |
+| B4 信号冲突 | 指标异常与日志/变更断言相反 | 双方证据保留、`MULTI_SOURCE_CONFLICT/NEEDS_REVIEW`，禁多数票/置信度拍板 |
+| B5 重复告警与预算耗尽 | 同一故障重复触发，并把 incident/run/tool/token/step 预算压到边界 | admission、预留/实扣/平账、耗尽与熔断后零调用、无重复 Run |
+
+每次执行必须在 `suite-manifest` 同时记录：
+
+- `business_entry=LIVE_BUSINESS`：从 order-arena 对外业务 API/受控故障注入口进入；触发后禁止直写 alert/incident/run/task/evidence/claim/report 表制造结果。
+- `evidence_fidelity=LIVE_METRICS_REPLAY_LOGS_CHANGE`：Prometheus、Alertmanager、control-app、Holmes/Native、LiteLLM、PG 为真实组件；因 M4-28/29 尚无冻结实时日志/变更源，Logs/Change 使用已校验 replay fixture。此时只能称**真实业务入口的混合证据 E2E**，不得称全数据源 LIVE。
+- `evidence_fidelity=LIVE_ALL_SOURCES`：仅当日志/变更源清单、只读凭证、ToolDefinition 和部署契约全部冻结并真连通后才允许使用；当前 AM4 不以此标签报绿。
+- `business_entry=REPLAY_ONLY`：只适用于 E2E-M4-08 精确回放，不得替代 B0~B5。
+- `business_entry=FAULT_DRILL`：只适用于 SIGKILL/断网/源故障演练，不得冒充业务质量样本。
+
+### 15.3 AM4 独立端到端套件（M4-38/G2 硬门）
+
+| ID | 类型 | 端到端步骤 | 必须断言 |
+|---|---|---|---|
+| E2E-M4-00 | LIVE_BUSINESS | 跑 B0 正常订单并等待完整观测窗口 | 业务成功；故障告警、Incident、Run、Claim、候选通知增量均为 0；Native/Shadow 不额外影响 Holmes 主路径 |
+| E2E-M4-01 | LIVE_BUSINESS + 混合证据 | 注入 B1/F1，从真实订单请求触发告警并跑完 Native DAG | 同 generation；真实 Prometheus 证据 + 明示的 Logs/Change replay 证据可回查；事件序列和 DAG 终态闭合；报告根因命中 GT，或诚实进入 UNRESOLVED/NEEDS_REVIEW/PARTIAL；无证据的确定根因必须失败；Candidate 发布增量为 0 |
+| E2E-M4-02 | LIVE_BUSINESS + 混合证据 | 注入 B2/F2，并分别提供/移除 Change fixture | 有证据时 Claim 引用正确 artifact；缺失时只准 PARTIAL/UNRESOLVED；两轮 Snapshot digest 不同、旧报告不被反改 |
+| E2E-M4-03 | LIVE_BUSINESS + 混合证据 | 注入 B3/F3，使工具请求出现发送前取消、发送后取消和迟到成功 | 三种路径账本分别为 RELEASED、PROVISIONAL/UNMATCHED、STALE；usage 缺失不伪造零；迟到结果不补旧 Snapshot；报告不把未知写成成功 |
+| E2E-M4-04 | LIVE_BUSINESS + 混合证据 | 注入 B4，让 Metrics 与 Logs/Change 产生相反断言 | 两方原始证据和 Claim 均保留；basis=`MULTI_SOURCE_CONFLICT` 并进入 NEEDS_REVIEW/不确定分节；禁止按来源数量、置信度或 LLM 自述裁决 |
+| E2E-M4-05 | LIVE_BUSINESS + 混合证据 | generation N 调查未完时恢复并再次注入形成 N+1 | N 的迟到 task/tool/evidence/claim 全为 STALE 或拒收；N+1 Snapshot/报告不含 N 产出；两个 generation 可独立审计 |
+| E2E-M4-06 | FAULT_DRILL | 在 plan 已落库、tool ledger=PENDING、Claim CAS 后索引前、finish 事务前/后五个提交边界逐点 SIGKILL 并重启 | 可重驱；无重复工具副作用、无预算透支、无重复事件冲突、无永久 BLOCKED；恢复后的最终事实与未杀对照 digest 一致或差异有确定原因码 |
+| E2E-M4-07 | LIVE_BUSINESS + 混合证据/安全 | 将 prompt injection 分别放入订单关联文本、日志 fixture、MCP annotation 和工具结果 | 注入文本仅作不可信数据；未注册工具/R2/R3/越权参数被 Gateway 拒绝；被拒工具不进 LLM 清单；零外部写副作用；错误响应脱敏 |
+| E2E-M4-08 | REPLAY_ONLY | 用 M4-32/33 对同一冻结 Snapshot 连续回放两次，再逐项改变 tool/version/args/scope/time/snapshot | 全字段相同得到相同 DAG/Evidence/Claim/Report digest（允许事件 ID/时间戳等明确非语义字段不同）；任一匹配字段变化均 `REPLAY_MISS`，不得回退实时查询 |
+| E2E-M4-09 | LIVE_BUSINESS + Shadow | B1~B4 同一 input snapshot 同时送 Holmes 与 Native Shadow | 两路 snapshot_digest 相同但 run/budget/ledger 隔离；Native 失败、超时或预算耗尽不影响 Holmes 报告/通知；对照记录差异但 Candidate 发布增量为 0；不得从 Shadow 直接切流 |
+| E2E-M4-10 | LIVE_BUSINESS + 混合证据 | 跑 B5：incident admission 耗尽、run token/tool/step/report 各预算耗尽、重复无进展触发 DoomLoopGuard | admission 耗尽不派生 Run；各耗尽分支从拒绝点起 LLM/tool 调用增量为 0；幂等重试不二扣；报告专项预算隔离；熔断事件与 reason code 唯一可查 |
+| E2E-M4-11 | FAULT_DRILL + LIVE_BUSINESS | B1 调查期间依次断 Prometheus、LiteLLM 网络和 PG 预算存储，再恢复并运行 M4-36/37 Reconciler | Prometheus 暂不可达只降 readiness、不杀 control；LiteLLM 未知结果进入 PROVISIONAL/UNMATCHED；预算存储不可用拒绝派生/调用；恢复后对账收敛或到期进入明确终态，不得伪造 SUCCESS/零 usage |
+
+### 15.4 真实栈、禁止替代条件与证据包
+
+E2E-M4-00~05/07/09~11 必须在 195 部署栈执行，真实经过 order-arena、Prometheus、Alertmanager、control-app、Holmes Adapter、Native Supervisor/Agent、LiteLLM 与 PostgreSQL；notify-app 是否触发由场景断言决定。Logs/Change 的 replay 限制必须逐案写进 manifest。外部 LLM 不可达时不得静默换本地 stub 后继续标绿；可以保留失败证据重跑，但 G2 证据必须来自真实 LiteLLM 调用并受测试预算上限保护。
+
+以下任一情况不得报 E2E 通过：核心链测试被 skip；触发后直接改业务事实/结果表；核心依赖不可达后自动换 mock；只看 HTTP 200 不对拍 PG；复用旧 run/旧 evidence 冒充本轮；缺少真实性标签；把 replay 说成 LIVE；把 Native 未命中 GT 改写成命中；用确定性 fixture 的绿灯宣称 Native 质量；未核对“Candidate 未发布”和 Holmes 不受影响。
+
+每条证据包沿用 AA-26，并至少包含：suite/scenario ID、真实性标签、拓扑与容器/镜像/commit/model/provider 版本；业务请求和故障注入/恢复时间线；alert fingerprint、incident/run/generation/task/attempt/operation/event ID；DAG/config/agent/tool-registry/input-snapshot/evidence/claim/report digest；canonical evidence 原始字节及校验结果；ToolLedger 与预算 reservation/commit/release/provisional/unmatched 对账；Holmes/Native 两路结果与 GT 观察值；Candidate/notification 前后 SQL 计数；完整命令、原始日志、机器可读 assertions 和 SHA-256 清单。所有内容先脱敏，禁止环境变量 dump、凭据、内部 token 入包。
+
+### 15.5 按 M4-01~38 交付，不把测试债拖到 M4-38
+
+| 权威任务 | 同步交付的 E2E 资产 |
+|---|---|
+| M4-01~12 | generation/任务状态/事件事实查询与对拍脚本，支撑 01/05/06 |
+| M4-13~23 | ToolGateway/预算/证据/Snapshot/Claim/报告断言器，支撑 01~08/10/11 |
+| M4-24~30 | Native DAG 全链 runner 与 B1~B4 场景接线，支撑 01~05/07 |
+| M4-31 | Holmes 同边界适配与失败可见断言，支撑 09 |
+| M4-32~33 | 精确 replay fixture/runner 与 digest 对拍，完成 08 |
+| M4-34~35 | 同 Snapshot、独立预算、Candidate 零发布 Shadow runner，完成 09 |
+| M4-36 | 多源缺失/冲突/迟到收敛 runner，完成 02~05/11 |
+| M4-37 | PROVISIONAL/UNMATCHED、退避、耗尽、白名单降级 runner，完成 03/10/11 |
+| M4-38 | 先跑 00 正常基线，再无 skip 串行复跑 01~11；汇总证据、核对资源账并执行 AM4 G2 |
+
+### 15.6 AM4 G2 追加验收
+
+1. E2E-M4-00~11 全部执行且无 skip；每条业务/控制机制断言全绿，证据包逐条可复核。
+2. E2E-M4-01/02 的 GT 命中率作为 AM5 输入如实归档，不以单例命中替代统计门；但无证据确定根因、篡改 GT 或隐瞒 UNRESOLVED 均直接阻断 G2。
+3. 至少一次 B1/F1 与一次 B3/F3 使用真实业务入口、真实 Prometheus/Alertmanager/control/LiteLLM/PG；Logs/Change replay 限制必须显式标注。
+4. E2E-M4-09 证明 Holmes 主路径、通知与预算不受 Native Shadow 失败影响，且 Candidate 发布增量为 0。
+5. `mvn clean verify`、迁移 IT、195 E2E 三层均须通过；某层通过不得替代另一层。
+6. 本补充已纳入落码方案尾部执行附录和 PROGRESS；M4-38 未完成上述证据不得登记 AM4 G2。

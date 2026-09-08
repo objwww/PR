@@ -1,0 +1,1132 @@
+2026-09-08T05:23:39Z PREFLIGHT begin batch=am4-20260908T052339Z
+2026-09-08T05:23:39Z RUN e2e-m4-00-normal.sh
+2026-09-08T05:23:39Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-00-normal.sh git=unknown
+2026-09-08T05:23:39Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:23:40Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:24:20Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:24:20Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:24:20Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F2'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:24:26Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaIllegalTransitions%'
+           and status <> 'RESOLVED'
+2026-09-08T05:24:26Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:24:26Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F3'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:24:32Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaOrderStuck%'
+           and status <> 'RESOLVED'
+2026-09-08T05:24:32Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:24:32Z SQL: select count(*) from alert_event
+2026-09-08T05:24:32Z SQL: select count(*) from incident
+2026-09-08T05:24:32Z SQL: select count(*) from rca_run
+2026-09-08T05:24:32Z SQL: select count(*) from rca_claim
+2026-09-08T05:24:32Z SQL: select count(*) from report_publication
+2026-09-08T05:24:32Z SQL: select count(*) from notify_outbox
+2026-09-08T05:24:32Z SQL: select count(*) from rca_tool_invocation
+2026-09-08T05:29:32Z SQL: select count(*) from alert_event
+2026-09-08T05:29:32Z SQL: select count(*) from incident
+2026-09-08T05:29:32Z SQL: select count(*) from rca_run
+2026-09-08T05:29:33Z SQL: select count(*) from rca_claim
+2026-09-08T05:29:33Z SQL: select count(*) from report_publication
+2026-09-08T05:29:33Z SQL: select count(*) from notify_outbox
+2026-09-08T05:29:33Z SQL: select count(*) from rca_tool_invocation
+2026-09-08T05:29:33Z SUMMARY scenario=e2e-m4-00-normal.sh pass=7 fail=0
+2026-09-08T05:29:33Z PASS e2e-m4-00-normal.sh
+2026-09-08T05:29:33Z RUN e2e-m4-01-f1.sh
+2026-09-08T05:29:33Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-01-f1.sh git=unknown
+2026-09-08T05:29:33Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:29:38Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:29:38Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:30:02Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:07Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:12Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:17Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:22Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:27Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:32Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:37Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:42Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:47Z SQL: 
+        select r.id from rca_run r
+         where r.created_at >= '2026-09-08T05:29:39Z'
+           and r.state in ('SUCCEEDED','PARTIAL')
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at limit 1
+2026-09-08T05:30:47Z SQL: 
+    select count(*) from rca_run r join incident i on i.id = r.incident_id
+     where r.generation = i.generation and r.id = '8645a2a7-1714-45da-843f-10a19441644f'
+2026-09-08T05:30:47Z SQL: 
+    select validation_status from rca_report where run_id='8645a2a7-1714-45da-843f-10a19441644f'
+     order by created_at desc limit 1
+2026-09-08T05:30:47Z SQL: 
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='8645a2a7-1714-45da-843f-10a19441644f')
+               and r.state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_run s join rca_run h on h.id = '8645a2a7-1714-45da-843f-10a19441644f'
+     where s.id = '0b2048b5-8109-4dac-a709-416d0953ec78' and s.incident_id = h.incident_id
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_run s join rca_run h on h.id = '8645a2a7-1714-45da-843f-10a19441644f'
+     where s.id = '0b2048b5-8109-4dac-a709-416d0953ec78' and s.generation = h.generation
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_evidence
+     where run_id='0b2048b5-8109-4dac-a709-416d0953ec78' and source='prometheus'
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_evidence
+     where run_id='0b2048b5-8109-4dac-a709-416d0953ec78' and source in ('logs','change')
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_evidence
+     where run_id='0b2048b5-8109-4dac-a709-416d0953ec78' and (payload_digest is null or payload_digest='')
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_task where run_id='0b2048b5-8109-4dac-a709-416d0953ec78'
+      and state in ('READY','BLOCKED','RUNNING','LEASED')
+2026-09-08T05:30:59Z SQL: 
+    select scope::jsonb->>'input_snapshot_digest' from rca_evidence
+     where run_id='0b2048b5-8109-4dac-a709-416d0953ec78'
+       and scope::jsonb->>'input_snapshot_digest' is not null limit 1
+2026-09-08T05:30:59Z SQL: select investigation_hash from rca_run where id='8645a2a7-1714-45da-843f-10a19441644f'
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_claim
+     where run_id='0b2048b5-8109-4dac-a709-416d0953ec78' and status in ('TRUE','FALSE')
+       and (evidence_refs is null or evidence_refs::text = '[]')
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_report where run_id='0b2048b5-8109-4dac-a709-416d0953ec78'
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from report_publication rp
+     join rca_report rr on rr.id = rp.report_id
+     where rr.run_id = '0b2048b5-8109-4dac-a709-416d0953ec78'
+2026-09-08T05:30:59Z SQL: 
+    select count(*) from rca_run where id='0b2048b5-8109-4dac-a709-416d0953ec78' and state='REPORTING'
+2026-09-08T05:30:59Z SUMMARY scenario=e2e-m4-01-f1.sh pass=13 fail=0
+2026-09-08T05:30:59Z PASS e2e-m4-01-f1.sh
+2026-09-08T05:30:59Z RUN e2e-m4-02-f2.sh
+2026-09-08T05:30:59Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-02-f2.sh git=unknown
+2026-09-08T05:30:59Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F2'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:31:05Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaIllegalTransitions%'
+           and status <> 'RESOLVED'
+2026-09-08T05:31:05Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:31:33Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:31:38Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:31:43Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:31:48Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:31:53Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:31:58Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:32:04Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:32:09Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:32:14Z SQL: 
+            select count(*) from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaIllegalTransitions%'
+2026-09-08T05:32:14Z SQL: 
+        select r.id from rca_run r
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:31:05Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaIllegalTransitions%'
+           and exists (select 1 from rca_report rr where rr.run_id = r.id)
+         order by r.created_at desc limit 1
+2026-09-08T05:32:14Z SQL: 
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='353ede0b-4d32-4444-a7e5-87c1d7b136d6')
+               and r.state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:32:25Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F2'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:32:26Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F2'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:33:06Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaIllegalTransitions%'
+           and status <> 'RESOLVED'
+2026-09-08T05:33:06Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:33:07Z SQL: 
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='353ede0b-4d32-4444-a7e5-87c1d7b136d6')
+               and r.state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:33:18Z SQL: select count(*) from rca_evidence where run_id='dc76e28d-56e5-4f15-93f8-2d994f0a9975' and source='change'
+2026-09-08T05:33:18Z SQL: 
+        select count(*) from rca_claim
+         where run_id='dc76e28d-56e5-4f15-93f8-2d994f0a9975' and (evidence_refs is null or evidence_refs::text='[]')
+2026-09-08T05:33:18Z SQL: select count(*) from rca_evidence where run_id='6e993a33-7640-492e-9376-c577ede0eb93' and source='change'
+2026-09-08T05:33:18Z SQL: 
+    select count(*) from rca_claim
+     where run_id='6e993a33-7640-492e-9376-c577ede0eb93' and status='TRUE'
+       and evidence_basis in ('SINGLE_SOURCE','MULTI_SOURCE_CONSISTENT')
+       and claim_key like '%change%'
+2026-09-08T05:33:18Z SQL: 
+    select count(*) from rca_run where id='6e993a33-7640-492e-9376-c577ede0eb93' and state='REPORTING'
+2026-09-08T05:33:18Z SQL: 
+    select distinct snapshot_digest from rca_evidence_snapshot where run_id='dc76e28d-56e5-4f15-93f8-2d994f0a9975' limit 1
+2026-09-08T05:33:18Z SQL: 
+    select distinct snapshot_digest from rca_evidence_snapshot where run_id='6e993a33-7640-492e-9376-c577ede0eb93' limit 1
+2026-09-08T05:33:18Z SQL: 
+    select count(*) from rca_report where run_id='353ede0b-4d32-4444-a7e5-87c1d7b136d6'
+2026-09-08T05:33:18Z SUMMARY scenario=e2e-m4-02-f2.sh pass=7 fail=0
+2026-09-08T05:33:18Z PASS e2e-m4-02-f2.sh
+2026-09-08T05:33:18Z RUN e2e-m4-03-f3.sh
+2026-09-08T05:33:18Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-03-f3.sh git=unknown
+2026-09-08T05:33:18Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F3'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:33:24Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaOrderStuck%'
+           and status <> 'RESOLVED'
+2026-09-08T05:33:24Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:35:02Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:08Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:13Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:18Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:23Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:28Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:33Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:38Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:43Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:48Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:33:24Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:35:48Z SQL: select state, count(*) from run_budget_entry group by state order by state
+2026-09-08T05:35:48Z SQL: select count(*) from run_budget_entry where state='RELEASED'
+2026-09-08T05:35:48Z SQL: select count(*) from run_budget_entry where state in ('PROVISIONAL','UNMATCHED')
+2026-09-08T05:35:48Z SQL: 
+    select count(*) from rca_tool_invocation
+     where state='SUCCESS' and settled_at is null
+2026-09-08T05:35:48Z SQL: 
+    select count(*) from rca_report
+     where usage_missing = true and total_tokens is not null
+2026-09-08T05:35:48Z SQL: 
+    select count(*) from rca_snapshot_member m
+     join rca_evidence_snapshot s on s.id = m.snapshot_id
+     join rca_evidence e on e.id = m.evidence_id
+     where e.observed_generation < s.observed_generation
+2026-09-08T05:35:48Z SQL: 
+    select count(*) from rca_tool_invocation
+     where state='UNKNOWN' and reason_code is null
+2026-09-08T05:35:48Z SUMMARY scenario=e2e-m4-03-f3.sh pass=4 fail=0
+2026-09-08T05:35:48Z PASS e2e-m4-03-f3.sh
+2026-09-08T05:35:48Z RUN e2e-m4-04-f4.sh
+2026-09-08T05:35:49Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-04-f4.sh git=unknown
+2026-09-08T05:35:49Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:35:49Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:36:34Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:36:35Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:37:03Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:08Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:13Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:18Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:23Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:28Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:33Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:38Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:43Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:48Z SQL: 
+        select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+         join incident i on i.id = r.incident_id
+         where r.created_at >= '2026-09-08T05:36:35Z' and r.state in ('SUCCEEDED','PARTIAL')
+           and i.incident_key like '%ArenaDuplicateOrders%'
+         order by r.created_at desc limit 1
+2026-09-08T05:37:48Z SQL: 
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='3fe0fea2-d233-472e-a853-47fc0ed43899')
+               and r.state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:38:00Z SQL: select count(*) from rca_evidence where run_id='7ef46084-2176-4bf4-86c5-216531ade55e' and source='prometheus'
+2026-09-08T05:38:00Z SQL: select count(*) from rca_evidence where run_id='7ef46084-2176-4bf4-86c5-216531ade55e' and source in ('logs','change')
+2026-09-08T05:38:00Z SQL: 
+    select count(*) from rca_claim
+     where run_id='7ef46084-2176-4bf4-86c5-216531ade55e' and evidence_basis='MULTI_SOURCE_CONFLICT'
+2026-09-08T05:38:00Z SQL: 
+    select count(*) from rca_claim
+     where run_id='7ef46084-2176-4bf4-86c5-216531ade55e' and evidence_basis='MULTI_SOURCE_CONFLICT'
+       and status='TRUE'
+2026-09-08T05:38:00Z SQL: select count(*) from rca_claim where run_id='7ef46084-2176-4bf4-86c5-216531ade55e'
+2026-09-08T05:38:00Z SUMMARY scenario=e2e-m4-04-f4.sh pass=3 fail=0
+2026-09-08T05:38:00Z PASS e2e-m4-04-f4.sh
+2026-09-08T05:38:00Z RUN e2e-m4-05-generation.sh
+2026-09-08T05:38:00Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-05-generation.sh git=unknown
+2026-09-08T05:38:00Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:38:00Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:38:36Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:38:36Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:39:15Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:39:15Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:39:50Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:39:51Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:40:14Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:38:36Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','SUPERSEDED')
+2026-09-08T05:40:14Z SQL: 
+    select count(distinct generation) from rca_run r
+     where r.incident_id = (select r2.incident_id from rca_run r2
+                             join incident i2 on i2.id = r2.incident_id
+                             where r2.created_at >= '2026-09-08T05:38:36Z'
+                               and i2.incident_key like '%ArenaDuplicateOrders%'
+                             order by r2.created_at desc limit 1)
+2026-09-08T05:40:14Z SQL: 
+    select count(*) from rca_task t
+     join rca_run r on r.id = t.run_id
+     where r.state in ('SUPERSEDED','CANCELLED','EXPIRED')
+       and t.updated_at > r.updated_at
+2026-09-08T05:40:14Z SQL: 
+    select count(*) from rca_snapshot_member m
+     join rca_evidence_snapshot s on s.id = m.snapshot_id
+     join rca_evidence e on e.id = m.evidence_id
+     where e.observed_generation <> s.observed_generation
+2026-09-08T05:40:14Z SQL: 
+    select count(*) from rca_claim c
+     join rca_run r on r.id = c.run_id
+     where r.state in ('SUPERSEDED','CANCELLED','EXPIRED')
+2026-09-08T05:40:14Z SQL: 
+    select count(*) from rca_tool_invocation ti
+     join rca_run r on r.id = ti.run_id
+     where r.state in ('SUPERSEDED','CANCELLED','EXPIRED')
+       and ti.started_at > r.updated_at
+2026-09-08T05:40:14Z SUMMARY scenario=e2e-m4-05-generation.sh pass=3 fail=0
+2026-09-08T05:40:14Z PASS e2e-m4-05-generation.sh
+2026-09-08T05:40:14Z RUN e2e-m4-07-injection.sh
+2026-09-08T05:40:14Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-07-injection.sh git=unknown
+2026-09-08T05:40:14Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:40:14Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:40:50Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:40:50Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:41:18Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:23Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:28Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:33Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:38Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:44Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:49Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:54Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:59Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:40:50Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T05:41:59Z SQL: select state, reason_code, count(*) from rca_tool_invocation
+         group by state, reason_code order by state
+2026-09-08T05:41:59Z SQL: 
+    select count(*) from rca_tool_invocation
+     where reason_code in ('POLICY_DENIED','UNKNOWN_TOOL') and state='SUCCESS'
+2026-09-08T05:41:59Z SQL: 
+    select count(*) from rca_tool_invocation
+     where reason_code is not null
+       and reason_code not in ('INVALID_INPUT','POLICY_DENIED','TIMEOUT','RATE_LIMITED',
+           'AUTH_FAILED','REMOTE_4XX','REMOTE_5XX','TRANSPORT_UNKNOWN','CANCELLED',
+           'REPLAY_MISS')
+2026-09-08T05:41:59Z SQL: 
+    select count(*) from rca_tool_invocation
+     where tool_name not in ('prometheus.query','logs.query','change.query')
+2026-09-08T05:41:59Z SQL: 
+    select count(*) from rca_claim
+     where reason like '%ignore previous%' or reason like '%system prompt%'
+2026-09-08T05:41:59Z SUMMARY scenario=e2e-m4-07-injection.sh pass=3 fail=0
+2026-09-08T05:41:59Z PASS e2e-m4-07-injection.sh
+2026-09-08T05:41:59Z RUN e2e-m4-09-shadow.sh
+2026-09-08T05:41:59Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-09-shadow.sh git=unknown
+2026-09-08T05:41:59Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:41:59Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:42:50Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:42:50Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:43:18Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:23Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:28Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:33Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:38Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:44Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:49Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:54Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:59Z SQL: 
+            select r.id from rca_run r join rca_report rr on rr.run_id = r.id
+             join incident i on i.id = r.incident_id
+             where r.created_at >= '2026-09-08T05:42:50Z' and r.state in ('SUCCEEDED','PARTIAL')
+               and i.incident_key like '%ArenaDuplicateOrders%'
+             order by r.created_at desc limit 1
+2026-09-08T05:43:59Z SQL: 
+            select count(*) from rca_run r
+             where r.incident_id = (select incident_id from rca_run where id='f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0')
+               and r.state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:44:10Z SQL: 
+    select investigation_hash from rca_run where id = 'f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0'
+2026-09-08T05:44:10Z SQL: 
+    select scope::jsonb->>'input_snapshot_digest' from rca_evidence
+     where run_id = '96a36e14-b51e-4dd6-86c7-980f5332911e'
+     order by created_at, id limit 1
+2026-09-08T05:44:10Z SQL: select count(*) from rca_evidence where run_id='96a36e14-b51e-4dd6-86c7-980f5332911e'
+2026-09-08T05:44:10Z SQL: 
+    select count(*) from rca_tool_invocation where run_id='f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0'
+2026-09-08T05:44:10Z SQL: 
+    select count(*) from rca_tool_invocation where run_id='96a36e14-b51e-4dd6-86c7-980f5332911e'
+2026-09-08T05:44:10Z SQL: 
+    select count(*) from rca_report where run_id='f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0'
+2026-09-08T05:44:10Z SQL: 
+    select count(*) from report_publication rp
+     join rca_report rr on rr.id = rp.report_id
+     where rr.run_id = '96a36e14-b51e-4dd6-86c7-980f5332911e'
+2026-09-08T05:44:11Z SQL: 
+    select count(*) from notify_outbox no
+     join rca_report rr on rr.id = no.report_id
+     where rr.run_id = '96a36e14-b51e-4dd6-86c7-980f5332911e'
+2026-09-08T05:44:11Z SQL: select count(*) from rca_report where run_id='96a36e14-b51e-4dd6-86c7-980f5332911e'
+2026-09-08T05:44:11Z SQL: select count(*) from rca_report where run_id='f50a7263-a5f3-47ca-9fa2-e8754cbc1eb0'
+2026-09-08T05:44:11Z SUMMARY scenario=e2e-m4-09-shadow.sh pass=10 fail=0
+2026-09-08T05:44:11Z PASS e2e-m4-09-shadow.sh
+2026-09-08T05:44:11Z RUN e2e-m4-10-budget.sh
+2026-09-08T05:44:11Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-10-budget.sh git=unknown
+2026-09-08T05:44:11Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:44:11Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:44:52Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:44:52Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T05:46:18Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:23Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:28Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:33Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:38Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:43Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:48Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:53Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:46:58Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:03Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:08Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:13Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:18Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:23Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:28Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:33Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:39Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:44Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:49Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:54Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:47:59Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:04Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:09Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:14Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:19Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:24Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:29Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:34Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:39Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:44Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:49Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:54Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:48:59Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:04Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:10Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:15Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:20Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:25Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:30Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:35Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:40Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:45Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:50Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:49:55Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:00Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:05Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:10Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:15Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:20Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:25Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:30Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:35Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:40Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:45Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:50Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:50:56Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:01Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:06Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:11Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:16Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:21Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:26Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:31Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:36Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:41Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:46Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:51Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:51:56Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:01Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:06Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:11Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:16Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:21Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:26Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:32Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:37Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:42Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:47Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:52Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:52:57Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:02Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:07Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:12Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:17Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:22Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:27Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:32Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:37Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:42Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:47Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:53Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:53:58Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:03Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:08Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:13Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:18Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:23Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:28Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:33Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:38Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:43Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:48Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:53Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:54:58Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:03Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:08Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:13Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:18Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:23Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:28Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:34Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:39Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:44Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:49Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:54Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:55:59Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:56:04Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:56:09Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:56:14Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:56:19Z SQL: 
+        select count(*) from run_budget_entry
+         where state in ('COMMITTED','RELEASED','PROVISIONAL','UNMATCHED')
+2026-09-08T05:56:24Z SQL: select window_kind, count(*), sum(units) from incident_budget_entry
+         group by window_kind order by window_kind
+2026-09-08T05:56:24Z SQL: select count(*) from rca_run
+2026-09-08T05:56:24Z SQL: select count(*) from incident
+2026-09-08T05:56:24Z SQL: select state, count(*) from run_budget_entry group by state
+2026-09-08T05:56:24Z SQL: 
+    select count(*) from (
+        select run_id, task_id, attempt_id, call_seq, budget_kind, count(*) c
+          from run_budget_entry group by run_id, task_id, attempt_id, call_seq, budget_kind
+         having count(*) > 1) d
+2026-09-08T05:56:24Z SQL: 
+    select count(*) from run_budget_state where consumed_units > limit_units
+2026-09-08T05:56:24Z SQL: 
+    select count(*) from run_budget_state where budget_kind='REPORT'
+2026-09-08T05:56:24Z SQL: select event_type, count(*) from rca_event group by event_type order by event_type
+2026-09-08T05:56:25Z SQL: 
+    select count(*) from (
+        select run_id, event_type, payload_digest, count(*) c
+          from rca_event group by run_id, event_type, payload_digest
+         having count(*) > 1) d
+2026-09-08T05:56:25Z SUMMARY scenario=e2e-m4-10-budget.sh pass=3 fail=0
+2026-09-08T05:56:25Z PASS e2e-m4-10-budget.sh
+2026-09-08T05:56:25Z RUN e2e-m4-06-fault-drill.sh
+2026-09-08T05:56:52Z PASS e2e-m4-06-fault-drill.sh
+2026-09-08T05:56:52Z RUN e2e-m4-08-replay.sh
+2026-09-08T05:57:20Z PASS e2e-m4-08-replay.sh
+2026-09-08T05:57:20Z RUN e2e-m4-11-source-outage.sh
+2026-09-08T05:57:20Z BEGIN batch=am4-20260908T052339Z scenario=e2e-m4-11-source-outage.sh git=unknown
+2026-09-08T05:57:20Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:57:21Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:57:21Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:57:21Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:57:21Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:57:21Z SQL: 
+            select scenario_id || ' ' || generation from arena.oa_chaos_session
+             where fault_type = 'F1'
+               and state in ('PREPARED','ACTIVE')
+             order by created_at desc limit 1
+2026-09-08T05:58:07Z ADMIN-SQL: 
+        update incident
+           set status = 'RESOLVED', resolved_at = now(), updated_at = now()
+         where incident_key like '%ArenaDuplicateOrders%'
+           and status <> 'RESOLVED'
+2026-09-08T05:58:07Z ADMIN-SQL: 
+        update rca_run set state='CANCELLED', finished_at=now(), updated_at=now()
+         where trigger_kind='RERUN'
+           and state in ('QUEUED','RUNNING','REPORTING')
+2026-09-08T06:00:50Z SQL: select 1
+2026-09-08T06:00:50Z SQL: select count(*) from rca_run where created_at >= '2026-09-08T05:58:07Z' and state in ('REPORTING','SUCCEEDED','PARTIAL','FAILED')
+2026-09-08T06:00:51Z SQL: 
+    select count(*) from rca_tool_invocation
+     where state='SUCCESS' and settled_at is null
+2026-09-08T06:00:51Z SQL: select count(*) from rca_tool_invocation where state='UNKNOWN'
+2026-09-08T06:00:51Z SQL: select count(*) from run_budget_entry where state in ('PROVISIONAL','UNMATCHED')
+2026-09-08T06:00:51Z SQL: 
+    select count(*) from run_budget_entry e
+     where not exists (select 1 from rca_run r where r.id = e.run_id)
+2026-09-08T06:00:51Z SQL: 
+    select count(*) from rca_run
+     where state='RUNNING' and updated_at < now() - interval '30 minutes'
+2026-09-08T06:00:51Z SUMMARY scenario=e2e-m4-11-source-outage.sh pass=4 fail=0
+2026-09-08T06:00:51Z PASS e2e-m4-11-source-outage.sh
+2026-09-08T06:00:51Z SEALED sha256sums.txt

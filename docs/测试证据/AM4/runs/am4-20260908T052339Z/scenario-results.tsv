@@ -1,0 +1,12 @@
+e2e-m4-00-normal.sh|PASS
+e2e-m4-01-f1.sh|PASS
+e2e-m4-02-f2.sh|PASS
+e2e-m4-03-f3.sh|PASS
+e2e-m4-04-f4.sh|PASS
+e2e-m4-05-generation.sh|PASS
+e2e-m4-07-injection.sh|PASS
+e2e-m4-09-shadow.sh|PASS
+e2e-m4-10-budget.sh|PASS
+e2e-m4-06-fault-drill.sh|PASS
+e2e-m4-08-replay.sh|PASS
+e2e-m4-11-source-outage.sh|PASS
