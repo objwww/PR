@@ -246,6 +246,12 @@ class CommandServiceTest {
             rows.put(run.id(), run);
         }
 
+        // C-61 fake 镜像：无路由记录 = 普通 insert 存量行 = 默认 HOLMES
+        @Override
+        public boolean existsNativeRunByIncidentId(UUID incidentId) {
+            return false;
+        }
+
         @Override
         public Optional<RcaRun> findByIdForUpdate(UUID id) {
             return Optional.ofNullable(rows.get(id));

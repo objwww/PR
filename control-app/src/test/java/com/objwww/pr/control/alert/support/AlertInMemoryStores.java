@@ -267,6 +267,9 @@ public final class AlertInMemoryStores {
 
     public static final class Runs implements RcaRunRepository {
         private final Map<UUID, RcaRun> rows = new LinkedHashMap<>();
+        /** 路由四列读视图（insertRouted 录入；普通 insert 按 DB 默认 = HOLMES/null/null/null） */
+        private final Map<UUID, com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView>
+                routings = new LinkedHashMap<>();
 
         @Override
         public synchronized void insert(RcaRun run) {
@@ -277,6 +280,16 @@ public final class AlertInMemoryStores {
                 throw new DuplicateKeyException("uq_rca_run_active_incident 模拟(23505)");
             }
             rows.put(run.id(), run);
+        }
+
+        @Override
+        public synchronized void insertRouted(RcaRun run,
+                com.objwww.pr.control.alert.domain.model.RcaRunRouting routing) {
+            insert(run);
+            routings.put(run.id(), new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
+                    routing.engine(),
+                    routing.configDigest() == null ? null : routing.configDigest().hex(),
+                    routing.stickinessKey(), routing.bucket()));
         }
 
         @Override
@@ -316,14 +329,31 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized Optional<com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView>
         findRoutingById(UUID id) {
-            // fake 不承载路由语义（insertRouted 默认落普通 insert）——如实返回 empty
-            return Optional.empty();
+            if (!rows.containsKey(id)) {
+                return Optional.empty();
+            }
+            // 普通 insert 存量行按 DB 列默认投影（HOLMES/null/null/null，V25）
+            return Optional.of(routings.getOrDefault(id,
+                    new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
+                            com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES,
+                            null, null, null)));
         }
 
         @Override
         public synchronized java.util.OptionalLong currentRevision(UUID id) {
             // fake 无事件账本语义（计数器与事件同事务推进）——修订锚恒 0
             return rows.containsKey(id) ? java.util.OptionalLong.of(0) : java.util.OptionalLong.empty();
+        }
+
+        /** C-61 判定源镜像：routings 缺记录 = 普通 insert 存量行 = DB 默认 HOLMES */
+        @Override
+        public synchronized boolean existsNativeRunByIncidentId(UUID incidentId) {
+            return rows.values().stream().anyMatch(r -> r.incidentId().equals(incidentId)
+                    && routings.getOrDefault(r.id(),
+                            new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
+                                    com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES,
+                                    null, null, null)).engine()
+                            == com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE);
         }
 
         public synchronized List<RcaRun> all() {
@@ -351,6 +381,9 @@ public final class AlertInMemoryStores {
             Optional<RcaTask> candidate = rows.values().stream()
                     .filter(t -> t.state() == RcaTaskState.READY || t.state() == RcaTaskState.RETRY_WAIT)
                     .filter(t -> !t.availableAt().isAfter(now))
+                    // C-70（M6-01）与 Postgres CLAIM_SQL 同语义：通用领取只认 driver task_key
+                    .filter(t -> t.taskKey().equals(RcaTask.HOLMES_INVESTIGATE)
+                            || t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
                     .min(SlaPolicy.claimOrder(now));
             if (candidate.isEmpty()) {
                 return Optional.empty();

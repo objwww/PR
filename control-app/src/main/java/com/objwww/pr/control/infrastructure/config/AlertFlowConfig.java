@@ -5,11 +5,13 @@ import com.objwww.pr.control.alert.application.AlertIntakeLimits;
 import com.objwww.pr.control.alert.application.AlertInboxProcessor;
 import com.objwww.pr.control.alert.application.AlertIntakeService;
 import com.objwww.pr.control.alert.application.ControlAlertRouter;
+import com.objwww.pr.control.alert.application.DeterministicSupervisor;
 import com.objwww.pr.control.alert.application.IncidentProjector;
 import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
 import com.objwww.pr.control.alert.application.RcaWorker;
 import com.objwww.pr.control.alert.application.ReportCompletedNotifier;
+import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.alert.domain.repository.ExternalInvocationRepository;
@@ -31,10 +33,12 @@ import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
 import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
 import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
+import com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.control.release.domain.repository.CanaryDecisionLogRepository;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
@@ -46,6 +50,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -249,16 +254,103 @@ public class AlertFlowConfig {
     // ---------------- AM5 M5-09/10：发布与切流（release 域路由决策） ----------------
 
     /**
-     * M5-10 CanaryRouter：nativeReady 恒 false——NATIVE 执行面未接线（O-3 裁定 +
-     * 生产 1% Canary 属 M6-01），NATIVE 意愿降级 HOLMES（立即回退为一等操作）；
-     * 路由决策与审计照记，放量语义待执行面就绪后放开本开关。
+     * M6-01 NATIVE 执行面能力探针（落点 10；C-67 无热开关）：就绪与 capability
+     * digest 均为装配事实纯函数——缺任一 bean/配置即 not ready，路由面
+     * NATIVE_DEFERRED；装配变更只经重启生效。
+     */
+    @Bean
+    public NativeCapabilityProbe nativeCapabilityProbe(
+            ObjectProvider<ConfigBundleRepository> bundles,
+            ObjectProvider<DeterministicSupervisor> supervisor,
+            ObjectProvider<RcaTaskRepository> tasks,
+            ObjectProvider<RcaRunRepository> runs,
+            ObjectProvider<com.objwww.pr.control.alert.domain.evidence.EvidenceRepository> evidence,
+            ObjectProvider<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository> snapshots,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.MetricsAgent> metricsAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.LogsAgent> logsAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.ChangeAgent> changeAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.NativeRcaAgent> nativeRcaAgent,
+            ObjectProvider<com.objwww.pr.control.alert.domain.claim.ClaimStore> claims,
+            ObjectProvider<EvidencePackageValidator> validator,
+            @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
+            @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
+        Map<String, Object> components = new java.util.LinkedHashMap<>();
+        components.put("configBundleRepository", bundles.getIfAvailable());
+        components.put("deterministicSupervisor", supervisor.getIfAvailable());
+        components.put("rcaTaskRepository", tasks.getIfAvailable());
+        components.put("rcaRunRepository", runs.getIfAvailable());
+        components.put("evidenceRepository", evidence.getIfAvailable());
+        components.put("evidenceSnapshotRepository", snapshots.getIfAvailable());
+        components.put("metricsAgent", metricsAgent.getIfAvailable());
+        components.put("logsAgent", logsAgent.getIfAvailable());
+        components.put("changeAgent", changeAgent.getIfAvailable());
+        components.put("nativeRcaAgent", nativeRcaAgent.getIfAvailable());
+        components.put("claimStore", claims.getIfAvailable());
+        components.put("validator", validator.getIfAvailable());
+        return new NativeCapabilityProbe(components, metricsExpr, toolRegistryDigest);
+    }
+
+    /**
+     * M6-01 NATIVE 执行器：probe 不就绪 = 部署态 NATIVE_DEFERRED，本 bean 返回
+     * null（NullBean，注入面不可得——RcaWorker 映射表随之缺 NATIVE 槽），绝不带病
+     * 构造（构造器 blank 校验是第二道栅栏）。
+     */
+    @Bean
+    public NativeInvestigationExecutor nativeInvestigationExecutor(
+            ObjectProvider<ConfigBundleRepository> bundles,
+            ObjectProvider<DeterministicSupervisor> supervisor,
+            ObjectProvider<RcaTaskRepository> tasks,
+            ObjectProvider<RcaRunRepository> runs,
+            ObjectProvider<com.objwww.pr.control.alert.domain.evidence.EvidenceRepository> evidence,
+            ObjectProvider<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository> snapshots,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.MetricsAgent> metricsAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.LogsAgent> logsAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.ChangeAgent> changeAgent,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.NativeRcaAgent> nativeRcaAgent,
+            ObjectProvider<com.objwww.pr.control.alert.domain.claim.ClaimStore> claims,
+            ObjectProvider<EvidencePackageValidator> validator,
+            NativeCapabilityProbe probe,
+            @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
+            @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
+        if (!probe.ready()) {
+            return null;
+        }
+        return new NativeInvestigationExecutor(bundles.getIfAvailable(),
+                supervisor.getIfAvailable(), tasks.getIfAvailable(), runs.getIfAvailable(),
+                evidence.getIfAvailable(), snapshots.getIfAvailable(),
+                metricsAgent.getIfAvailable(), logsAgent.getIfAvailable(),
+                changeAgent.getIfAvailable(), nativeRcaAgent.getIfAvailable(),
+                claims.getIfAvailable(), validator.getIfAvailable(),
+                metricsExpr, toolRegistryDigest, AlertClock.system());
+    }
+
+    /** 状态观察面（C-64）的能力快照：装配时定格，interfaces 不触探针类型（分层缝） */
+    @Bean
+    public com.objwww.pr.control.release.interfaces.CanaryStatusController.Capability canaryCapability(
+            NativeCapabilityProbe probe) {
+        return new com.objwww.pr.control.release.interfaces.CanaryStatusController.Capability(
+                probe.ready(), probe.missing(),
+                probe.ready() ? probe.capabilityDigest().hex() : null);
+    }
+
+    /**
+     * M5-10 CanaryRouter：nativeReady 由能力探针给出（M6-01 落点 10）——缺件即
+     * NATIVE 意愿降级 HOLMES（NATIVE_DEFERRED，立即回退为一等操作）；不新增
+     * nativeReady 热开关（C-67：percent 归 bundle、capability 归装配，分责）。
      */
     @Bean
     public CanaryRouter canaryRouter(ConfigBundleRepository configBundleRepository,
-                                     CanaryDecisionLogRepository decisionLog) {
-        return new CanaryRouter(configBundleRepository, decisionLog, false, Instant::now);
+                                     CanaryDecisionLogRepository decisionLog,
+                                     NativeCapabilityProbe nativeCapabilityProbe) {
+        return new CanaryRouter(configBundleRepository, decisionLog,
+                nativeCapabilityProbe.ready(), Instant::now);
     }
 
+    /**
+     * M6-01 落点 10：引擎执行器映射表<b>显式构造</b>（不再依赖 Spring 按类型聚装）——
+     * HOLMES 恒在；NATIVE 槽位由探针裁决的就绪执行器补位。参数名对齐 bean 名消歧
+     * （RcaTaskExecutor 现有两个实现）。
+     */
     @Bean
     public RcaWorker rcaWorker(RcaTaskRepository tasks,
                                RcaRunRepository runs,
@@ -267,7 +359,8 @@ public class AlertFlowConfig {
                                IncidentRepository incidents,
                                SchedulerSlotRepository slots,
                                ExternalInvocationRepository invocations,
-                               RcaTaskExecutor executor,
+                               RcaTaskExecutor holmesInvestigationExecutor,
+                               ObjectProvider<NativeInvestigationExecutor> nativeExecutor,
                                RcaRunOrchestrator orchestrator,
                                TransactionOperations tx,
                                @Value("${app.alert.worker.owner:control-1}") String owner,
@@ -284,8 +377,14 @@ public class AlertFlowConfig {
         Duration hangingGrace = hangingGraceOverride == null || hangingGraceOverride.isBlank()
                 ? holmesReadTimeout.plus(Duration.ofMinutes(2))
                 : Duration.parse(hangingGraceOverride);
+        Map<RcaEngine, RcaTaskExecutor> executors = new java.util.EnumMap<>(RcaEngine.class);
+        executors.put(RcaEngine.HOLMES, holmesInvestigationExecutor);
+        NativeInvestigationExecutor nativeExecutorInstance = nativeExecutor.getIfAvailable();
+        if (nativeExecutorInstance != null) {
+            executors.put(RcaEngine.NATIVE, nativeExecutorInstance);
+        }
         return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
-                invocations, executor, orchestrator, tx, AlertClock.system(), owner, slotScope,
+                invocations, executors, orchestrator, tx, AlertClock.system(), owner, slotScope,
                 taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace,
                 investigationSchemaVersion);
     }

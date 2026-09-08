@@ -229,9 +229,12 @@ public class RcaRunOrchestrator {
             slots.release(slotScope, slotNo, owner, slotEpoch);
         }
 
-        // 3) run 收尾 + rerun 判定（§6.7）——run 行已在收尾事务开头锁定
-        if (run.state() != RcaRunState.QUEUED && run.state() != RcaRunState.RUNNING) {
-            log.warn("run {} 已非活跃，跳过收尾 state={}", run.id(), run.state());
+        // 3) run 收尾 + rerun 判定（§6.7）——run 行已在收尾事务开头锁定。
+        // 活跃集谓词统一（M6-01）：NATIVE 链经 advance 入 REPORTING 后由 finishTask
+        // 收尾（REPORTING→SUCCEEDED/FAILED 即 AM4 状态机预留的组装完成边）；
+        // HOLMES 路径 run 仍为 QUEUED/RUNNING，行为不变。
+        if (!run.state().isActive()) {
+            log.warn("run {} 已出活跃集，跳过收尾 state={}", run.id(), run.state());
             return outcome;
         }
 
@@ -285,7 +288,7 @@ public class RcaRunOrchestrator {
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null);
         runs.insertRouted(run, routing);
-        RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.HOLMES_INVESTIGATE,
+        RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);
         tasks.insert(task);

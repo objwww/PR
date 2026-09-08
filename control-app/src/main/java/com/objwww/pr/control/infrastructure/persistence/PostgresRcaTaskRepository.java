@@ -24,8 +24,12 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
      * 端口契约原文（§6.2）：(now() >= deadline_at) DESC, priority DESC, deadline_at, created_at, id。
      * M4-07 generation fence（INV-AM4-4）：只领活跃 run（QUEUED/RUNNING/REPORTING，与 V12
      * uq 谓词同集）的任务——被新代际取代的 run 其任务不可再领取。
+     * C-70（M6-01）：通用领取面只认 driver task_key——NATIVE run 的 DAG 调查任务
+     * （investigate-*）由 NativeInvestigationExecutor 在 driver task 内独占驱动，
+     * 被 worker 误领会在其 finishTask 提前终结 run（STALE 栅栏兜底但报告作废）。
+     * 键值常量与 {@link RcaTask} 冻结常量的一致性由 PostgresClaimTaskKeyFilterContractTest 锁定。
      */
-    private static final String CLAIM_SQL = """
+    static final String CLAIM_SQL = """
             UPDATE rca_task SET
                 state = 'LEASED',
                 lease_owner = :owner,
@@ -36,6 +40,7 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
             WHERE id = (
                 SELECT t.id FROM rca_task t
                  WHERE t.state IN ('READY', 'RETRY_WAIT') AND t.available_at <= :now
+                   AND t.task_key IN ('HOLMES_INVESTIGATE', 'NATIVE_INVESTIGATE')
                    AND EXISTS (SELECT 1 FROM rca_run r
                                 WHERE r.id = t.run_id
                                   AND r.state IN ('QUEUED', 'RUNNING', 'REPORTING'))

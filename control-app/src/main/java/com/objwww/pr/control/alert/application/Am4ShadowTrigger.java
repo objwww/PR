@@ -132,6 +132,13 @@ public class Am4ShadowTrigger {
     public UUID trigger(UUID holmesRunId) {
         RcaRun holmes = runs.findById(holmesRunId)
                 .orElseThrow(() -> new IllegalArgumentException("holmes run 不存在: " + holmesRunId));
+        // C-61 Shadow/Canary 互斥：incident 已有 NATIVE 路由 run（含终态——历史
+        // canary 实跑即占住对照位）即停发 Native 影子（同引擎双跑无对照价值且费
+        // 预算）；全 HOLMES incident 影子照发，继续供 V31 引擎对照
+        if (runs.existsNativeRunByIncidentId(holmes.incidentId())) {
+            throw new IllegalStateException("C-61 Shadow/Canary 互斥: incident 已有 NATIVE"
+                    + " 路由 run，停发影子 incident=" + holmes.incidentId());
+        }
         String snapshotDigest = holmes.investigationHash().hex();
         RcaRun shadow = new RcaRun(UUID.randomUUID(), holmes.incidentId(),
                 holmes.generation(), RunTrigger.RERUN, RcaRunState.QUEUED,

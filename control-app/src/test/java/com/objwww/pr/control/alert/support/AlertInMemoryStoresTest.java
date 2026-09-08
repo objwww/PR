@@ -84,10 +84,12 @@ class AlertInMemoryStoresTest {
     void taskClaimFollowsSlaOrderAndFenceBlocksStaleEpoch() {
         AlertInMemoryStores store = new AlertInMemoryStores();
         UUID runId = UUID.randomUUID();
+        UUID runId2 = UUID.randomUUID();
 
         // critical（永不到期）与 warning（10min SLA，已过 30min → 到期越级）
-        RcaTask critical = task(runId, "t-critical", 200, Instant.MAX, NOW.minusSeconds(20));
-        RcaTask warningOverdue = task(runId, "t-warning", 100, NOW.minus(Duration.ofMinutes(20)), NOW);
+        // C-70 后通用领取只认 driver key，夹具用 HOLMES_INVESTIGATE
+        RcaTask critical = task(runId, RcaTask.HOLMES_INVESTIGATE, 200, Instant.MAX, NOW.minusSeconds(20));
+        RcaTask warningOverdue = task(runId2, RcaTask.HOLMES_INVESTIGATE, 100, NOW.minus(Duration.ofMinutes(20)), NOW);
         store.tasks.insert(critical);
         store.tasks.insert(warningOverdue);
 
@@ -106,6 +108,30 @@ class AlertInMemoryStoresTest {
         assertThat(second.id()).isEqualTo(critical.id());
         // 两任务都 LEASED 后无单可领
         assertThat(store.tasks.claimNext("w3", NOW, Duration.ofMinutes(2))).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ C-61 NATIVE run 判定
+
+    @Test
+    void existsNativeRunByIncidentIdTracksRoutingWithHolmesDefault() {
+        AlertInMemoryStores store = new AlertInMemoryStores();
+        UUID incidentA = UUID.randomUUID();
+        UUID incidentB = UUID.randomUUID();
+
+        // 普通 insert 存量行 = DB 列默认 HOLMES → 不触发互斥
+        store.runs.insert(run(incidentA, RcaRunState.SUCCEEDED));
+        assertThat(store.runs.existsNativeRunByIncidentId(incidentA)).isFalse();
+
+        // insertRouted 落 NATIVE 路由 → 互斥命中（含终态 run）
+        store.runs.insertRouted(run(incidentB, RcaRunState.SUCCEEDED),
+                new com.objwww.pr.control.alert.domain.model.RcaRunRouting(
+                        com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
+                        Digest.sha256Of("bundle"), "grp:1", 1,
+                        com.objwww.pr.control.release.domain.model.CanaryDecision
+                                .BUCKETED_NATIVE.name()));
+        assertThat(store.runs.existsNativeRunByIncidentId(incidentB)).isTrue();
+        // 其他 incident 的 NATIVE run 不外溢
+        assertThat(store.runs.existsNativeRunByIncidentId(incidentA)).isFalse();
     }
 
     // ------------------------------------------------------------------ slot 原子领取 + 回收

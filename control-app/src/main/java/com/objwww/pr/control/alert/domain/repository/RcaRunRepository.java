@@ -60,6 +60,13 @@ public interface RcaRunRepository {
     }
 
     /**
+     * incident 是否存在 NATIVE 路由 run（含终态——历史 canary 实跑即占住对照位）。
+     * C-61 Shadow/Canary 互斥的判定源：NATIVE run 在场即停发 Native 影子；
+     * 全 HOLMES incident 影子照发（供 V31 引擎对照）。
+     */
+    boolean existsNativeRunByIncidentId(UUID incidentId);
+
+    /**
      * run 修订锚（M5-14 命令面）：= rca_run.last_event_seq——M4-10 计数器在
      * 状态事实推进时同行 +1，无洞单调，是 run 的天然修订号。run 不存在 → empty。
      */

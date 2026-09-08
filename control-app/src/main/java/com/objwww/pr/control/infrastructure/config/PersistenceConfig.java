@@ -247,6 +247,14 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    // M6-01 Canary 窗口判定追加面（V30；消费方 = M6-03 窗口任务 / ⑧canary status 只读面）
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.CanaryWindowVerdictRepository canaryWindowVerdictRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresCanaryWindowVerdictRepository(
+                jdbc);
+    }
+
     // ---------------- AM5 处置域（V26，M5-11 装配；HTTP 面 = M5-12 Operator API） ----------------
 
     @Bean

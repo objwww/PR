@@ -93,7 +93,7 @@ public class DeterministicSupervisor {
             throw new IllegalStateException(
                     "run 不活跃，拒绝启动: " + runId + "（state=" + run.state() + "）");
         }
-        if (!tasks.findByRunId(runId).isEmpty()) {
+        if (hasDagTasks(runId)) {
             advance(runId);
             return new StartResult(StartOutcome.ALREADY_STARTED, null, null);
         }
@@ -120,11 +120,25 @@ public class DeterministicSupervisor {
             return new Advancement(Set.of(), Set.of(), false);
         }
         DagPromotion promotion = dag.promoteOnTerminal(runId);
-        List<RcaTask> current = tasks.findByRunId(runId);
-        boolean allTerminal = !current.isEmpty() && current.stream()
+        List<RcaTask> dagTasks = dagTasks(runId);
+        boolean allTerminal = !dagTasks.isEmpty() && dagTasks.stream()
                 .allMatch(t -> DagTaskState.fromPersistent(t.state()).isTerminal());
         boolean reportingEntered = allTerminal && enterReporting(runId);
         return new Advancement(promotion.ready(), promotion.skipped(), reportingEntered);
+    }
+
+    /**
+     * DAG 任务面（M6-01）：剔除 driver task（NATIVE_INVESTIGATE = 铸造点预铸的
+     * 执行权凭证，不参与图收敛/启动判定）——AM4 影子 run 无 driver，行为不变。
+     */
+    private List<RcaTask> dagTasks(UUID runId) {
+        return tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                .toList();
+    }
+
+    private boolean hasDagTasks(UUID runId) {
+        return !dagTasks(runId).isEmpty();
     }
 
     /** REPORTING 迁移：行锁串行化并发重入；run 已出活跃集则放弃（fence 优先） */

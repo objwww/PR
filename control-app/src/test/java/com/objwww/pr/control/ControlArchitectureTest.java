@@ -172,6 +172,47 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M6-01 ⑩：release.domain.service 扩面零框架（M5-10 CanaryBucketer 与 M6-01
+     * CanaryWindowEvaluator 所在子包；Evaluator 的 Map 载荷刻意不引 Jackson——
+     * jsonb 序列化归 infrastructure.persistence）。预防性收紧，沿 AM5 惯例。
+     */
+    @Test
+    void am6ReleaseDomainServiceZeroFrameworkDependency() {
+        noClasses().that().resideInAPackage("..control.release.domain.service..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
+    /**
+     * M6-01 ⑩：NATIVE 执行面禁触 Holmes 基建——Strangler 隔离的结构卡点：
+     * infrastructure.nativeexec 对 holmesgpt 客户端/执行器零依赖是 M6-07
+     * 「代码引用面归零」的进程内前提（回切 = 路由面职责，不是执行面纠缠）。
+     */
+    @Test
+    void nativeExecutorNeverDependsOnHolmesInfrastructure() {
+        noClasses().that().resideInAPackage("..control.infrastructure.nativeexec..")
+                .should().dependOnClassesThat().resideInAPackage(
+                        "..control.infrastructure.holmes..")
+                .check(classes);
+    }
+
+    /**
+     * M6-01 ⑩（INV-AM6-5 静态边界）：影子/回放工具面不得触证据分级类型——
+     * LIVE_CANARY 只归生产采集适配器构造，DRILL/REPLAY 语义由采集面标注；
+     * 工具面（ReadOnlyToolFace/ReplayToolGateway 族）与分级正交，引用即语义泄漏。
+     */
+    @Test
+    void replayAndShadowFaceNeverTouchesEvidenceClassTypes() {
+        noClasses().that().resideInAPackage("..control.alert.application.replay..")
+                .should().dependOnClassesThat().haveFullyQualifiedName(
+                        "com.objwww.pr.control.release.domain.model.CanaryEvidenceClass")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.domain.model.Incident;
 import com.objwww.pr.control.alert.domain.model.InvestigationResult;
 import com.objwww.pr.control.alert.domain.model.RcaAttempt;
 import com.objwww.pr.control.alert.domain.model.RcaAttemptStatus;
+import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
@@ -25,6 +26,7 @@ import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,7 +48,8 @@ public class RcaWorker {
     /** 单轮循环结果（观测/测试断言） */
     public enum CycleOutcome {EXECUTED, IDLE, SLOTS_BUSY}
 
-    public record ClaimedWork(int slotNo, long slotEpoch, RcaTask task, RcaRun run, Incident incident) {
+    public record ClaimedWork(int slotNo, long slotEpoch, RcaTask task, RcaRun run,
+                              Incident incident, RcaEngine engine) {
     }
 
     private final RcaTaskRepository tasks;
@@ -56,7 +59,8 @@ public class RcaWorker {
     private final IncidentRepository incidents;
     private final SchedulerSlotRepository slots;
     private final ExternalInvocationRepository invocations;
-    private final RcaTaskExecutor executor;
+    /** 引擎执行器映射表（M6-01）：分派面唯一权威，无默认回退——缺绑定即 fail-closed */
+    private final Map<RcaEngine, RcaTaskExecutor> executors;
     private final RcaRunOrchestrator orchestrator;
     private final TransactionOperations tx;
     private final AlertClock clock;
@@ -74,6 +78,7 @@ public class RcaWorker {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
 
+    /** 单引擎构造（M6-01 前形态；等价仅 HOLMES 绑定的映射表） */
     public RcaWorker(RcaTaskRepository tasks,
                      RcaRunRepository runs,
                      RcaAttemptRepository attempts,
@@ -93,6 +98,32 @@ public class RcaWorker {
                      Duration retryBackoff,
                      Duration hangingGrace,
                      int investigationSchemaVersion) {
+        this(tasks, runs, attempts, investigationResults, incidents, slots, invocations,
+                Map.of(RcaEngine.HOLMES, Objects.requireNonNull(executor, "executor 不得为 null")),
+                orchestrator, tx, clock, owner, slotScope, taskLease, heartbeatInterval,
+                pollInterval, retryBackoff, hangingGrace, investigationSchemaVersion);
+    }
+
+    /** 引擎映射表构造（M6-01）：Map 分派面唯一权威，未知引擎 fail-closed 不回退 */
+    public RcaWorker(RcaTaskRepository tasks,
+                     RcaRunRepository runs,
+                     RcaAttemptRepository attempts,
+                     InvestigationResultRepository investigationResults,
+                     IncidentRepository incidents,
+                     SchedulerSlotRepository slots,
+                     ExternalInvocationRepository invocations,
+                     Map<RcaEngine, RcaTaskExecutor> executors,
+                     RcaRunOrchestrator orchestrator,
+                     TransactionOperations tx,
+                     AlertClock clock,
+                     String owner,
+                     String slotScope,
+                     Duration taskLease,
+                     Duration heartbeatInterval,
+                     Duration pollInterval,
+                     Duration retryBackoff,
+                     Duration hangingGrace,
+                     int investigationSchemaVersion) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -100,7 +131,10 @@ public class RcaWorker {
         this.incidents = Objects.requireNonNull(incidents);
         this.slots = Objects.requireNonNull(slots);
         this.invocations = Objects.requireNonNull(invocations);
-        this.executor = Objects.requireNonNull(executor);
+        this.executors = Objects.requireNonNull(executors, "executors 不得为 null");
+        if (executors.isEmpty()) {
+            throw new IllegalArgumentException("executors 映射表不得为空");
+        }
         this.orchestrator = Objects.requireNonNull(orchestrator);
         this.tx = Objects.requireNonNull(tx);
         this.clock = Objects.requireNonNull(clock);
@@ -207,8 +241,12 @@ public class RcaWorker {
             RcaTask task = claimed.get();
             RcaRun run = runs.findByIdForUpdate(task.runId()).orElseThrow();
             Incident incident = incidents.findById(run.incidentId()).orElseThrow();
+            // M6-01：路由四列读视图定引擎（存量行/无路由语义环境列默认 HOLMES）
+            RcaEngine engine = runs.findRoutingById(task.runId())
+                    .map(RcaRunRepository.RoutingView::engine)
+                    .orElse(RcaEngine.HOLMES);
             return Optional.of(new ClaimedWork(acquired.slotNo(), acquired.leaseEpoch(),
-                    task, run, incident));
+                    task, run, incident, engine));
         });
     }
 
@@ -245,7 +283,13 @@ public class RcaWorker {
                 tasks.heartbeat(work.task().id(), owner, work.task().leaseEpoch(), hb, taskLease);
                 slots.heartbeat(slotScope, work.slotNo(), owner, work.slotEpoch(), hb, taskLease);
             };
-            result = executor.execute(work.task(), work.run(), work.incident(), attempt, heartbeat);
+            // M6-01 引擎分派：无绑定执行器 = fail-closed（终态失败，不回退主路径——
+            // 回退会污染 Canary 证据面，INV-AM6-2 语义分歧不触发回退）
+            RcaTaskExecutor bound = executors.get(work.engine());
+            result = bound != null
+                    ? bound.execute(work.task(), work.run(), work.incident(), attempt, heartbeat)
+                    : RcaTaskExecutor.ExecutionResult.terminal("EXECUTOR_MISSING",
+                            "engine 无执行器绑定: " + work.engine());
         } catch (RuntimeException e) {
             log.error("task {} 执行异常", work.task().id(), e);
             result = RcaTaskExecutor.ExecutionResult.retryable("EXECUTOR_ERROR", e.getMessage());

@@ -29,7 +29,8 @@ import java.util.UUID;
 
 /**
  * 投影器（§6.7 单事务算法）：拆组 → 逐 alert 软背压 → alert_event 幂等追加 →
- * incident upsert（episode 水印乱序收敛）→ 铸 rca_run + HOLMES_INVESTIGATE task。
+ * incident upsert（episode 水印乱序收敛）→ 铸 rca_run（CanaryRouter 定引擎，M5-10）
+ * + 按引擎选 task_key（M6-01）。
  *
  * <p>"单事务"指 event/incident/run/task 四表的原子性，由调用方
  * （AlertInboxProcessor）经 TransactionOperations 包裹；inbox 行自身的状态流转在事务外，
@@ -294,7 +295,7 @@ public class IncidentProjector {
         runs.insertRouted(run, routing);
 
         int priority = sla.priority(alert.labels().get("severity"));
-        RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.HOLMES_INVESTIGATE,
+        RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);
         tasks.insert(task);

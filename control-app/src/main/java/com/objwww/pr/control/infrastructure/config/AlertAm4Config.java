@@ -11,7 +11,7 @@ import com.objwww.pr.control.alert.application.agent.LogsAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
 import com.objwww.pr.control.alert.application.replay.AgentReplayRunner;
-import com.objwww.pr.control.alert.application.replay.ShadowToolFace;
+import com.objwww.pr.control.alert.application.replay.ReadOnlyToolFace;
 import com.objwww.pr.control.alert.application.replay.SnapshotShadowRouter;
 import com.objwww.pr.control.alert.application.tool.ReplayToolGateway;
 import com.objwww.pr.control.alert.application.tool.ToolGateway;
@@ -162,16 +162,20 @@ public class AlertAm4Config {
         return Executors.newFixedThreadPool(poolSize);
     }
 
-    /** 影子在线只读工具面（M4-35）：三 Agent 生产形态的工具出口 */
+    /**
+     * 影子在线只读工具面（M4-35 → M6-01 落点 ⑦）：真实类型 ReadOnlyToolFace。
+     * redteamOnly=false = canary 期策略位（REDTEAM 双闸从结构强制降为策略开关，
+     * 落点 ③；装配硬接线，bundle 化归 M6-03）——R0/R1 裁剪/独立池/限流/预算门不变。
+     */
     @Bean
-    public ShadowToolFace am4ShadowToolFace(ToolRegistry am4ToolRegistry,
+    public ReadOnlyToolFace am4ShadowToolFace(ToolRegistry am4ToolRegistry,
             ToolPolicy am4ToolPolicy, ExecutorService am4ShadowPool,
             @Value(SHADOW_MAX_CALLS_KEY) long maxCallsPerWindow,
             @Value(SHADOW_WINDOW_MILLIS_KEY) long windowMillis) {
         long calls = maxCallsPerWindow > 0 ? maxCallsPerWindow : SHADOW_MAX_CALLS_DEFAULT;
         long window = windowMillis > 0 ? windowMillis : SHADOW_WINDOW_MILLIS_DEFAULT;
-        return new ShadowToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
-                calls, window, Clock.systemUTC());
+        return new ReadOnlyToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
+                calls, window, Clock.systemUTC(), false);
     }
 
     /** 影子对照路由器（M4-34）：同 digest 盖章/独立预算/失败隔离，无发布出口 */
@@ -211,7 +215,7 @@ public class AlertAm4Config {
     /** Metrics Agent（在线影子形态：工具出口 = 影子面） */
     @Bean
     public MetricsAgent am4MetricsAgent(AgentRegistry am4AgentRegistry,
-            ShadowToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
+            ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
             RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
         return new MetricsAgent(am4AgentRegistry.require("metrics", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
@@ -221,7 +225,7 @@ public class AlertAm4Config {
     /** Logs Agent（在线影子形态） */
     @Bean
     public LogsAgent am4LogsAgent(AgentRegistry am4AgentRegistry,
-            ShadowToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
+            ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
             RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
         return new LogsAgent(am4AgentRegistry.require("logs", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
@@ -231,7 +235,7 @@ public class AlertAm4Config {
     /** Change Agent（在线影子形态） */
     @Bean
     public ChangeAgent am4ChangeAgent(AgentRegistry am4AgentRegistry,
-            ShadowToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
+            ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
             RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
         return new ChangeAgent(am4AgentRegistry.require("change", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,

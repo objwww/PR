@@ -157,6 +157,19 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .optional();
     }
 
+    /** C-61 判定源：含终态（历史 canary 实跑即占住对照位），不止活跃 run */
+    @Override
+    public boolean existsNativeRunByIncidentId(UUID incidentId) {
+        Boolean exists = jdbc.sql("""
+                        SELECT EXISTS(SELECT 1 FROM rca_run
+                                       WHERE incident_id = :incidentId AND engine = 'NATIVE')
+                        """)
+                .param("incidentId", incidentId)
+                .query(Boolean.class)
+                .single();
+        return Boolean.TRUE.equals(exists);
+    }
+
     @Override
     public OptionalLong currentRevision(UUID id) {
         return jdbc.sql("SELECT last_event_seq FROM rca_run WHERE id = :id")
