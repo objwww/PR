@@ -1,0 +1,15 @@
+[AM6] E2E-AM6-03 开始 suite=20260908T192428Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T192428Z-am6-03
+[AM6] phase0 50% 姿态：发布并激活 percent=50 bundle
+[AM6]   percent=50 生效 active=7a83d05cd14036adba7c2c4e6d5468b01afe61f3d1f7e4f4d494448a9f0c9218
+[AM6] phase1 容量报告执行（deploy/policy/m6-capacity-report.sh）
+[AM6]   mem_available_mb=3268 classified_tier=L0
+[AM6]   in_flight=2 oldest_ready_age=none
+[AM6]   PASS mem_available=3268MiB >= L1 阈值 1229MiB
+[AM6] phase1 PASS（/opt/projects/pr_agent_it/e2e-am6/runs/20260908T192428Z-am6-03/capacity-report.txt）
+[AM6] phase2 白名单直达 → NATIVE run（在途即取证 config_digest）
+[AM6]   在途取证 run=46e22641-7dbf-43c6-956a-fc07c379baf9 state=SUCCEEDED digest=7a83d05cd14036adba7c2c4e6d5468b01afe61f3d1f7e4f4d494448a9f0c9218（run 启动固定不再变）
+[AM6] phase2 PASS（终态复验 digest 仍=7a83d05cd14036adba7c2c4e6d5468b01afe61f3d1f7e4f4d494448a9f0c9218）
+[AM6] phase3 回退演练（断言 SQL 随件）
+[AM6] phase3 PASS（新 run 全 HOLMES；NATIVE run=46e22641-7dbf-43c6-956a-fc07c379baf9 digest 冻结 7a83d05cd14036adba7c2c4e6d5468b01afe61f3d1f7e4f4d494448a9f0c9218——回退只影响新 Run）
+[AM6] phase4 终态：active=852040c9ce6b329b11f273c4c547ec2cb3c8091d92467b5658de1d34a071d1f3（percent=0，验证后不留放量态）
+[AM6] E2E-AM6-03 PASS（suite=20260908T192428Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T192428Z-am6-03）

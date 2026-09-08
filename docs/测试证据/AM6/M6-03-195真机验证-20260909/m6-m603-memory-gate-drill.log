@@ -1,0 +1,40 @@
+== HOST1 三档内存闸演练 20260908T192351Z ==
+--- §A 观测分类 ---
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3962         539         234        3223        3221
+Swap:          4095         395        3700
+mem_available_mb=3221 classified_tier=L0
+L1<1229MiB(停新LiveE2E/在线Shadow+关order-arena+slot2→1,持续5min) L2<768MiB(暂停领取,持续2min) L3<512MiB(readiness fail)
+恢复滞回=连续10min>1536MiB逐级恢复;每次降级应落RESOURCE_MODE_CHANGED事件(见§D缺口)
+--- §B tier1 动作面实弹（order-arena 停=可回收容量；停/启各一次）---
+alert-order-arena-1 214.1MiB / 512MiB
+stopped alert-order-arena-1 (rss_before=214.1MiB )
+stop_confirmed=true
+mem_available_mb_after_stop=3479 (delta=258MiB)
+control_health_during_arena_stop=200 (tier1 动作不得伤及控制面)
+restarted alert-order-arena-1 health=starting rss_after=199.8MiB 
+--- §C slot 2→1 机制面 ---
+V7 :337 纪律：scheduler_slot 固定槽位预置，扩容=新迁移加行，不 DELETE——运行时无降槽旋钮，
+  slot 2→1 的运维面当前只能走迁移变更（本演练不做生产 schema 变更）；以下只读验证约束语义：
+slot_rows=2 (scope=rca)
+occupied_now=2 occupied_max_hist=0
+RcaWorker.claimWork 判定（代码 :259）：occupiedSlots(scope).size() >= totalSlots(scope) 即不再领取——
+  槽位上限=领取上限的机制在位；"按内存水位自动降槽"的触发器未落码（见 §D）
+--- §D tier2/tier3 机制面现状实证（缺口取证） ---
+[G1] readiness 表达面（tier3 要求 readiness fail）:
+  /actuator/health/readiness http=404
+  404=probes 未启用——readiness/liveness 分组不存在，tier3 无表达面（application.yml 仅暴露 health,info,metrics）
+[G2] 自动判定器（三档均要求）：
+  control-app 主树 grep MemAvailable/RESOURCE_MODE_CHANGED/768 = 0 命中（2026-09-09 本地 findstr 实证）——
+  无 MemAvailable 采样、无 RESOURCE_MODE_CHANGED 事件、无领取暂停与 readiness 联动组件
+[G3] Prometheus 宿主内存指标面（P7 B1 复现）:
+{"status":"success","data":{"resultType":"vector","result":[]}}
+  （空 result 向量=node_exporter 缺失，三档闸 5min/2min 持续窗判定无数据源）
+[G4] 领取暂停旋钮（tier2）：worker 领取仅受 scheduler_slot 上限约束（§C），无内存水位联动开关
+[G5] 独立值班告警（tier2）：Gatus 外部探针通道收口地址 O-66 开放项（GATUS_ONCALL_WEBHOOK_URL 未裁定）
+--- §E 三档缺口台账（架构要求 vs 现状）---
+L1 | 停新LiveE2E/Shadow: 在线Shadow M6-03时点尚不存在(M6-05交付) | LiveE2E停=order-arena停已实弹(§B) | slot2→1: 迁移面管理无运行时旋钮(§C) | 自动触发: 缺(G2/G3)
+L2 | 暂停领取: 仅槽位上限间接约束,无水位联动(G4) | 独立值班告警: O-66 未收口(G5) | 入口原子持久化: 恒在(非降级专属)
+L3 | readiness fail: 无表达面(G1 404) | OOM/reclaim 响应: 无
+== 演练完（tier1 动作面实弹通过；tier2/3 机制缺口如实留证 → BUGLOG BA-54）==
+[事后核验 20260908T192428Z 前戳] alert-order-arena-1 预热后 State.Health.Status=healthy（重启回健康实证）
