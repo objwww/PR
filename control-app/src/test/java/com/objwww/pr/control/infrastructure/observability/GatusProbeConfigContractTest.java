@@ -79,7 +79,9 @@ class GatusProbeConfigContractTest {
 
     @Test
     void composePinsIndependentFailureDomainBudgetAndHardening() throws IOException {
-        String compose = Files.readString(GATUS_COMPOSE);
+        // 逐行解析前剥 \r：Windows 侧传输（git archive autocrlf）会把 CRLF 落到 Linux 树，
+        // Java 正则 . 不吃 \r，服务块抽取将整体失明（195 真机红证据 2026-09-08）
+        String compose = Files.readString(GATUS_COMPOSE).replace("\r", "");
         String block = serviceBlock(compose, "gatus");
 
         // 独立故障域：无 depends_on（195 挂不牵连探针，探针挂不牵连 195）
