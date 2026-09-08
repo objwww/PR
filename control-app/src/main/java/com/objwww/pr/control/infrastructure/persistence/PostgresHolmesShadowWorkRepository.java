@@ -28,6 +28,7 @@ public class PostgresHolmesShadowWorkRepository implements HolmesShadowWorkRepos
                 generation, snapshot_digest, state, attempts, max_attempts)
             VALUES (:shadowKey, :kind, :nativeRunId, :incidentId, :generation,
                 :snapshotDigest, 'QUEUED', 0, :maxAttempts)
+            ON CONFLICT (shadow_key) DO NOTHING
             """;
 
     private static final String COUNT_SQL = """
@@ -86,6 +87,8 @@ public class PostgresHolmesShadowWorkRepository implements HolmesShadowWorkRepos
 
     @Override
     public boolean enqueue(ShadowWorkRow row) {
+        // ON CONFLICT DO NOTHING（V32 uq_ec_pair 同律）：撞确定性 key = 幂等败者
+        // 返 false，不抛（端口契约：Sampler 重放窗以此记 ALREADY_ENQUEUED）
         int inserted = jdbc.sql(ENQUEUE_SQL)
                 .param("shadowKey", row.shadowKey())
                 .param("kind", row.kind())

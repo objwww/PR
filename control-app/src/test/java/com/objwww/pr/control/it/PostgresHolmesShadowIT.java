@@ -95,7 +95,7 @@ class PostgresHolmesShadowIT extends PostgresITBase {
 
     @Test
     void enqueueIsIdempotentOnDeterministicShadowKey() {
-        UUID nativeRunId = UUID.randomUUID();
+        UUID nativeRunId = seedNativeRun("idem");
         String key = "holmes-shadow:" + nativeRunId;
         ShadowWorkRow row = ShadowWorkRow.forEnqueue(key, "COMPARISON", nativeRunId,
                 seedIncidentOnly("idem"), 0, Digest.sha256Of("snap").hex(), 3);
@@ -110,7 +110,7 @@ class PostgresHolmesShadowIT extends PostgresITBase {
     void twentyWayConcurrentClaimClaimsEachRowExactlyOnce() throws Exception {
         for (int i = 0; i < 10; i++) {
             works.enqueue(ShadowWorkRow.forEnqueue("holmes-shadow:row-" + i, "COMPARISON",
-                    UUID.randomUUID(), seedIncidentOnly("claim-" + i), 0,
+                    seedNativeRun("claim-" + i), seedIncidentOnly("claim-" + i), 0,
                     Digest.sha256Of("s" + i).hex(), 3));
         }
         Instant now = Instant.now();
@@ -284,13 +284,23 @@ class PostgresHolmesShadowIT extends PostgresITBase {
         ExecutionResult next = ExecutionResult.success(new AttemptArtifact(2,
                 ValidationStatus.STRUCTURE_VALIDATED, List.of(), PACKAGE, "raw",
                 typedPackage(), List.of(), Digest.sha256Of("raw"),
-                Digest.sha256Of(PACKAGE), "glm-5", 10, 20, 30, false, Map.of()));
+                Digest.sha256Of(PACKAGE), "glm-5", 10, 20, 30, false, fingerprint()));
 
         @Override
         public ExecutionResult execute(RcaTask task, RcaRun run, Incident incident,
                 RcaAttempt attempt, Runnable heartbeat) {
             executedRunIds.add(run.id());
             return next;
+        }
+
+        /** V23 ck_rca_attempt_fingerprint_keys：非空指纹必须五顶层键全带（生产形态镜像） */
+        private static Map<String, Object> fingerprint() {
+            return new com.objwww.pr.control.eval.domain.model.SamplingFingerprint(
+                    new com.objwww.pr.control.eval.domain.model.SamplingFingerprint.Sampling(
+                            0.2, 0.9, 2048, null),
+                    new com.objwww.pr.control.eval.domain.model.SamplingFingerprint.Sampling(
+                            0.2, 0.9, 2048, null),
+                    "litellm:glm-5@dashscope", "glm-5", 0).toMap();
         }
 
         private static EvidencePackageV2 typedPackage() {
@@ -348,7 +358,7 @@ class PostgresHolmesShadowIT extends PostgresITBase {
 
     private ShadowWorkRow enqueueOne(String tag) {
         works.enqueue(ShadowWorkRow.forEnqueue("holmes-shadow:" + tag, "COMPARISON",
-                UUID.randomUUID(), seedIncidentOnly(tag), 0, Digest.sha256Of(tag).hex(), 3));
+                seedNativeRun(tag), seedIncidentOnly(tag), 0, Digest.sha256Of(tag).hex(), 3));
         return works.findByShadowKey("holmes-shadow:" + tag).orElseThrow();
     }
 
@@ -362,5 +372,19 @@ class PostgresHolmesShadowIT extends PostgresITBase {
                 .param("key", "alertname=HighErrorRate|service=shadow-" + tag + "-" + incidentId)
                 .update();
         return incidentId;
+    }
+
+    /**
+     * 种子终态 NATIVE run（V34 native_run_id 有真 FK——工作行引用的 run 必须在案；
+     * 终态 SUCCEEDED = 生产抽样前提形态，活跃位约束零牵连）。
+     */
+    private UUID seedNativeRun(String tag) {
+        UUID runId = UUID.randomUUID();
+        runs.insertRouted(new RcaRun(runId, seedIncidentOnly(tag), 0, RunTrigger.INITIAL,
+                        RcaRunState.SUCCEEDED, Digest.sha256Of("run-" + tag), Instant.now(),
+                        Instant.now(), Instant.now(), Instant.now(), null),
+                new RcaRunRouting(RcaEngine.NATIVE, Digest.sha256Of("bundle-" + tag),
+                        "svc-" + tag, 7, "BUCKETED_NATIVE"));
+        return runId;
     }
 }
