@@ -7,17 +7,12 @@ import com.objwww.pr.control.alert.application.agent.ChangeAgent;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
-import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository;
-import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
-import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.release.application.EngineComparisonRecorder;
-import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
-import com.objwww.pr.control.release.domain.repository.EngineComparisonRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -40,8 +35,8 @@ import java.util.UUID;
  * <p>须与 {@code docker} profile 同开（依赖 AlertAm4Config 装配的三 Agent/
  * Supervisor）；web-application-type=none 保证一次性实例不接入 webhook 面。
  * 正式触发入口形态仍是 G2 终裁开放项（配方 §6.1），本装配不发明。
- * M6-02 起附带 {@link EngineComparisonRecorder} 装配（消费方目前仅本入口，
- * M6-05 反向影子复用时上收公共装配面）。
+ * 引擎对照记录器装配已上收 AlertFlowConfig 公共面（BA-56：M6-05 反向影子
+ * worker 复用后，docker profile 常驻进程同需此依赖，不能挂本 profile）。
  *
  * @author wanghua
  * @date 2026-09-05
@@ -49,16 +44,6 @@ import java.util.UUID;
 @Configuration
 @Profile("am4-shadow-trigger")
 public class Am4ShadowTriggerConfig {
-
-    @Bean
-    public EngineComparisonRecorder engineComparisonRecorder(
-            ConfigBundleRepository configBundleRepository, RcaRunRepository rcaRunRepository,
-            RcaReportRepository rcaReportRepository, ClaimStore claimStore,
-            EngineComparisonRepository engineComparisonRepository,
-            AlertMetrics alertMetrics) {
-        return new EngineComparisonRecorder(configBundleRepository, rcaRunRepository,
-                rcaReportRepository, claimStore, engineComparisonRepository, alertMetrics);
-    }
 
     @Bean
     public CommandLineRunner am4ShadowTrigger(DeterministicSupervisor am4DeterministicSupervisor,

@@ -298,6 +298,23 @@ public class AlertFlowConfig {
                 maxAttempts);
     }
 
+    /**
+     * BA-56：引擎对照结论记录器上收公共装配面——原挂 Am4ShadowTriggerConfig 只在
+     * am4-shadow-trigger profile 存在，M6-05 生产影子 worker 复用后 docker profile
+     * 常驻进程启动即缺 bean（195 真启动实证；一次性入口专属装配不能承载生产依赖）。
+     */
+    @Bean
+    public com.objwww.pr.control.release.application.EngineComparisonRecorder engineComparisonRecorder(
+            ConfigBundleRepository bundles,
+            RcaRunRepository runs,
+            RcaReportRepository reports,
+            com.objwww.pr.control.alert.domain.claim.ClaimStore claims,
+            com.objwww.pr.control.release.domain.repository.EngineComparisonRepository comparisons,
+            AlertMetrics alertMetrics) {
+        return new com.objwww.pr.control.release.application.EngineComparisonRecorder(
+                bundles, runs, reports, claims, comparisons, alertMetrics);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.application.HolmesShadowWorker holmesShadowWorker(
             com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
