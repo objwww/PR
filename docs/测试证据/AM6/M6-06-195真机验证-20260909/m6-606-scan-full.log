@@ -1,0 +1,191 @@
+================================================================
+面① 代码引用（main 树 *.java 含 holmes 字样，类名/注释分账）
+================================================================
+main 树命中文件数: 54
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/Am4ShadowTrigger.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/FallbackService.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/holmes/HolmesEvidenceAdapter.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/HolmesShadowSampler.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/HolmesShadowScheduler.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/HolmesShadowWorker.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/IncidentProjector.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/NativeReportAdapter.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/RcaRunOrchestrator.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/RcaTaskExecutor.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/RcaWorker.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/replay/SnapshotShadowRouter.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/claim/ReportAssembler.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/ExternalInvocation.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/InvestigationResult.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/RcaEngine.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/RcaRunRouting.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/RcaTask.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/RcaToolCall.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/model/ToolCallStatus.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/repository/HolmesShadowWorkRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/repository/RcaRunRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/repository/ReportWinnerRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/service/EvidencePackageValidator.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/domain/statemachine/RcaStateContract.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/infrastructure/selfcheck/AlertSelfCheck.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/eval/application/EvalBatchRunner.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/eval/application/RcaRunResolver.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/eval/domain/litellm/SpendRecord.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/eval/domain/litellm/UsageLedgerReconciler.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertAm4Config.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/Am4ShadowTriggerConfig.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/NativeCapabilityProbe.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/PersistenceConfig.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/SelfCheckConfig.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesClient.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesErrorClassifier.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesResponseParser.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/ToolCallAdapter.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/nativeexec/NativeInvestigationExecutor.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/observability/AlertMetrics.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresEngineComparisonRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresExternalInvocationRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresHolmesShadowWorkRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresRcaRunResolver.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/persistence/PostgresRcaTaskRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/selfcheck/ControlSelfCheck.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/release/application/CanaryRouter.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/release/application/EngineComparisonRecorder.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/release/domain/model/CanaryDecision.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/release/domain/repository/EngineComparisonRepository.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/release/domain/service/CanaryBucketer.java
+--- 生产装配/执行面引用（M6-07 摘除对象裁定） ---
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:34:import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:35:import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:160:    public HolmesClient holmesClient(
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:167:        return new HolmesClient(baseUrl, apiKey, connectTimeout, readTimeout, maxResponseBytes);
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:171:    public RcaTaskExecutor holmesInvestigationExecutor(HolmesClient client,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:192:        HolmesInvestigationExecutor.SamplingSpec samplingSpec =
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:193:                new HolmesInvestigationExecutor.SamplingSpec(
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:197:        return new HolmesInvestigationExecutor(client, events, ledger, tx, validator,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:325:            RcaTaskExecutor holmesInvestigationExecutor,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:332:                incidents, tasks, attempts, holmesInvestigationExecutor, comparisons,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:457:                               RcaTaskExecutor holmesInvestigationExecutor,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/config/AlertFlowConfig.java:476:        executors.put(RcaEngine.HOLMES, holmesInvestigationExecutor);
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesResponseParser.java:13: * <p>分工边界：usage 解析留在 {@link HolmesClient}（账本单一来源，不重复建一套）；
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesClient.java:29:public final class HolmesClient {
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesClient.java:74:    public HolmesClient(String baseUrl, String apiKey, Duration connectTimeout, Duration readTimeout,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:55:public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:57:    private static final Logger log = LoggerFactory.getLogger(HolmesInvestigationExecutor.class);
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:116:    private final HolmesClient client;
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:132:    public HolmesInvestigationExecutor(HolmesClient client,
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:192:        HolmesClient.HolmesChatResult chat;
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:209:        } catch (HolmesClient.HolmesHttpException e) {
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/holmes/HolmesInvestigationExecutor.java:220:        } catch (HolmesClient.HolmesTransportException e) {
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/RcaTaskExecutor.java:16: * RCA task 物理执行抽象（T06 worker 的执行插槽；T07 由 HolmesInvestigationExecutor 实现）。
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/RcaTaskExecutor.java:21: *       （写失败 = 零触网）——这两条由实现方（HolmesInvestigationExecutor）保证；</li>
+裁定: holmesClient/holmesInvestigationExecutor bean+铸造点 HOLMES 分支=删;
+      RcaEngine.HOLMES/Digest 历史读面注释/Am4ShadowTrigger(E2E 入口)=留(豁免:历史行+演练面);
+================================================================
+面② compose 服务/network/volume
+================================================================
+--- alert compose（holmesgpt 所在项目）服务清单:
+30  prometheus:
+49  alertmanager:
+63  holmesgpt:
+95  arena-migrate:
+121  order-arena:
+156  arena-chaos-admin:
+188  litellm-bootstrap:
+213  litellm:
+252  flagd-admin:
+281  opentelemetry-demo:
+285  alert-net:
+288  eval-mgmt:
+295  litellm-logs:   # litellm proxy 日志（M3-24）；宿主侧权限纪律见 README「LiteLLM」节
+--- holmesgpt 段:
+11:#     /api/chat + X-API-Key;镜像 local/holmesgpt:am1-http)
+12-#
+13-# 网络拓扑：
+14-#   - prometheus/alertmanager 挂 opentelemetry-demo 外部网（抓 otel-collector:9464 指标；
+15-#     collector 的 prometheus exporter 由 deploy/alert/otelcol/otelcol-config-extras.yml 加装）
+16-#   - alert-net 外部共享网：holmes(别名 holmes) / alertmanager / control-app(主栈 compose 挂入)
+17-#     / order-arena(AM2) / arena-migrate / postgres(主栈 compose 挂入，AM2 起供 arena 域触库)
+18-#   - eval-mgmt 外部私网（--internal，无宿主端口、无外网出口）：仅 arena-chaos-admin(AM2)；
+19-#     AM3 的 eval-runner 届时加入。业务 order-arena 对 eval-mgmt 零成员（C-3 裁定：
+20-#     "同容器双网监听"不成立，管理面必须拆独立服务/独立容器）
+21-#   - 全部端口仅绑 127.0.0.1，公网零暴露（INV-AM0-1）；arena-chaos-admin 无宿主端口
+22-#
+23-# AM3（M3-24）LiteLLM proxy 收口（§6.6，spike Exp5 实证）：
+24-#   - litellm 容器 = 模型调用唯一出口（P-12 账本盲区收口 + per-EvalRun 预算硬拦/对账）；
+25-#     holmes 的 OPENAI_API_BASE 指向 proxy，proxy 不可达即调查失败（fail-closed，
+26-#     无直连百炼回退路径——E2E-M3-06 断言面）
+27-#   - litellm-bootstrap 一次性建 litellm 角色/库（SpendLogs + 虚拟 key 台账，Prisma 自建表）
+28-
+29-services:
+30-  prometheus:
+31-    image: quay.io/prometheus/prometheus:v3.13.1
+--
+63:  holmesgpt:
+64-    build: ./holmesgpt
+65:    image: local/holmesgpt:am1-http
+66-    container_name: holmesgpt-am1
+67-    restart: unless-stopped
+68-    # G0-10:HTTP /api/chat 服务形态(§6.5;Dockerfile 内 ENTRYPOINT python server.py)
+69-    environment:
+70-      HOLMES_PORT: "8080"
+--- deploy compose holmes 引用（HOLMES_BASE_URL/HOLMES_API_KEY 映射）:
+130:      HOLMES_BASE_URL: ${HOLMES_BASE_URL:-http://holmes:8080}
+131:      HOLMES_API_KEY: ${HOLMES_API_KEY:?}
+133:      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/glm-5}
+146:      APP_ALERT_SHADOW_HOLMES_ENABLED: ${APP_ALERT_SHADOW_HOLMES_ENABLED:-false}
+147:      APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET: ${APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET:-20}
+148:      APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE: ${APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE:-100}
+149:      APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS: ${APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS:-3}
+150:      APP_ALERT_SHADOW_HOLMES_LEASE: ${APP_ALERT_SHADOW_HOLMES_LEASE:-PT15M}
+151:      APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL: ${APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL:-PT30S}
+152:      APP_ALERT_SHADOW_HOLMES_BATCH_SIZE: ${APP_ALERT_SHADOW_HOLMES_BATCH_SIZE:-2}
+裁定: alert compose holmesgpt 服务+其卷/网段=删; litellm=留(C-63:Native 模型调用同经此路由);
+      deploy compose HOLMES_BASE_URL/HOLMES_API_KEY 映射+app.alert.holmes-model=删(随 M6-07);
+================================================================
+面③ 密钥与 env 键（只列键名不打印值）
+================================================================
+--- .env 中 HOLMES 相关键名:
+HOLMES_API_KEY
+HOLMES_BASE_URL
+APP_ALERT_HOLMES_MODEL
+APP_ALERT_SHADOW_HOLMES_ENABLED
+--- 运行容器 holmesgpt-am1 的 env 键名:
+  GPG_KEY (敏感,值不回显)
+  HOLMES_API_KEY (敏感,值不回显)
+  HOLMES_PORT
+  HOME
+  HOSTNAME
+  LANG
+  MODEL
+  OPENAI_API_BASE
+  OPENAI_API_KEY (敏感,值不回显)
+  OVERRIDE_MAX_OUTPUT_TOKEN (敏感,值不回显)
+  PATH
+  PROMETHEUS_URL
+  PWD
+  PYTHON_SHA256
+  PYTHON_VERSION
+裁定: HOLMES_API_KEY(20/.env+compose 映射)=删+回收(轮换 litellm 面所用上游键另行管理,不在本键);
+================================================================
+面④ 监控仪表盘/告警规则 holmes 维度
+================================================================
+  (prometheus/alertmanager 规则零 holmes 维度)
+裁定: 零命中=零处置(LeaveAsIs);
+================================================================
+面⑤ 灾备/恢复脚本 holmes 依赖
+================================================================
+  (备份/恢复脚本零 holmes 依赖)
+裁定: 零命中=零处置;制品恢复路径按 M6-06 恢复演练记录 RTO/RPO;
+================================================================
+面⑥ 文档锚点（docs 树含 holmes 的文件计数+关键锚）
+================================================================
+docs 命中文件数: 172
+/opt/projects/pr_agent_it/docs/告警AM6-落码技术方案.md
+/opt/projects/pr_agent_it/docs/告警AM6-技术方案.md
+/opt/projects/pr_agent_it/docs/告警AM6-Shadow差异报告模板.md
+/opt/projects/pr_agent_it/docs/测试证据/AM6/M6-04-195真机验证-20260909/README.md
+裁定: 历史方案/台账/证据文档=留(豁免:历史事实不改写);决策记录=本扫描后产出;
+M6_DEPENDENCY_SCAN_OK

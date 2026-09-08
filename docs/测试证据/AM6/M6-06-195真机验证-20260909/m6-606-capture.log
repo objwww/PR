@@ -1,0 +1,120 @@
+===== A. six-face scan log =====
+191 /tmp/m6-606-scan.log
+================================================================
+面① 代码引用（main 树 *.java 含 holmes 字样，类名/注释分账）
+================================================================
+main 树命中文件数: 54
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/Am4ShadowTrigger.java
+/opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/FallbackService.java
+--- scan tail (waiver section) ---
+  MODEL
+  OPENAI_API_BASE
+  OPENAI_API_KEY (敏感,值不回显)
+  OVERRIDE_MAX_OUTPUT_TOKEN (敏感,值不回显)
+  PATH
+  PROMETHEUS_URL
+  PWD
+  PYTHON_SHA256
+  PYTHON_VERSION
+裁定: HOLMES_API_KEY(20/.env+compose 映射)=删+回收(轮换 litellm 面所用上游键另行管理,不在本键);
+================================================================
+面④ 监控仪表盘/告警规则 holmes 维度
+================================================================
+  (prometheus/alertmanager 规则零 holmes 维度)
+裁定: 零命中=零处置(LeaveAsIs);
+================================================================
+面⑤ 灾备/恢复脚本 holmes 依赖
+================================================================
+  (备份/恢复脚本零 holmes 依赖)
+裁定: 零命中=零处置;制品恢复路径按 M6-06 恢复演练记录 RTO/RPO;
+================================================================
+面⑥ 文档锚点（docs 树含 holmes 的文件计数+关键锚）
+================================================================
+docs 命中文件数: 172
+/opt/projects/pr_agent_it/docs/告警AM6-落码技术方案.md
+/opt/projects/pr_agent_it/docs/告警AM6-技术方案.md
+/opt/projects/pr_agent_it/docs/告警AM6-Shadow差异报告模板.md
+/opt/projects/pr_agent_it/docs/测试证据/AM6/M6-04-195真机验证-20260909/README.md
+裁定: 历史方案/台账/证据文档=留(豁免:历史事实不改写);决策记录=本扫描后产出;
+M6_DEPENDENCY_SCAN_OK
+===== B. drain barrier (replay, read-only) =====
+== B1 真在途 run（非终态且任一 task 未 DONE=M6-02 影子设计位已排除） ==
+ true_inflight_runs 
+--------------------
+                  0
+(1 row)
+
+== B2 真在途 task（挂在非终态 run 上且未 DONE） ==
+ true_inflight_tasks 
+---------------------
+                   0
+(1 row)
+
+== B3 影子工作未收口 ==
+ unsettled_shadow_work 
+-----------------------
+                     0
+(1 row)
+
+== B4 fallback 未收口 ==
+ unsettled_fallbacks 
+---------------------
+                   0
+(1 row)
+
+== B5 豁免台账量化（非终态 task 按所属 run 终态分组=历史僵尸，无活认领） ==
+ run_state | task_state | count 
+-----------+------------+-------
+ SUCCEEDED | RUNNING    |     1
+ FAILED    | DEAD       |    24
+ CANCELLED | DEAD       |     6
+ CANCELLED | RUNNING    |     3
+ SUCCEEDED | READY      |     1
+(5 rows)
+
+== 恢复演练取材面：最旧 HOLMES SUCCEEDED 报告 ==
+                run_id                |              report_id               |          created_at           | pkg_bytes 
+--------------------------------------+--------------------------------------+-------------------------------+-----------
+ 9b7b51c6-b940-42f2-8587-7b6f41e26b4e | d86f99fd-6bf9-4e83-80ef-4ef54bd7ebaa | 2026-09-04 14:16:39.278889+00 |       467
+(1 row)
+
+===== C. restore-read replay (read-only, RTO re-time) =====
+== 旧路径制品恢复实跑（修正 jsonb cast；读报告行+证据包字节+sha256） ==
+run=9b7b51c6-b940-42f2-8587-7b6f41e26b4e|report=d86f99fd-6bf9-4e83-80ef-4ef54bd7ebaa|pkg_bytes=467
+restore-read RTO=0s
+== 全量历史 HOLMES 报告可读性面（计数+空包审计） ==
+131|0|382|3470
+== control-app 存续终验 ==
+health=200
+RESTORE_M606_OK
+===== D. exit posture snapshot =====
+--- holmesgpt container state ---
+holmesgpt-am1 Exited (0) 9 minutes ago
+--- control-app health ---
+200
+--- control-app image digest ---
+
+pr-agent/control-app <none>
+--- .env HOLMES/SHADOW/FALLBACK key NAMES only (values never printed) ---
+HOLMES_API_KEY=<redacted>
+HOLMES_BASE_URL=<redacted>
+APP_ALERT_HOLMES_MODEL=<redacted>
+APP_ALERT_SHADOW_HOLMES_ENABLED=<redacted>
+APP_ALERT_FALLBACK_ENABLED=<redacted>
+--- sealed rollback artifacts ---
+total 48
+drwxr-xr-x 2 root root  4096 Sep  9 06:43 .
+drwxr-xr-x 3 root root  4096 Sep  9 06:43 ..
+-rw-rw-r-- 1 root root 13896 Sep  9 05:55 alert-compose-pre-removal.yml
+-rw-rw-r-- 1 root root 13170 Sep  9 05:55 deploy-compose-pre-removal.yml
+-rw------- 1 root root  2100 Sep  9 06:42 dotenv-pre-removal.bak
+-rw-r--r-- 1 root root    72 Sep  9 06:43 holmesgpt-image-digest.txt
+sha256:d0a0518d734cc58b24b61e98abf992cdf53d238974e497539e5d7268d8062583
+--- alert project holmesgpt service still declared (pre-removal anchor) ---
+6
+CAPTURE_M606_OK
+
+--- posture addendum (read-only re-check) ---
+APP_ALERT_SHADOW_HOLMES_ENABLED=false
+APP_ALERT_FALLBACK_ENABLED=false
+control-app image=sha256:baaaa58ff68fc28098a70f7d1d8ecd944281ab3525b616d4eb61860c1f562f2f
