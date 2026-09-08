@@ -14,6 +14,7 @@ import com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingVie
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.RunFallbackRepository;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
+import com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.observability.StructuredLog;
 import org.slf4j.Logger;
@@ -200,6 +201,7 @@ public final class FallbackService {
         payload.put("source_incident_id", failedRun.incidentId().toString());
         payload.put("error_class", errorClass);
         payload.put("depth", 1);
-        return payload.toString();
+        // rca_event.payload 是 json 列：必须走仓内规范序列化（BA-55：Map.toString 真 PG 拒收）
+        return InternalCanonicalJsonV1.canonicalize(payload);
     }
 }

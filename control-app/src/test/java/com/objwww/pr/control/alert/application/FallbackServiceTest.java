@@ -123,6 +123,8 @@ class FallbackServiceTest {
         assertThat(events.get(0).eventType()).isEqualTo("fallback_of");
         assertThat(events.get(0).runId()).isEqualTo(cast.id());
         assertThat(events.get(0).payloadJson()).contains(seed.runId.toString());
+        // BA-55：payload 落真 PG json 列，必须是 JSON 形（非 Map.toString 的 {k=v}）
+        assertThat(events.get(0).payloadJson()).startsWith("{").contains("\"source_run_id\"");
         assertThat(events.get(0).payloadJson()).contains("PROPOSAL_MISSING");
     }
 

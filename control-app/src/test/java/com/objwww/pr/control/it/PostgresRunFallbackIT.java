@@ -167,7 +167,7 @@ class PostgresRunFallbackIT extends PostgresITBase {
                 100, Instant.now(), Instant.now(), Instant.now(), null, null, 0, 1, 3,
                 Instant.now(), Instant.now()));
         UUID attemptId = UUID.randomUUID();
-        attempts.insert(new RcaAttempt(attemptId, taskId, 0, 0, "it",
+        attempts.insert(new RcaAttempt(attemptId, taskId, 1, 0, "it",
                 RcaAttemptStatus.SUCCEEDED, null, null, null, Instant.now(),
                 Instant.now(), null));
 
