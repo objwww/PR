@@ -57,8 +57,23 @@ class AlertInboxProcessorTest {
     }
 
     private AlertInboxProcessor newProcessor(DeferredPolicy policy) {
+        // M6-07：fixture 迁 Native 唯一引擎面（percent=100 全桶 NATIVE；原无 router
+        // 便捷构造默认 holmesOnly，其 HOLMES 投影已不铸 run——C-77）
+        NativeEngineWiringTest.WiringBundles bundles = new NativeEngineWiringTest.WiringBundles();
+        java.util.Map<String, Object> canary = new java.util.LinkedHashMap<>();
+        canary.put("percent", 100);
+        canary.put("whitelist", java.util.List.of());
+        canary.put("max_native_runs", 100);
+        java.util.Map<String, Object> content = new java.util.LinkedHashMap<>();
+        content.put("policy_version", "policy-2026-09");
+        content.put("canary", canary);
+        bundles.publish(content);
+        com.objwww.pr.control.release.application.CanaryRouter nativeRouter =
+                new com.objwww.pr.control.release.application.CanaryRouter(bundles,
+                        new NativeEngineWiringTest.WiringDecisions(), true, clock::now);
         IncidentProjector projector = new IncidentProjector(stores.events, stores.incidents,
-                stores.runs, stores.tasks, identity, policy, SlaPolicy.defaults(), clock);
+                stores.runs, stores.tasks, identity, policy, SlaPolicy.defaults(), clock,
+                nativeRouter);
         return new AlertInboxProcessor(stores.inbox, projector,
                 TransactionOperations.withoutTransaction(), clock, "test-owner",
                 Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofSeconds(10),
@@ -107,7 +122,8 @@ class AlertInboxProcessorTest {
 
         assertThat(stores.tasks.all()).hasSize(1);
         RcaTask task = stores.tasks.all().get(0);
-        assertThat(task.taskKey()).isEqualTo(RcaTask.HOLMES_INVESTIGATE);
+        // M6-07：NATIVE 唯一引擎面——task key 随路由引擎（C-77 迁移前为 HOLMES_INVESTIGATE）
+        assertThat(task.taskKey()).isEqualTo("NATIVE_INVESTIGATE");
         assertThat(task.state()).isEqualTo(RcaTaskState.READY);
         assertThat(task.priority()).isEqualTo(SlaPolicy.PRIORITY_CRITICAL);
         assertThat(task.deadlineAt()).isEqualTo(Instant.MAX);

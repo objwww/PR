@@ -298,19 +298,8 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
                 AlertClock.system(), "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                new com.objwww.pr.control.alert.application.FallbackService(runs,
-                        new PostgresIncidentRepository(controlJdbc), tasks,
-                        new PostgresRcaEventAppender(controlJdbc, controlTx, controlTx),
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresRunFallbackRepository(controlJdbc),
-                        SlaPolicy.defaults(), AlertClock.system(), AlertMetrics.NOOP,
-                        true, 20),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(controlJdbc),
-                new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs,
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresHolmesShadowWorkRepository(controlJdbc),
-                        AlertClock.system(), AlertMetrics.NOOP, false, 20, 100, 3));
+                        .PostgresReportWinnerRepository(controlJdbc));
     }
 
     private AgentRegistry agentRegistry() {

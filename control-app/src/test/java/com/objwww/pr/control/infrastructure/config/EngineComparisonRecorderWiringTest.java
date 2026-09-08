@@ -11,10 +11,10 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * BA-56 装配面钉住（本地回归绊线）：引擎对照结论记录器必须由 docker profile
- * 常驻的 {@link AlertFlowConfig} 装配，且不得回挂 am4-shadow-trigger 专属
- * profile（195 真启动实证的缺口形态——本地默认 profile smoke 不加载 docker
- * 装配，只能靠本钉住 + 195 真启动双面守）。
+ * 引擎对照结论记录器装配面钉住（M6-07 回迁形态）：docker profile 常驻的
+ * {@link AlertFlowConfig} 不再承载该 bean——BA-56 上收的原因（docker profile
+ * 影子 worker）已随 Holmes 退场退役，公共面摘除；唯一消费者回到
+ * am4-shadow-trigger 专属 profile（一次性入口）。双面各钉一针。
  *
  * @author wanghua
  * @date 2026-09-09
@@ -22,22 +22,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EngineComparisonRecorderWiringTest {
 
     @Test
-    void alertFlowConfigAssemblesRecorderOnTheCommonFace() {
+    void alertFlowConfigNeverAssemblesTheRecorderAfterRetirement() {
         List<Method> beans = Arrays.stream(AlertFlowConfig.class.getDeclaredMethods())
                 .filter(m -> m.isAnnotationPresent(
                         org.springframework.context.annotation.Bean.class))
                 .filter(m -> m.getReturnType().equals(EngineComparisonRecorder.class))
                 .collect(Collectors.toList());
-        assertThat(beans).hasSize(1);
+        assertThat(beans).isEmpty();
     }
 
     @Test
-    void am4ShadowTriggerProfileNeverOwnsTheRecorder() {
+    void am4ShadowTriggerProfileOwnsTheRecorder() {
         List<Method> beans = Arrays.stream(Am4ShadowTriggerConfig.class.getDeclaredMethods())
                 .filter(m -> m.isAnnotationPresent(
                         org.springframework.context.annotation.Bean.class))
                 .filter(m -> m.getReturnType().equals(EngineComparisonRecorder.class))
                 .collect(Collectors.toList());
-        assertThat(beans).isEmpty();
+        assertThat(beans).hasSize(1);
     }
 }

@@ -3,7 +3,6 @@ package com.objwww.pr.control.infrastructure.nativeexec;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.application.AlertClock;
 import com.objwww.pr.control.alert.application.DeterministicSupervisor;
-import com.objwww.pr.control.alert.application.FallbackService;
 import com.objwww.pr.control.alert.application.IncidentProjector;
 import com.objwww.pr.control.alert.application.NativeReportAdapter;
 import com.objwww.pr.control.alert.application.PlanCompiler;
@@ -142,16 +141,7 @@ class NativeInvestigationExecutorTest {
                 stores.cas, com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
                 clock, "rca", com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                new FallbackService(stores.runs, stores.incidents, stores.tasks,
-                        stores.rcaEvents, stores.fallbacks,
-                        com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
-                        clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
-                        true, 20),
-                stores.winners,
-                new com.objwww.pr.control.alert.application.HolmesShadowSampler(stores.runs,
-                        stores.shadowWorks, clock,
-                        com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
-                        false, 20, 100, 3));
+                stores.winners);
         incidentId = UUID.randomUUID();
         stores.incidents.insert(new Incident(incidentId, "alertname=HighErrorRate|service=checkout",
                 IncidentStatus.FIRING, 0, NOW, NOW, null, null, null, 0, 0, 0, null,

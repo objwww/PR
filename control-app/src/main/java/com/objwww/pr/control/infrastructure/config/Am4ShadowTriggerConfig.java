@@ -9,10 +9,14 @@ import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository;
+import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
+import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.release.application.EngineComparisonRecorder;
+import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
+import com.objwww.pr.control.release.domain.repository.EngineComparisonRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -35,8 +39,9 @@ import java.util.UUID;
  * <p>须与 {@code docker} profile 同开（依赖 AlertAm4Config 装配的三 Agent/
  * Supervisor）；web-application-type=none 保证一次性实例不接入 webhook 面。
  * 正式触发入口形态仍是 G2 终裁开放项（配方 §6.1），本装配不发明。
- * 引擎对照记录器装配已上收 AlertFlowConfig 公共面（BA-56：M6-05 反向影子
- * worker 复用后，docker profile 常驻进程同需此依赖，不能挂本 profile）。
+ * 引擎对照记录器 bean 于 M6-07 回迁本 profile（BA-56 上收 AlertFlowConfig 的
+ * 原因——docker profile 影子 worker——已随 Holmes 退场退役，公共面不再承载；
+ * 本 profile 是该 recorder 唯一消费者）。
  *
  * @author wanghua
  * @date 2026-09-05
@@ -44,6 +49,19 @@ import java.util.UUID;
 @Configuration
 @Profile("am4-shadow-trigger")
 public class Am4ShadowTriggerConfig {
+
+    /**
+     * M6-07 回迁（原 BA-56 上收面反转）：对照记录器唯一消费者回到本一次性入口。
+     */
+    @Bean
+    public EngineComparisonRecorder engineComparisonRecorder(
+            ConfigBundleRepository bundles, RcaRunRepository runs,
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository reports,
+            ClaimStore claims, EngineComparisonRepository comparisons,
+            AlertMetrics alertMetrics) {
+        return new EngineComparisonRecorder(bundles, runs, reports, claims,
+                comparisons, alertMetrics);
+    }
 
     @Bean
     public CommandLineRunner am4ShadowTrigger(DeterministicSupervisor am4DeterministicSupervisor,

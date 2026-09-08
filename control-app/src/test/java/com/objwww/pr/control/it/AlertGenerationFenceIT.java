@@ -81,17 +81,8 @@ class AlertGenerationFenceIT extends PostgresITBase {
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
                 Instant::now, "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
-                        tasks, new PostgresRcaEventAppender(controlJdbc, controlTx, controlTx),
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresRunFallbackRepository(controlJdbc),
-                        SlaPolicy.defaults(), Instant::now, AlertMetrics.NOOP, true, 20),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(controlJdbc),
-                new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs,
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresHolmesShadowWorkRepository(controlJdbc),
-                        Instant::now, AlertMetrics.NOOP, false, 20, 100, 3));
+                        .PostgresReportWinnerRepository(controlJdbc));
     }
 
     @Test

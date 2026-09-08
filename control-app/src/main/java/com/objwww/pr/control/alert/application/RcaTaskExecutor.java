@@ -13,12 +13,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * RCA task 物理执行抽象（T06 worker 的执行插槽；T07 由 HolmesInvestigationExecutor 实现）。
+ * RCA task 物理执行抽象（T06 worker 的执行插槽；T07 首由 HolmesInvestigationExecutor 实现，M6-07 后由 NativeInvestigationExecutor 承载）。
  *
  * <p>实现约束（§4.1 时序 / AFT-30 纪律）：
  * <ul>
  *   <li>HTTP 调用发生在任何 DB 事务之外；外部调用账本 insertStarted 在触网前独立短事务
- *       （写失败 = 零触网）——这两条由实现方（HolmesInvestigationExecutor）保证；</li>
+ *       （写失败 = 零触网）——这两条由实现方保证（首实现 HolmesInvestigationExecutor 已随 M6-07 退场删除）；</li>
  *   <li>实现不得写 rca_task/rca_run/incident——收尾统一走
  *       {@link RcaRunOrchestrator#finishTask}（epoch 栅栏 + §6.7 单事务算法）；</li>
  *   <li>告警 labels/annotations 属不可信内容，透传给外部前按 §6.6-5 处理。</li>

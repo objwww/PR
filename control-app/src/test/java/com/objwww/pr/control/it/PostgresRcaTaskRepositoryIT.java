@@ -193,8 +193,72 @@ class PostgresRcaTaskRepositoryIT extends PostgresITBase {
     @Test
     void staleFiringAfterResolvedKeepsIncidentResolvedOnRealPg() {
         FixedClock clock = new FixedClock(Instant.parse("2026-09-03T10:00:00Z"));
+        // M6-07（C-77）：显式 percent=100 NATIVE 路由（无 router 便捷构造已删；
+        // 原 holmesOnly 默认下 FIRING 铸 HOLMES run 的形态随退场终结）
+        java.util.Map<String, Object> canary = new java.util.LinkedHashMap<>();
+        canary.put("percent", 100);
+        canary.put("whitelist", java.util.List.of());
+        canary.put("max_native_runs", 100);
+        java.util.Map<String, Object> content = new java.util.LinkedHashMap<>();
+        content.put("policy_version", "policy-2026-09");
+        content.put("canary", canary);
+        com.objwww.pr.control.release.domain.model.ConfigBundle bundle =
+                com.objwww.pr.control.release.domain.model.ConfigBundle.of(content, "it-op",
+                        Instant.parse("2026-09-03T00:00:00Z"));
+        com.objwww.pr.control.release.application.CanaryRouter nativeRouter =
+                new com.objwww.pr.control.release.application.CanaryRouter(
+                        new com.objwww.pr.control.release.domain.repository.ConfigBundleRepository() {
+                            @Override
+                            public long nextRevision() {
+                                return 1;
+                            }
+
+                            @Override
+                            public boolean insert(
+                                    com.objwww.pr.control.release.domain.model.ConfigBundle b) {
+                                return true;
+                            }
+
+                            @Override
+                            public java.util.Optional<com.objwww.pr.control.release.domain.model.ConfigBundle> findByDigest(
+                                    com.objwww.pr.shared.Digest digest) {
+                                return java.util.Optional.empty();
+                            }
+
+                            @Override
+                            public java.util.Optional<com.objwww.pr.shared.Digest> activeDigest() {
+                                return java.util.Optional.of(bundle.bundleDigest());
+                            }
+
+                            @Override
+                            public java.util.Optional<ActivePointer> findActivePointer() {
+                                return java.util.Optional.of(new ActivePointer(
+                                        bundle.bundleDigest(), 1L,
+                                        Instant.parse("2026-09-03T00:00:00Z")));
+                            }
+
+                            @Override
+                            public boolean activate(com.objwww.pr.shared.Digest toDigest,
+                                    com.objwww.pr.shared.Digest expectedCurrent, String by,
+                                    Instant at) {
+                                return true;
+                            }
+                        },
+                        new com.objwww.pr.control.release.domain.repository.CanaryDecisionLogRepository() {
+                            @Override
+                            public void append(DecisionRow row) {
+                                // IT 审计行无需落库断言
+                            }
+
+                            @Override
+                            public long countNativeDecisions() {
+                                return 0;
+                            }
+                        },
+                        true, clock::now);
         IncidentProjector projector = new IncidentProjector(events, incidents, runs, tasks,
-                new AlertIdentityFactory(), new DeferredPolicy(1000), SlaPolicy.defaults(), clock);
+                new AlertIdentityFactory(), new DeferredPolicy(1000), SlaPolicy.defaults(),
+                clock, nativeRouter);
         UUID inboxId = insertInboxRow();
 
         projector.project(inboxId, List.of(alert(AlertFiringStatus.FIRING, "2026-09-03T09:00:00Z")));

@@ -41,13 +41,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * M6-01 Native 执行面接线（1% Canary）——铸造点与分派面 UT：
+ * M6-01 Native 执行面接线（1% Canary；M6-07 后为 Native 唯一引擎面）——铸造点与分派面 UT：
  * <ul>
- *   <li>task_key 按 routing.engine 选择（NATIVE run 铸 NATIVE_INVESTIGATE，
- *       HOLMES 保持 HOLMES_INVESTIGATE），铸造点 = IncidentProjector（INITIAL/FIRING
- *       重查）+ RcaRunOrchestrator（finishTask 材料变化 RERUN）；</li>
+ *   <li>task_key 按 routing.engine 选择（NATIVE run 铸 NATIVE_INVESTIGATE；
+ *       M6-07 C-70：HOLMES 投影=决策照记零铸造），铸造点 = IncidentProjector
+ *       （INITIAL/FIRING 重查）+ RcaRunOrchestrator（finishTask 材料变化 RERUN）；</li>
  *   <li>RcaWorker 按 Map&lt;RcaEngine, RcaTaskExecutor&gt; 分派；未知 engine fail-closed
- *       （task DEAD + run FAILED，不误入 HOLMES 执行器）。</li>
+ *       （task DEAD + run FAILED）；M6-04 fallback 钩子与 M6-05 影子入队钩子已随
+ *       Holmes 退场拆除（诚实失败/成功，零第二引擎铸造）。</li>
  * </ul>
  * 并发/真 PG 语义归 195 契约 IT；本类用 InMemory + withoutTransaction。
  */
@@ -118,20 +119,11 @@ class NativeEngineWiringTest {
     }
 
     private RcaRunOrchestrator newOrchestrator() {
+        // M6-07：fallback/影子抽样参数已随退场摘除（构造面 16 参）
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier(), stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP, nativeRouter,
-                new FallbackService(stores.runs, stores.incidents, stores.tasks,
-                        stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(), clock,
-                        AlertMetrics.NOOP, true, 20),
-                stores.winners, newSampler(true));
-    }
-
-    /** M6-05 影子抽样面（wiring 测试用真 Sampler；enabled 由用例裁定） */
-    HolmesShadowSampler newSampler(boolean enabled) {
-        return new HolmesShadowSampler(stores.runs, stores.shadowWorks, clock,
-                AlertMetrics.NOOP, enabled, 20, 100, 3);
+                AlertMetrics.NOOP, nativeRouter, stores.winners);
     }
 
     private ReportCompletedNotifier notifier() {
@@ -192,15 +184,20 @@ class NativeEngineWiringTest {
     }
 
     @Test
-    @DisplayName("HOLMES 路由铸造：task key 保持 HOLMES_INVESTIGATE（回归锚）")
-    void holmesRoutingKeepsHolmesTaskKey() {
-        bundles.publish(canaryBundle(0, List.of(), 100));   // percent=0：全桶 HOLMES
+    @DisplayName("M6-07 HOLMES 投影不铸 run：决策审计行照记 + run/task 零铸造（无写入入口）")
+    void holmesRoutingCastsNothing() {
+        bundles.publish(canaryBundle(0, List.of(), 100));   // percent=0：全桶 HOLMES 意愿
 
         deliverFiring("checkout", "材料一");
 
-        assertThat(stores.tasks.all().get(0).taskKey()).isEqualTo(RcaTask.HOLMES_INVESTIGATE);
-        assertThat(stores.runs.findRoutingById(stores.runs.all().get(0).id())
-                .orElseThrow().engine()).isEqualTo(RcaEngine.HOLMES);
+        // 决策面：审计行照记（历史可比性不破——路由器判断面原样保留）
+        assertThat(decisions.rows).hasSize(1);
+        assertThat(decisions.rows.get(0).decision())
+                .isEqualTo(CanaryDecision.BUCKETED_HOLMES.name());
+        // 铸造面：第二引擎已物理下线，HOLMES 投影零 run 零 task（C-70 fail-closed
+        // 无写入入口；不代跑 NATIVE——INV-AM6-2 语义分歧不伪装成交付）
+        assertThat(stores.runs.all()).isEmpty();
+        assertThat(stores.tasks.all()).isEmpty();
     }
 
     @Test
@@ -266,11 +263,11 @@ class NativeEngineWiringTest {
         assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.FAILED);
     }
 
-    // ------------------------------------------------------------------ M6-04 fallback hook（worker 失败路径接线证明）
+    // ------------------------------------------------------------------ M6-07：fallback/shadow 钩子拆除后的诚实失败/成功面
 
     @Test
-    @DisplayName("M6-04 hook：NATIVE run 终态失败（封闭错误类）→ finishTask 内自动铸 HOLMES fallback")
-    void fallbackHookFiresOnEligibleNativeTerminalFailure() {
+    @DisplayName("M6-07 hook 已拆除：NATIVE run 终态失败（原封闭错误类）不再铸 fallback")
+    void nativeTerminalFailureCastsNoFallback() {
         ScriptedExecutor nativeExec = new ScriptedExecutor();
         RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
 
@@ -278,34 +275,23 @@ class NativeEngineWiringTest {
         nativeExec.failTerminalNext("PROPOSAL_MISSING");
         assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
 
-        // 源 run 终态失败、task DEAD、错误类留痕
+        // 失败面照旧诚实落档：run FAILED + task DEAD + 错误类留痕 + 指针清空
         RcaRun source = stores.runs.all().get(0);
         assertThat(source.state()).isEqualTo(RcaRunState.FAILED);
         assertThat(source.lastError()).isEqualTo("PROPOSAL_MISSING");
         assertThat(stores.tasks.all().get(0).state()).isEqualTo(RcaTaskState.DEAD);
-
-        // 恰一次 fallback：占位 + HOLMES RERUN QUEUED run + READY task + 指针上移 + 审计事件
-        assertThat(stores.fallbacks.all()).hasSize(1);
-        assertThat(stores.fallbacks.all().get(0).sourceNativeRunId()).isEqualTo(source.id());
-        assertThat(stores.fallbacks.all().get(0).depth()).isEqualTo(1);
-        RcaRun cast = stores.runs.all().get(1);
-        assertThat(cast.trigger()).isEqualTo(RunTrigger.RERUN);
-        assertThat(cast.state()).isEqualTo(RcaRunState.QUEUED);
-        assertThat(cast.generation()).isEqualTo(source.generation());
-        assertThat(stores.runs.findRoutingById(cast.id()).orElseThrow().engine())
-                .isEqualTo(RcaEngine.HOLMES);
-        assertThat(stores.tasks.all()).hasSize(2);
-        assertThat(stores.tasks.all().get(1).taskKey()).isEqualTo(RcaTask.HOLMES_INVESTIGATE);
-        assertThat(stores.tasks.all().get(1).state()).isEqualTo(RcaTaskState.READY);
         assertThat(stores.incidents.findById(source.incidentId()).orElseThrow().currentRcaRunId())
-                .isEqualTo(cast.id());
-        assertThat(stores.rcaEvents.all()).hasSize(1);
-        assertThat(stores.rcaEvents.all().get(0).eventType()).isEqualTo("fallback_of");
-        assertThat(stores.rcaEvents.all().get(0).payloadJson()).contains(source.id().toString());
+                .isNull();
+        // 铸造面：fallback 钩子已随 Holmes 退场拆除——即使原封闭错误类也不铸
+        // HOLMES RERUN（V33 run_fallback 表保留为 insert-only 历史读面，零新行）
+        assertThat(stores.fallbacks.all()).isEmpty();
+        assertThat(stores.runs.all()).hasSize(1);
+        assertThat(stores.tasks.all()).hasSize(1);
+        assertThat(stores.rcaEvents.all()).isEmpty();
     }
 
     @Test
-    @DisplayName("M6-04 反例：低质量终态失败（ADAPTER_PACKAGE_REJECTED）不触发 fallback")
+    @DisplayName("M6-07 反例并入：低质量终态失败（ADAPTER_PACKAGE_REJECTED）同样零 fallback")
     void lowQualityNativeFailureLeavesNoFallback() {
         ScriptedExecutor nativeExec = new ScriptedExecutor();
         RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
@@ -322,8 +308,8 @@ class NativeEngineWiringTest {
     }
 
     @Test
-    @DisplayName("M6-05：NATIVE SUCCEEDED run 终态收尾点触发影子抽样入队（确定性 key + 失败 run 不入选）")
-    void nativeSuccessEnqueuesHolmesShadowWork() {
+    @DisplayName("M6-07 hook 已拆除：NATIVE SUCCEEDED 收尾点不再入队影子抽样")
+    void nativeSuccessEnqueuesNoShadowWork() {
         ScriptedExecutor nativeExec = new ScriptedExecutor();
         RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
 
@@ -331,21 +317,10 @@ class NativeEngineWiringTest {
         nativeExec.succeedNext();
         assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
 
-        RcaRun source = stores.runs.all().get(0);
-        assertThat(source.state()).isEqualTo(RcaRunState.SUCCEEDED);
-        // 抽样命中：确定性 shadow_key 对照工作行入库（kind COMPARISON + 同快照同代）
-        assertThat(stores.shadowWorks.all()).hasSize(1);
-        var row = stores.shadowWorks.all().get(0);
-        assertThat(row.shadowKey())
-                .isEqualTo(HolmesShadowSampler.COMPARISON_KEY_PREFIX + source.id());
-        assertThat(row.kind()).isEqualTo("COMPARISON");
-        assertThat(row.nativeRunId()).isEqualTo(source.id());
-        assertThat(row.incidentId()).isEqualTo(source.incidentId());
-        assertThat(row.generation()).isEqualTo(source.generation());
-        assertThat(row.snapshotDigest()).isEqualTo(source.investigationHash().hex());
-        // 终态失败的同 incident run 不入选（由 fallback 面接管）
-        int before = stores.shadowWorks.all().size();
-        assertThat(before).isEqualTo(1);
+        // 成功面照旧诚实落档；V34 影子入队钩子已随 Holmes 退场拆除——
+        // holmes_shadow_work 零新行（表保留为对照期 insert-only 历史读面）
+        assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.SUCCEEDED);
+        assertThat(stores.shadowWorks.all()).isEmpty();
     }
 
     // ------------------------------------------------------------------ 迷你认账面（CanaryRouterTest 同构）

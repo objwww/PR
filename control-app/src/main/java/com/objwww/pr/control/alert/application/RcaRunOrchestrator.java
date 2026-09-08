@@ -92,15 +92,13 @@ public class RcaRunOrchestrator {
     private final ObjectMapper mapper = new ObjectMapper();
     private final AlertMetrics metrics;
     private final CanaryRouter canaryRouter;
-    private final FallbackService fallback;
     private final com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners;
-    private final HolmesShadowSampler holmesShadow;
 
     /**
-     * M6-04 全量构造（生产装配面）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
-     * + FallbackService（run 级 fallback 恰一次铸 Holmes）+ 发布赢家仓储
-     * （generation 发布 CAS）。栅栏依赖无默认值——装配缺失即启动失败（fail-closed，
-     * 不允许静默无栅栏的发布/回退面）。
+     * 生产装配面（M6-07 收瘦）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
+     * + 发布赢家仓储（generation 发布 CAS）。M6-04 FallbackService 与 M6-05 影子入队
+     * 参数已随 Holmes 退场摘除（铸造点拆面，技术方案 §4.4）。栅栏依赖无默认值——
+     * 装配缺失即启动失败（fail-closed，不允许静默无栅栏的发布面）。
      */
     public RcaRunOrchestrator(RcaTaskRepository tasks,
                               RcaRunRepository runs,
@@ -117,9 +115,7 @@ public class RcaRunOrchestrator {
                               String slotScope,
                               AlertMetrics metrics,
                               CanaryRouter canaryRouter,
-                              FallbackService fallback,
-                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
-                              HolmesShadowSampler holmesShadow) {
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -135,9 +131,7 @@ public class RcaRunOrchestrator {
         this.slotScope = Objects.requireNonNull(slotScope);
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
-        this.fallback = Objects.requireNonNull(fallback, "fallback");
         this.winners = Objects.requireNonNull(winners, "winners");
-        this.holmesShadow = Objects.requireNonNull(holmesShadow, "holmesShadow");
     }
 
     /**
@@ -241,29 +235,16 @@ public class RcaRunOrchestrator {
             runs.update(withRunState(run, runFailed ? RcaRunState.FAILED : run.state(), now,
                     result.errorClass()));
             if (runFailed) {
+                // M6-07：fallback 铸造钩子已随 Holmes 退场拆除——run FAILED + 指针
+                // 清空后即终局（诚实失败，无第二引擎兜底；C-69 制品恢复语义）。
                 clearIncidentRunPointer(run, now);
-                // M6-04 run 级 fallback：仅 NATIVE 源 + 安全/运行封闭错误类进入
-                // FallbackService（服务内二次裁定 + uq_rf_source 唯一占位 + 同事务铸
-                // HOLMES RERUN）；取消/过期/人工终止走上方 STALE/非 DEAD 分支结构性
-                // 不触发，UNRESOLVED/低质量被封闭集排除（FUT-12 语义分歧不回退）。
-                fallback.tryCastFromFailedNative(
-                        withRunState(run, RcaRunState.FAILED, now, result.errorClass()),
-                        result.errorClass(), fresh.priority());
             }
             return outcome;
         }
 
         RcaRunStateMachine.requireTransition(run.state(), RcaRunState.SUCCEEDED);
         runs.update(withRunState(run, RcaRunState.SUCCEEDED, now, null));
-        // M6-05 反向影子抽样：NATIVE SUCCEEDED run 按确定性规则入队 V34 影子工作。
-        // 观察面容错（同 fallback 抽取面纪律）：影子入队失败绝不毒化收尾事务。
-        try {
-            holmesShadow.tryEnqueueAfterNativeSuccess(
-                    withRunState(run, RcaRunState.SUCCEEDED, now, null));
-        } catch (RuntimeException e) {
-            log.warn("holmes shadow 抽样入队失败（不影响收尾）run={}: {}", run.id(),
-                    String.valueOf(e.getMessage()));
-        }
+        // M6-07：影子抽样入队钩子已随 Holmes 退场拆除（V34 面保留为对照期历史读面）。
         Incident incident = incidents.findByIdForUpdate(run.incidentId()).orElseThrow();
 
         // 分支 1：告警已恢复——清 rerun 线索，不再调查（调查报告已留存）
@@ -296,6 +277,13 @@ public class RcaRunOrchestrator {
         UUID runId = UUID.randomUUID();
         RcaRunRouting routing = canaryRouter.route(
                 runId, incident.incidentKey(), incident.incidentKey());
+        // M6-07（C-70）：HOLMES 投影=决策照记不铸（同 IncidentProjector 守卫——
+        // RERUN 也是铸造点，无写入入口不变量两处同闸）。
+        if (routing.engine() == com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES) {
+            log.info("incident {} RERUN 路由决策 {} 为 HOLMES 意愿：第二引擎已退场，不铸 run",
+                    incident.id(), routing.decision());
+            return;
+        }
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null);
         runs.insertRouted(run, routing);

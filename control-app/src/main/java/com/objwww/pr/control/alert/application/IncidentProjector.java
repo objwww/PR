@@ -47,6 +47,9 @@ import java.util.UUID;
  */
 public class IncidentProjector {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(IncidentProjector.class);
+
     /** 投影结果（AlertInboxProcessor 据此决定 inbox 行终局/重投） */
     public record ProjectOutcome(int immediateCount, int deferredCount, int duplicateCount) {
         public int totalAlerts() {
@@ -64,19 +67,9 @@ public class IncidentProjector {
     private final AlertClock clock;
     private final CanaryRouter canaryRouter;
 
-    public IncidentProjector(AlertEventRepository events,
-                             IncidentRepository incidents,
-                             RcaRunRepository runs,
-                             RcaTaskRepository tasks,
-                             AlertIdentityFactory identity,
-                             DeferredPolicy deferredPolicy,
-                             SlaPolicy sla,
-                             AlertClock clock) {
-        this(events, incidents, runs, tasks, identity, deferredPolicy, sla, clock,
-                CanaryRouter.holmesOnly());
-    }
-
-    /** M5-10：CanaryRouter 注入构造（新 run 铸造点路由决策 + 路由四列落行） */
+    /** M5-10：CanaryRouter 注入构造（新 run 铸造点路由决策 + 路由四列落行）。
+     * M6-07：无 router 便捷构造（默认 holmesOnly）已删——HOLMES 投影不铸 run 后
+     * 该默认等价"永不铸 run"陷阱（C-77）；路由依赖显式必填（fail-closed 装配律）。 */
     public IncidentProjector(AlertEventRepository events,
                              IncidentRepository incidents,
                              RcaRunRepository runs,
@@ -290,6 +283,15 @@ public class IncidentProjector {
         UUID runId = UUID.randomUUID();
         RcaRunRouting routing = canaryRouter.route(
                 runId, incident.incidentKey(), incident.incidentKey());
+        // M6-07 Holmes 退场（C-70）：HOLMES 投影=决策审计行照记（路由器判断面原样
+        // 保留，历史可比性不破）但不铸 run/task——第二引擎已物理下线，技术方案 §4.4
+        // "无写入入口"不变量由本守卫保证；fail-closed 不代跑 NATIVE（INV-AM6-2 同律：
+        // 语义分歧不得伪装成交付）。incident 等待下一次告警再驱动（不做指针/pending 变更）。
+        if (routing.engine() == com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES) {
+            log.info("incident {} 路由决策 {} 为 HOLMES 意愿：第二引擎已退场，决策照记不铸 run",
+                    incident.id(), routing.decision());
+            return;
+        }
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 trigger, RcaRunState.QUEUED, invHash, now, now, null, null, null);
         runs.insertRouted(run, routing);

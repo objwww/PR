@@ -158,18 +158,8 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
                 AlertClock.system(), "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
-                        tasks, new PostgresRcaEventAppender(jdbc, controlTx, controlTx),
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresRunFallbackRepository(jdbc),
-                        SlaPolicy.defaults(), AlertClock.system(), AlertMetrics.NOOP,
-                        true, 20),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(jdbc),
-                new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs,
-                        new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresHolmesShadowWorkRepository(jdbc),
-                        AlertClock.system(), AlertMetrics.NOOP, false, 20, 100, 3));
+                        .PostgresReportWinnerRepository(jdbc));
     }
 
     // ------------------------------------------------------------------ 案① 全链

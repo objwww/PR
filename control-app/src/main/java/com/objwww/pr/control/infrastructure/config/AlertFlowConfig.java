@@ -31,8 +31,6 @@ import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.infrastructure.cas.LocalCasArtifactStore;
-import com.objwww.pr.control.infrastructure.holmes.HolmesClient;
-import com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor;
 import com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.release.application.CanaryRouter;
@@ -149,67 +147,18 @@ public class AlertFlowConfig {
 
     @Bean
     public EvidencePackageValidator evidencePackageValidator(
-            @Value("${app.alert.holmes.max-response-bytes:1048576}") int maxResponseBytes,
-            @Value("${app.alert.holmes.max-evidence-items:20}") int maxEvidenceItems,
-            @Value("${app.alert.holmes.max-field-chars:4000}") int maxFieldChars) {
-        // M3-02：schema_version 按包内显式路由（v1/v2），不再由配置指定期望版本
+            @Value("${app.alert.evidence.max-response-bytes:1048576}") int maxResponseBytes,
+            @Value("${app.alert.evidence.max-evidence-items:20}") int maxEvidenceItems,
+            @Value("${app.alert.evidence.max-field-chars:4000}") int maxFieldChars) {
+        // M3-02：schema_version 按包内显式路由（v1/v2），不再由配置指定期望版本。
+        // M6-07：键族由 app.alert.holmes.* 更名 app.alert.evidence.*（holmes 专属
+        // 配置键随退场回收；验证器是 NATIVE 共享面，语义不变，默认值不变）。
         return new EvidencePackageValidator(maxResponseBytes, maxEvidenceItems, maxFieldChars);
     }
 
-    @Bean
-    public HolmesClient holmesClient(
-            @Value("${app.alert.holmes.base-url:http://holmes:8080}") String baseUrl,
-            @Value("${app.alert.holmes.api-key}") String apiKey,
-            @Value("${app.alert.holmes.connect-timeout:PT5S}") Duration connectTimeout,
-            @Value("${app.alert.holmes.read-timeout:PT8M}") Duration readTimeout,
-            // 与 validator 同键同值：客户端先限读截断（BA-12②），验证链是超限的决策点
-            @Value("${app.alert.holmes.max-response-bytes:1048576}") int maxResponseBytes) {
-        return new HolmesClient(baseUrl, apiKey, connectTimeout, readTimeout, maxResponseBytes);
-    }
-
-    @Bean
-    public RcaTaskExecutor holmesInvestigationExecutor(HolmesClient client,
-                                                       AlertEventRepository events,
-                                                       ExternalInvocationRepository ledger,
-                                                       TransactionOperations tx,
-                                                       EvidencePackageValidator validator,
-                                                       @Value("${app.alert.holmes.model:}") String model,
-                                                       @Value("${app.alert.holmes.sampling.temperature:}") String samplingTemperature,
-                                                       @Value("${app.alert.holmes.sampling.top-p:}") String samplingTopP,
-                                                       @Value("${app.alert.holmes.sampling.max-tokens:}") String samplingMaxTokens,
-                                                       @Value("${app.alert.holmes.sampling.seed:}") String samplingSeed,
-                                                       // M5-04：采样指纹与 eval_run 头（V10）同源——
-                                                       // provider 指纹复用同一配置键，单一事实源
-                                                       @Value("${app.alert.eval.provider-fingerprint}") String providerFingerprint,
-                                                       @Value("${app.alert.holmes.version:}") String holmesVersion,
-                                                       @Value("${app.alert.holmes.max-events:20}") int maxEvents,
-                                                       @Value("${app.alert.holmes.heartbeat-interval:PT30S}") Duration heartbeatInterval,
-                                                       // M3-08：输出契约升 v2（RESPONSE_FORMAT strict json_schema），
-                                                       // 包内显式 schema_version 缺失时按此版本兜底
-                                                       @Value("${app.alert.holmes.expected-schema-version:2}") int expectedSchemaVersion,
-                                                       AlertMetrics alertMetrics) {
-        // M5-04：未配置的采样参数 = null（诚实留空 → 指纹不完整 → 门禁拒绝，INV-AM5-3）
-        HolmesInvestigationExecutor.SamplingSpec samplingSpec =
-                new HolmesInvestigationExecutor.SamplingSpec(
-                        doubleOrNull(samplingTemperature), doubleOrNull(samplingTopP),
-                        integerOrNull(samplingMaxTokens), longOrNull(samplingSeed),
-                        providerFingerprint);
-        return new HolmesInvestigationExecutor(client, events, ledger, tx, validator,
-                AlertClock.system(), model, samplingSpec, holmesVersion, maxEvents, heartbeatInterval,
-                expectedSchemaVersion, alertMetrics);
-    }
-
-    private static Double doubleOrNull(String value) {
-        return value == null || value.isBlank() ? null : Double.valueOf(value.trim());
-    }
-
-    private static Integer integerOrNull(String value) {
-        return value == null || value.isBlank() ? null : Integer.valueOf(value.trim());
-    }
-
-    private static Long longOrNull(String value) {
-        return value == null || value.isBlank() ? null : Long.valueOf(value.trim());
-    }
+    // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
+    // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
+    // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
 
     /** M3-08：STRUCTURE_VALIDATED 即铸 publication(READY) + 每渠道 outbox（候选标记） */
     @Bean
@@ -245,105 +194,21 @@ public class AlertFlowConfig {
                                                  SlaPolicy sla,
                                                  AlertMetrics alertMetrics,
                                                  CanaryRouter canaryRouter,
-                                                 com.objwww.pr.control.alert.application
-                                                         .FallbackService fallback,
                                                  com.objwww.pr.control.alert.domain.repository
                                                          .ReportWinnerRepository winners,
-                                                 com.objwww.pr.control.alert.application
-                                                         .HolmesShadowSampler holmesShadowSampler,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
+        // M6-07：fallback 与 holmesShadowSampler 参数已随退场摘除（铸造点拆面）
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
-                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter,
-                fallback, winners, holmesShadowSampler);
+                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter, winners);
     }
 
-    /**
-     * M6-04 run 级 fallback（V33）：NATIVE run 安全/运行故障恰一次铸 HOLMES RERUN。
-     * 开关面 {@code app.alert.fallback.enabled} 是 M6-06/07 退场的 sanctioned 闸；
-     * 独立预算 {@code app.alert.fallback.daily-budget}（滚动 24h 窗）与 canary 预算分账。
-     */
-    @Bean
-    public com.objwww.pr.control.alert.application.FallbackService fallbackService(
-            RcaRunRepository runs,
-            IncidentRepository incidents,
-            RcaTaskRepository tasks,
-            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
-            com.objwww.pr.control.alert.domain.repository.RunFallbackRepository fallbacks,
-            SlaPolicy sla,
-            AlertMetrics alertMetrics,
-            @Value("${app.alert.fallback.enabled:true}") boolean enabled,
-            @Value("${app.alert.fallback.daily-budget:20}") int dailyBudget) {
-        return new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
-                tasks, events, fallbacks, sla, AlertClock.system(), alertMetrics, enabled,
-                dailyBudget);
-    }
-
-    /**
-     * M6-05 Holmes 只读对照期（V34 反向影子）：NATIVE SUCCEEDED run 确定性抽样入队
-     * 影子工作。{@code app.alert.shadow.holmes.enabled} 缺省关（对既有部署零惊扰），
-     * 195 部署面显式开；独立预算与 canary/fallback 预算分账。
-     */
-    @Bean
-    public com.objwww.pr.control.alert.application.HolmesShadowSampler holmesShadowSampler(
-            RcaRunRepository runs,
-            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
-            AlertMetrics alertMetrics,
-            @Value("${app.alert.shadow.holmes.enabled:false}") boolean enabled,
-            @Value("${app.alert.shadow.holmes.daily-budget:20}") int dailyBudget,
-            @Value("${app.alert.shadow.holmes.sample-rate:100}") int sampleRate,
-            @Value("${app.alert.shadow.holmes.max-attempts:3}") int maxAttempts) {
-        return new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs, works,
-                AlertClock.system(), alertMetrics, enabled, dailyBudget, sampleRate,
-                maxAttempts);
-    }
-
-    /**
-     * BA-56：引擎对照结论记录器上收公共装配面——原挂 Am4ShadowTriggerConfig 只在
-     * am4-shadow-trigger profile 存在，M6-05 生产影子 worker 复用后 docker profile
-     * 常驻进程启动即缺 bean（195 真启动实证；一次性入口专属装配不能承载生产依赖）。
-     */
-    @Bean
-    public com.objwww.pr.control.release.application.EngineComparisonRecorder engineComparisonRecorder(
-            ConfigBundleRepository bundles,
-            RcaRunRepository runs,
-            RcaReportRepository reports,
-            com.objwww.pr.control.alert.domain.claim.ClaimStore claims,
-            com.objwww.pr.control.release.domain.repository.EngineComparisonRepository comparisons,
-            AlertMetrics alertMetrics) {
-        return new com.objwww.pr.control.release.application.EngineComparisonRecorder(
-                bundles, runs, reports, claims, comparisons, alertMetrics);
-    }
-
-    @Bean
-    public com.objwww.pr.control.alert.application.HolmesShadowWorker holmesShadowWorker(
-            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
-            RcaRunRepository runs,
-            IncidentRepository incidents,
-            RcaTaskRepository tasks,
-            RcaAttemptRepository attempts,
-            RcaTaskExecutor holmesInvestigationExecutor,
-            com.objwww.pr.control.release.domain.repository.EngineComparisonRepository comparisons,
-            com.objwww.pr.control.release.application.EngineComparisonRecorder recorder,
-            SlaPolicy sla,
-            AlertMetrics alertMetrics,
-            @Value("${app.alert.worker.owner:control-1}") String owner) {
-        return new com.objwww.pr.control.alert.application.HolmesShadowWorker(works, runs,
-                incidents, tasks, attempts, holmesInvestigationExecutor, comparisons,
-                recorder, sla, AlertClock.system(), alertMetrics, owner + "-holmes-shadow");
-    }
-
-    @Bean
-    public com.objwww.pr.control.alert.application.HolmesShadowScheduler holmesShadowScheduler(
-            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
-            com.objwww.pr.control.alert.application.HolmesShadowWorker worker,
-            @Value("${app.alert.shadow.holmes.lease:PT15M}") java.time.Duration lease,
-            @Value("${app.alert.shadow.holmes.poll-interval:PT30S}") java.time.Duration pollInterval,
-            @Value("${app.alert.shadow.holmes.batch-size:2}") int batchSize) {
-        return new com.objwww.pr.control.alert.application.HolmesShadowScheduler(works,
-                worker, AlertClock.system(), "control-1-holmes-shadow", lease,
-                pollInterval, batchSize);
-    }
+    // M6-07 Holmes 退场：fallbackService（M6-04 HOLMES RERUN 铸造面）、
+    // holmesShadowSampler/holmesShadowWorker/holmesShadowScheduler（M6-05 对照期
+    // 观察面）四 bean 已摘除。类保留（V33/V34 语义由直构 IT 持续回归），生产
+    // docker profile 零 holmes 铸造入口（无写入入口不变量，技术方案 §4.4）。
+    // EngineComparisonRecorder bean 回迁 Am4ShadowTriggerConfig（BA-56 上收的
+    // 消费者——docker profile 影子 worker——已退役，公共面不再承载）。
 
     // ---------------- AM5 M5-09/10：发布与切流（release 域路由决策） ----------------
 
@@ -442,9 +307,10 @@ public class AlertFlowConfig {
     }
 
     /**
-     * M6-01 落点 10：引擎执行器映射表<b>显式构造</b>（不再依赖 Spring 按类型聚装）——
-     * HOLMES 恒在；NATIVE 槽位由探针裁决的就绪执行器补位。参数名对齐 bean 名消歧
-     * （RcaTaskExecutor 现有两个实现）。
+     * M6-01 落点 10：引擎执行器映射表<b>显式构造</b>——M6-07 后 NATIVE 槽位由探针
+     * 裁决的就绪执行器补位；HOLMES 槽位已随退场摘除（缺执行器 = RcaWorker
+     * EXECUTOR_MISSING fail-closed 终态，M6-01 预埋语义）。悬挂宽限不再由 holmes
+     * read-timeout 派生（BA-13② 语义保留：宽限必须 &gt; 单次调查最长在途窗）。
      */
     @Bean
     public RcaWorker rcaWorker(RcaTaskRepository tasks,
@@ -454,7 +320,6 @@ public class AlertFlowConfig {
                                IncidentRepository incidents,
                                SchedulerSlotRepository slots,
                                ExternalInvocationRepository invocations,
-                               RcaTaskExecutor holmesInvestigationExecutor,
                                ObjectProvider<NativeInvestigationExecutor> nativeExecutor,
                                RcaRunOrchestrator orchestrator,
                                TransactionOperations tx,
@@ -463,17 +328,12 @@ public class AlertFlowConfig {
                                @Value("${app.alert.worker.task-lease:PT10M}") Duration taskLease,
                                @Value("${app.alert.worker.heartbeat-interval:PT30S}") Duration heartbeatInterval,
                                @Value("${app.alert.worker.poll-interval:PT2S}") Duration pollInterval,
-                               // BA-13②:回收退避可配置;悬挂宽限由 holmes read-timeout 派生
-                               // (宽限必须 > 单次调查最长在途窗,否则会把真在跑的调用误标 UNKNOWN)
+                               // BA-13②:回收退避可配置;悬挂宽限自足默认（原 holmes
+                               // read-timeout PT8M+2m 派生面随退场摘除）
                                @Value("${app.alert.worker.retry-backoff:PT1M}") Duration retryBackoff,
-                               @Value("${app.alert.holmes.read-timeout:PT8M}") Duration holmesReadTimeout,
-                               @Value("${app.alert.worker.hanging-grace:}") String hangingGraceOverride,
-                               @Value("${app.alert.holmes.expected-schema-version:2}") int investigationSchemaVersion) {
-        Duration hangingGrace = hangingGraceOverride == null || hangingGraceOverride.isBlank()
-                ? holmesReadTimeout.plus(Duration.ofMinutes(2))
-                : Duration.parse(hangingGraceOverride);
+                               @Value("${app.alert.worker.hanging-grace:PT10M}") Duration hangingGrace,
+                               @Value("${app.alert.worker.investigation-schema-version:2}") int investigationSchemaVersion) {
         Map<RcaEngine, RcaTaskExecutor> executors = new java.util.EnumMap<>(RcaEngine.class);
-        executors.put(RcaEngine.HOLMES, holmesInvestigationExecutor);
         NativeInvestigationExecutor nativeExecutorInstance = nativeExecutor.getIfAvailable();
         if (nativeExecutorInstance != null) {
             executors.put(RcaEngine.NATIVE, nativeExecutorInstance);
@@ -492,10 +352,10 @@ public class AlertFlowConfig {
         return new com.objwww.pr.control.alert.application.DagExecutionService(edges, tasks);
     }
 
-    /** 消费循环（inbox 投影 + RCA worker + M6-05 holmes shadow）随容器启停（T10 部署启动真执行链） */
+    /** 消费循环（inbox 投影 + RCA worker）随容器启停（T10 部署启动真执行链；
+     *  M6-05 holmes shadow 调度循环已随退场摘除） */
     @Bean
-    public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
-            com.objwww.pr.control.alert.application.HolmesShadowScheduler holmesShadowScheduler) {
+    public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -503,14 +363,12 @@ public class AlertFlowConfig {
             public void start() {
                 inboxProcessor.start();
                 rcaWorker.start();
-                holmesShadowScheduler.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
-                holmesShadowScheduler.stop();
                 rcaWorker.stop();
                 inboxProcessor.stop();
             }

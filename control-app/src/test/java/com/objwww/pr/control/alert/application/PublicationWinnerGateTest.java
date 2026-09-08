@@ -70,28 +70,37 @@ class PublicationWinnerGateTest {
         stores = new AlertInMemoryStores();
         clock = new MutableClock();
         executor = new SuccessExecutor();
+        // M6-07：fixture 迁 Native 唯一引擎面（percent=100 全桶 NATIVE——原 holmesOnly
+        // 路由下的 HOLMES 投影已不铸 run，C-77）
+        NativeEngineWiringTest.WiringBundles bundles = new NativeEngineWiringTest.WiringBundles();
+        java.util.Map<String, Object> canary = new java.util.LinkedHashMap<>();
+        canary.put("percent", 100);
+        canary.put("whitelist", List.of());
+        canary.put("max_native_runs", 100);
+        java.util.Map<String, Object> content = new java.util.LinkedHashMap<>();
+        content.put("policy_version", "policy-2026-09");
+        content.put("canary", canary);
+        bundles.publish(content);
+        com.objwww.pr.control.release.application.CanaryRouter nativeRouter =
+                new com.objwww.pr.control.release.application.CanaryRouter(bundles,
+                        new NativeEngineWiringTest.WiringDecisions(), true, clock::now);
         intake = new AlertInboxProcessor(stores.inbox,
                 new IncidentProjector(stores.events, stores.incidents, stores.runs,
                         stores.tasks, new com.objwww.pr.control.alert.domain.service.AlertIdentityFactory(),
                         new com.objwww.pr.control.alert.domain.service.DeferredPolicy(1000),
-                        SlaPolicy.defaults(), clock),
+                        SlaPolicy.defaults(), clock, nativeRouter),
                 org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
                 clock, "intake-owner", Duration.ofMinutes(2), Duration.ofSeconds(30),
                 Duration.ofSeconds(10), Duration.ofSeconds(1));
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier(), stores.cas, SlaPolicy.defaults(), clock,
-                "rca", AlertMetrics.NOOP,
-                com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                new FallbackService(stores.runs, stores.incidents, stores.tasks,
-                        stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(), clock,
-                        AlertMetrics.NOOP, true, 20),
-                stores.winners,
-                new com.objwww.pr.control.alert.application.HolmesShadowSampler(stores.runs,
-                        stores.shadowWorks, clock, AlertMetrics.NOOP, false, 20, 100, 3));
+                "rca", AlertMetrics.NOOP, nativeRouter, stores.winners);
         worker = new RcaWorker(stores.tasks, stores.runs, stores.attempts,
                 stores.investigations, stores.incidents, stores.slots, stores.invocations,
-                executor, orchestrator,
+                java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
+                        executor),
+                orchestrator,
                 org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
                 clock, "worker-a", "rca", Duration.ofMinutes(5), Duration.ofSeconds(30),
                 Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofMinutes(10), 2);

@@ -56,7 +56,7 @@ import java.util.concurrent.Executors;
  *
  * <p>装配纪律（AM4 技术方案 §2）：
  * <ul>
- *   <li>影子面与生产主链物理隔离：三 Agent 的工具出口只绑 {@link ShadowToolFace}
+ *   <li>影子面与生产主链物理隔离：三 Agent 的工具出口只绑影子只读工具面
  *       （仅 R0/R1 + REDTEAM 物理禁入 + 独立 slot/限流），Holmes 主链零改动；</li>
  *   <li>回放面（{@link AgentReplayRunner}）为 E2E-M4-08 专用：账本落 V19
  *       rca_tool_replay，MISS 绝不降级活执行；</li>
@@ -276,7 +276,7 @@ public class AlertAm4Config {
 
     // ------------------------------------------------------------------ 内部
 
-    /** classpath 冻结 fixture 字节（缺失/空 = 启动期硬失败，同 ShadowToolFace 惯例） */
+    /** classpath 冻结 fixture 字节（缺失/空 = 启动期硬失败，同影子只读面惯例） */
     static byte[] fixtureBytes(String classpathLocation) {
         try {
             byte[] bytes = new ClassPathResource(classpathLocation).getInputStream()

@@ -151,7 +151,7 @@ class ReadOnlyToolFaceTest {
                 Map.of("since", "0", "until", "1"), null);
     }
 
-    /** 手动推进的测试时钟（限流窗口确定性，ShadowToolFaceTest 同构） */
+    /** 手动推进的测试时钟（限流窗口确定性） */
     static final class MutableClock extends Clock {
 
         private long millis = 1_790_000_000_000L;
