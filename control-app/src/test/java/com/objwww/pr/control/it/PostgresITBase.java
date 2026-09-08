@@ -25,8 +25,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>形态：
  * <ul>
- *   <li>静态容器全 IT 类共享一个 PG 实例；每个测试方法前 TRUNCATE 全部 19 张表清场
- *       （V1 的 12 张 + V3/V4/V5/V6 新表，RESTART IDENTITY CASCADE 兜底）；</li>
+ *   <li>静态容器全 IT 类共享一个 PG 实例；每个测试方法前 TRUNCATE 全部业务表清场
+ *       （V1~V29 全表，见 ALL_TABLES，RESTART IDENTITY CASCADE 兜底）；</li>
  *   <li>admin（容器超级用户）先执行与 deploy/db/01-roles.sh 等价的 DO 块创建
  *       control_app / publisher_app 两角色（V2/V3 的 grant 依赖两角色存在），
  *       再以 admin 身份跑 Flyway；</li>
@@ -48,8 +48,11 @@ public abstract class PostgresITBase {
     protected static final String NOTIFY_PASSWORD = "it-notify-pass";
     protected static final String EVAL_PASSWORD = "it-eval-pass";
 
-    /** V1 的 12 张 + V3/V4/V5/V6 新表 + V7 告警域 9 表 + V8 DAG 预留表 + V9 AM3 四表
-     *  + V10 评测两表（TRUNCATE 清场顺序无关，CASCADE 兜底） */
+    /** V1~V29 全业务表清单（BA-41，195 真 PG 实证）：原清单冻结在 AM2 时代，V20~V29
+     *  的 AM5 表不在列——跨类污染在 195 类序（GoldenCandidate 先于 DatasetVersion）
+     *  下以 FK 违约爆出。TRUNCATE 单语句 + CASCADE 顺序无关；config_bundle /
+     *  config_bundle_active 除外（V24 种子行 id=1 是激活 CAS 的依赖面，
+     *  ConfigBundleRepositoryTest 自管两表，见各 setUp）。 */
     private static final List<String> ALL_TABLES = List.of(
             "pr_subject", "pr_revision", "review_run", "run_step", "work_item", "step_attempt",
             "execution_event", "outbox_command", "outbox_dependency", "publication_resource",
@@ -58,7 +61,13 @@ public abstract class PostgresITBase {
             "alert_inbox", "alert_event", "incident", "rca_run", "rca_task", "rca_attempt",
             "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
             "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox",
-            "eval_case_result", "eval_run");
+            "eval_case_result", "eval_run",
+            // V20~V29（AM5）：rca_event 为 V28 分区父表，TRUNCATE 级联全部分区
+            "dataset_version", "case_version", "case_family_partition",
+            "golden_candidate", "golden_review_event",
+            "canary_route_decision", "operator_case", "operator_command",
+            "rca_event",
+            "retention_policy", "legal_hold", "archive_manifest");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

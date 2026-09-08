@@ -58,10 +58,11 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
         assertThat(service.activate(first.bundleDigest(), "op-1").moved()).isTrue();
         assertThat(service.activate(second.bundleDigest(), "op-1").moved()).isTrue();
 
-        // 回滚前快照两行历史全貌（admin 视角 to_jsonb）
-        Map<String, Object> before = adminJdbc.sql(
+        // 回滚前快照两行历史全貌（admin 视角 to_jsonb；BA-41：SimplePropertyRowMapper
+        // 不支持 Map.class，单列 jsonb 取文本——jsonb 输出确定性，字符串全等更强）
+        String before = adminJdbc.sql(
                         "SELECT jsonb_object_agg(bundle_digest, to_jsonb(b)) FROM config_bundle b")
-                .query(Map.class).single();
+                .query((rs, i) -> rs.getString(1)).single();
 
         Instant rollbackAt = Instant.now();
         ConfigBundleService.ActivationResult rollback =
@@ -77,8 +78,8 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
         // 历史行零改写（INV-AM5-5）：两行 digest→行全貌 映射与回滚前逐字段一致
         assertThat(adminJdbc.sql(
                         "SELECT jsonb_object_agg(bundle_digest, to_jsonb(b)) FROM config_bundle b")
-                .query(Map.class).single())
-                .usingRecursiveComparison().isEqualTo(before);
+                .query((rs, i) -> rs.getString(1)).single())
+                .isEqualTo(before);
         assertThat(count("config_bundle")).isEqualTo(2);
     }
 

@@ -78,10 +78,17 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
 
         runs.insertRouted(run, routing);
 
+        // BA-41：SimplePropertyRowMapper 不支持 Map.class——显式行映射保持断言形状
         Map<String, Object> row = adminJdbc.sql("""
                 SELECT engine, config_digest, stickiness_key, canary_bucket
                   FROM rca_run WHERE id = :id
-                """).param("id", run.id()).query(Map.class).single();
+                """).param("id", run.id())
+                .query((rs, i) -> Map.<String, Object>of(
+                        "engine", rs.getString("engine"),
+                        "config_digest", rs.getString("config_digest"),
+                        "stickiness_key", rs.getString("stickiness_key"),
+                        "canary_bucket", rs.getInt("canary_bucket")))
+                .single();
         assertThat(row.get("engine")).isEqualTo("NATIVE");
         assertThat(row.get("config_digest")).isEqualTo(digest.hex());
         assertThat(row.get("stickiness_key")).isEqualTo("alertname=higherror|service=checkout");
@@ -116,10 +123,10 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         // 指针移到 v2（发布新版本 = 回滚语义：activate 到旧 digest 同一路径）
         assertThat(bundles.activate(v2, v1, "it", now)).isTrue();
 
-        Map<String, Object> oldRow = adminJdbc.sql(
+        assertThat(adminJdbc.sql(
                         "SELECT config_digest FROM rca_run WHERE id = :id")
-                .param("id", oldRun.id()).query(Map.class).single();
-        assertThat(oldRow.get("config_digest"))
+                .param("id", oldRun.id())
+                .query((rs, i) -> rs.getString("config_digest")).single())
                 .as("老 Run 固定铸造时 digest——指针移动不改历史行")
                 .isEqualTo(v1.hex());
 
@@ -128,10 +135,10 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         runs.insertRouted(newRun, new RcaRunRouting(
                 RcaEngine.NATIVE, v2, "alertname=higherror|service=checkout", 12,
                 CanaryDecision.BUCKETED_NATIVE.name()));
-        Map<String, Object> newRow = adminJdbc.sql(
+        assertThat(adminJdbc.sql(
                         "SELECT config_digest FROM rca_run WHERE id = :id")
-                .param("id", newRun.id()).query(Map.class).single();
-        assertThat(newRow.get("config_digest"))
+                .param("id", newRun.id())
+                .query((rs, i) -> rs.getString("config_digest")).single())
                 .as("回滚/更新只影响新 Run")
                 .isEqualTo(v2.hex());
     }
