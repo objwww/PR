@@ -49,7 +49,10 @@ preflight_check "docker 可用"            docker info
 preflight_check "195 control-app 健康"   curl -fsS --max-time 5 "http://${AM5_CONTROL_HOST:-127.0.0.1}:${AM5_CONTROL_PORT:-8080}/actuator/health"
 preflight_check "PG 可达"                sh -c 'test -n "$AM5_PG_URL"'
 preflight_check "迁移最大号读取"         am5_psql_ro AM5_PG_URL "select max(version) from flyway_schema_history"
-preflight_check "LiteLLM 可达"           curl -fsS --max-time 5 "http://${AM5_LITELLM_HOST:-127.0.0.1}:${AM5_LITELLM_PORT:-4000}/health"
+# LiteLLM 标准探活路径 /health/liveliness（/health 是全量健康检查需 admin key；
+# v2：路径可覆盖，适配真栈宿主发布端口面）
+preflight_check "LiteLLM 可达"           curl -fsS --max-time 5 \
+    "http://${AM5_LITELLM_HOST:-127.0.0.1}:${AM5_LITELLM_PORT:-4000}${AM5_LITELLM_HEALTH_PATH:-/health/liveliness}"
 preflight_check "order-arena 可达"       curl -fsS --max-time 5 "http://${AM5_ARENA_HOST:-127.0.0.1}:${AM5_ARENA_PORT:-8081}/actuator/health"
 preflight_check "Prometheus 可达"        curl -fsS --max-time 5 "http://${AM5_PROM_HOST:-127.0.0.1}:${AM5_PROM_PORT:-9090}/-/ready"
 preflight_check "Alertmanager 可达"      curl -fsS --max-time 5 "http://${AM5_AM_HOST:-127.0.0.1}:${AM5_AM_PORT:-9093}/-/ready"

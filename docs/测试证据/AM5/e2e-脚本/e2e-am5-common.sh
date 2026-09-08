@@ -7,7 +7,12 @@
 # 本库只被 source，不独立执行。
 # ============================================================================
 
-AM5_COMMON_VERSION="1"
+AM5_COMMON_VERSION="2"
+# v2（195 部署段适配）：AM5_PSQL_CMD 可覆盖 psql 命令面——195 宿主无 psql 客户端且
+# deploy postgres 无宿主发布面（INV-AM0-1），部署段经
+#   AM5_PSQL_CMD="docker exec deploy-postgres-1 psql"
+# 容器内执行；此时 AM5_PG_URL 的主机段须为容器内视角（127.0.0.1:5432），
+# 口令面仍只存 195 侧 600 权限 env，不入证据包（am5_redact 兜底）。
 
 am5_log() { echo "[AM5] $1"; }
 am5_fail() { echo "[AM5] FAIL: $1"; exit 1; }
@@ -31,7 +36,7 @@ am5_psql_ro() {
     _am5_url_var="$1"; _am5_sql="$2"
     eval "_am5_url=\${${_am5_url_var}}"
     [ -n "$_am5_url" ] || am5_fail "环境变量 ${_am5_url_var} 未注入（连接信息走既有安全配置）"
-    psql "$_am5_url" -v ON_ERROR_STOP=1 -q \
+    ${AM5_PSQL_CMD:-psql} "$_am5_url" -v ON_ERROR_STOP=1 -q \
         -c "BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY; ${_am5_sql}; ROLLBACK;"
 }
 
