@@ -1,0 +1,9 @@
+source_native_run_id=88106da4-c6d4-4f8d-83a5-f8be1fbb7bd5 engine=NATIVE state=FAILED last_error~PROPOSAL_MISSING
+run_fallback: depth=1 error_class=PROPOSAL_MISSING fallback_run_id=92d8f5e2-0d22-435f-b867-d4195d62b035
+fallback_run_id=92d8f5e2-0d22-435f-b867-d4195d62b035 engine=HOLMES trigger_kind=RERUN generation=0
+incident.current_rca_run_id=92d8f5e2-0d22-435f-b867-d4195d62b035
+         source_native_run_id         |           fallback_run_id            | depth |   error_class    |          created_at           
+--------------------------------------+--------------------------------------+-------+------------------+-------------------------------
+ 88106da4-c6d4-4f8d-83a5-f8be1fbb7bd5 | 92d8f5e2-0d22-435f-b867-d4195d62b035 |     1 | PROPOSAL_MISSING | 2026-09-08 20:43:23.406322+00
+(1 row)
+

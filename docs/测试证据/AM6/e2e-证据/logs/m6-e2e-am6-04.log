@@ -1,0 +1,13 @@
+[AM6] E2E-AM6-04 开始 suite=20260908T204318Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T204318Z-am6-04
+[AM6] phase0 DRILL 姿态：percent=100 且无 native.proposal（NATIVE 必失败姿态）
+[AM6]   预演 active=852040c9ce6b329b11f273c4c547ec2cb3c8091d92467b5658de1d34a071d1f3（回滚靶）
+[AM6]   percent=100 生效 active=f5e09807736e76537550278ab4ce93c279e4c2930dd2d81d0d9318834aabd022（无 proposal 段）
+[AM6] phase1 注入告警 → BUCKETED_NATIVE → PROPOSAL_MISSING → 自动 fallback
+[AM6]   NATIVE run=88106da4-c6d4-4f8d-83a5-f8be1fbb7bd5 incident=add91d46-64fb-4743-8e95-81879717360c generation=0
+[AM6] phase1 PASS（恰一 HOLMES fallback，全链留痕 /opt/projects/pr_agent_it/e2e-am6/runs/20260908T204318Z-am6-04/fallback-chain.txt）
+[AM6] phase2 fallback run 真 LLM 驱动至 SUCCEEDED（holmes 面结论源）
+[AM6] phase2 PASS（赢家唯一：报告/发布/每渠道恰一；留痕 /opt/projects/pr_agent_it/e2e-am6/runs/20260908T204318Z-am6-04/winner-publication.txt）
+[AM6] phase3 depth=1 封死断言 + 一键切回计时
+[AM6] phase3 PASS（depth=1 零二跳；一键切回 0s，留痕 drill-timing.txt）
+[AM6] phase4 终态：active=852040c9ce6b329b11f273c4c547ec2cb3c8091d92467b5658de1d34a071d1f3（percent=0，验证后不留放量态）
+[AM6] E2E-AM6-04 PASS（suite=20260908T204318Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T204318Z-am6-04）

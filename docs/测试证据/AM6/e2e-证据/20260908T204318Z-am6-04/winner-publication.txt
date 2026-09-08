@@ -1,0 +1,17 @@
+fallback_run_id=92d8f5e2-0d22-435f-b867-d4195d62b035 state=SUCCEEDED
+rca_report=cb782e7f-cb7c-4d89-9ba3-44f206b1cec7
+report_generation_winner: incident=add91d46-64fb-4743-8e95-81879717360c generation=0 winner_report=cb782e7f-cb7c-4d89-9ba3-44f206b1cec7 winner_run=92d8f5e2-0d22-435f-b867-d4195d62b035
+report_publication: report=cb782e7f-cb7c-4d89-9ba3-44f206b1cec7 count=1
+notify_outbox: report=cb782e7f-cb7c-4d89-9ba3-44f206b1cec7 rows=1 distinct_channels=1（uq_notify_outbox_delivery）
+native_source_report_count=0（fail-closed 零报告）
+                  id                  | engine |   state   | trigger_kind | generation 
+--------------------------------------+--------+-----------+--------------+------------
+ 88106da4-c6d4-4f8d-83a5-f8be1fbb7bd5 | NATIVE | FAILED    | INITIAL      |          0
+ 92d8f5e2-0d22-435f-b867-d4195d62b035 | HOLMES | SUCCEEDED | RERUN        |          0
+(2 rows)
+
+             incident_id              | generation |           winner_report_id           |            winner_run_id             |          decided_at           
+--------------------------------------+------------+--------------------------------------+--------------------------------------+-------------------------------
+ add91d46-64fb-4743-8e95-81879717360c |          0 | cb782e7f-cb7c-4d89-9ba3-44f206b1cec7 | 92d8f5e2-0d22-435f-b867-d4195d62b035 | 2026-09-08 20:43:34.229468+00
+(1 row)
+
