@@ -79,6 +79,12 @@ for f in "logs/logs-query.json" "changes/change-query.json"; do
     fi
 done
 
+# BA-19（2026-09-08 v5 批次实证）：arena-e2e-cli 是 sleep 14400 一次性容器
+#（RestartPolicy=no），4h 寿命到期自然退出会砸中后续场景的注入 exec
+#（"container is not running" 场景直接 FAIL）——批前重拉起得新鲜 4h 窗口
+#（docker start 重跑 Cmd 即重置 sleep）；容器缺失则由场景面显式暴露。
+docker start arena-e2e-cli >/dev/null 2>&1 || true
+
 IMAGE_DIGEST="unset"
 if [ -n "${AM4_CONTROL_IMAGE:-}" ]; then
     IMAGE_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' \

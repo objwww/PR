@@ -370,7 +370,12 @@ public final class HolmesInvestigationExecutor implements RcaTaskExecutor {
         sb.append(eventsJson(material));
         sb.append('\n');
         sb.append("调查要求:优先用可用的 Prometheus 工具核实指标与阈值,再下根因结论;\n");
-        sb.append("references 只允许 prometheus:// 或 dashboard:// 形式的 artifact_ref,禁止任何凭证或其它外链。\n");
+        // BA-19（2026-09-08 195 runall 实证）：glm-5 会仿照告警标签造出 "prometheus://alert: Xxx"
+        // 这类含空格的 ref，被 SAFE_REF（禁空格）拒绝即 REJECTED_SCHEMA_MISMATCH 终态——
+        // ask 里显式给出"ref 是无空格 URL"规则与真实指标名正例，不依赖模型自觉。
+        sb.append("references 只允许 prometheus:// 或 dashboard:// 形式的 artifact_ref,");
+        sb.append("整个 ref 是一个不含空格的 URL,例如 prometheus://oa_duplicate_orders_current,");
+        sb.append("禁止任何凭证或其它外链。\n");
         // BA-15（G0-10 E2E 实证）：holmes 的 bash 工具会诱导模型先跑 kubectl（本环境没有），
         // 空转数轮后把"kubectl 缺失"误报成根因——ask 里显式框定运行环境与可用工具面
         sb.append("环境框定:本环境为 docker compose 部署,不存在 Kubernetes,没有 kubectl 命令,\n");
