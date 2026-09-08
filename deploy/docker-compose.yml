@@ -134,6 +134,10 @@ services:
       # AM5 M5-04：采样指纹 provider 身份（部署特定=模型由谁服务，INV-AM5-3 fail-closed：
       # :? 必填——缺省即启动期失败，优于运行期每次调查崩在 requireText）
       APP_ALERT_EVAL_PROVIDER_FINGERPRINT: ${APP_ALERT_EVAL_PROVIDER_FINGERPRINT:?}
+      # AM6 M6-01：NATIVE 执行面能力探针（两键空=缺件→nativeReady=false→NATIVE_DEFERRED
+      # fail-closed，无默认值 @Value 均带 : 空缺省，不阻断启动；BA-48 同 commit 补映射纪律）
+      APP_ALERT_NATIVE_METRICS_EXPR: ${APP_ALERT_NATIVE_METRICS_EXPR:-}
+      APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST: ${APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST:-}
       # AM5 M5-15：三支柱遥测出口——control 平面 collector（应用侧零代码变更，
       # exporter 依赖不上类路径时此变量仅作声明面；trace 采样概率同面）
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otelcol-control:4317}
