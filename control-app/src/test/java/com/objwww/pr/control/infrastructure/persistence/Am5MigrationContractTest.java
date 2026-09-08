@@ -308,12 +308,16 @@ class Am5MigrationContractTest {
     void v25ActiveIndexWidensToEngineGranularityAndDecisionTableIsAppendOnly() throws IOException {
         String sql = normalized(V25);
 
-        // 唯一活跃索引 (incident_id, engine)——Shadow（默认 HOLMES）行为不变，
-        // NATIVE 候选获得独立槽位（C-2 矛盾消解面）；决策表 append-only 冻结值域
-        assertThat(sql)
+                // 唯一活跃索引 (incident_id, engine)——Shadow（默认 HOLMES）行为不变，
+                // NATIVE 候选获得独立槽位（C-2 矛盾消解面）；决策表 append-only 冻结值域
+                assertThat(sql)
                 .contains("drop index uq_rca_run_active_incident")
                 .contains("create unique index uq_rca_run_active_incident")
-                .contains("on rca_run(incident_id, engine) where state in ('queued','running')")
+                // BA-43（195 真 PG 实证）：重建必须保留 V12 扩集 'REPORTING'
+                //（V12 曾 drop+create 加宽，V25 回退丢集 = REPORTING 活跃 run 失去
+                // 唯一性防线 + V12 契约 IT 连坐红）
+                .contains("on rca_run(incident_id, engine) where state in "
+                        + "('queued','running','reporting')")
                 .contains("create table canary_route_decision")
                 .contains("run_id uuid not null references rca_run (id)")
                 .contains("check (percent between 0 and 100)")

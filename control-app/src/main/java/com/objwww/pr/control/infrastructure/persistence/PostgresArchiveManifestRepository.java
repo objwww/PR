@@ -8,10 +8,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * V29 archive_manifest 的 Postgres 实现（M5-19）。advanceState = UPDATE ... WHERE
- * state = :from（单向序在调用面闭合：EXPORTED→VERIFIED→ARCHIVED，其余 0 行 false）。
+ * V29 archive_manifest 的 Postgres 实现（M5-19）。advanceState = 合法前向白名单
+ * 短路 + UPDATE ... WHERE state = :from 双闸：单向序 EXPORTED→VERIFIED→ARCHIVED
+ * 在仓库面自持（BA-43：裸 WHERE state=:from 会放行 ARCHIVED→EXPORTED 倒退，
+ * 195 真 PG 实证），非法组合零 SQL 直接 false。
  */
 public class PostgresArchiveManifestRepository implements ArchiveManifestRepository {
+
+    /** 单向序白名单：仅相邻前向可推进（INV-AM5-19 恰一次栅栏的仓库面） */
+    private static boolean isForwardTransition(String from, String to) {
+        return ("EXPORTED".equals(from) && "VERIFIED".equals(to))
+                || ("VERIFIED".equals(from) && "ARCHIVED".equals(to));
+    }
 
     private final JdbcClient jdbc;
 
@@ -54,6 +62,9 @@ public class PostgresArchiveManifestRepository implements ArchiveManifestReposit
 
     @Override
     public boolean advanceState(String partition, String from, String to) {
+        if (!isForwardTransition(from, to)) {
+            return false;   // 倒退/跳级/同态重放：零 SQL 直接拒绝（恰一次栅栏仓库面）
+        }
         return jdbc.sql("""
                 UPDATE archive_manifest SET state = :to
                  WHERE partition_name = :partition AND state = :from

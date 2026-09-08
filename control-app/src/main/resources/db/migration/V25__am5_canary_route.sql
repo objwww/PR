@@ -41,8 +41,10 @@ comment on column rca_run.canary_bucket is
 -- ---------- 2. 唯一活跃索引升 (incident_id, engine) 粒度 ----------
 
 drop index uq_rca_run_active_incident;
+-- BA-43（195 真 PG 实证）：重建必须保留 V12 扩集 'REPORTING'——V12 曾加宽谓词，
+-- 此处回退丢集 = REPORTING 活跃 run 失去唯一性防线（V12 契约 IT 连坐红）
 create unique index uq_rca_run_active_incident
-    on rca_run(incident_id, engine) where state in ('QUEUED','RUNNING');
+    on rca_run(incident_id, engine) where state in ('QUEUED','RUNNING','REPORTING');
 
 -- ---------- 3. canary_route_decision：路由决策 append-only 审计 ----------
 

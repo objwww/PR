@@ -98,11 +98,12 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         assertThat(((Number) row.get("canary_bucket")).intValue()).isEqualTo(37);
 
         // 审计面：NATIVE 实跑决策计入爆炸半径重数，HOLMES 落桶不计
+        //（BA-43：决策行 FK 钉 rca_run——第二行同 run 落桶 HOLMES，计数仍只看 NATIVE）
         decisions.append(new CanaryDecisionLogRepository.DecisionRow(
                 run.id(), "alertname=higherror|service=checkout", 37, 5, digest,
                 CanaryDecision.BUCKETED_NATIVE.name(), Instant.now()));
         decisions.append(new CanaryDecisionLogRepository.DecisionRow(
-                UUID.randomUUID(), "alertname=lowerror|service=cart", 82, 5, digest,
+                run.id(), "alertname=lowerror|service=cart", 82, 5, digest,
                 CanaryDecision.BUCKETED_HOLMES.name(), Instant.now()));
         assertThat(decisions.countNativeDecisions()).isEqualTo(1);
         assertThat(count("canary_route_decision")).isEqualTo(2);
@@ -133,8 +134,11 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
                 .as("老 Run 固定铸造时 digest——指针移动不改历史行")
                 .isEqualTo(v1.hex());
 
-        // 新 Run 读新指针（V25 ck 约束：NATIVE 必带 digest）
-        RcaRun newRun = run(incidentId);
+        // 新 Run 读新指针（V25 ck 约束：NATIVE 必带 digest）。
+        // BA-43：独立 incident——同 incident+engine 双活跃 run 本就被
+        // uq_rca_run_active_incident 拒绝（第三案专门验证），此处不再借用同 incident
+        UUID incident2 = insertIncident("digest-new-" + UUID.randomUUID());
+        RcaRun newRun = run(incident2);
         runs.insertRouted(newRun, new RcaRunRouting(
                 RcaEngine.NATIVE, v2, "alertname=higherror|service=checkout", 12,
                 CanaryDecision.BUCKETED_NATIVE.name()));
