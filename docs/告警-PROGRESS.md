@@ -529,3 +529,42 @@
 - 服务器侧 .env（不入 git）由并行会话处理；litellm 费率仍为 glm-5 刊例价占位（TODO，归 AM5 运维项）；AM5 eval 门禁基线须以 glm-5 重测重建。
 - 《告警AM5-执行交接文档》§四 同步改为"模型身份最终裁定"一节，标注裁定来源与 commit 号。
 - 开放项：push 授权（本地积压多笔未推送提交，含本次 507c3f6）。
+
+## 2026-09-08 — AM6 工序 1 启动：技术方案 + 落码方案 v1.0 起草完成（待 G1）
+
+- 用户裁定：AM4 已收尾、AM5 由指定执行者编码中，主会话启动 M6 方案工作（工序 1，纯方案不编码；M6 动工硬前提=M5-22 G2 签署，已在方案头部钉死）。
+- 产物三件：① `docs/告警AM6-技术方案.md` v1.0（12 章节全结构：核心问题=Canary 决策面已落但执行面未接线——RcaWorker 单 Holmes executor 不看 engine、ReportAssembler 零调用点、nativeReady 硬编码 false；任务 M6-01~07 不新增编号；迁移 V30 canary_window_verdict + V31 engine_comparison，M6-04/06/07 经裁定不占号；INV-AM6-1~8；E2E-AM6-00~07）；② `docs/告警AM6-落码技术方案.md` v1.0（逐任务落点清单/DDL 要点/C-61~65 裁定/O-61~65 开放项/BA 教训顺延纪律）；③ E-19 调研 `docs/告警-调研-M6渐进发布与引擎退场-v1.md`（9 对象源码级：Argo/Flagger/Kayenta/flagd/Scientist/Diffy/Strangler/SRE/LangSmith·Langfuse）已登记 OSS 证据清单。
+- 勘察副产：**BA-39 登记**（M5-10 `CanaryDecisionLogRepository` 无 @Bean 生产方法，docker profile 启动即败，因部署段未激活潜伏——M5 部署段前置修复项，已入 BUGLOG 待修复）。
+- 下一步：等用户 G1 评审 AM6 两方案；AM5 侧仍由执行者推进（部署段挂 195）。
+
+## 2026-09-08 — AM6 G1 独立调研与实现对拍：v1.1 复审稿（未放行）
+
+- **证据纠号**：原 M6 调研误占 E-19；E-19 已由前端 UI 对标调研在 wireframes/PROGRESS 广泛引用。M6 调研与技术/落码方案、OSS 清单统一改为 **E-20**，旧条目只增不删，本条作为纠错事实。
+- **G1 结论**：v1.0 不建议直接通过。方向可行（1→10→50→Primary、稳定分桶、三段式 verdict、只读 Holmes 对照、Strangler 退场），但生产放量前必须闭环七项 P0：①LIVE_CANARY 与 DRILL/REPLAY 数据级隔离；②rollout/candidate/policy/capability 四身份 + 代表性独立 incident + 连续 K 窗；③部署 capability 与 ConfigBundle 单一发布事实源；④V32 fallback 恰一次与 generation 发布赢家；⑤V33 可恢复 Holmes Shadow；⑥BA-40 活跃索引补回 REPORTING；⑦不可伪造 operator identity、退场 drain barrier 与删除后制品恢复 RTO/RPO。
+- **真实业务测试补齐**：E2E-AM6-00~07 重新定义为 DRILL，只验证装配、路由、跨版本作废、容量、并发 fallback 单发、Shadow 崩溃恢复、退场 drain/恢复；另增 L4.5 真实生产长窗，覆盖租户/严重度、重复归并与升级、瞬态依赖故障、持续 SLO 烧损、证据不足、工具超时/预算耗尽。真实量不足只能 INCONCLUSIVE，严禁测试注入补数。
+- **实现缺陷登记**：新增 BA-40——V12 活跃唯一索引含 REPORTING，V25 升 `(incident_id,engine)` 时漏值；AM6 V30 用追加迁移修复并加真 PG 并发契约测试，禁止改写 V25。
+- **迁移施工图修订**：AM6 号段从 V30~V31 扩为 V30~V33；V30 晋升证据+BA-40 修复，V31 comparison，V32 fallback/publication winner，V33 shadow execution。V30~V33 retention/legal-hold 必须建表前冻结。
+- 当前状态：`docs/告警AM6-技术方案.md` 与 `docs/告警AM6-落码技术方案.md` 已升 v1.1 **待 G1 复审**；M5-22 G2 与上述 P0 未清零前禁止编码或生产 Canary，仅允许继续评审/DRILL 设计。
+
+## 2026-09-08 — AM5 部署段（195）测试收口：真 PG IT 全绿 + 栈升级 + E2E preflight 8/10 就绪面
+
+- 用户指令"开始后续测试，195 需要 ssh，自己查找交接文档"驱动；执行者会话完成三段。
+- **① 真 PG IT 证据层（M5 一票否决项清零）**：195 上 `mvn clean verify -pl control-app -am` BUILD SUCCESS——surefire 921 + failsafe 115，0F/0E/**0 skipped**（V1~V29 全量真 PG；本机跳过的 21 案 IT 全部真执行）。六批次缺陷修复 10 commit：f18fb9a（V28 42P07）、f1e22d0（IT 基座+Map.class）、6150a97（V25 序列授权/DETACH 提权/itR04）、14edd86（V25 REPORTING 就地修复+advanceState 栅栏+canary IT）、733d072+b8271d2（itC6 TOCTOU 行锁+uuid 映射）、9ebe952（canary @Bean，BA-39 关闭）、ea0c9b6（OperatorCase CAS 先行）、64ad55c（provider 指纹部署面）、005966d（孤儿测试替身收编）。缺陷全景入 BUGLOG BA-39（关闭）~BA-50（新增 10 条，含与提交消息标签的三处编号冲突说明，以台账为准）。
+- **② 195 栈升级至 main HEAD**：V20~V29 迁移全量执行（migrate exit 0，ordinal 面 29/28/27；rca_event 已分区）；control-app 新镜像健康 200、零 APPLICATION FAILED；otelcol-control 上游出口在位。V25 依据 INV-AM5-10 未执行条款就地修复（BA-40 关闭；AM6 V30 的修复职责作废，提请方案对账）。
+- **③ E2E-AM5 激活至 preflight 门**：线束 v2 适配真栈拓扑（c7fc14e：AM5_PSQL_CMD 容器内执行面/健康路径参数化）+ preflight 自 source 修复（8f16821，BA-50）。preflight 复跑 **8 OK / 2 MISS → exit 3（FAIL_PRECONDITION，契约行为）**：MISS=Gatus 栈未部署（缺 GATUS_ONCALL_WEBHOOK_URL + 网络面待裁定）+ AM5_LLM_BUDGET_CAP 未设（用户裁定面）。证据归档 docs/测试证据/AM5/e2e-证据/preflight-20260908T092153Z/（环境账 40 行，泄漏扫描干净）。
+- **E2E 全套激活的开放项（全部外部依赖，非编码缺陷）**：Gatus 部署（webhook 值+网络面）、预算上限设值、RCA-100 授权（场景 02 唯一 BLOCKED_EXTERNAL 出口）、11 场景脚本真栈填实（00/01/02/10 为 M5-22 骨架、03~09 为各任务随件骨架——探针序列注释态，依赖面已齐待填实）。
+- 台账与证据面（BUGLOG/PROGRESS/证据包）按惯例只编辑不 stage，留主会话复核提交；线束两笔修复已提交（c7fc14e/8f16821）。push 仍待用户授权。
+
+## 2026-09-08 — AM5 收尾（用户宣告"AM5 结束了"）+ AM6 方案对账 v1.1r1
+
+- **AM5 状态**：执行者部署段收口（195 真 PG IT 921+115 全绿零跳过、栈升 main HEAD、V20~V29 全 apply、control-app 健康 200、E2E preflight 8/10）。用户宣告 AM5 结束，主会话视为 G2 通过并执行阶段切换清单。**如实留痕**：AM5 方案 DoD 的"E2E-AM5-00~10 无跳过归档"未达成（11 场景脚本骨架态、preflight 被 Gatus 未部署 + AM5_LLM_BUDGET_CAP 未设按契约拦住）——三项外部裁定（Gatus webhook 与网络面/LLM 预算上限/RCA-100 授权）悬置，转入 M6 期处置或豁免，以用户裁定为准。
+- **阶段切换清单执行**：① AM5 压力点转 M6 输入（P-54 告警量统计前提、P-44 质量差距已入 M6 方案 §8 的 P-61/62；RCA-100 授权/费率刊例价等悬置项同上转入）；② BA-39~50 事故汇总已补入 AM5 技术方案 §10；③ OSS 证据清单 E-20 在位（并行会话完成 E-19 纠号）；④ M6 工序 1 已产出（v1.1 复审稿）。
+- **AM6 方案对账（v1.1→v1.1r1）**：执行者提请的"V30 修复职责作废"已落实——BA-39（9ebe952）/BA-40（14edd86①，INV-AM5-10 就地修复）均已在部署段关闭并 195 实证：技术方案核心问题/DoD#5/P0⑥ 三处回写关闭态，落码方案 V30 行移除索引修复职责（号段完整留给 canary 证据表）、前置子项 1/2 改记"验收要求保留、缺陷已关闭"、BUGLOG 接续号改 BA-50。AM6 七项 P0 剩余六项（证据分级隔离/稳定身份连续窗/单一发布事实源/V32 fallback 恰一次/V33 可恢复 Shadow/不可伪造操作者身份+drain SLA）仍开放。
+- **待用户**：① AM5 G2 正式措辞确认（是否接受 E2E 未跑全的现状下签 G2，三项外部裁定如何处置）；② 本轮台账与文档改动（BUGLOG/PROGRESS/AM5 方案/AM6 两方案/OSS 清单 + 执行者的证据包与线束提交 c7fc14e/8f16821 已在库）的 commit/push 授权——本地又有未推送积压；③ AM6 v1.1r1 G1 复审时机。
+
+## 2026-09-08 — AM5 G2 正式签署（用户裁定）+ 三外部项转入 M6 落账
+
+- 用户裁定："三个外部项转入 M6 期处置"——AM5 G2 在 E2E 未跑全的现状下正式签署（附条件留痕已入 AM5 方案头部状态与 §14 v1.2r1 修订记录）。
+- 转入项落账：AM6 技术方案 §8 新增 **P-70**（Gatus 部署/AM5_LLM_BUDGET_CAP 设值/RCA-100 授权 + E2E-AM5 场景骨架填实连带项；M6-01 前 glm-5 基线重测须先清点阻塞面）；AM6 落码方案 O 表新增 **O-66/67/68**（含归属建议：预算上限=M6-01 live 前必须落值；授权=用户/法务面；场景填实=M6 期测试工序排期）。
+- AM6 两方案头部同步：动工硬前提"M5-22 G2 签署"已达成；剩余前提=AM6 其余 P0 闭环（C-66~69 等）+ 用户 G1 复审签署。
+- 仍待用户：本轮全部文档改动未 commit（BUGLOG/PROGRESS/AM5 方案/AM6 两方案/OSS 清单/AM5 证据包 README 等）+ 本地未 push 积压（含执行者线束 c7fc14e/8f16821）；AM6 v1.1r1 G1 复审时机。

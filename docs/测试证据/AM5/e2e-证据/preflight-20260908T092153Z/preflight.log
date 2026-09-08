@@ -1,0 +1,40 @@
+# host 2026-09-08T09:21:53Z
+Tue Sep  8 09:21:53 UTC 2026
+Linux VM-0-4-centos 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   48G  8.8G  85% /
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3925        1037         233        2762        3259
+Swap:          4095         374        3721
+deploy-control-app-1 Up 14 minutes
+deploy-otelcol-control-1 Up 48 minutes
+holmesgpt-am1 Up 7 hours
+flagd-admin-am3 Up 2 days (healthy)
+litellm-am3 Up 8 hours (healthy)
+deploy-notify-app-1 Up 2 days
+alert-arena-chaos-admin-1 Up 3 days (healthy)
+alert-order-arena-1 Up 3 days (healthy)
+prometheus-am0 Up 3 days
+deploy-postgres-1 Up 3 days (healthy)
+alertmanager-am0 Up 3 hours
+otel-collector Up 4 days
+frontend-proxy Up 4 days (healthy)
+load-generator Up 3 days (healthy)
+frontend Up 3 days (healthy)
+recommendation Up 3 days (healthy)
+checkout Up 3 days (healthy)
+product-catalog Up 4 days (healthy)
+cart Up 4 days
+shipping Up 4 days (healthy)
+ad Up 4 days (healthy)
+payment Up 4 days (healthy)
+flagd-ui Up 4 days (healthy)
+currency Up 4 days (healthy)
+quote Up 4 days (healthy)
+email Up 4 days (healthy)
+image-provider Up 4 days (healthy)
+astronomy-db Up 4 days (healthy)
+flagd Up 2 days
+telemetry-docs Up 4 days (healthy)
+valkey-cart Up 4 days (healthy)
+echo-receiver Up 5 days (healthy)
