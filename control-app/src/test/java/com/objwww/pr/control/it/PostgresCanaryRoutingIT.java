@@ -40,7 +40,9 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  *   <li>insertRouted 落 V25 路由四列（engine/config_digest/stickiness_key/canary_bucket）；</li>
  *   <li>老 Run 固定旧 digest——pointer 移动/回滚不改历史行，只影响新 Run；</li>
  *   <li>uq_rca_run_active_incident 迁 (incident_id, engine) 粒度：同引擎双活跃仍 23505，
- *       异引擎活跃共存（NATIVE 影子对照的物理前提）。</li>
+ *       异引擎活跃共存（NATIVE 影子对照的物理前提）；</li>
+ *   <li>M6-01 案②：REPORTING 占活跃槽——索引谓词含 REPORTING（V12 扩集），并发
+ *       铸造被索引拒绝；出活跃集后槽位释放。</li>
  * </ul>
  */
 class PostgresCanaryRoutingIT extends PostgresITBase {
@@ -170,6 +172,45 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
                         null, null, null, CanaryDecision.BUCKETED_HOLMES.name())));
 
         assertThat(count("rca_run")).isEqualTo(2);
+    }
+
+    // ------------------------- M6-01 案②：REPORTING 占活跃槽（索引谓词含 REPORTING）
+
+    @Test
+    void reportingRunOccupiesActiveSlotAndBlocksConcurrentMint() {
+        UUID incidentId = insertIncident("reporting-" + UUID.randomUUID());
+        RcaRun first = run(incidentId);
+        runs.insertRouted(first, RcaRunRouting.holmes(
+                null, null, null, CanaryDecision.BUCKETED_HOLMES.name()));
+        // 真实推进形态：调查任务全部终态后经 advance 入组装期（C-72：REPORTING 属活跃集）
+        runs.update(inState(first, RcaRunState.REPORTING));
+
+        // REPORTING 期间并发铸造同 (incident, engine) → 23505——活跃索引谓词含
+        // REPORTING（V12 扩集 + BA-43 重建保留；M6-01 案② 回归钉）
+        assertThatExceptionOfType(DuplicateKeyException.class).isThrownBy(
+                () -> runs.insertRouted(run(incidentId), RcaRunRouting.holmes(
+                        null, null, null, CanaryDecision.BUCKETED_HOLMES.name())));
+
+        // 异引擎分槽不受阻（NATIVE 候选与 HOLMES 主路径并存的物理前提）
+        runs.insertRouted(run(incidentId), new RcaRunRouting(
+                RcaEngine.NATIVE, Digest.sha256Of("bundle-v1"),
+                "alertname=higherror|service=checkout", 12,
+                CanaryDecision.BUCKETED_NATIVE.name()));
+
+        // 出活跃集（SUCCEEDED）后槽位释放：新 HOLMES run 可铸（先证能拒、再证能过）
+        runs.update(inState(first, RcaRunState.SUCCEEDED));
+        runs.insertRouted(run(incidentId), RcaRunRouting.holmes(
+                null, null, null, CanaryDecision.BUCKETED_HOLMES.name()));
+
+        assertThat(count("rca_run")).isEqualTo(3);
+    }
+
+    /** 活跃态迁移行（同 withRunState 语义：updatedAt=now，出活跃集补 completedAt） */
+    private static RcaRun inState(RcaRun r, RcaRunState state) {
+        Instant now = Instant.now();
+        return new RcaRun(r.id(), r.incidentId(), r.generation(), r.trigger(), state,
+                r.investigationHash(), r.createdAt(), now, r.startedAt(),
+                state.isActive() ? null : now, null);
     }
 
     // ------------------------------------------------------------------ 种子
