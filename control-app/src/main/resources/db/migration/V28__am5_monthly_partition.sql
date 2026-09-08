@@ -27,15 +27,6 @@ create table rca_event_partitioned (
     like rca_event including defaults including generated including storage including comments
 ) partition by range (created_at);
 
-alter table rca_event_partitioned
-    add constraint pk_rca_event primary key (id, created_at),
-    add constraint uq_rca_event_run_seq unique (run_id, seq, created_at),
-    add constraint uq_rca_event_run_event_id unique (run_id, event_id, created_at),
-    add constraint ck_rca_event_seq_positive check (seq >= 1),
-    add constraint fk_rca_event_run foreign key (run_id) references rca_run (id);
-
-create index ix_rca_event_run_created on rca_event_partitioned (run_id, created_at);
-
 -- 初始分区：当前月 + 次月 + default 兜底（后续月由归档工序前滚创建，M5-19）
 create table rca_event_2026_09 partition of rca_event_partitioned
     for values from ('2026-09-01 00:00:00+00') to ('2026-10-01 00:00:00+00');
@@ -43,13 +34,27 @@ create table rca_event_2026_10 partition of rca_event_partitioned
     for values from ('2026-10-01 00:00:00+00') to ('2026-11-01 00:00:00+00');
 create table rca_event_default partition of rca_event_partitioned default;
 
--- 存量搬迁（开发期体量小；真产离线回填/双写切换属部署段工序，C-23②）
+-- 存量搬迁（开发期体量小；真产离线回填/双写切换属部署段工序，C-23②）。
+-- 搬迁窗口无键防线：NOT NULL 由 LIKE 必然继承，防重入由单事务换身兜住
+--（迁移整体一个事务，失败即全回滚、热数据原封）。
 insert into rca_event_partitioned select * from rca_event;
 
 -- 同名换身（视图按 oid 绑定旧表，先拆后建）
 drop view rca_agent_event;
 drop table rca_event;
 alter table rca_event_partitioned rename to rca_event;
+
+-- BA-40（195 真 PG 42P07 实证）：约束/索引必须在换身【之后】创建——
+-- PK/UNIQUE 的索引名是 schema 全局关系名，旧表同名索引（pk_rca_event 等）
+-- 在场时 add constraint 即撞名；旧表 drop 即释放。约束值域见头注 E-17。
+alter table rca_event
+    add constraint pk_rca_event primary key (id, created_at),
+    add constraint uq_rca_event_run_seq unique (run_id, seq, created_at),
+    add constraint uq_rca_event_run_event_id unique (run_id, event_id, created_at),
+    add constraint ck_rca_event_seq_positive check (seq >= 1),
+    add constraint fk_rca_event_run foreign key (run_id) references rca_run (id);
+
+create index ix_rca_event_run_created on rca_event (run_id, created_at);
 
 create view rca_agent_event as
     select run_id, seq, event_id, event_type, payload, payload_digest, created_at

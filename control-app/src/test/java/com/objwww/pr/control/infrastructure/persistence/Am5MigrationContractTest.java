@@ -413,6 +413,13 @@ class Am5MigrationContractTest {
                 .contains("alter table rca_event_partitioned rename to rca_event")
                 .contains("grant select, insert on rca_event to control_app")
                 .contains("grant select on rca_agent_event to control_app");
+
+        // BA-40（195 真 PG 42P07 实证）：PK/UNIQUE 约束的索引名是 schema 全局关系名，
+        // 旧表 rca_event 同名索引（pk_rca_event 等）在场时 add constraint 即撞名——
+        // 约束/索引必须排在同名换身（旧表 drop）之后；顺序回归即红
+        assertThat(sql.indexOf("alter table rca_event_partitioned rename to rca_event"))
+                .as("换身先于约束创建（索引名 schema 全局唯一）")
+                .isLessThan(sql.indexOf("add constraint pk_rca_event"));
     }
 
     @Test
