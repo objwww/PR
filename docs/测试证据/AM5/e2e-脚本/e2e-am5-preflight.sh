@@ -15,6 +15,11 @@ OUT_PREFIX="[AM5-PREFLIGHT]"
 
 log() { echo "$OUT_PREFIX $1"; }
 
+# 自 source 公共函数库（BA-49：runall 以子进程 sh 调本脚本，函数面不跨进程边界——
+# 原"调用方先 source"假设在 runall 形态下 am5_psql_ro/am5_redact 全部 command not found）
+_SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+. "$_SCRIPT_DIR/e2e-am5-common.sh"
+
 RUNS_DIR="${1:?用法: e2e-am5-preflight.sh <runs_dir>}"
 mkdir -p "$RUNS_DIR"
 
@@ -53,7 +58,9 @@ preflight_check "迁移最大号读取"         am5_psql_ro AM5_PG_URL "select m
 # v2：路径可覆盖，适配真栈宿主发布端口面）
 preflight_check "LiteLLM 可达"           curl -fsS --max-time 5 \
     "http://${AM5_LITELLM_HOST:-127.0.0.1}:${AM5_LITELLM_PORT:-4000}${AM5_LITELLM_HEALTH_PATH:-/health/liveliness}"
-preflight_check "order-arena 可达"       curl -fsS --max-time 5 "http://${AM5_ARENA_HOST:-127.0.0.1}:${AM5_ARENA_PORT:-8081}/actuator/health"
+# order-arena 健康路径可覆盖（真栈 order-arena 自证面为 /healthz，非 actuator——195 实证）
+preflight_check "order-arena 可达"       curl -fsS --max-time 5 \
+    "http://${AM5_ARENA_HOST:-127.0.0.1}:${AM5_ARENA_PORT:-8081}${AM5_ARENA_HEALTH_PATH:-/actuator/health}"
 preflight_check "Prometheus 可达"        curl -fsS --max-time 5 "http://${AM5_PROM_HOST:-127.0.0.1}:${AM5_PROM_PORT:-9090}/-/ready"
 preflight_check "Alertmanager 可达"      curl -fsS --max-time 5 "http://${AM5_AM_HOST:-127.0.0.1}:${AM5_AM_PORT:-9093}/-/ready"
 preflight_check "2C4G Gatus 可达"        curl -fsS --max-time 5 "http://${AM5_GATUS_HOST}:${AM5_GATUS_PORT:-8081}/health"
