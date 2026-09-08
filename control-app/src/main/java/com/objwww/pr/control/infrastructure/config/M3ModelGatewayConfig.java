@@ -87,7 +87,7 @@ public class M3ModelGatewayConfig {
             PricingService pricingService,
             ObjectMapper objectMapper,
             Environment env,
-            @Value("${AGENT_MODEL:qwen-plus}") String primaryModel,
+            @Value("${AGENT_MODEL:glm-5}") String primaryModel,
             @Value("${AGENT_MODEL_FALLBACK:}") String fallbackModel,
             @Value("${OPENAI_COMPAT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}")
             String primaryBaseUrl,

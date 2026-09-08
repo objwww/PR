@@ -18,12 +18,12 @@ class SamplingFingerprintTest {
     private static final SamplingFingerprint.Sampling FULL =
             new SamplingFingerprint.Sampling(0.2, 0.9, 4096, 42L);
 
-    private static final String PROVIDER = "litellm:qwen3.7-plus@dashscope";
-    private static final String MODEL = "qwen3.7-plus";
+    private static final String PROVIDER = "litellm:glm-5@dashscope";
+    private static final String MODEL = "glm-5";
 
-    /** 钉值：canonical() 全字段样例的 sha256（BA-22 实测校准，改动 canonical 即红） */
+    /** 钉值：canonical() 全字段样例的 sha256（BA-22 实测校准；2026-09-08 模型回写 glm-5 重钉，改动 canonical 即红） */
     private static final String PINNED_DIGEST =
-            "b38e7bde2262812bc4ee2a358decb66c5c9dd97d812d7a77b16c44acb4bf2e80";
+            "3bf88844449a0aadc6e1ea26822291d58a0752745b01e48d6783d56ad6c40f12";
 
     @Test
     void fullFingerprintIsGateEligibleWithStableDigest() {
@@ -82,7 +82,7 @@ class SamplingFingerprintTest {
 
     @Test
     void requestedAndEffectiveStatesAreRecordedDistinctly() {
-        // qwen3.7-plus thinking 型：生效 max_tokens（思考预算）与请求值可能分化；
+        // glm-5 thinking 型：生效 max_tokens（思考预算）与请求值可能分化；
         // 两态异值必须同时可见且 digest 可区分
         var requested = new SamplingFingerprint.Sampling(0.7, 0.95, 8192, null);
         var effective = new SamplingFingerprint.Sampling(0.7, 0.95, 8192, 42L);

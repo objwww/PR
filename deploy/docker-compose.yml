@@ -130,7 +130,7 @@ services:
       HOLMES_BASE_URL: ${HOLMES_BASE_URL:-http://holmes:8080}
       HOLMES_API_KEY: ${HOLMES_API_KEY:?}
       # 账本/报告记录的调查模型(与 deploy/alert compose 的 MODEL 同值,请求显式携带)
-      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/qwen3.7-plus}
+      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/glm-5}
       # AM5 M5-15：三支柱遥测出口——control 平面 collector（应用侧零代码变更，
       # exporter 依赖不上类路径时此变量仅作声明面；trace 采样概率同面）
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otelcol-control:4317}

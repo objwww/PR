@@ -8,13 +8,13 @@
 # 所有敏感值经容器 env 注入（compose environment ← .env），本文件零密钥。
 
 model_list:
-  - model_name: qwen3.7-plus                 # holmes MODEL=openai/qwen3.7-plus 的请求名；
+  - model_name: glm-5                 # holmes MODEL=openai/glm-5 的请求名；
                                              # 与上游实际模型 id 解耦（换上游只改下一行）
     litellm_params:
-      model: openai/qwen3.7-plus             # 上游=百炼兼容端点（UPSTREAM_BASE）
+      model: openai/glm-5             # 上游=百炼兼容端点（UPSTREAM_BASE）
       api_base: os.environ/UPSTREAM_BASE
       api_key: os.environ/UPSTREAM_KEY
-      # TODO(AM5 运维项)：费率为 deepseek-v3 旧值占位，须按 qwen3.7-plus 实际刊例价校准——
+      # TODO(AM5 运维项)：费率为 deepseek-v3 旧值占位，须按 glm-5 实际刊例价校准——
       # 成本记账与 per-EvalRun max_budget 硬拦都依赖此值，低估会放宽预算门（BA-29 同族风险）
       input_cost_per_token: 0.0000005        # 成本记账补丁（spike §三.3）：缺失则 holmes 侧 cost 记 0
       output_cost_per_token: 0.000001

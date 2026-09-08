@@ -262,7 +262,7 @@ public class EvalRunnerConfig {
     /** 元数据来源（十项可复现元数据；M3-24/25 的对账输入在 provider 侧另行回填） */
     @Bean
     public EvalRunMetadata evalRunMetadata(
-            @Value("${app.alert.eval.model:qwen3.7-plus}") String model,
+            @Value("${app.alert.eval.model:glm-5}") String model,
             @Value("${app.alert.eval.prompt-version:am3-rca-v2}") String promptVersion,
             @Value("${app.alert.eval.prompt-digest}") String promptDigest,
             @Value("${app.alert.eval.tool-registry-digest}") String toolRegistryDigest,

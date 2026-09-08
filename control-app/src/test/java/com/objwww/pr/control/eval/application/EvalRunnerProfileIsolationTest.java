@@ -78,7 +78,7 @@ class EvalRunnerProfileIsolationTest {
                     assertThat(registry.scenarios()).hasSize(2);
 
                     EvalRunMetadata metadata = context.getBean(EvalRunMetadata.class);
-                    assertThat(metadata.model()).isEqualTo("qwen3.7-plus");
+                    assertThat(metadata.model()).isEqualTo("glm-5");
                     assertThat(metadata.registryDigest().value())
                             .isEqualTo(registry.contentDigest().value());
                 });
