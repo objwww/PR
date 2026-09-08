@@ -153,16 +153,18 @@ class PostgresRetentionIT extends PostgresITBase {
         assertThat(service.cleanupBlocked("rca_event")).isTrue();
         assertThat(service.archiveCandidates("rca_event")).isEmpty();
 
-        // 分区域 hold 只钉一区
+        // 分区域 hold 只钉一区：家庭 hold 仍在场时全域零候选已证（上行），
+        // 故先释放家庭 hold（BA-42④，195 真 PG 实证：原稿漏释放，候选恒 []），
+        // 期间插分区域 hold 验证窄化面
         UUID hold2 = policies.insertHold("rca_event:rca_event_2026_09", "个案",
                 "ops-1", CLOCK);
+        assertThat(policies.releaseHold(hold, CLOCK.plusSeconds(60))).isTrue();
         assertThat(service.archiveCandidates("rca_event"))
                 .containsExactly("rca_event_2026_10");
 
-        // release 单列开口：解除后候选恢复；二次释放 0 行 = false
-        assertThat(policies.releaseHold(hold, CLOCK.plusSeconds(60))).isTrue();
+        // release 单列开口：同锚二次释放 0 行 = false；分区 hold 释放后候选全恢复
         assertThat(policies.releaseHold(hold, CLOCK.plusSeconds(60))).isFalse();
-        policies.releaseHold(hold2, CLOCK.plusSeconds(60));
+        assertThat(policies.releaseHold(hold2, CLOCK.plusSeconds(60))).isTrue();
         assertThat(policies.activeHolds()).isEmpty();
         assertThat(service.archiveCandidates("rca_event"))
                 .containsExactly("rca_event_2026_09", "rca_event_2026_10");

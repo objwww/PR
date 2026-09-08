@@ -322,6 +322,9 @@ class Am5MigrationContractTest {
                 .contains("'native_deferred','blast_radius_stopped'")
                 .contains("grant select, insert on canary_route_decision to control_app")
                 .contains("revoke update, delete on canary_route_decision from control_app")
+                // BA-42①（195 真 PG 实证）：append 走 bigserial 默认值需序列 USAGE，
+                // 表授权不覆盖序列面——漏授即生产写路径 permission denied
+                .contains("grant usage on sequence canary_route_decision_id_seq to control_app")
                 .contains("revoke all on canary_route_decision"
                         + " from publisher_app, notify_app, eval_app, public");
     }
@@ -442,5 +445,17 @@ class Am5MigrationContractTest {
                 .contains("revoke delete on legal_hold from control_app")
                 .contains("grant update (state) on archive_manifest to control_app")
                 .contains("revoke delete on archive_manifest from control_app");
+
+        // BA-42③（195 真 PG 实证：DETACH=ALTER TABLE 需表主，control_app 无主身份
+        // → 归档工波单向卡死 FAILED_DETACH）：提权收口 = security definer 函数，
+        // 动作面钉死「仅 rca_event 族分区摘离」+ 白名单 + public 零开口
+        assertThat(sql)
+                .contains("create function pr_archive_detach_partition(p_partition text)")
+                .contains("security definer")
+                .contains("p.relname = 'rca_event'")
+                .contains("detach partition")
+                .contains("revoke all on function pr_archive_detach_partition(text) from public")
+                .contains("grant execute on function pr_archive_detach_partition(text)"
+                        + " to control_app");
     }
 }

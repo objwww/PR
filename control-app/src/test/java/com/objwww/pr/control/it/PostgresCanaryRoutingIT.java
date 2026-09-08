@@ -59,10 +59,13 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         incidents = new PostgresIncidentRepository(jdbc);
         bundles = new PostgresConfigBundleRepository(controlDataSource());
         decisions = new PostgresCanaryDecisionLogRepository(jdbc);
-        // AM5 表不在基座 TRUNCATE 清单（AM5 表惯例自清，同 PostgresConfigBundleRepositoryTest）
+        // config 族两表自清（BA-41：基座 TRUNCATE 清单刻意排除 V24 种子行依赖面）；
+        // 删后必须回种 id=1（BA-42②：激活 CAS 的 WHERE id=1 依赖种子行在场，
+        // 195 真 PG 实证：无行则 activate 恒 false）
         adminJdbc.sql("DELETE FROM canary_route_decision").update();
         adminJdbc.sql("DELETE FROM config_bundle_active").update();
         adminJdbc.sql("DELETE FROM config_bundle").update();
+        adminJdbc.sql("INSERT INTO config_bundle_active (id) VALUES (1)").update();
     }
 
     // ----------------------------------------------- 路由四列落行 + 决策审计追加面

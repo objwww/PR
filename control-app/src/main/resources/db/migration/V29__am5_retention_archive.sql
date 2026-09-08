@@ -62,3 +62,41 @@ revoke delete on legal_hold from control_app;
 grant select, insert on archive_manifest to control_app;
 grant update (state) on archive_manifest to control_app;
 revoke delete on archive_manifest from control_app;
+
+-- ---------- 4. 分区摘离收口函数（BA-42③，195 真 PG 实证） ----------
+--
+--   DETACH PARTITION = ALTER TABLE，需表主权限；control_app 按最小授权原则无主
+--   身份，归档工序（M5-19）直连即 permission denied → FAILED_DETACH 单向卡死。
+--   提权收口 = security definer 函数：动作面钉死「仅 rca_event 族的分区摘离」
+--   单一动作；分区名白名单同应用面（SAFE_IDENTIFIER）；分区不存在/已摘离即异常
+--   （与网关前置检查同语义，fail-closed）。
+create function pr_archive_detach_partition(p_partition text)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+    v_parent text;
+begin
+    if p_partition !~ '^[a-z_][a-z0-9_]*$' then
+        raise exception '非法分区标识符: %', p_partition;
+    end if;
+    select p.relname into v_parent
+      from pg_catalog.pg_inherits i
+      join pg_catalog.pg_class c on c.oid = i.inhrelid
+      join pg_catalog.pg_class p on p.oid = i.inhparent
+     where c.relname = p_partition
+       and p.relname = 'rca_event';
+    if v_parent is null then
+        raise exception '分区不存在或已摘离: %', p_partition;
+    end if;
+    execute format('alter table %I detach partition %I', v_parent, p_partition);
+end
+$$;
+
+revoke all on function pr_archive_detach_partition(text) from public;
+grant execute on function pr_archive_detach_partition(text) to control_app;
+
+comment on function pr_archive_detach_partition(text) is
+    'AM5 M5-19 分区归档摘离收口（security definer：control_app 无表主权限，提权面=仅 rca_event 族 DETACH 单动作；BA-42③）';

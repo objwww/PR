@@ -67,6 +67,11 @@ comment on table canary_route_decision is
 
 grant select, insert on canary_route_decision to control_app;
 revoke update, delete on canary_route_decision from control_app;
+-- BA-42①（195 真 PG 实证：append 走 bigserial 默认值，表授权不覆盖序列面，
+-- 漏 USAGE 即生产写路径 permission denied）
+grant usage on sequence canary_route_decision_id_seq to control_app;
+revoke all on sequence canary_route_decision_id_seq
+    from publisher_app, notify_app, eval_app, public;
 
 revoke all on canary_route_decision
     from publisher_app, notify_app, eval_app, public;
