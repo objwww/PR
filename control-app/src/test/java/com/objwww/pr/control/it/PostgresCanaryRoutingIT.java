@@ -18,6 +18,7 @@ import com.objwww.pr.control.release.domain.model.CanaryDecision;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.control.release.domain.repository.CanaryDecisionLogRepository;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
+import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,11 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  *       异引擎活跃共存（NATIVE 影子对照的物理前提）；</li>
  *   <li>M6-01 案②：REPORTING 占活跃槽——索引谓词含 REPORTING（V12 扩集），并发
  *       铸造被索引拒绝；出活跃集后槽位释放。</li>
+ *   <li>BA-52：生产铸造点（castRunAndTask）顺序 = route() 决策行先落、insertRouted()
+ *       run 行后落——同事务原子对；run_id FK 即时检查（NOT DEFERRABLE）即每次新
+ *       run 铸造必 23503，投影整组重试后 DEAD_LETTER（195 真栈 E2E-AM6-00 首跑
+ *       实证）。V31 改 DEFERRABLE INITIALLY DEFERRED（提交点检查），本测试以生产
+ *       顺序钉死原子对语义。</li>
  * </ul>
  */
 class PostgresCanaryRoutingIT extends PostgresITBase {
@@ -203,6 +209,36 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
                 null, null, null, CanaryDecision.BUCKETED_HOLMES.name()));
 
         assertThat(count("rca_run")).isEqualTo(3);
+    }
+
+    // --------------------- BA-52：决策行先落/run 行后落（生产铸造点同事务原子对）
+
+    @Test
+    void decisionAppendBeforeRunInsertCommitsAsOneTransaction() {
+        // 生产铸造点顺序（IncidentProjector / RcaRunOrchestrator castRunAndTask）：
+        // canaryRouter.route() 内决策行先 append，runs.insertRouted() 的 run 行后落，
+        // 两者同事务。BA-52：run_id FK 即时检查使该顺序必然 23503（每次新 run 铸造
+        // 必炸、投影整组 DEAD_LETTER）——V31 改 DEFERRABLE INITIALLY DEFERRED，
+        // 提交点检查恰与"原子对"语义对齐。本测试按生产顺序（先 route 后 insertRouted、
+        // 同 runId）钉死回归。
+        Digest digest = publish(Map.of("app", Map.of("model", Map.of("route", "holmes"))),
+                Instant.now());
+        assertThat(bundles.activate(digest, null, "it", Instant.now())).isTrue();
+        CanaryRouter router = new CanaryRouter(bundles, decisions, false, Instant::now);
+        UUID incidentId = insertIncident("fk-defer-" + UUID.randomUUID());
+        String key = "alertname=higherror|service=checkout";
+
+        controlTx.executeWithoutResult(tx -> {
+            UUID runId = UUID.randomUUID();
+            RcaRunRouting routing = router.route(runId, key, key);
+            RcaRun run = new RcaRun(runId, incidentId, 0, RunTrigger.INITIAL,
+                    RcaRunState.QUEUED, Digest.sha256Of("run-" + runId),
+                    Instant.now(), Instant.now(), null, null, null);
+            runs.insertRouted(run, routing);
+        });
+
+        assertThat(count("rca_run")).isEqualTo(1);
+        assertThat(count("canary_route_decision")).isEqualTo(1);
     }
 
     /** 活跃态迁移行（同 withRunState 语义：updatedAt=now，出活跃集补 completedAt） */
