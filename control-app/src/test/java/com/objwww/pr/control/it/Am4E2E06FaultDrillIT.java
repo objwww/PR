@@ -128,8 +128,11 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
     void it06_2_toolPENDING悬挂与预算悬挂_重启收口零重复副作用零透支() {
         UUID run = seedRun();
         supervisor().startRun(run, proposal(), Set.of("snapshot:r0"));
+        seedDriverTask(run);
         RcaTask leased = tasks.claimNext(WORKER, Instant.now(),
                 Duration.ofMinutes(5)).orElseThrow();
+        assertThat(leased.taskKey()).as("C-70 可领取面 = driver 键")
+                .isEqualTo(RcaTask.HOLMES_INVESTIGATE);
         RcaAttempt attempt = startedAttempt(leased.id());
 
         RunBudgetLedger firstBudget = budgetLedger();
@@ -193,6 +196,7 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
     void it06_4_finish前中断重启_恰一份报告_重启侧预算实扣收口() {
         UUID run = seedRun();
         supervisor().startRun(run, proposal(), Set.of("snapshot:r0"));
+        seedDriverTask(run);
         RcaTask leased = tasks.claimNext(WORKER, Instant.now(),
                 Duration.ofMinutes(5)).orElseThrow();
         RcaAttempt attempt = startedAttempt(leased.id());
@@ -222,6 +226,7 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
     void it06_5_finish完成后重放_终态不可改写零重复报告() {
         UUID run = seedRun();
         supervisor().startRun(run, proposal(), Set.of("snapshot:r0"));
+        seedDriverTask(run);
         RcaTask leased = tasks.claimNext(WORKER, Instant.now(),
                 Duration.ofMinutes(5)).orElseThrow();
         RcaAttempt attempt = startedAttempt(leased.id());
@@ -361,17 +366,35 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
                 .toList();
     }
 
-    /** 逐任务终态化（模拟 worker 完成事实已落）：claimNext 真实领取 → DONE 直置 →
-     * advance 放行后继（BLOCKED→READY）；无 READY 可领即收敛完成 */
+    /** 铸 driver 任务（M6-01 生产铸造点形态：run + 单 driver，claimNext 唯一可领面）。
+     * 须在 startRun 之后调用——先有任务图会让 startRun 走 ALREADY_STARTED 不编译计划 */
+    private UUID seedDriverTask(UUID run) {
+        UUID taskId = UUID.randomUUID();
+        controlJdbc.sql("""
+                INSERT INTO rca_task(id, run_id, task_key, state, priority,
+                    available_at, ready_since, deadline_at, created_at, updated_at)
+                VALUES (:id, :run, 'HOLMES_INVESTIGATE', 'READY', 100,
+                    now(), now(), now(), now(), now())
+                """).param("id", taskId).param("run", run).update();
+        return taskId;
+    }
+
+    /** 逐任务终态化（模拟驱动方完成事实已落）：READY 任务直驱 DONE → advance 放行后继
+     *（BLOCKED→READY）；无 READY 即收敛完成。M6-01 C-70 起 DAG 节点任务不经通用领取面
+     *（claimNext 只认 driver 键）——生产驱动方（影子触发器/native 执行器）同为直驱迁移，
+     * 本 helper 与其同构；原 claimNext 驱动在 C-70 下空转（it06_6 双侧同卡 QUEUED 的
+     * 空洞通过，195 真机红实证 2026-09-08） */
     private void finishAllTasks(DeterministicSupervisor supervisor, UUID run) {
         while (true) {
-            var leased = tasks.claimNext(WORKER, Instant.now(), Duration.ofMinutes(5));
-            if (leased.isEmpty()) {
+            var ready = tasks.findByRunId(run).stream()
+                    .filter(t -> t.state() == RcaTaskState.READY)
+                    .findFirst();
+            if (ready.isEmpty()) {
                 return;
             }
             controlJdbc.sql("UPDATE rca_task SET state = 'DONE', updated_at = now() "
                             + "WHERE id = :id")
-                    .param("id", leased.orElseThrow().id()).update();
+                    .param("id", ready.orElseThrow().id()).update();
             supervisor.advance(run);
         }
     }

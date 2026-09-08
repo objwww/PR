@@ -84,11 +84,11 @@ class AlertGenerationFenceIT extends PostgresITBase {
     @Test
     void claimNextSkipsTasksOfSupersededRunAndPicksActiveRun() {
         Seed old = seedIncidentWithRun("fence-old", 0);
-        UUID staleTask = insertTask(old.runId(), "OLD_TASK");
+        UUID staleTask = insertTask(old.runId(), "HOLMES_INVESTIGATE");
         supersede(old.runId(), 0);
 
         Seed fresh = seedIncidentWithRun("fence-new", 5);
-        UUID activeTask = insertTask(fresh.runId(), "NEW_TASK");
+        UUID activeTask = insertTask(fresh.runId(), "HOLMES_INVESTIGATE");
 
         Optional<RcaTask> claimed = tasks.claimNext("it-worker", Instant.now(),
                 Duration.ofMinutes(5));
@@ -106,13 +106,13 @@ class AlertGenerationFenceIT extends PostgresITBase {
         // 直接收尾。必须先 claim 再 supersede——taskId 只有经 claimNext 才有租约，
         // 无租约的行会先被 requireCurrentLease 拒成 LEASE_REJECTED，到不了代际栅栏
         Seed old = seedIncidentWithRun("fence-fin", 0);
-        UUID taskId = insertTask(old.runId(), "OLD_WORK");
+        UUID taskId = insertTask(old.runId(), "HOLMES_INVESTIGATE");
         RcaTask leased = tasks.claimNext("it-worker", Instant.now(),
                 Duration.ofMinutes(5)).orElseThrow();
         assertThat(leased.id()).as("先领取旧 run 任务（真实租约在手）").isEqualTo(taskId);
         supersede(old.runId(), 0);
         Seed fresh = seedIncidentWithRun("fence-new", 1);
-        insertTask(fresh.runId(), "NEW_WORK");
+        insertTask(fresh.runId(), "HOLMES_INVESTIGATE");
 
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), taskId, 1, 1, "it-worker",
                 RcaAttemptStatus.STARTED, null, null, null, Instant.now(), null, null);
@@ -156,6 +156,8 @@ class AlertGenerationFenceIT extends PostgresITBase {
         return new Seed(incidentId, runId);
     }
 
+    /** C-70（M6-01）起 claimNext 只认 driver 键——夹具按生产铸造点形态类型化
+     * （HOLMES_INVESTIGATE），任意 key 在真 PG 上领不到（195 真机红实证 2026-09-08） */
     private UUID insertTask(UUID runId, String key) {
         UUID taskId = UUID.randomUUID();
         controlJdbc.sql("""
