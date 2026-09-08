@@ -54,7 +54,7 @@ public class PostgresRcaEventAppender implements RcaEventAppender {
         }
         jdbc.sql("select id from rca_run where id = :run for update")
                 .param("run", runId)
-                .query((rs, n) -> rs.getLong(1))
+                .query((rs, n) -> rs.getString(1))   // uuid 列取文本即可：本查询只求行锁与存在性
                 .optional()
                 .orElseThrow(() -> new IllegalStateException("run 不存在，事件无法落账: " + runId));
         // 锁内重查：同 run 并发追加已在行锁上串行化，此处所见即终态
