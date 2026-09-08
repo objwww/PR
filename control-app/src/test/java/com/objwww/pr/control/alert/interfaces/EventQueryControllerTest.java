@@ -251,6 +251,11 @@ class EventQueryControllerTest {
         public Optional<RoutingView> findRoutingById(UUID id) {
             return Optional.of(new RoutingView(RcaEngine.HOLMES, null, null, null));
         }
+
+        @Override
+        public java.util.OptionalLong currentRevision(UUID id) {
+            return rows.containsKey(id) ? java.util.OptionalLong.of(0) : java.util.OptionalLong.empty();
+        }
     }
 
     static final class StubEvents implements RcaEventReader {

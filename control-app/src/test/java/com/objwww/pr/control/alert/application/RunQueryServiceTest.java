@@ -253,6 +253,11 @@ class RunQueryServiceTest {
         public Optional<RoutingView> findRoutingById(UUID id) {
             return Optional.ofNullable(routing.get(id));
         }
+
+        @Override
+        public java.util.OptionalLong currentRevision(UUID id) {
+            return rows.containsKey(id) ? java.util.OptionalLong.of(0) : java.util.OptionalLong.empty();
+        }
     }
 
     static final class FakeTasks implements RcaTaskRepository {
