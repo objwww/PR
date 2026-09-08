@@ -51,8 +51,7 @@ create table golden_candidate (
 create index ix_golden_candidate_state on golden_candidate(state, updated_at);
 
 comment on table golden_candidate is
-    'AM5 GT 提案工作流（M5-03）：双人复核状态机 + revision CAS；'
-    || '发布 = case_version 追加新行（insert-only 不破）';
+    'AM5 GT 提案工作流（M5-03）：双人复核状态机 + revision CAS；发布 = case_version 追加新行（insert-only 不破）';
 
 -- ---------- 2. golden_review_event：append-only 复核事件 ----------
 
@@ -75,8 +74,7 @@ create index ix_golden_review_event_candidate
     on golden_review_event(candidate_id, created_at);
 
 comment on table golden_review_event is
-    'AM5 复核事件时间线（M5-03，append-only 只授 select,insert）：'
-    || '同 idempotency_key 唯一，重放判定面';
+    'AM5 复核事件时间线（M5-03，append-only 只授 select,insert）：同 idempotency_key 唯一，重放判定面';
 
 -- ---------- 3. 授权：eval_app 读写候选（列级 UPDATE）；事件 append-only ----------
 

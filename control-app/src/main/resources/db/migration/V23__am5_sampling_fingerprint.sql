@@ -25,11 +25,7 @@
 alter table rca_attempt add column sampling_fingerprint jsonb;
 
 comment on column rca_attempt.sampling_fingerprint is
-    'AM5 采样指纹（M5-04，FUT-40/INV-AM5-3）：LLM 调用点回写的每 Attempt 生效'
-    || '采样参数——requested/effective 两态 {temperature,top_p,max_tokens,seed}'
-    || ' + provider_fingerprint + model + trial_no；键集由'
-    || ' ck_rca_attempt_fingerprint_keys 兜底，字段级完整性由'
-    || ' SamplingFingerprint.isGateEligible 把门（缺字段不进正式门禁）';
+    'AM5 采样指纹（M5-04，FUT-40/INV-AM5-3）：LLM 调用点回写的每 Attempt 生效采样参数——requested/effective 两态 {temperature,top_p,max_tokens,seed} + provider_fingerprint + model + trial_no；键集由 ck_rca_attempt_fingerprint_keys 兜底，字段级完整性由 SamplingFingerprint.isGateEligible 把门（缺字段不进正式门禁）';
 
 alter table rca_attempt
     add constraint ck_rca_attempt_fingerprint_keys

@@ -80,8 +80,7 @@ create table case_version (
 );
 
 comment on table case_version is
-    'AM5 案例版本行（M5-01，insert-only）：同 (dataset_version_id,case_key) 唯一，'
-    || '纠错 = 新 dataset_version 携带修正行，历史版本行永不变更';
+    'AM5 案例版本行（M5-01，insert-only）：同 (dataset_version_id,case_key) 唯一，纠错 = 新 dataset_version 携带修正行，历史版本行永不变更';
 comment on column case_version.source_artifact_ref is
     '原始 artifact 引用指针（Parquet/JSON 定位），与 payload 内原始证据互为表里';
 

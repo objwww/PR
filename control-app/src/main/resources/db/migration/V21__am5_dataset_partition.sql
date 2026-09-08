@@ -47,8 +47,7 @@
 alter table case_version add column partition_class varchar(16) not null;
 
 comment on column case_version.partition_class is
-    '四分区归属（自 dataset_version 冗余直挂，写入面 INSERT..SELECT 派生）；'
-    || 'RLS 与家族整组分区兜底的行侧谓词';
+    '四分区归属（自 dataset_version 冗余直挂，写入面 INSERT..SELECT 派生）；RLS 与家族整组分区兜底的行侧谓词';
 
 alter table dataset_version
     add constraint uq_dataset_version_partition unique (id, partition_class);
@@ -76,8 +75,7 @@ create table case_family_partition (
 );
 
 comment on table case_family_partition is
-    'AM5 家族整组分区登记面（M5-02，insert-only）：同 scenario_family_id 二次登记'
-    || '不同分区 = DuplicateKey 拒绝（落码方案 §M5-02② 分区兜底的可实施形态，C-6）';
+    'AM5 家族整组分区登记面（M5-02，insert-only）：同 scenario_family_id 二次登记不同分区 = DuplicateKey 拒绝（落码方案 §M5-02② 分区兜底的可实施形态，C-6）';
 
 -- ---------- 3. RLS + 四分区角色（V9 条件化建角色同构） ----------
 
