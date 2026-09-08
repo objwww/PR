@@ -1,0 +1,18 @@
+[AM6] E2E-AM6-05 开始 suite=20260908T222122Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T222122Z-am6-05
+[AM6] phase0 DRILL 姿态：percent=100 + native.proposal（抽样闸已开）
+[AM6]   预演锚 active=43f23ecc30007c09558e4aa41c22ea0c6e7db491622d6a92105094de36e4a1c7（percent=0，回滚靶）
+[AM6]   percent=100 生效 active=2e97307edbbfc28889916137c876d6525bd036d2d6f981ac8b3ddfb6e13c0f74（带 proposal）
+[AM6] phase1 注入告警 → BUCKETED_NATIVE → 真 agent NATIVE SUCCEEDED
+[AM6]   route 行取回 run=45101729-6470-4532-8713-8106deb6d55e（重试 3s；digest=2e97307edbbfc28889916137c876d6525bd036d2d6f981ac8b3ddfb6e13c0f74 key=alertname=higherrorrate|service=am6e2e05-shadow-20260908t222122z:alertname=higherrorrate|service=am6e2e05-shadow-20260908t222122z）
+[AM6]   NATIVE run=45101729-6470-4532-8713-8106deb6d55e incident=992a5928-616e-4495-9102-a038d85e6c85 generation=0（真栈 agents，超时 420s）
+[AM6] phase1 PASS（NATIVE 主路径生产收尾链完整，对照期零惊扰）
+[AM6] phase2 抽样入队 → 影子执行（真 LLM）→ V32 对照恰 1 行
+[AM6]   影子 run=c27ff17e-c508-49e3-b71f-ec69efc80d40（engine=HOLMES DB 默认/RERUN/终态自收）
+[AM6] phase2 PASS（入队恰一/执行恰一/对照落账，留痕 work-row.txt+comparison-row.txt）
+[AM6] phase3 零发布面：报告/发布/外发/赢家全零 + incident 指针不上移
+[AM6] phase3 PASS（零报告/零发布/零外发/零赢家；指针未动（195 实证 finishTask 不移 incident 指针，指针移动仅 FallbackService 面）: ）
+[AM6] phase4 底噪校准：CALIBRATION 执行 → noise_baseline 回填
+[AM6] phase4 PASS（校准行落账 noise_baseline，同快照 run=219bbd6a-76d7-47ed-9cc7-81cfb92686d2，留痕 noise-baseline.txt）
+[AM6] phase5 工作面健康（EXHAUSED=0/预算内）+ 一键切回 percent=0
+[AM6] phase5 PASS（工作面健康 24h=6/20；active=43f23ecc30007c09558e4aa41c22ea0c6e7db491622d6a92105094de36e4a1c7）
+[AM6] E2E-AM6-05 PASS（suite=20260908T222122Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T222122Z-am6-05）
