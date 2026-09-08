@@ -7,14 +7,17 @@
 # G0-10 接线（相对 AM0 实测形态的变更，均有方案依据）：
 #   - alertmanager webhook 由 echo-receiver 切到 control-app /webhooks/alertmanager
 #     （bearer 走 credentials_file 运行时挂载）；alertmanager 追加挂 alert-net
-#   - holmesgpt 由 sleep 常驻(CLI exec)升级为 server 形态(HOLMES_PORT=8080,
-#     /api/chat + X-API-Key;镜像 local/holmesgpt:am1-http)
+#   - [历史] holmesgpt 曾由 sleep 常驻(CLI exec)升级为 server 形态(HOLMES_PORT=8080,
+#     /api/chat + X-API-Key;镜像 local/holmesgpt:am1-http)——M6-07 随 Holmes 退场
+#     整服务摘除（镜像 digest 封存 /opt/backups/pre-m607-holmes-removal/；
+#     git tag pre-holmes-removal 封存本文件与构建目录的历史树）
 #
 # 网络拓扑：
 #   - prometheus/alertmanager 挂 opentelemetry-demo 外部网（抓 otel-collector:9464 指标；
 #     collector 的 prometheus exporter 由 deploy/alert/otelcol/otelcol-config-extras.yml 加装）
-#   - alert-net 外部共享网：holmes(别名 holmes) / alertmanager / control-app(主栈 compose 挂入)
-#     / order-arena(AM2) / arena-migrate / postgres(主栈 compose 挂入，AM2 起供 arena 域触库)
+#   - alert-net 外部共享网：alertmanager / control-app(主栈 compose 挂入)
+#     / order-arena(AM2) / arena-migrate / postgres(主栈 compose 挂入，AM2 起供 arena 域触库)；
+#     [M6-07] holmes 别名随 holmesgpt 服务摘除
 #   - eval-mgmt 外部私网（--internal，无宿主端口、无外网出口）：仅 arena-chaos-admin(AM2)；
 #     AM3 的 eval-runner 届时加入。业务 order-arena 对 eval-mgmt 零成员（C-3 裁定：
 #     "同容器双网监听"不成立，管理面必须拆独立服务/独立容器）
@@ -22,8 +25,7 @@
 #
 # AM3（M3-24）LiteLLM proxy 收口（§6.6，spike Exp5 实证）：
 #   - litellm 容器 = 模型调用唯一出口（P-12 账本盲区收口 + per-EvalRun 预算硬拦/对账）；
-#     holmes 的 OPENAI_API_BASE 指向 proxy，proxy 不可达即调查失败（fail-closed，
-#     无直连百炼回退路径——E2E-M3-06 断言面）
+#     [M6-07 后] proxy 唯一消费者 = Native 链模型调用（C-63：litellm 不属退场范围）
 #   - litellm-bootstrap 一次性建 litellm 角色/库（SpendLogs + 虚拟 key 台账，Prisma 自建表）
 
 services:
@@ -42,8 +44,9 @@ services:
       - "127.0.0.1:9090:9090"
     networks:
       - opentelemetry-demo
-      # G0-10 E2E 修正(BA-14 后续):holmes 的 Prometheus 工具集需要可达的 PROMETHEUS_URL,
-      # prometheus 挂入 alert-net 以便 holmes 以容器名直连
+      # G0-10 E2E 修正(BA-14 后续)的历史动机=holmes 的 Prometheus 工具集需可达
+      # PROMETHEUS_URL；[M6-07] holmes 已退场，挂接保留——prometheus 仍经 alert-net
+      # 供 order-arena 场景指标与主栈侧观测互通
       - alert-net
 
   alertmanager:
@@ -60,35 +63,11 @@ services:
       - opentelemetry-demo
       - alert-net
 
-  holmesgpt:
-    build: ./holmesgpt
-    image: local/holmesgpt:am1-http
-    container_name: holmesgpt-am1
-    restart: unless-stopped
-    # G0-10:HTTP /api/chat 服务形态(§6.5;Dockerfile 内 ENTRYPOINT python server.py)
-    environment:
-      HOLMES_PORT: "8080"
-      HOLMES_API_KEY: "${HOLMES_API_KEY:?}"          # server 侧鉴权(control-app 同值外带 X-API-Key)
-      MODEL: "openai/glm-5"                   # 默认模型;须与 litellm config.yaml model_name 对齐
-      # AM3（M3-24）：模型调用全部收口 LiteLLM proxy（§6.6）——原直连百炼的两变量移交 proxy
-      OPENAI_API_BASE: "http://litellm:4000/v1"
-      OPENAI_API_KEY: "${LITELLM_RUN_KEY:?}"         # per-EvalRun 虚拟 key（部署侧铸后写入 .env；
-                                                     # master key 不进 holmes；换 run = 换 key 重启本容器）
-      # G0-10 E2E 修正:不设则 prometheus 工具集被前置检查禁用,模型只能拿 kubectl 瞎撞
-      PROMETHEUS_URL: "http://prometheus-am0:9090"
-      HOME: "/tmp"
-    mem_limit: 1536m
-    mem_reservation: 512m
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    tmpfs:
-      - /tmp:exec,size=512m
-    networks:
-      alert-net:
-        aliases:
-          - holmes    # control-app 的 HOLMES_BASE_URL=http://holmes:8080 经此别名解析
+  # M6-07 Holmes 退场：holmesgpt 服务整块摘除（build ./holmesgpt、镜像
+  # local/holmesgpt:am1-http、alert-net 别名 holmes）。历史树封存=git tag
+  # pre-holmes-removal + 195 /opt/backups/pre-m607-holmes-removal/（镜像 digest）。
+  # 下线手法：alert 栈 up -d --remove-orphans 令 holmesgpt-am1 容器物理移除。
+  # litellm/litellm-bootstrap 保留（C-63：模型出口不属退场范围）。
 
   # ---------------------------------------------------------------- AM2 订单靶场（M2-01/02，C-3 拓扑）
 

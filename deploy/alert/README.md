@@ -1,5 +1,13 @@
 # deploy/alert/ — AM0 手工配置回收（G0-09）
 
+> **M6-07 Holmes 退场（2026-09-09）**：`holmesgpt` 服务与 `holmesgpt/` 构建目录已
+> 从本目录摘除（服务块 + 195 容器 holmesgpt-am1 + alert-net 别名 holmes）；
+> `litellm`/`litellm-bootstrap`/prometheus/alertmanager 全部保留（C-63：模型出口
+> 不属退场范围）。本文余下对 holmesgpt 的描述为 **AM0~M6-06 历史记录**，重部署时
+> 以 `docker-compose.yml` 现行文件为准；回滚制品=git tag `pre-holmes-removal` +
+> 195 `/opt/backups/pre-m607-holmes-removal/`（镜像 digest + compose/.env 封存）。
+> 依赖顺序末段"→ `holmesgpt`"自退场起不存在，终点=`litellm`。
+
 AM0（告警链路底座：独立 Prometheus + Alertmanager + HolmesGPT）部署验证期在
 195 上以散置手工文件拉起（`/opt/projects/alert_agent/`）。本目录把其中**配置真源**
 回收入 git，结束"只在服务器上、不在仓库里"的状态。

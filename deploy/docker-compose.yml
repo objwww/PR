@@ -127,10 +127,6 @@ services:
       APP_RELEASE_API_BEARER: ${APP_RELEASE_API_BEARER:?}
       # AM5 M5-12：Operator Case API 鉴权（operator 角色共享凭证，同 O-4 形态）
       APP_OPERATOR_API_BEARER: ${APP_OPERATOR_API_BEARER:?}
-      HOLMES_BASE_URL: ${HOLMES_BASE_URL:-http://holmes:8080}
-      HOLMES_API_KEY: ${HOLMES_API_KEY:?}
-      # 账本/报告记录的调查模型(与 deploy/alert compose 的 MODEL 同值,请求显式携带)
-      APP_ALERT_HOLMES_MODEL: ${APP_ALERT_HOLMES_MODEL:-openai/glm-5}
       # AM5 M5-04：采样指纹 provider 身份（部署特定=模型由谁服务，INV-AM5-3 fail-closed：
       # :? 必填——缺省即启动期失败，优于运行期每次调查崩在 requireText）
       APP_ALERT_EVAL_PROVIDER_FINGERPRINT: ${APP_ALERT_EVAL_PROVIDER_FINGERPRINT:?}
@@ -138,18 +134,9 @@ services:
       # fail-closed，无默认值 @Value 均带 : 空缺省，不阻断启动；BA-48 同 commit 补映射纪律）
       APP_ALERT_NATIVE_METRICS_EXPR: ${APP_ALERT_NATIVE_METRICS_EXPR:-}
       APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST: ${APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST:-}
-      # AM6 M6-04：run 级 fallback 闸与独立预算（缺省开/20，滚动 24h 窗）
-      APP_ALERT_FALLBACK_ENABLED: ${APP_ALERT_FALLBACK_ENABLED:-true}
-      APP_ALERT_FALLBACK_DAILY_BUDGET: ${APP_ALERT_FALLBACK_DAILY_BUDGET:-20}
-      # AM6 M6-05：Holmes 只读对照期反向影子（V34 持久工作面）。enabled 缺省关
-      # （既有部署零惊扰）；lease 必须 > Holmes 最长在途窗（read-timeout 8min）
-      APP_ALERT_SHADOW_HOLMES_ENABLED: ${APP_ALERT_SHADOW_HOLMES_ENABLED:-false}
-      APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET: ${APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET:-20}
-      APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE: ${APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE:-100}
-      APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS: ${APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS:-3}
-      APP_ALERT_SHADOW_HOLMES_LEASE: ${APP_ALERT_SHADOW_HOLMES_LEASE:-PT15M}
-      APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL: ${APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL:-PT30S}
-      APP_ALERT_SHADOW_HOLMES_BATCH_SIZE: ${APP_ALERT_SHADOW_HOLMES_BATCH_SIZE:-2}
+      # M6-07 Holmes 退场：HOLMES_BASE_URL/HOLMES_API_KEY/APP_ALERT_HOLMES_MODEL、
+      # APP_ALERT_FALLBACK_*（M6-04 铸造面已拆）、APP_ALERT_SHADOW_HOLMES_*（M6-05
+      # 观察面 bean 已拆）九映射随退场摘除——密钥回收以 .env 摘键 + 全库扫描零命中收口。
       # AM5 M5-15：三支柱遥测出口——control 平面 collector（应用侧零代码变更，
       # exporter 依赖不上类路径时此变量仅作声明面；trace 采样概率同面）
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otelcol-control:4317}
@@ -170,8 +157,8 @@ services:
       - no-new-privileges:true
     networks:
       - internal
-      # G0-10:接告警共享网——出向调 holmes(/api/chat 别名 holmes:8080);
-      # alertmanager 经该网投递 webhook(解析服务名 control-app)
+      # G0-10:接告警共享网——alertmanager 经该网投递 webhook(解析服务名
+      # control-app)；M6-07 后 holmes 别名已随 holmesgpt 服务摘除
       - alert-net
     deploy:
       resources:
