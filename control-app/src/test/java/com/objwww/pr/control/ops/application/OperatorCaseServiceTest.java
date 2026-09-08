@@ -124,6 +124,21 @@ class OperatorCaseServiceTest {
     }
 
     @Test
+    void staleRevisionReaderOnTerminalStatusGetsConflictBeforeStateMachine() {
+        // BA-45（195 真 PG 实证，PostgresOperatorCaseIT 并发认领连坐）：并发败者在胜者
+        // 提交后才读——期望修订=1 而现行=2（ACKED）。修订冲突必须先于状态机判定
+        //（CAS 先行），否则时序露窗即抛 IllegalCaseActionException；败者零副作用
+        UUID id = service.openOrMerge(draft("fp-1", "idem-1")).caseId();
+        service.claim(id, 1, "operator-a", "k-claim");
+
+        assertThatExceptionOfType(CaseRevisionConflictException.class).isThrownBy(
+                () -> service.claim(id, 1, "operator-b", "k-claim-b"));
+
+        assertThat(repo.byId(id).revision()).as("败者零副作用").isEqualTo(2);
+        assertThat(repo.byId(id).owner()).isEqualTo("operator-a");
+    }
+
+    @Test
     void commandReplayWithSameKeyReturnsCurrentState() {
         UUID id = service.openOrMerge(draft("fp-1", "idem-1")).caseId();
         service.claim(id, 1, "operator-a", "k-claim");

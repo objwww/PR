@@ -145,6 +145,12 @@ public class OperatorCaseService {
 
     private OperatorCase applyCommand(OperatorCase current, long expectedRevision, String actor,
                                       String idempotencyKey, CaseAction action, CommandBody body) {
+        // BA-45（195 真 PG 实证）：修订冲突判定必须先于状态机——并发败者在胜者提交后
+        // 才读（期望修订过期 + 状态已迁移）时，CAS 先行使其得到 CaseRevisionConflict
+        // 败者语义而非 IllegalCaseAction；DB 侧 update 乐观锁仍兜底读-改-写残留窗
+        if (current.revision() != expectedRevision) {
+            throw new CaseRevisionConflictException(current.id(), expectedRevision);
+        }
         long nextRevision = current.revision() + 1;
         OperatorCaseStateMachine.Transition transition =
                 OperatorCaseStateMachine.apply(current.status(), action);
