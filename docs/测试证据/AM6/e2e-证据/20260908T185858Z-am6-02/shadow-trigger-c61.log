@@ -1,0 +1,88 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-08T18:59:31.396Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Starting ControlApplication v0.0.1-SNAPSHOT using Java 21.0.12 with PID 1 (/app/app.jar started by app in /app)
+2026-09-08T18:59:31.455Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : The following 2 profiles are active: "docker", "am4-shadow-trigger"
+2026-09-08T18:59:37.005Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-08T18:59:37.396Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1cc93da4
+2026-09-08T18:59:37.398Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-08T18:59:37.463Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-08T18:59:38.678Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : AlertInboxProcessor 启动 owner=control-1
+2026-09-08T18:59:38.678Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-08T18:59:38.757Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 8.782 seconds (process running for 10.036)
+2026-09-08T18:59:38.859Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.i.s.StartupSelfCheckRunner       : [control] 启动自检通过（B25 运行时门）
+2026-09-08T18:59:38.885Z  INFO 1 --- [control-app] [           main] [                                                 ] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-09-08T18:59:38.961Z ERROR 1 --- [control-app] [           main] [                                                 ] o.s.boot.SpringApplication               : Application run failed
+
+org.springframework.dao.DuplicateKeyException: PreparedStatementCallback; SQL [INSERT INTO rca_run (
+    id, incident_id, generation, trigger_kind, state, investigation_hash,
+    created_at, updated_at, started_at, finished_at, last_error
+) VALUES (
+    ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, CAST(? AS jsonb)
+)
+]; ERROR: duplicate key value violates unique constraint "uq_rca_run_active_incident"
+  Detail: Key (incident_id, engine)=(3b5e3514-e915-4998-a29a-72086bf8ab5c, HOLMES) already exists.
+	at org.springframework.jdbc.support.SQLStateSQLExceptionTranslator.doTranslate(SQLStateSQLExceptionTranslator.java:116) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:116) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1556) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository.insert(PostgresRcaRunRepository.java:51) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.Am4ShadowTrigger.trigger(Am4ShadowTrigger.java:155) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.config.Am4ShadowTriggerConfig.lambda$am4ShadowTrigger$0(Am4ShadowTriggerConfig.java:79) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.boot.SpringApplication.lambda$callRunner$5(SpringApplication.java:789) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.util.function.ThrowingConsumer$1.acceptWithException(ThrowingConsumer.java:82) ~[spring-core-6.2.6.jar!/:6.2.6]
+	at org.springframework.util.function.ThrowingConsumer.accept(ThrowingConsumer.java:60) ~[spring-core-6.2.6.jar!/:6.2.6]
+	at org.springframework.util.function.ThrowingConsumer$1.accept(ThrowingConsumer.java:86) ~[spring-core-6.2.6.jar!/:6.2.6]
+	at org.springframework.boot.SpringApplication.callRunner(SpringApplication.java:797) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.callRunner(SpringApplication.java:788) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.lambda$callRunners$3(SpringApplication.java:773) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.SortedOps$SizedRefSortingSink.end(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.copyInto(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.AbstractPipeline.evaluate(Unknown Source) ~[na:na]
+	at java.base/java.util.stream.ReferencePipeline.forEach(Unknown Source) ~[na:na]
+	at org.springframework.boot.SpringApplication.callRunners(SpringApplication.java:773) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:325) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1362) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1351) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at com.objwww.pr.control.ControlApplication.main(ControlApplication.java:14) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:102) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:64) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:40) ~[app.jar:0.0.1-SNAPSHOT]
+Caused by: org.postgresql.util.PSQLException: ERROR: duplicate key value violates unique constraint "uq_rca_run_active_incident"
+  Detail: Key (incident_id, engine)=(3b5e3514-e915-4998-a29a-72086bf8ab5c, HOLMES) already exists.
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 32 common frames omitted
+
+2026-09-08T18:59:38.972Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-09-08T18:59:38.982Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

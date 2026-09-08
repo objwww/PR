@@ -1,0 +1,17 @@
+[AM6] E2E-AM6-02 开始 suite=20260908T185858Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T185858Z-am6-02
+[AM6] phase0 前置：nativeReady=true + percent=0 姿态 + holmes 主路径 run
+[AM6]   holmes 主路径 run=05b199f4-1209-41de-9b40-43bbf627ff54（真栈 worker + 真 LLM，超时 300s）
+[AM6] phase0 PASS
+[AM6] phase1 影子触发（docker,am4-shadow-trigger + web=none + --no-deps）
+[AM6]   影子 run=37b3ef3e-c257-4c6a-9e12-1a233fb69bb5；任务结局: AM4_SHADOW_TASK=investigate-change=EVIDENCE_PRODUCED AM4_SHADOW_TASK=investigate-logs=EVIDENCE_PRODUCED AM4_SHADOW_TASK=investigate-metrics=EVIDENCE_PRODUCED AM4_SHADOW_TASK=snapshot=37c064af3031032e35650b733fb6448f1d4c4e7a8b7755adcc0ed25837f1f51b 
+[AM6] phase1 PASS（run 面: 05b199f4-1209-41de-9b40-43bbf627ff54|HOLMES|SUCCEEDED|0|5623b764b7c80cae058530507b18ed9ebcafefbbdf11ded7a0331ad114753ccb 37b3ef3e-c257-4c6a-9e12-1a233fb69bb5|HOLMES|REPORTING|0|5623b764b7c80cae058530507b18ed9ebcafefbbdf11ded7a0331ad114753ccb ）
+[AM6] phase2 对照落账断言
+[AM6] phase2 PASS（对照行落账，零报告零发布，flags 零判语）
+[AM6] phase2b 二次触发停发（活跃位互斥）
+[AM6] phase2b PASS（拒绝理由 C-61，engine_comparison 仍恰 1 行）
+[AM6] phase3 四维台账 SQL 执行留证
+[AM6] phase3 PASS（/opt/projects/pr_agent_it/e2e-am6/runs/20260908T185858Z-am6-02/observation-ledger.txt）
+[AM6] phase4 percent=10 放量姿态 + 立即回退
+[AM6]   percent=10 生效 active=be0af67822a9277c431350fefe3a1e3b7837ae2a051e0c93f3edafa0b4fa8d10
+[AM6] phase4 PASS（percent=10 → 回退 percent=0，active=bbba4e43e373473aed89d5240c8dc633b4afd0a33b2e067ece17a52444c05147）
+[AM6] E2E-AM6-02 PASS（suite=20260908T185858Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T185858Z-am6-02）

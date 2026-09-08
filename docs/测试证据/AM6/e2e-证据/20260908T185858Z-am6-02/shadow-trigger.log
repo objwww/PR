@@ -1,0 +1,29 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-08T18:59:19.567Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Starting ControlApplication v0.0.1-SNAPSHOT using Java 21.0.12 with PID 1 (/app/app.jar started by app in /app)
+2026-09-08T18:59:19.570Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : The following 2 profiles are active: "docker", "am4-shadow-trigger"
+2026-09-08T18:59:25.082Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-08T18:59:25.492Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1cc93da4
+2026-09-08T18:59:25.494Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-08T18:59:25.565Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-08T18:59:26.783Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : AlertInboxProcessor 启动 owner=control-1
+2026-09-08T18:59:26.783Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-08T18:59:26.867Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 8.601 seconds (process running for 9.891)
+2026-09-08T18:59:26.958Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.i.s.StartupSelfCheckRunner       : [control] 启动自检通过（B25 运行时门）
+AM4_SHADOW_TASK=investigate-change=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=investigate-logs=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=investigate-metrics=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=snapshot=37c064af3031032e35650b733fb6448f1d4c4e7a8b7755adcc0ed25837f1f51b
+2026-09-08T18:59:27.297Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.DeterministicSupervisor      : {"event":"am4_run_reporting","ts":"2026-09-08T18:59:27.296965143Z","run_id":"37b3ef3e-c257-4c6a-9e12-1a233fb69bb5"}
+2026-09-08T18:59:27.355Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.DeterministicSupervisor      : run 37b3ef3e-c257-4c6a-9e12-1a233fb69bb5 全任务终态 → REPORTING（报告链组装）
+AM4_SHADOW_RUN_ID=37b3ef3e-c257-4c6a-9e12-1a233fb69bb5
+2026-09-08T18:59:27.462Z  INFO 1 --- [control-app] [ionShutdownHook] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-09-08T18:59:27.476Z  INFO 1 --- [control-app] [ionShutdownHook] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

@@ -1,0 +1,43 @@
+
+==== 维度一：预算（token 成本，按 engine 分桶；usage_missing 诚实单列） ====
+ engine |          day           | reports | total_tokens | usage_missing_cnt 
+--------+------------------------+---------+--------------+-------------------
+ HOLMES | 2026-09-08 00:00:00+00 |      81 |       586615 |                 0
+ NATIVE | 2026-09-08 00:00:00+00 |       1 |              |                 1
+ HOLMES | 2026-09-07 00:00:00+00 |      26 |       233525 |                 0
+ HOLMES | 2026-09-06 00:00:00+00 |       2 |        18659 |                 0
+ HOLMES | 2026-09-05 00:00:00+00 |      11 |        91698 |                 0
+ HOLMES | 2026-09-04 00:00:00+00 |       9 |        66429 |                 0
+(6 rows)
+
+
+==== 维度二：延迟（run 起止时长 ms，按 engine 分位数；空区间=样本不足） ====
+ engine | runs |  p50_ms   |   p95_ms    |     max_ms     
+--------+------+-----------+-------------+----------------
+ HOLMES |  153 | 13317.349 | 120809.5098 | 2856528.179000
+ NATIVE |    1 |   196.062 |     196.062 |     196.062000
+(2 rows)
+
+
+==== 维度三：错误率（run 终态 + driver 任务 DEAD 面，按 engine 分桶） ====
+ engine | succeeded | failed | in_flight | fail_rate 
+--------+-----------+--------+-----------+-----------
+ HOLMES |       129 |     24 |         2 |    0.1569
+ NATIVE |         1 |      0 |         0 |    0.0000
+(2 rows)
+
+
+==== 维度三附：对照结论落账进度（engine_comparison 行数与差异率） ====
+ comparisons | flagged | with_noise_baseline |        first_recorded        |         last_recorded         
+-------------+---------+---------------------+------------------------------+-------------------------------
+           2 |       2 |                   0 | 2026-09-08 18:56:34.46407+00 | 2026-09-08 18:59:27.395355+00
+(1 row)
+
+
+==== 维度四：人工分歧面（六维差异标记明细——无 GT 只记 disagreement 不判对错） ====
+            native_run_id             |  shadow_exec_ref   |                         snapshot_digest                          |  dim   |                                                                                                   holmes_side                                                                                                    |                                                           native_side                                                            |          created_at           
+--------------------------------------+--------------------+------------------------------------------------------------------+--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+-------------------------------
+ 37b3ef3e-c257-4c6a-9e12-1a233fb69bb5 | am4-shadow-trigger | 5623b764b7c80cae058530507b18ed9ebcafefbbdf11ded7a0331ad114753ccb | result | {"claim_keys": ["alert_firing", "metric_anomaly"], "root_cause": {"component": "am6e2e02-holmes-20260908t185858z", "fault_type": "service_error", "reason_code": "HIGH_ERROR_RATE_DETECTED"}}                    | {"claim_keys": [], "root_cause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}} | 2026-09-08 18:59:27.395355+00
+ 2de23770-7024-4d5a-8002-7c2c011a8b64 | am4-shadow-trigger | 72dd58bc817ae7a0ba5f9b8bf844c603dc09c05f8c3ee8bc6807884e5705d11e | result | {"claim_keys": ["alert_triggered", "metric_anomaly"], "root_cause": {"component": "am6e2e02-holmes-20260908t185601z", "fault_type": "error_rate_exceeded_threshold", "reason_code": "HIGH_ERROR_RATE_DETECTED"}} | {"claim_keys": [], "root_cause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}} | 2026-09-08 18:56:34.46407+00
+(2 rows)
+

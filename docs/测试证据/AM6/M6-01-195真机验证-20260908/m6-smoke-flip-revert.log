@@ -1,0 +1,35 @@
+BACKUP=.env.bak-pre-m6flip-20260908234240
+ Container deploy-postgres-1  Running
+ Container deploy-migrate-1  Created
+ Container deploy-control-app-1  Recreate
+ Container deploy-control-app-1  Recreated
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Starting
+ Container deploy-migrate-1  Started
+ Container deploy-postgres-1  Waiting
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+FLIP_CODE=200
+{"nativeReady":true,"capabilityDigest":"b251c71c62cf6dcee0da9d97290fcf338819f0ab6d0fc894cef70300917fb2fc","nativeDecisions":0}
+--- revert to fail-closed default
+ Container deploy-postgres-1  Running
+ Container deploy-migrate-1  Created
+ Container deploy-control-app-1  Recreate
+ Container deploy-control-app-1  Recreated
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Starting
+ Container deploy-migrate-1  Started
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+REVERT_CODE=200
+{"nativeReady":false,"missing":["metricsExpr","toolRegistryDigest"],"nativeDecisions":0}
+FLIP-REVERT-DONE

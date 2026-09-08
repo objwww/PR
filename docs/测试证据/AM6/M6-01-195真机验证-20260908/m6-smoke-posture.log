@@ -1,0 +1,5 @@
+UNAUTH_CODE=401
+{"error":"unauthorized"}
+AUTH_CODE=200
+{"nativeReady":false,"missing":["metricsExpr","toolRegistryDigest"],"nativeDecisions":0}
+SMOKE-DONE

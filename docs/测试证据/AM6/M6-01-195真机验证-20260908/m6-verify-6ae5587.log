@@ -1,0 +1,1197 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ pr-agent ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ shared-kernel ---
+[INFO] Deleting /opt/projects/pr_agent_it/shared-kernel/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/main/resources
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 34 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 7 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+[INFO] Running com.objwww.pr.shared.DigestTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.092 s -- in com.objwww.pr.shared.DigestTest
+[INFO] Running com.objwww.pr.shared.OutboxStateMachineTest
+[INFO] Tests run: 67, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.187 s -- in com.objwww.pr.shared.OutboxStateMachineTest
+[INFO] Running com.objwww.pr.shared.TypedRequestTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.027 s -- in com.objwww.pr.shared.TypedRequestTest
+[INFO] Running com.objwww.pr.shared.DependencyVerdictEvaluatorTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.074 s -- in com.objwww.pr.shared.DependencyVerdictEvaluatorTest
+[INFO] Running com.objwww.pr.shared.RevisionFenceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.shared.RevisionFenceTest
+[INFO] Running com.objwww.pr.shared.SharedKernelArchitectureTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.898 s -- in com.objwww.pr.shared.SharedKernelArchitectureTest
+[INFO] Running com.objwww.pr.shared.snapshot.SafeTarExtractorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in com.objwww.pr.shared.snapshot.SafeTarExtractorTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 108, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ shared-kernel ---
+[INFO] Building jar: /opt/projects/pr_agent_it/shared-kernel/target/shared-kernel-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ shared-kernel ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ shared-kernel ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- clean:3.4.1:clean (default-clean) @ control-app ---
+[INFO] Deleting /opt/projects/pr_agent_it/control-app/target
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 32 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 437 source files with javac [debug parameters release 21] to target/classes
+[WARNING] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/model/RawHttpErrorCapture.java:[23,17] handleError(org.springframework.http.client.ClientHttpResponse) in org.springframework.web.client.ResponseErrorHandler has been deprecated and marked for removal
+[INFO] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: Some input files use unchecked or unsafe operations.
+[INFO] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 5 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 201 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/replay/ShadowToolFaceTest.java: Some input files use or override a deprecated API.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/replay/ShadowToolFaceTest.java: Recompile with -Xlint:deprecation for details.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.domain.review.ReviewAgentLoopTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.449 s -- in com.objwww.pr.control.domain.review.ReviewAgentLoopTest
+[INFO] Running com.objwww.pr.control.domain.review.FindingMapperTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.domain.review.FindingMapperTest
+[INFO] Running com.objwww.pr.control.domain.statemachine.RunStateMachineTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.objwww.pr.control.domain.statemachine.RunStateMachineTest
+[INFO] Running com.objwww.pr.control.domain.statemachine.AttemptStatusMachineTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.objwww.pr.control.domain.statemachine.AttemptStatusMachineTest
+[INFO] Running com.objwww.pr.control.domain.statemachine.StepStateMachineTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.domain.statemachine.StepStateMachineTest
+[INFO] Running com.objwww.pr.control.domain.ai.CircuitBreakerTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.164 s -- in com.objwww.pr.control.domain.ai.CircuitBreakerTest
+[INFO] Running com.objwww.pr.control.domain.ai.ModelRouterTest
+[INFO] Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in com.objwww.pr.control.domain.ai.ModelRouterTest
+[INFO] Running com.objwww.pr.control.domain.ai.ModelBudgetGuardTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.domain.ai.ModelBudgetGuardTest
+[INFO] Running com.objwww.pr.control.domain.ai.MockModelClientTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.domain.ai.MockModelClientTest
+[INFO] Running com.objwww.pr.control.domain.ai.PricingServiceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.domain.ai.PricingServiceTest
+[INFO] Running com.objwww.pr.control.domain.ai.ModelStepBudgetGuardTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.domain.ai.ModelStepBudgetGuardTest
+[INFO] Running com.objwww.pr.control.domain.tool.PolicyEngineTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.domain.tool.PolicyEngineTest
+[INFO] Running com.objwww.pr.control.domain.model.PRRevisionTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.domain.model.PRRevisionTest
+[INFO] Running com.objwww.pr.control.domain.snapshot.SafeTarExtractorTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.137 s -- in com.objwww.pr.control.domain.snapshot.SafeTarExtractorTest
+[INFO] Running com.objwww.pr.control.domain.service.ProjectorTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.domain.service.ProjectorTest
+[INFO] Running com.objwww.pr.control.domain.service.RevisionServiceTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.domain.service.RevisionServiceTest
+[INFO] Running com.objwww.pr.control.release.domain.model.ConfigBundleTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in com.objwww.pr.control.release.domain.model.ConfigBundleTest
+[INFO] Running com.objwww.pr.control.release.domain.service.CanaryBucketerTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.051 s -- in com.objwww.pr.control.release.domain.service.CanaryBucketerTest
+[INFO] Running com.objwww.pr.control.release.domain.service.CanaryWindowEvaluatorTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.objwww.pr.control.release.domain.service.CanaryWindowEvaluatorTest
+[INFO] Running com.objwww.pr.control.release.application.ConfigBundleServiceTest
+22:36:12.404 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op policy=policy-2026-09
+22:36:12.408 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op policy=policy-2026-09
+22:36:12.410 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op
+22:36:12.415 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op policy=policy-2026-09
+22:36:12.415 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op
+22:36:12.416 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op policy=policy-2026-09
+22:36:12.416 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op
+22:36:12.419 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op policy=policy-2026-09
+22:36:12.419 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op policy=policy-2026-09
+22:36:12.419 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op
+22:36:12.419 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op
+22:36:12.420 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- rollback 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:12.422 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:12.423 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 幂等重放: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:12.423 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=release-operator policy=policy-2026-09
+22:36:12.425 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op policy=policy-2026-09
+22:36:12.426 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op policy=policy-2026-09
+22:36:12.426 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:12.426 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=release-operator
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.029 s -- in com.objwww.pr.control.release.application.ConfigBundleServiceTest
+[INFO] Running com.objwww.pr.control.release.application.CanaryRouterTest
+22:36:12.445 [main] WARN com.objwww.pr.control.release.application.CanaryRouter -- canary 爆炸半径达上限，自动停放量: nativeRuns=1 cap=1 bundle=be2802f5ee3f3cd8b48e8bc1048f8896d2f57a771f977c998321f60f5eca0d3d
+22:36:12.446 [main] WARN com.objwww.pr.control.release.application.CanaryRouter -- canary 爆炸半径达上限，自动停放量: nativeRuns=1 cap=1 bundle=be2802f5ee3f3cd8b48e8bc1048f8896d2f57a771f977c998321f60f5eca0d3d
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.objwww.pr.control.release.application.CanaryRouterTest
+[INFO] Running com.objwww.pr.control.release.interfaces.ConfigBundleControllerTest
+22:36:12.908 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:12.908 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:12.910 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 2 ms
+22:36:13.046 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.047 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.047 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.054 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:13.095 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=release-operator policy=policy-2026-09
+22:36:13.100 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[]
+22:36:13.100 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.102 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 body-keys=[]
+22:36:13.102 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=release-operator
+22:36:13.108 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle rollback: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[toDigest]
+22:36:13.108 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- rollback 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.113 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle rollback: digest=null body-keys=[]
+22:36:13.125 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.125 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.125 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.133 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:13.136 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[]
+22:36:13.137 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.149 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.149 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.149 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.168 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.168 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.169 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+22:36:13.172 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:13.175 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 幂等重放: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.187 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.187 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.187 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.192 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:13.195 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=release-operator policy=policy-2026-09
+22:36:13.198 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[]
+22:36:13.198 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.200 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 body-keys=[]
+22:36:13.200 [main] WARN com.objwww.pr.control.release.application.ConfigBundleService -- activate CAS 竞争失败: target=be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 by=release-operator
+22:36:13.210 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.210 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.210 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.214 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator policy=policy-2026-09
+22:36:13.217 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[]
+22:36:13.217 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=release-operator
+22:36:13.219 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c body-keys=[]
+22:36:13.220 [main] INFO com.objwww.pr.control.release.interfaces.ConfigBundleController -- config-bundle activate: digest=ead6ef03d61ee60c533d6d450c50a1e559a8a37f6b796a4094cd0dac6b744428 body-keys=[]
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.767 s -- in com.objwww.pr.control.release.interfaces.ConfigBundleControllerTest
+[INFO] Running com.objwww.pr.control.release.interfaces.CanaryStatusControllerTest
+22:36:13.234 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.234 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.234 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.262 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.262 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.262 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.274 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.274 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.275 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.289 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.290 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.290 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:13.299 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:13.300 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:13.300 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.077 s -- in com.objwww.pr.control.release.interfaces.CanaryStatusControllerTest
+[INFO] Running com.objwww.pr.control.eval.domain.statemachine.GoldenCandidateStateMachineTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.eval.domain.statemachine.GoldenCandidateStateMachineTest
+[INFO] Running com.objwww.pr.control.eval.domain.ScenarioMetricsTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.eval.domain.ScenarioMetricsTest
+[INFO] Running com.objwww.pr.control.eval.domain.SynonymLexiconTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.070 s -- in com.objwww.pr.control.eval.domain.SynonymLexiconTest
+[INFO] Running com.objwww.pr.control.eval.domain.litellm.UsageLedgerReconcilerTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in com.objwww.pr.control.eval.domain.litellm.UsageLedgerReconcilerTest
+[INFO] Running com.objwww.pr.control.eval.domain.GoldenScenarioRegistryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in com.objwww.pr.control.eval.domain.GoldenScenarioRegistryTest
+[INFO] Running com.objwww.pr.control.eval.domain.port.DatasetAdapterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.eval.domain.port.DatasetAdapterTest
+[INFO] Running com.objwww.pr.control.eval.domain.model.SamplingFingerprintTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.eval.domain.model.SamplingFingerprintTest
+[INFO] Running com.objwww.pr.control.eval.domain.model.EvalCaseV1Test
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.objwww.pr.control.eval.domain.model.EvalCaseV1Test
+[INFO] Running com.objwww.pr.control.eval.domain.model.DatasetVersionTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.eval.domain.model.DatasetVersionTest
+[INFO] Running com.objwww.pr.control.eval.domain.model.CaseVersionTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.eval.domain.model.CaseVersionTest
+[INFO] Running com.objwww.pr.control.eval.domain.EvalRunMetadataTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.eval.domain.EvalRunMetadataTest
+[INFO] Running com.objwww.pr.control.eval.domain.EvalCaseResultTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.eval.domain.EvalCaseResultTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.SafetyGateTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.objwww.pr.control.eval.domain.service.SafetyGateTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.QualityGateTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.objwww.pr.control.eval.domain.service.QualityGateTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.SixDimEvaluatorTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.eval.domain.service.SixDimEvaluatorTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.HypothesisSearchServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.eval.domain.service.HypothesisSearchServiceTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.PairedTrialStatsTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.objwww.pr.control.eval.domain.service.PairedTrialStatsTest
+[INFO] Running com.objwww.pr.control.eval.infrastructure.adapter.OrderArenaAdapterTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.eval.infrastructure.adapter.OrderArenaAdapterTest
+[INFO] Running com.objwww.pr.control.eval.infrastructure.adapter.RcaEvalAdapterTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 s -- in com.objwww.pr.control.eval.infrastructure.adapter.RcaEvalAdapterTest
+[INFO] Running com.objwww.pr.control.eval.infrastructure.adapter.Rca100AdapterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.eval.infrastructure.adapter.Rca100AdapterTest
+[INFO] Running com.objwww.pr.control.eval.infrastructure.identity.DatasetPartitionAccessTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.eval.infrastructure.identity.DatasetPartitionAccessTest
+[INFO] Running com.objwww.pr.control.eval.application.UsageLedgerServiceTest
+22:36:13.710 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- SpendLogs 查询失败，usage 对账降级 UNMATCHED（run=3143e60d-14ae-4dd1-a5a8-79a6f3fbaf90）: LiteLLM /spend/logs 调用失败: HTTP 500
+22:36:13.712 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- usage 对账: run=3143e60d-14ae-4dd1-a5a8-79a6f3fbaf90 取得 proxy 行数=1
+22:36:13.713 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+22:36:13.713 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+22:36:13.722 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- usage_json 解析失败按 usage_missing 落账: attempt=d7ce135d-94e6-4593-9cdd-7bb69bf7234f
+22:36:13.722 [main] WARN com.objwww.pr.control.eval.application.UsageLedgerService -- LiteLLM 未配置（app.alert.eval.litellm.base-url 为空），usage 对账按 chain③ 降级 UNMATCHED/BEST_EFFORT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in com.objwww.pr.control.eval.application.UsageLedgerServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.BaselineReportGeneratorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.objwww.pr.control.eval.application.BaselineReportGeneratorTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalGateRunnerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in com.objwww.pr.control.eval.application.EvalGateRunnerTest
+[INFO] Running com.objwww.pr.control.eval.application.SingleCaseScorerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in com.objwww.pr.control.eval.application.SingleCaseScorerTest
+[INFO] Running com.objwww.pr.control.eval.application.FinalReportSelectorTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.035 s -- in com.objwww.pr.control.eval.application.FinalReportSelectorTest
+[INFO] Running com.objwww.pr.control.eval.application.ScenarioEvaluatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.eval.application.ScenarioEvaluatorTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+22:36:13.871 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- 场景 S1 第 1 轮注入失败: flagd admin down
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.051 s -- in com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+[INFO] Running com.objwww.pr.control.eval.application.GoldenCandidateServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.objwww.pr.control.eval.application.GoldenCandidateServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalRunnerProfileIsolationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.533 s -- in com.objwww.pr.control.eval.application.EvalRunnerProfileIsolationTest
+[INFO] Running com.objwww.pr.control.infrastructure.config.AlertAm4ConfigTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.infrastructure.config.AlertAm4ConfigTest
+[INFO] Running com.objwww.pr.control.infrastructure.config.NativeCapabilityProbeTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.infrastructure.config.NativeCapabilityProbeTest
+[INFO] Running com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClientTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.183 s -- in com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClientTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.ToolCallAdapterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.infrastructure.holmes.ToolCallAdapterTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesErrorClassifierTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesErrorClassifierTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesResponseParserTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesResponseParserTest
+[INFO] Running com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutorWireMockTest
+22:36:15.415 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.414634634Z","run_id":"8ec29c85-6bee-49e1-b8c9-7d9cd16e6bbf","attempt_id":"97691965-ea05-451e-93b7-21fc97681acd","validation_status":"REJECTED_SCHEMA_VERSION","usage_missing":true,"latency_ms":0,"task_id":"51ab3d2a-1bc6-4609-9f31-7d5fb01bdf00"}
+22:36:15.458 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.458129961Z","run_id":"92dfe73a-79ae-4af2-acc0-e8b03d2a949e","attempt_id":"00361de1-66db-4551-9e4a-cfa7bae86615","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"4b50baa8-8539-4931-9696-2055d785dbe9"}
+22:36:15.481 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.481783338Z","run_id":"40bf286b-4add-426d-b018-60cab5c6715a","attempt_id":"f8764e55-fbe5-4939-9c5b-8a69abd15b67","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"58e44a07-6c3d-4c0a-8ee7-6fd9a9db9e28"}
+22:36:15.512 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.511876564Z","run_id":"90380650-e814-4f0e-a6ce-7274c90b1f76","attempt_id":"e3b4371b-20a3-4942-9023-2e253ae9bbd7","validation_status":"REJECTED_MALFORMED","usage_missing":true,"latency_ms":0,"task_id":"0288ddcb-48e1-4225-86c7-d93960228952"}
+22:36:15.581 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.581162714Z","run_id":"8cd23a82-f553-43d4-aabf-8d46071a2262","attempt_id":"5dab0e38-76a6-4fd1-b496-9cd1045bbd76","validation_status":"STRUCTURE_VALIDATED","usage_missing":true,"latency_ms":0,"task_id":"72deaeae-26c8-4bcb-8f3f-100d17b3fed0"}
+22:36:15.647 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.647411593Z","run_id":"7b8a819e-2ab2-433a-8426-d0047c730d1a","attempt_id":"dd9b5d17-3480-44e9-9191-baef9d4c227f","validation_status":"STRUCTURE_VALIDATED","usage_missing":true,"latency_ms":0,"task_id":"ded28852-87e4-4fcb-9eae-d34ee878e77f"}
+22:36:15.716 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.716728581Z","run_id":"151f1df5-ad44-4bc5-9caf-51a3e5081bf5","attempt_id":"08747f56-1041-4a92-9314-0688608e0c6f","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"69ac1778-8d45-485c-8f98-26604180b5b5"}
+22:36:15.743 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:15.743110828Z","run_id":"0f4188a8-62b2-45f9-85de-76a26ee3c478","attempt_id":"3456fe34-a5e2-44a3-b984-fe86a7fd1bb1","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"558835cf-fa34-44d6-a30a-fdbf7807f3ea"}
+22:36:16.947 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:16.947596400Z","run_id":"6e57c0c6-a96a-4dc8-9889-1b00306b3051","attempt_id":"334969f2-ba10-45a7-a23e-a808259bd347","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"0d472962-c120-49bc-80c7-92d496ee96a1"}
+22:36:17.059 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:17.059452363Z","run_id":"0bc7e986-8cde-42fb-84c4-8f024c8e389e","attempt_id":"3264250f-38ab-4f4b-9eb7-f2900adb7ae5","validation_status":"STRUCTURE_VALIDATED","usage_missing":false,"latency_ms":0,"task_id":"7e45cd61-8d5e-4542-92e0-a546141ca919"}
+22:36:17.088 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:17.087941328Z","run_id":"5ad1f042-0b91-43cd-af71-0bdc42f6d800","attempt_id":"9aa8a42f-663d-4017-b607-9c9696c49274","validation_status":"REJECTED_SCHEMA_MISMATCH","usage_missing":false,"latency_ms":0,"task_id":"bdb08f7f-44b5-415d-9032-aff34b3190f6"}
+22:36:17.110 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:17.110614650Z","run_id":"a3764043-171a-45f4-a970-1e10bdd9483b","attempt_id":"e8ab88f8-21bd-45d0-af0e-43a32e7e91a9","validation_status":"REJECTED_OVERSIZE","usage_missing":true,"latency_ms":0,"task_id":"56d93903-cbb3-45d6-99c3-17d54e9b4088"}
+22:36:17.128 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:17.128654806Z","run_id":"18f6e404-de08-48cf-8495-569bb5925af4","attempt_id":"b9c6c8af-cd24-4542-9b03-4ac83f27e917","validation_status":"REJECTED_SCHEMA_MISMATCH","usage_missing":true,"latency_ms":0,"task_id":"665d6c3e-f1df-44f6-9230-5553865ee8b7"}
+22:36:17.147 [main] INFO com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutor -- {"event":"rca_attempt_finished","ts":"2026-09-08T14:36:17.147200354Z","run_id":"c9d1b0f2-e439-4780-a7c2-08e525c36fd2","attempt_id":"d7cfe12d-2353-449d-9c30-9529bba16d9c","validation_status":"REJECTED_MALFORMED","usage_missing":true,"latency_ms":0,"task_id":"59647ad1-8f4c-468c-8a04-e681d9fdbcf2"}
+[INFO] Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.436 s -- in com.objwww.pr.control.infrastructure.holmes.HolmesInvestigationExecutorWireMockTest
+[INFO] Running com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutorTest
+22:36:17.180 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:17.180396013Z","run_id":"a4c3244a-7480-4d1e-a49f-faf077a260bb"}
+22:36:17.180 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run a4c3244a-7480-4d1e-a49f-faf077a260bb 全任务终态 → REPORTING（报告链组装）
+22:36:17.191 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native 全链完成 run=a4c3244a-7480-4d1e-a49f-faf077a260bb reportOutcome=CONFIRMED claims=1 validation=STRUCTURE_VALIDATED 快照=6582eb7268b061d956d770afc2cfeb4f2b9435fa97143db05f1e256d97a047d7
+22:36:17.196 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:17.196056696Z","task_id":"f63a18df-3f47-42db-94d5-2cdbc3179c2d","attempt_id":"505bb07c-7deb-4b7f-8298-4621bda717ff","latency_ms":0,"decision":"COMPLETED","run_id":"a4c3244a-7480-4d1e-a49f-faf077a260bb"}
+22:36:17.199 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_plan_rejected","ts":"2026-09-08T14:36:17.199238039Z","run_id":"9cff3748-a386-4694-bf0e-3f50468c0b34","reason":"schema_version 必须为 am4-plan.v1，实际: bogus"}
+22:36:17.199 [main] WARN com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 9cff3748-a386-4694-bf0e-3f50468c0b34 提案被确定性拒绝 → FAILED（schema_version 必须为 am4-plan.v1，实际: bogus）
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.051 s -- in com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutorTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.Am5MigrationContractTest
+[INFO] Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.038 s -- in com.objwww.pr.control.infrastructure.persistence.Am5MigrationContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.Am6MigrationContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.infrastructure.persistence.Am6MigrationContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.PostgresClaimTaskKeyFilterContractTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.infrastructure.persistence.PostgresClaimTaskKeyFilterContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.M7MigrationContractTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.infrastructure.persistence.M7MigrationContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.persistence.PostgresArchiveManifestRepositoryFenceTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.objwww.pr.control.infrastructure.persistence.PostgresArchiveManifestRepositoryFenceTest
+[INFO] Running com.objwww.pr.control.infrastructure.selfcheck.ControlSelfCheckTest
+22:36:17.272 [main] INFO com.objwww.pr.control.infrastructure.selfcheck.StartupSelfCheckRunner -- [control] 启动自检通过（B25 运行时门）
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.infrastructure.selfcheck.ControlSelfCheckTest
+[INFO] Running com.objwww.pr.control.infrastructure.tool.PrometheusMetricsWireMockTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.215 s -- in com.objwww.pr.control.infrastructure.tool.PrometheusMetricsWireMockTest
+[INFO] Running com.objwww.pr.control.infrastructure.github.HttpCredentialTokenPortTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.objwww.pr.control.infrastructure.github.HttpCredentialTokenPortTest
+[INFO] Running com.objwww.pr.control.infrastructure.model.SpringAiModelClientTest
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (/root/.m2/repository/net/bytebuddy/byte-buddy-agent/1.15.11/byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.158 s -- in com.objwww.pr.control.infrastructure.model.SpringAiModelClientTest
+[INFO] Running com.objwww.pr.control.infrastructure.model.ProviderErrorClassifierTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.039 s -- in com.objwww.pr.control.infrastructure.model.ProviderErrorClassifierTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.GatusProbeConfigContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.infrastructure.observability.GatusProbeConfigContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.StructuredLogTest
+22:36:18.744 [main] INFO structured-log-test -- {"event":"e","ts":"2026-09-08T14:36:18.744183545Z","error":null}
+22:36:18.746 [main] INFO structured-log-test -- {"event":"e","ts":"2026-09-08T14:36:18.746726153Z","secret_like":"quote\" and\nnewline\ttab"}
+22:36:18.751 [main] INFO structured-log-test -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:18.751066858Z","run_id":"r-1","decision":"COMPLETED","latency_ms":42}
+22:36:18.757 [main] WARN structured-log-test -- structured log 序列化失败 event=e
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.infrastructure.observability.StructuredLogTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.AlertMetricsLabelAllowlistTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.infrastructure.observability.AlertMetricsLabelAllowlistTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.ControlCollectorConfigContractTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.objwww.pr.control.infrastructure.observability.ControlCollectorConfigContractTest
+[INFO] Running com.objwww.pr.control.infrastructure.observability.TracedTasksTest
+Sep 08, 2026 10:36:18 PM brave.Tracing$LogSpanHandler end
+INFO: {"traceId":"acaff61b69726265","id":"acaff61b69726265","name":"parent","timestamp":1788878178872470,"duration":2055,"localEndpoint":{"serviceName":"unknown","ipv4":"172.24.0.1"}}
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.106 s -- in com.objwww.pr.control.infrastructure.observability.TracedTasksTest
+[INFO] Running com.objwww.pr.control.ControlArchitectureTest
+22:36:18.925 [main] INFO com.tngtech.archunit.core.PluginLoader -- Detected Java version 21.0.12.1
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.860 s -- in com.objwww.pr.control.ControlArchitectureTest
+[INFO] Running com.objwww.pr.control.alert.domain.statemachine.AlertStateMachineTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.objwww.pr.control.alert.domain.statemachine.AlertStateMachineTest
+[INFO] Running com.objwww.pr.control.alert.domain.statemachine.RcaStateContractTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.statemachine.RcaStateContractTest
+[INFO] Running com.objwww.pr.control.alert.domain.agent.AgentProfileTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.agent.AgentProfileTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.PlanProposalTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.alert.domain.dag.PlanProposalTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.DagTaskStateTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.alert.domain.dag.DagTaskStateTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.DagPromoterTest
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in com.objwww.pr.control.alert.domain.dag.DagPromoterTest
+[INFO] Running com.objwww.pr.control.alert.domain.dag.DagCycleDetectorTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.domain.dag.DagCycleDetectorTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ToolReasonCodeTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.domain.tool.ToolReasonCodeTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ToolArgsValidatorTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.alert.domain.tool.ToolArgsValidatorTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1Test
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1Test
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ActionDigestTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in com.objwww.pr.control.alert.domain.tool.ActionDigestTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ToolPolicyTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.domain.tool.ToolPolicyTest
+[INFO] Running com.objwww.pr.control.alert.domain.tool.ToolDefinitionTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.alert.domain.tool.ToolDefinitionTest
+[INFO] Running com.objwww.pr.control.alert.domain.model.EvidencePackageV2ContractTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.alert.domain.model.EvidencePackageV2ContractTest
+[INFO] Running com.objwww.pr.control.alert.domain.budget.RunBudgetTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in com.objwww.pr.control.alert.domain.budget.RunBudgetTest
+[INFO] Running com.objwww.pr.control.alert.domain.budget.DoomLoopGuardTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.alert.domain.budget.DoomLoopGuardTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimReducerTest
+[INFO] Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.alert.domain.claim.ClaimReducerTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimVerdictTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.claim.ClaimVerdictTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimProjectionTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.alert.domain.claim.ClaimProjectionTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ReportAssemblerTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.objwww.pr.control.alert.domain.claim.ReportAssemblerTest
+[INFO] Running com.objwww.pr.control.alert.domain.claim.ClaimTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in com.objwww.pr.control.alert.domain.claim.ClaimTest
+[INFO] Running com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelopeTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelopeTest
+[INFO] Running com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotBuilderTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotBuilderTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.AlertIdentityFactoryTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.objwww.pr.control.alert.domain.service.AlertIdentityFactoryTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.SlaPolicyTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.service.SlaPolicyTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.DeferredPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.objwww.pr.control.alert.domain.service.DeferredPolicyTest
+[INFO] Running com.objwww.pr.control.alert.domain.service.EvidencePackageValidatorTest
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in com.objwww.pr.control.alert.domain.service.EvidencePackageValidatorTest
+[INFO] Running com.objwww.pr.control.alert.infrastructure.config.AlertConfigBridgeTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.104 s -- in com.objwww.pr.control.alert.infrastructure.config.AlertConfigBridgeTest
+[INFO] Running com.objwww.pr.control.alert.infrastructure.selfcheck.AlertSelfCheckTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.objwww.pr.control.alert.infrastructure.selfcheck.AlertSelfCheckTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.MetricsAgentTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.128 s -- in com.objwww.pr.control.alert.application.agent.MetricsAgentTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.ChangeAgentTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.alert.application.agent.ChangeAgentTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.AgentRegistryTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.alert.application.agent.AgentRegistryTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.NativeRcaAgentTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.agent.NativeRcaAgentTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.LogsAgentTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.application.agent.LogsAgentTest
+[INFO] Running com.objwww.pr.control.alert.application.RcaWorkerTest
+22:36:23.505 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.505089751Z","task_id":"e55ccdeb-170c-48ed-82d5-9a0652eed799","attempt_id":"76a3c5a0-c057-4e4a-ab87-91e4505d8126","latency_ms":0,"decision":"COMPLETED","run_id":"c017bbf2-e50d-49a0-9542-fac18ecb2edd"}
+22:36:23.505 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- incident 47417836-0005-4782-9c82-5334aa4eb9e1 材料变化，铸 RERUN run
+22:36:23.506 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.506608872Z","task_id":"56f5e70a-7c07-4f9b-b617-654d4bd7b0c6","attempt_id":"b0ab2c6e-3f00-4822-a07e-32a23c2745e2","latency_ms":0,"decision":"COMPLETED","run_id":"398449d1-c1cb-45d3-8dec-a5a71413765c"}
+22:36:23.511 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.511211039Z","task_id":"f29135ee-eca8-4f12-a96d-aa519e06f949","attempt_id":"416eaaa5-82bf-42d5-ad2b-60d7f49f9a14","latency_ms":0,"decision":"RETRY_SCHEDULED","run_id":"888f12cf-3879-4a8f-b3b9-f4e6e2cc5535"}
+22:36:23.511 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.511634607Z","task_id":"f29135ee-eca8-4f12-a96d-aa519e06f949","attempt_id":"e707236a-16ec-4470-9875-d6d749cc12a8","latency_ms":0,"decision":"RETRY_SCHEDULED","run_id":"888f12cf-3879-4a8f-b3b9-f4e6e2cc5535"}
+22:36:23.511 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.511880931Z","task_id":"f29135ee-eca8-4f12-a96d-aa519e06f949","attempt_id":"361e5d85-ae3f-41a4-b42d-21f7a108daff","latency_ms":0,"decision":"DEAD","run_id":"888f12cf-3879-4a8f-b3b9-f4e6e2cc5535"}
+22:36:23.515 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task f6f7abaf-005c-4122-85e0-f81ce519d95f 租约过期回收 owner=worker-a → RETRY_WAIT
+22:36:23.516 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- 悬挂账本 abc1d8ee-f339-448b-ad63-28f3c3c90275 STARTED→UNKNOWN（崩溃回收）
+22:36:23.543 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.543433917Z","task_id":"17b016be-c3b3-44e4-a1e9-ad618b18f409","attempt_id":"f53d220a-3ca5-4819-a7aa-62537b6d3d9e","latency_ms":0,"decision":"COMPLETED","run_id":"6a83f2d4-3f80-4d25-81d4-85435f82fcaa"}
+22:36:23.545 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- 悬挂调查记录 d39d4af0-db6c-46f0-940b-e0375ae76c49 STARTED→UNKNOWN（崩溃回收）
+22:36:23.561 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.561262474Z","task_id":"335364f9-e61a-438e-9ec6-dda8bcbdcca1","attempt_id":"d72b9ec1-a12c-4f49-b075-5a452a092e73","latency_ms":0,"decision":"DEAD","run_id":"f4d048e7-4a64-4b9b-882c-f7b32aacd31a"}
+22:36:23.563 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 4ee53406-b386-4533-a9af-bb8a42ec4dfe 租约过期回收 owner=worker-a → STALE
+22:36:23.565 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.564957954Z","task_id":"465c372a-8761-4029-82c0-f7fbb1d0949e","attempt_id":"0ee86082-7897-4c36-9db6-de7038bdc319","latency_ms":0,"decision":"COMPLETED","run_id":"47f0e8b2-7cb8-42c1-a36e-4194e385c087"}
+22:36:23.566 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.566533481Z","task_id":"252a6d75-2051-4dee-ad37-4762bace3083","attempt_id":"d27ae7c2-51ee-42a3-b1c8-8e8cab28a961","latency_ms":0,"decision":"RETRY_SCHEDULED","run_id":"30118a28-72da-4de6-ba4a-d1867feab4aa"}
+22:36:23.567 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.566978819Z","task_id":"252a6d75-2051-4dee-ad37-4762bace3083","attempt_id":"3a795534-3892-4c15-8515-e55c0cbeac76","latency_ms":0,"decision":"COMPLETED","run_id":"30118a28-72da-4de6-ba4a-d1867feab4aa"}
+22:36:23.568 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.568792776Z","task_id":"f18d886c-b893-4bd2-8387-4b08e8ff69a6","attempt_id":"5383ecd2-e179-4e58-83f1-dfb8433ec8b3","latency_ms":0,"decision":"COMPLETED","run_id":"7cfc2b68-f0b0-4a51-93e1-cc8307554db9"}
+22:36:23.576 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.576177504Z","task_id":"fbae7b1f-6514-43de-9933-96f2e4e192f1","attempt_id":"2e566c8c-04ce-48b9-9cdc-94c609561ab2","run_state":"SUPERSEDED","decision":"STALE_GENERATION","run_id":"2e99c486-b3aa-4b2f-ba44-3f495d65cc4e"}
+22:36:23.576 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task fbae7b1f-6514-43de-9933-96f2e4e192f1 旧代结果作废（run 2e99c486-b3aa-4b2f-ba44-3f495d65cc4e state=SUPERSEDED），task→STALE 零落档
+22:36:23.578 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 970c6408-0b18-42a5-aa2e-3dd6d62abed9 租约过期回收 owner=worker-a → RETRY_WAIT
+22:36:23.578 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:23.578729891Z","task_id":"970c6408-0b18-42a5-aa2e-3dd6d62abed9","attempt_id":"8028e296-b633-4c69-8d05-4e392af92d72","latency_ms":0,"decision":"COMPLETED","run_id":"cdd86dab-aebb-43b7-87c4-af93280fbac4"}
+22:36:23.578 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 970c6408-0b18-42a5-aa2e-3dd6d62abed9 旧租约提交被拒 owner=worker-a epoch=1
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.093 s -- in com.objwww.pr.control.alert.application.RcaWorkerTest
+[INFO] Running com.objwww.pr.control.alert.application.EventQueryServiceTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.EventQueryServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.EventPayloadSanitizerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.alert.application.EventPayloadSanitizerTest
+[INFO] Running com.objwww.pr.control.alert.application.holmes.HolmesEvidenceAdapterTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.objwww.pr.control.alert.application.holmes.HolmesEvidenceAdapterTest
+[INFO] Running com.objwww.pr.control.alert.application.SseStreamServiceTest
+22:36:23.618 [main] WARN com.objwww.pr.control.alert.application.SseStreamService -- sse drain gap: runId=d1ff96af-21ca-4704-b2f0-77e8ca680a20 cursor=1 latestSeq=4 → resync
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in com.objwww.pr.control.alert.application.SseStreamServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.PlanCompilerTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in com.objwww.pr.control.alert.application.PlanCompilerTest
+[INFO] Running com.objwww.pr.control.alert.application.ControlAlertRouterTest
+22:36:23.648 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:23.648684921Z","receiver":"rca-oncall","gate":"identity"}
+22:36:23.650 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_ONCALL","ts":"2026-09-08T14:36:23.650567426Z","inbox_id":"f19afdf3-5770-4de1-89fe-a4aaa908bb15","receiver":"rca-oncall","group_key":"g:RCA_SYSTEM_CollectorDown","alertnames":"RCA_SYSTEM_CollectorDown","scopes":"rca_system","alert_count":1}
+22:36:23.652 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:23.652498453Z","receiver":"rca-oncall","gate":"identity"}
+22:36:23.653 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:23.653901074Z","receiver":"zhongtai","gate":"route_not_allowlisted"}
+22:36:23.654 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_ONCALL","ts":"2026-09-08T14:36:23.654583340Z","inbox_id":"e90a619f-1828-4fc2-af5b-9f121e56c61a","receiver":"rca-oncall","group_key":"g:Gatus_CanaryProbe","alertnames":"Gatus_CanaryProbe","scopes":"rca_system","alert_count":1}
+22:36:23.655 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:23.655192727Z","receiver":"rca-oncall","gate":"scope_not_allowlisted"}
+22:36:23.656 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:23.655784071Z","receiver":"rca-oncall","gate":"scope_not_allowlisted"}
+22:36:23.657 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_ONCALL","ts":"2026-09-08T14:36:23.657812922Z","inbox_id":"9f29ec0d-0af0-4bbf-a067-dbc10b73a569","receiver":"rca-oncall","group_key":"g:RCA_SYSTEM_X","alertnames":"RCA_SYSTEM_X","scopes":"rca_system","alert_count":1}
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.application.ControlAlertRouterTest
+[INFO] Running com.objwww.pr.control.alert.application.Am4ShadowFullChainG2Test
+22:36:23.674 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:23.673899969Z","run_id":"b878227f-9678-477c-9c6e-c7fd336116db"}
+22:36:23.674 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run b878227f-9678-477c-9c6e-c7fd336116db 全任务终态 → REPORTING（报告链组装）
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in com.objwww.pr.control.alert.application.Am4ShadowFullChainG2Test
+[INFO] Running com.objwww.pr.control.alert.application.CommandServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.alert.application.CommandServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.RunBudgetGateTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.RunBudgetGateTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ToolGatewayWireMockTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.888 s -- in com.objwww.pr.control.alert.application.tool.ToolGatewayWireMockTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ReplayToolGatewayTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.alert.application.tool.ReplayToolGatewayTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ToolRegistryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.tool.ToolRegistryTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.226 s -- in com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] Running com.objwww.pr.control.alert.application.DagExecutionServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.alert.application.DagExecutionServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.Am4ShadowTriggerTest
+AM4_SHADOW_TASK=investigate-change=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=investigate-metrics=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=investigate-logs=EVIDENCE_PRODUCED
+AM4_SHADOW_TASK=snapshot=f93a344a6b48b4fe5fd8e2734d5a146f46bd68cf8d77536ed0e2d8e2c03edd51
+22:36:24.856 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:24.856510866Z","run_id":"8c299194-562a-4b16-8d96-7eecf67e5653"}
+22:36:24.856 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 8c299194-562a-4b16-8d96-7eecf67e5653 全任务终态 → REPORTING（报告链组装）
+AM4_SHADOW_RUN_ID=8c299194-562a-4b16-8d96-7eecf67e5653
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.objwww.pr.control.alert.application.Am4ShadowTriggerTest
+[INFO] Running com.objwww.pr.control.alert.application.RunQueryServiceTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.RunQueryServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.RcaStateBackfillJobTest
+22:36:24.880 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.880730831Z","table":"rca_task","violations":0,"batches":1,"rows":2}
+22:36:24.882 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.882669562Z","table":"rca_task","violations":0,"batches":2,"rows":4}
+22:36:24.882 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.882874047Z","table":"rca_task","violations":0,"batches":3,"rows":5}
+22:36:24.883 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.883147662Z","table":"rca_run","violations":0,"batches":1,"rows":2}
+22:36:24.883 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.883273369Z","table":"rca_run","violations":0,"batches":2,"rows":3}
+22:36:24.883 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_reconciled","ts":"2026-09-08T14:36:24.883542847Z","batches":5,"digest":"4ca1357fd4b199d31c370842c907357ab131a659696953f6c76f10069f374c5d","task_rows":5,"violations":0,"run_rows":3}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.884122829Z","table":"rca_task","violations":0,"batches":1,"rows":2}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.884250740Z","table":"rca_task","violations":0,"batches":2,"rows":4}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.884335520Z","table":"rca_task","violations":0,"batches":3,"rows":5}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.884419829Z","table":"rca_run","violations":0,"batches":1,"rows":2}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.884507223Z","table":"rca_run","violations":0,"batches":2,"rows":3}
+22:36:24.884 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_reconciled","ts":"2026-09-08T14:36:24.884616418Z","batches":5,"digest":"4ca1357fd4b199d31c370842c907357ab131a659696953f6c76f10069f374c5d","task_rows":5,"violations":0,"run_rows":3}
+22:36:24.885 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.885523006Z","table":"rca_task","violations":0,"batches":1,"rows":1}
+22:36:24.888 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888204135Z","table":"rca_task","violations":0,"batches":1,"rows":1}
+22:36:24.888 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888446462Z","table":"rca_task","violations":0,"batches":2,"rows":2}
+22:36:24.888 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888529248Z","table":"rca_task","violations":0,"batches":3,"rows":3}
+22:36:24.888 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888615952Z","table":"rca_task","violations":0,"batches":4,"rows":4}
+22:36:24.888 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888699679Z","table":"rca_task","violations":0,"batches":5,"rows":5}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.888778828Z","table":"rca_task","violations":0,"batches":6,"rows":6}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.889467926Z","table":"rca_task","violations":0,"batches":7,"rows":7}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.889580027Z","table":"rca_task","violations":0,"batches":8,"rows":7}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.889668033Z","table":"rca_run","violations":0,"batches":1,"rows":1}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.889764965Z","table":"rca_run","violations":0,"batches":2,"rows":1}
+22:36:24.889 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_reconciled","ts":"2026-09-08T14:36:24.889886634Z","batches":10,"digest":"2fdb1966afacb8c902f0e49771770522ad967f6eda2dcf5d56fb99480f565edb","task_rows":7,"violations":0,"run_rows":1}
+22:36:24.890 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.890045152Z","table":"rca_task","violations":0,"batches":1,"rows":7}
+22:36:24.890 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.890198953Z","table":"rca_run","violations":0,"batches":1,"rows":1}
+22:36:24.890 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_reconciled","ts":"2026-09-08T14:36:24.890291527Z","batches":2,"digest":"2fdb1966afacb8c902f0e49771770522ad967f6eda2dcf5d56fb99480f565edb","task_rows":7,"violations":0,"run_rows":1}
+22:36:24.891 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.891305657Z","table":"rca_task","violations":1,"batches":1,"rows":2}
+22:36:24.891 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_progress","ts":"2026-09-08T14:36:24.891451832Z","table":"rca_run","violations":0,"batches":1,"rows":1}
+22:36:24.891 [main] INFO com.objwww.pr.control.alert.application.RcaStateBackfillJob -- {"event":"rca_state_backfill_reconciled","ts":"2026-09-08T14:36:24.891543605Z","batches":2,"digest":"266d86814df7b18c146e096c5e63a7a2140e4c5217df8b306b76267cff8357de","task_rows":2,"violations":1,"run_rows":1}
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.alert.application.RcaStateBackfillJobTest
+[INFO] Running com.objwww.pr.control.alert.application.NativeEngineWiringTest
+22:36:24.899 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:24.899153207Z","task_id":"f2e44ce5-9ae0-432a-b3fe-b0a33d4ec159","attempt_id":"998e6361-d5ad-47e8-88df-3c070abc04d1","latency_ms":0,"decision":"COMPLETED","run_id":"7e27ac92-15b5-4ab0-965a-f42957c06fa9"}
+22:36:24.899 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- incident 716df8a9-71ea-405a-bcbc-64106ab10e1a 材料变化，铸 RERUN run
+22:36:24.902 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:24.902162904Z","task_id":"bb10dec6-e0b1-4720-98b3-77552c10ad90","attempt_id":"e51c2258-7676-4d91-82d6-d28f7cef10af","latency_ms":0,"decision":"COMPLETED","run_id":"6e9e0d70-45b7-49c7-bbc1-a5a774273a1b"}
+22:36:24.904 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:24.904435986Z","task_id":"ef91000d-923b-47af-bbc0-b057b7270687","attempt_id":"0d1c1aec-657c-4290-9058-6b7df3250666","latency_ms":0,"decision":"DEAD","run_id":"594c88c3-a5ee-43c5-993d-d5241a7ca870"}
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.alert.application.NativeEngineWiringTest
+[INFO] Running com.objwww.pr.control.alert.application.AlertInboxProcessorTest
+22:36:24.911 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox 589a2427-913b-4dfc-a3db-22feb1ec3c03 死信: payload_raw JSON 解析失败: Unexpected character ('n' (code 110)): was expecting double-quote to start field name
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 2]
+22:36:24.930 [main] WARN com.objwww.pr.control.alert.application.AlertInboxProcessor -- alert_inbox 5654eb45-e400-4855-b0e3-2c9b062b072b 死信: 缺少 alertname 标签，无法铸造 incidentKey
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.objwww.pr.control.alert.application.AlertInboxProcessorTest
+[INFO] Running com.objwww.pr.control.alert.application.reconcile.ReconcileBudgetGateTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.alert.application.reconcile.ReconcileBudgetGateTest
+[INFO] Running com.objwww.pr.control.alert.application.reconcile.IncidentSourceReconcilerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.alert.application.reconcile.IncidentSourceReconcilerTest
+[INFO] Running com.objwww.pr.control.alert.application.DeterministicSupervisorTest
+22:36:24.954 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:24.954167828Z","run_id":"6bf5f30e-1e99-4418-a4fc-f2908f96d21c"}
+22:36:24.954 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 6bf5f30e-1e99-4418-a4fc-f2908f96d21c 全任务终态 → REPORTING（报告链组装）
+22:36:24.960 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:24.960359870Z","run_id":"f533d352-273a-4fa5-b357-adf945bbe2c1"}
+22:36:24.960 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run f533d352-273a-4fa5-b357-adf945bbe2c1 全任务终态 → REPORTING（报告链组装）
+22:36:24.961 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_plan_rejected","ts":"2026-09-08T14:36:24.961156450Z","run_id":"44a07cc2-6a3c-4d5d-9375-29288ca67af8","reason":"提案成环: a -> b -> a"}
+22:36:24.961 [main] WARN com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 44a07cc2-6a3c-4d5d-9375-29288ca67af8 提案被确定性拒绝 → FAILED（提案成环: a -> b -> a）
+22:36:24.967 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:24.966897753Z","run_id":"0daf2cd8-18f7-4746-bfe9-b843228ca8cd"}
+22:36:24.967 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 0daf2cd8-18f7-4746-bfe9-b843228ca8cd 全任务终态 → REPORTING（报告链组装）
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.alert.application.DeterministicSupervisorTest
+[INFO] Running com.objwww.pr.control.alert.application.replay.SnapshotShadowRouterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.alert.application.replay.SnapshotShadowRouterTest
+[INFO] Running com.objwww.pr.control.alert.application.replay.ShadowToolFaceTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 s -- in com.objwww.pr.control.alert.application.replay.ShadowToolFaceTest
+[INFO] Running com.objwww.pr.control.alert.application.replay.AgentReplayRunnerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.application.replay.AgentReplayRunnerTest
+[INFO] Running com.objwww.pr.control.alert.application.replay.ReadOnlyToolFaceTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.alert.application.replay.ReadOnlyToolFaceTest
+[INFO] Running com.objwww.pr.control.alert.application.NativeReportAdapterTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.alert.application.NativeReportAdapterTest
+[INFO] Running com.objwww.pr.control.alert.application.ReportCompletedNotifierTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.objwww.pr.control.alert.application.ReportCompletedNotifierTest
+[INFO] Running com.objwww.pr.control.alert.interfaces.RunCommandControllerTest
+22:36:25.054 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.054 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.054 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.074 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.075 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.075 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.090 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.090 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.090 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.099 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.099 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.100 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.076 s -- in com.objwww.pr.control.alert.interfaces.RunCommandControllerTest
+[INFO] Running com.objwww.pr.control.alert.interfaces.AlertWebhookControllerTest
+22:36:25.114 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.114 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.115 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+22:36:25.122 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.122 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.122 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.128 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.128 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.128 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.135 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.135 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.135 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.140 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.140 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.141 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+22:36:25.143 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.143 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.143 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.149 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.149 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.149 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.156 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.156 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.156 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.159 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.159 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.160 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.166 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.166 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.166 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.172 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.172 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.172 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.179 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.179 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.179 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.181 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_REJECTED","ts":"2026-09-08T14:36:25.181390086Z","receiver":"control-app","gate":"identity"}
+22:36:25.185 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.186 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.186 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.192 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.192 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.192 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.194 [main] INFO com.objwww.pr.control.alert.application.ControlAlertRouter -- {"event":"CONTROL_ALERT_ONCALL","ts":"2026-09-08T14:36:25.194050802Z","inbox_id":"c01865ac-a045-4742-9d8d-d65d4dac493f","receiver":"rca-oncall","group_key":"g:RCA_SYSTEM:collector","alertnames":"RCA_SYSTEM_CollectorDown","scopes":"rca_system","alert_count":1}
+22:36:25.197 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.197 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.198 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.206 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.206 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.206 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.209 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.209 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.209 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.211 [main] WARN com.objwww.pr.control.alert.interfaces.AlertWebhookController -- 整组无法持久化，返回 503: db down
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.104 s -- in com.objwww.pr.control.alert.interfaces.AlertWebhookControllerTest
+[INFO] Running com.objwww.pr.control.alert.interfaces.EventQueryControllerTest
+22:36:25.222 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.222 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.222 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.232 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.232 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.233 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+22:36:25.242 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.242 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.242 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.252 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.252 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.252 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.266 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.266 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.266 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+22:36:25.286 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+22:36:25.287 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+22:36:25.287 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.076 s -- in com.objwww.pr.control.alert.interfaces.EventQueryControllerTest
+[INFO] Running com.objwww.pr.control.alert.support.AlertInMemoryStoresTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.alert.support.AlertInMemoryStoresTest
+[INFO] Running com.objwww.pr.control.application.SnapshotServiceTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.application.SnapshotServiceTest
+[INFO] Running com.objwww.pr.control.application.IntakeServiceTest
+22:36:25.369 [main] INFO com.objwww.pr.control.application.IntakeService -- webhook 重投幂等返回 delivery=d-1 run=629924c6-cacc-4e55-a3b0-6103f968e551
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.060 s -- in com.objwww.pr.control.application.IntakeServiceTest
+[INFO] Running com.objwww.pr.control.application.ModelGatewayTest
+22:36:25.375 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本 STARTED 写失败，零触网（D5）: RuntimeException
+22:36:25.384 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本终态写失败（SUCCEEDED），转 UNKNOWN 语义: RuntimeException
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.objwww.pr.control.application.ModelGatewayTest
+[INFO] Running com.objwww.pr.control.application.ReviewOrchestratorT1Test
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.application.ReviewOrchestratorT1Test
+[INFO] Running com.objwww.pr.control.application.ReviewOrchestratorT2Test
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.application.ReviewOrchestratorT2Test
+[INFO] Running com.objwww.pr.control.application.ReviewStepExecutorTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.application.ReviewStepExecutorTest
+[INFO] Running com.objwww.pr.control.application.WorkItemWorkerTest
+22:36:25.435 [lease-heartbeat] WARN com.objwww.pr.control.application.WorkItemWorker -- 租约心跳失效，停止执行: work_item=dce4316f-6d83-43fd-be2b-f775794677ac
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.031 s -- in com.objwww.pr.control.application.WorkItemWorkerTest
+[INFO] Running com.objwww.pr.control.application.OutboxWriterTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.application.OutboxWriterTest
+[INFO] Running com.objwww.pr.control.ControlContextSmokeTest
+22:36:25.471 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.objwww.pr.control.ControlContextSmokeTest]: ControlContextSmokeTest does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+22:36:25.540 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.control.ControlApplication for test class com.objwww.pr.control.ControlContextSmokeTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-08T22:36:25.731+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : Starting ControlContextSmokeTest using Java 21.0.12.1 with PID 528 (started by root in /opt/projects/pr_agent_it/control-app)
+2026-09-08T22:36:25.732+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : No active profile set, falling back to 1 default profile: "default"
+2026-09-08T22:36:27.335+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-08T22:36:27.389+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.pr.control.ControlContextSmokeTest   : Started ControlContextSmokeTest in 1.801 seconds (process running for 17.811)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.062 s -- in com.objwww.pr.control.ControlContextSmokeTest
+[INFO] Running com.objwww.pr.control.ops.domain.statemachine.OperatorCaseStateMachineTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.ops.domain.statemachine.OperatorCaseStateMachineTest
+[INFO] Running com.objwww.pr.control.ops.domain.model.RetentionPolicyTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.objwww.pr.control.ops.domain.model.RetentionPolicyTest
+[INFO] Running com.objwww.pr.control.ops.application.ArchiveServiceTest
+2026-09-08T22:36:27.530+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.ops.application.ArchiveService   : CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_07 gate=verify_failed
+2026-09-08T22:36:27.532+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.ops.application.ArchiveService   : CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_07 gate=legal_hold
+2026-09-08T22:36:27.533+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.ops.application.ArchiveService   : CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_07 gate=export_failed
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.objwww.pr.control.ops.application.ArchiveServiceTest
+[INFO] Running com.objwww.pr.control.ops.application.RetentionServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.objwww.pr.control.ops.application.RetentionServiceTest
+[INFO] Running com.objwww.pr.control.ops.application.OperatorCaseServiceTest
+2026-09-08T22:36:27.545+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.544119758Z","to":"OPEN","revision":1,"caseId":"988b6dd2-1189-47f5-8863-86cf1f6471bf","rule":"T00_CREATE"}
+2026-09-08T22:36:27.547+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.546938166Z","to":"ACKED","revision":2,"caseId":"988b6dd2-1189-47f5-8863-86cf1f6471bf","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.552+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.552520760Z","to":"RESOLVED","revision":3,"caseId":"988b6dd2-1189-47f5-8863-86cf1f6471bf","rule":"T31_RESOLVE"}
+2026-09-08T22:36:27.554+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.554097800Z","to":"OPEN","revision":1,"caseId":"aded0cb0-ecf0-4d0b-8ffd-b0113d7e54f5","rule":"T00_CREATE"}
+2026-09-08T22:36:27.554+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.554584316Z","to":"OPEN","revision":2,"caseId":"aded0cb0-ecf0-4d0b-8ffd-b0113d7e54f5","rule":"T50_MERGE"}
+2026-09-08T22:36:27.555+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.555535007Z","to":"OPEN","revision":1,"caseId":"76ff4515-563f-4ed0-8f50-2b58cd52acd9","rule":"T00_CREATE"}
+2026-09-08T22:36:27.556+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.556343901Z","to":"OPEN","revision":2,"caseId":"76ff4515-563f-4ed0-8f50-2b58cd52acd9","rule":"T40_ASSIGN"}
+2026-09-08T22:36:27.557+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.557154066Z","to":"OPEN","revision":1,"caseId":"426dd92b-4b7e-47ad-ba3f-1ad5f54bbebb","rule":"T00_CREATE"}
+2026-09-08T22:36:27.557+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.557386905Z","to":"ACKED","revision":2,"caseId":"426dd92b-4b7e-47ad-ba3f-1ad5f54bbebb","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.558+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.557955926Z","to":"OPEN","revision":1,"caseId":"93a983ba-13e0-45aa-b76b-ae5c53a647f1","rule":"T00_CREATE"}
+2026-09-08T22:36:27.558+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.558131026Z","to":"RESOLVED","revision":2,"caseId":"93a983ba-13e0-45aa-b76b-ae5c53a647f1","rule":"T30_RESOLVE"}
+2026-09-08T22:36:27.559+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.559177487Z","to":"OPEN","revision":1,"caseId":"e3286407-aca3-4725-a5ab-84058d0f2072","rule":"T00_CREATE"}
+2026-09-08T22:36:27.559+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.559446724Z","to":"OPEN","revision":2,"caseId":"e3286407-aca3-4725-a5ab-84058d0f2072","rule":"T60_ESCALATE"}
+2026-09-08T22:36:27.560+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.560055220Z","to":"OPEN","revision":1,"caseId":"3808cc36-1094-48c6-a801-3934fabe0f05","rule":"T00_CREATE"}
+2026-09-08T22:36:27.560+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.560273742Z","to":"ACKED","revision":2,"caseId":"3808cc36-1094-48c6-a801-3934fabe0f05","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.560+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.560406572Z","to":"RESOLVED","revision":3,"caseId":"3808cc36-1094-48c6-a801-3934fabe0f05","rule":"T31_RESOLVE"}
+2026-09-08T22:36:27.560+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.560625574Z","to":"RESOLVED","revision":4,"caseId":"3808cc36-1094-48c6-a801-3934fabe0f05","rule":"T52_MERGE"}
+2026-09-08T22:36:27.561+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.561301837Z","to":"OPEN","revision":1,"caseId":"bb22f60b-b66d-4bae-aadb-5dedfa1c5a8e","rule":"T00_CREATE"}
+2026-09-08T22:36:27.562+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.561947504Z","to":"OPEN","revision":1,"caseId":"e4d286c0-dd54-41e5-8c22-377bfedb29a7","rule":"T00_CREATE"}
+2026-09-08T22:36:27.562+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.562159223Z","to":"ACKED","revision":2,"caseId":"e4d286c0-dd54-41e5-8c22-377bfedb29a7","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.563+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.563085557Z","to":"OPEN","revision":1,"caseId":"c9be7187-9357-45d8-b99b-73c05beb6bae","rule":"T00_CREATE"}
+2026-09-08T22:36:27.563+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.563323556Z","to":"ACKED","revision":2,"caseId":"c9be7187-9357-45d8-b99b-73c05beb6bae","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.563+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.563923295Z","to":"OPEN","revision":1,"caseId":"7beb01f1-4697-45f5-b86d-9da8d14128be","rule":"T00_CREATE"}
+2026-09-08T22:36:27.564+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.564162926Z","to":"OPEN","revision":2,"caseId":"7beb01f1-4697-45f5-b86d-9da8d14128be","rule":"T50_MERGE"}
+2026-09-08T22:36:27.564+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.564406355Z","to":"OPEN","revision":3,"caseId":"7beb01f1-4697-45f5-b86d-9da8d14128be","rule":"T50_MERGE"}
+2026-09-08T22:36:27.565+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.565134666Z","to":"OPEN","revision":1,"caseId":"7bd093bb-9f96-4f97-80a0-9520ee07e746","rule":"T00_CREATE"}
+2026-09-08T22:36:27.565+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.565319004Z","to":"OPEN","revision":2,"caseId":"7bd093bb-9f96-4f97-80a0-9520ee07e746","rule":"T60_ESCALATE"}
+2026-09-08T22:36:27.567+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.567149912Z","to":"OPEN","revision":1,"caseId":"36797b7d-3d9e-4134-92f1-eeb9c95008bd","rule":"T00_CREATE"}
+2026-09-08T22:36:27.567+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.567466698Z","to":"ACKED","revision":2,"caseId":"36797b7d-3d9e-4134-92f1-eeb9c95008bd","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.568+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.568095402Z","to":"RESOLVED","revision":3,"caseId":"36797b7d-3d9e-4134-92f1-eeb9c95008bd","rule":"T31_RESOLVE"}
+2026-09-08T22:36:27.568+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.568831669Z","to":"OPEN","revision":1,"caseId":"32cfe63e-edad-4fef-8f8a-0af6605d5ef1","rule":"T00_CREATE"}
+2026-09-08T22:36:27.569+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.569010837Z","to":"OPEN","revision":2,"caseId":"32cfe63e-edad-4fef-8f8a-0af6605d5ef1","rule":"T40_ASSIGN"}
+2026-09-08T22:36:27.570+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.570038723Z","to":"OPEN","revision":1,"caseId":"2cd89adc-05f5-46cd-bf55-90b9ea92b1e0","rule":"T00_CREATE"}
+2026-09-08T22:36:27.570+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.570218852Z","to":"ACKED","revision":2,"caseId":"2cd89adc-05f5-46cd-bf55-90b9ea92b1e0","rule":"T10_CLAIM"}
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in com.objwww.pr.control.ops.application.OperatorCaseServiceTest
+[INFO] Running com.objwww.pr.control.ops.interfaces.OperatorApiControllerTest
+2026-09-08T22:36:27.585+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.585+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.585+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.594+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.594+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.595+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-08T22:36:27.608+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.608+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.608+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.609+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.609324782Z","to":"OPEN","revision":1,"caseId":"e6da21cb-fb33-4ec7-be15-81ac2b81f6a9","rule":"T00_CREATE"}
+2026-09-08T22:36:27.609+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.609686092Z","to":"OPEN","revision":1,"caseId":"1d749f7f-f2be-4c6f-8913-b79640332ddf","rule":"T00_CREATE"}
+2026-09-08T22:36:27.609+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.609897139Z","to":"ACKED","revision":2,"caseId":"1d749f7f-f2be-4c6f-8913-b79640332ddf","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.610+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.610138855Z","to":"OPEN","revision":1,"caseId":"959b4532-bdb2-42c3-bbed-9f0caada6f71","rule":"T00_CREATE"}
+2026-09-08T22:36:27.610+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.610601827Z","to":"OPEN","revision":1,"caseId":"e8bffc12-04ef-42a3-af59-8ccb17869b29","rule":"T00_CREATE"}
+2026-09-08T22:36:27.610+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.610777858Z","to":"ACKED","revision":2,"caseId":"e8bffc12-04ef-42a3-af59-8ccb17869b29","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.611+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.611061803Z","to":"OPEN","revision":1,"caseId":"0661430e-8f99-4e81-b665-36dfdc8a6f06","rule":"T00_CREATE"}
+2026-09-08T22:36:27.611+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.611284202Z","to":"RESOLVED","revision":2,"caseId":"0661430e-8f99-4e81-b665-36dfdc8a6f06","rule":"T30_RESOLVE"}
+2026-09-08T22:36:27.624+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.625+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.625+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.625+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.625789430Z","to":"OPEN","revision":1,"caseId":"2b268a98-2f09-4537-98e1-96df615a2e04","rule":"T00_CREATE"}
+2026-09-08T22:36:27.626+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.626021227Z","to":"ACKED","revision":2,"caseId":"2b268a98-2f09-4537-98e1-96df615a2e04","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.628+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case resolve: case=2b268a98-2f09-4537-98e1-96df615a2e04 idem-key=ui-5 operator=operator-a
+2026-09-08T22:36:27.629+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.629229319Z","to":"RESOLVED","revision":3,"caseId":"2b268a98-2f09-4537-98e1-96df615a2e04","rule":"T31_RESOLVE"}
+2026-09-08T22:36:27.642+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.642+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.642+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.642+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.642857756Z","to":"OPEN","revision":1,"caseId":"c40248b5-4145-49ab-85b8-f95f201be3e5","rule":"T00_CREATE"}
+2026-09-08T22:36:27.645+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case assign: case=c40248b5-4145-49ab-85b8-f95f201be3e5 idem-key=ui-6 operator=dispatcher
+2026-09-08T22:36:27.646+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.646125319Z","to":"OPEN","revision":2,"caseId":"c40248b5-4145-49ab-85b8-f95f201be3e5","rule":"T40_ASSIGN"}
+2026-09-08T22:36:27.648+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case assign: case=c40248b5-4145-49ab-85b8-f95f201be3e5 idem-key=ui-7 operator=dispatcher
+2026-09-08T22:36:27.648+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.648495954Z","to":"OPEN","revision":3,"caseId":"c40248b5-4145-49ab-85b8-f95f201be3e5","rule":"T40_ASSIGN"}
+2026-09-08T22:36:27.653+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.654555456Z","to":"OPEN","revision":1,"caseId":"4bc2e5ba-ab73-48ae-8a69-141594f632dd","rule":"T00_CREATE"}
+2026-09-08T22:36:27.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.654764170Z","to":"ACKED","revision":2,"caseId":"4bc2e5ba-ab73-48ae-8a69-141594f632dd","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.676+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.676+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.676+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.677+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.677189244Z","to":"OPEN","revision":1,"caseId":"0a8e0738-3197-479c-8fd4-41b86a125ede","rule":"T00_CREATE"}
+2026-09-08T22:36:27.677+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.677520799Z","to":"RESOLVED","revision":2,"caseId":"0a8e0738-3197-479c-8fd4-41b86a125ede","rule":"T30_RESOLVE"}
+2026-09-08T22:36:27.682+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case claim: case=0a8e0738-3197-479c-8fd4-41b86a125ede idem-key=ui-8 operator=sre-b
+2026-09-08T22:36:27.686+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case claim: case=807579f1-8fa2-4d53-b26c-17fe03f29d9e idem-key=ui-9 operator=operator
+2026-09-08T22:36:27.693+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.694+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.694+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.694+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.694607920Z","to":"OPEN","revision":1,"caseId":"2764ea47-f6c8-40f8-ab7c-73e1ded64012","rule":"T00_CREATE"}
+2026-09-08T22:36:27.695+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.694947299Z","to":"OPEN","revision":1,"caseId":"da1847fc-5be0-4de0-bdf2-11b2cb263a2d","rule":"T00_CREATE"}
+2026-09-08T22:36:27.695+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.695195236Z","to":"OPEN","revision":1,"caseId":"60f518e0-83b9-4210-b32c-2bfccf507a03","rule":"T00_CREATE"}
+2026-09-08T22:36:27.718+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.719+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.719+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.720+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.719978731Z","to":"OPEN","revision":1,"caseId":"7300da04-1465-4f45-8fb7-b81ea75401dc","rule":"T00_CREATE"}
+2026-09-08T22:36:27.722+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case claim: case=7300da04-1465-4f45-8fb7-b81ea75401dc idem-key=ui-1 operator=sre-li
+2026-09-08T22:36:27.722+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.722828709Z","to":"ACKED","revision":2,"caseId":"7300da04-1465-4f45-8fb7-b81ea75401dc","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.729+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.729+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.729+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.730+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.730140389Z","to":"OPEN","revision":1,"caseId":"0a16de08-bc50-4920-8059-055053e25821","rule":"T00_CREATE"}
+2026-09-08T22:36:27.730+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.730523070Z","to":"ACKED","revision":2,"caseId":"0a16de08-bc50-4920-8059-055053e25821","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.735+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case resolve: case=0a16de08-bc50-4920-8059-055053e25821 idem-key=ui-4 operator=operator-a
+2026-09-08T22:36:27.736+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.735926226Z","to":"RESOLVED","revision":3,"caseId":"0a16de08-bc50-4920-8059-055053e25821","rule":"T31_RESOLVE"}
+2026-09-08T22:36:27.742+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.742+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.742+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.743+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.743120275Z","to":"OPEN","revision":1,"caseId":"0285d00c-9d58-43fa-8a18-3099bdbd66a3","rule":"T00_CREATE"}
+2026-09-08T22:36:27.743+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.743402256Z","to":"OPEN","revision":2,"caseId":"0285d00c-9d58-43fa-8a18-3099bdbd66a3","rule":"T40_ASSIGN"}
+2026-09-08T22:36:27.745+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.i.OperatorApiController        : operator-case claim: case=0285d00c-9d58-43fa-8a18-3099bdbd66a3 idem-key=ui-2 operator=sre-b
+2026-09-08T22:36:27.752+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.752+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.752+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.753+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.753171705Z","to":"OPEN","revision":1,"caseId":"234f9fac-4509-4523-a62a-ac15322cbd45","rule":"T00_CREATE"}
+2026-09-08T22:36:27.753+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.753426856Z","to":"ACKED","revision":2,"caseId":"234f9fac-4509-4523-a62a-ac15322cbd45","rule":"T10_CLAIM"}
+2026-09-08T22:36:27.753+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.o.a.OperatorCaseService          : {"event":"operator_case_transition","ts":"2026-09-08T14:36:27.753641971Z","to":"OPEN","revision":1,"caseId":"56093bc6-6f03-4f5b-a93a-077a8045c041","rule":"T00_CREATE"}
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.187 s -- in com.objwww.pr.control.ops.interfaces.OperatorApiControllerTest
+[INFO] Running com.objwww.pr.control.interfaces.webhook.GitHubSignatureVerifierTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.objwww.pr.control.interfaces.webhook.GitHubSignatureVerifierTest
+[INFO] Running com.objwww.pr.control.interfaces.webhook.WebhookControllerTest
+2026-09-08T22:36:27.824+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.824+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.825+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-08T22:36:27.833+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.834+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.834+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.840+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.840+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.840+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.846+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.846+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.846+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.854+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.854+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.854+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.860+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.860+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.860+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+2026-09-08T22:36:27.867+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.mock.web.MockServletContext          : Initializing Spring TestDispatcherServlet ''
+2026-09-08T22:36:27.867+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-08T22:36:27.867+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 0 ms
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.107 s -- in com.objwww.pr.control.interfaces.webhook.WebhookControllerTest
+2026-09-08T22:36:27.878+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Testcontainers version: 1.20.4
+2026-09-08T22:36:27.986+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.t.d.DockerClientProviderStrategy       : Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+2026-09-08T22:36:28.199+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.t.d.DockerClientProviderStrategy       : Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+2026-09-08T22:36:28.201+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Docker host IP address is localhost
+2026-09-08T22:36:28.220+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+2026-09-08T22:36:28.232+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.images.PullPolicy     : Image pull policy will be performed by: DefaultPullPolicy()
+2026-09-08T22:36:28.234+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.t.utility.ImageNameSubstitutor         : Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+2026-09-08T22:36:28.300+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Creating container for image: testcontainers/ryuk:0.11.0
+2026-09-08T22:36:28.304+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.t.utility.RegistryAuthLocator          : Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+2026-09-08T22:36:28.441+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Container testcontainers/ryuk:0.11.0 is starting: d71a97b9c5a301f84254ea18682c18ccee4af39db29112f362fa10c65fad2c45
+2026-09-08T22:36:28.718+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.testcontainers/ryuk:0.11.0            : Container testcontainers/ryuk:0.11.0 started in PT0.418042529S
+2026-09-08T22:36:28.721+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.t.utility.RyukResourceReaper           : Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+2026-09-08T22:36:28.721+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : Checking the system...
+2026-09-08T22:36:28.721+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.testcontainers.DockerClientFactory   : ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresDatasetPartitionAccessTest
+2026-09-08T22:36:28.726+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Creating container for image: postgres:16-alpine
+2026-09-08T22:36:28.791+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container postgres:16-alpine is starting: c7fad2633e95130ef0b99667d68a60d8b28b9698391c9e7699b1e6a4f4240cfe
+2026-09-08T22:36:29.984+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container postgres:16-alpine started in PT1.2580783S
+2026-09-08T22:36:29.985+08:00  INFO 528 --- [control-app] [           main] [                                                 ] tc.postgres:16-alpine                    : Container is started (JDBC URL: jdbc:postgresql://localhost:33206/test?loggerLevel=OFF)
+2026-09-08T22:36:29.990+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-08T22:36:30.141+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@23ab7590
+2026-09-08T22:36:30.142+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-09-08T22:36:30.434+08:00  INFO 528 --- [control-app] [           main] [                                                 ] org.flywaydb.core.FlywayExecutor         : Database: jdbc:postgresql://localhost:33206/test?loggerLevel=OFF (PostgreSQL 16.15)
+2026-09-08T22:36:30.516+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table "public"."flyway_schema_history" does not exist yet
+2026-09-08T22:36:30.543+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbValidate     : Successfully validated 30 migrations (execution time 00:00.064s)
+2026-09-08T22:36:30.564+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table "public"."flyway_schema_history" ...
+2026-09-08T22:36:30.611+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Current version of schema "public": << Empty Schema >>
+2026-09-08T22:36:30.673+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "1 - m0 schema"
+2026-09-08T22:36:30.786+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "2 - grants"
+2026-09-08T22:36:30.814+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "3 - m1 inbox reconcile"
+2026-09-08T22:36:30.862+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "4 - m2 checkpoint repair"
+2026-09-08T22:36:30.918+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "5 - m3 model governance"
+2026-09-08T22:36:30.953+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "6 - m4 sandbox"
+2026-09-08T22:36:31.020+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "7 - am1 alert domain"
+2026-09-08T22:36:31.095+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "8 - am1 dag reserve"
+2026-09-08T22:36:31.121+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "9 - am3 eval notify"
+2026-09-08T22:36:31.173+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "10 - am3 eval run"
+2026-09-08T22:36:31.201+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "11 - am3 eval readonly"
+2026-09-08T22:36:31.225+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "12 - am4 state expansion"
+2026-09-08T22:36:31.245+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "13 - am4 budget ledger"
+2026-09-08T22:36:31.268+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "14 - am4 rca event"
+2026-09-08T22:36:31.287+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "15 - am4 tool invocation ledger"
+2026-09-08T22:36:31.304+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "16 - am4 evidence snapshot"
+2026-09-08T22:36:31.328+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "17 - am4 claim"
+2026-09-08T22:36:31.343+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "18 - am4 task edge run scope"
+2026-09-08T22:36:31.358+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "19 - am4 tool replay"
+2026-09-08T22:36:31.377+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "20 - am5 dataset version"
+2026-09-08T22:36:31.392+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "21 - am5 dataset partition"
+2026-09-08T22:36:31.409+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "22 - am5 golden candidate"
+2026-09-08T22:36:31.425+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "23 - am5 sampling fingerprint"
+2026-09-08T22:36:31.432+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "24 - am5 config bundle"
+2026-09-08T22:36:31.446+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "25 - am5 canary route"
+2026-09-08T22:36:31.461+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "26 - am5 operator case"
+2026-09-08T22:36:31.474+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "27 - am5 operator command"
+2026-09-08T22:36:31.484+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "28 - am5 monthly partition"
+2026-09-08T22:36:31.519+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "29 - am5 retention archive"
+2026-09-08T22:36:31.545+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Migrating schema "public" to version "30 - am6 canary window verdict"
+2026-09-08T22:36:31.576+08:00  INFO 528 --- [control-app] [           main] [                                                 ] o.f.core.internal.command.DbMigrate      : Successfully applied 30 migrations to schema "public", now at version v30 (execution time 00:00.619s)
+2026-09-08T22:36:31.583+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2026-09-08T22:36:31.608+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@7d6e1475
+2026-09-08T22:36:31.608+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2026-09-08T22:36:31.609+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Starting...
+2026-09-08T22:36:31.627+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@49dcce5f
+2026-09-08T22:36:31.627+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-3 - Start completed.
+2026-09-08T22:36:31.627+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-4 - Starting...
+2026-09-08T22:36:31.640+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@2a9e3906
+2026-09-08T22:36:31.640+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-4 - Start completed.
+2026-09-08T22:36:31.641+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Starting...
+2026-09-08T22:36:31.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@67ef90c4
+2026-09-08T22:36:31.654+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-5 - Start completed.
+2026-09-08T22:36:31.759+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-6 - Starting...
+2026-09-08T22:36:31.779+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-6 - Added connection org.postgresql.jdbc.PgConnection@3c1b2744
+2026-09-08T22:36:31.779+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-6 - Start completed.
+2026-09-08T22:36:31.913+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Starting...
+2026-09-08T22:36:31.932+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-7 - Added connection org.postgresql.jdbc.PgConnection@282da359
+2026-09-08T22:36:31.933+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-7 - Start completed.
+2026-09-08T22:36:32.052+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-8 - Starting...
+2026-09-08T22:36:32.061+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-8 - Added connection org.postgresql.jdbc.PgConnection@5939091d
+2026-09-08T22:36:32.061+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-8 - Start completed.
+2026-09-08T22:36:32.140+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-9 - Starting...
+2026-09-08T22:36:32.147+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-9 - Added connection org.postgresql.jdbc.PgConnection@61203f12
+2026-09-08T22:36:32.147+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-9 - Start completed.
+2026-09-08T22:36:32.225+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-10 - Starting...
+2026-09-08T22:36:32.232+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-10 - Added connection org.postgresql.jdbc.PgConnection@34883b9
+2026-09-08T22:36:32.232+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-10 - Start completed.
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.518 s -- in com.objwww.pr.control.it.PostgresDatasetPartitionAccessTest
+[INFO] Running com.objwww.pr.control.it.PostgresConfigBundleRepositoryTest
+2026-09-08T22:36:32.328+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1 policy=policy-2026-09
+2026-09-08T22:36:32.332+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1
+2026-09-08T22:36:32.425+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1 policy=policy-2026-09
+2026-09-08T22:36:32.504+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1 policy=policy-2026-09
+2026-09-08T22:36:32.506+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op-1 policy=policy-2026-09
+2026-09-08T22:36:32.511+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : activate 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1
+2026-09-08T22:36:32.513+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : activate 落位: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=op-1
+2026-09-08T22:36:32.522+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : rollback 落位: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-2
+2026-09-08T22:36:32.613+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-1 policy=policy-2026-09
+2026-09-08T22:36:32.615+08:00  INFO 528 --- [control-app] [           main] [                                                 ] c.o.p.c.r.a.ConfigBundleService          : bundle 幂等重放: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=op-2
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.374 s -- in com.objwww.pr.control.it.PostgresConfigBundleRepositoryTest
+[INFO] Running com.objwww.pr.control.it.PostgresModelCallLedgerRepositoryTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.188 s -- in com.objwww.pr.control.it.PostgresModelCallLedgerRepositoryTest
+[INFO] Running com.objwww.pr.control.it.PostgresGoldenCandidateRepositoryTest
+2026-09-08T22:36:32.876+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-11 - Starting...
+2026-09-08T22:36:32.884+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-11 - Added connection org.postgresql.jdbc.PgConnection@446f8d38
+2026-09-08T22:36:32.884+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-11 - Start completed.
+2026-09-08T22:36:32.901+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-11 - Shutdown initiated...
+2026-09-08T22:36:32.902+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-11 - Shutdown completed.
+2026-09-08T22:36:32.974+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-12 - Starting...
+2026-09-08T22:36:32.983+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-12 - Added connection org.postgresql.jdbc.PgConnection@28cf09ed
+2026-09-08T22:36:32.983+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-12 - Start completed.
+2026-09-08T22:36:32.987+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-12 - Shutdown initiated...
+2026-09-08T22:36:32.989+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-12 - Shutdown completed.
+2026-09-08T22:36:33.058+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Starting...
+2026-09-08T22:36:33.066+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-13 - Added connection org.postgresql.jdbc.PgConnection@28b3b182
+2026-09-08T22:36:33.066+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Start completed.
+2026-09-08T22:36:33.079+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Shutdown initiated...
+2026-09-08T22:36:33.080+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-13 - Shutdown completed.
+2026-09-08T22:36:33.174+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-14 - Starting...
+2026-09-08T22:36:33.182+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-14 - Added connection org.postgresql.jdbc.PgConnection@52bdfe7b
+2026-09-08T22:36:33.183+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-14 - Start completed.
+2026-09-08T22:36:33.199+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-14 - Shutdown initiated...
+2026-09-08T22:36:33.200+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-14 - Shutdown completed.
+2026-09-08T22:36:33.271+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Starting...
+2026-09-08T22:36:33.278+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-15 - Added connection org.postgresql.jdbc.PgConnection@3f3d77d5
+2026-09-08T22:36:33.278+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Start completed.
+2026-09-08T22:36:33.293+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Shutdown initiated...
+2026-09-08T22:36:33.295+08:00  INFO 528 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-15 - Shutdown completed.
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.489 s -- in com.objwww.pr.control.it.PostgresGoldenCandidateRepositoryTest
+[INFO] Running com.objwww.pr.control.it.PostgresDatasetVersionRepositoryTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.416 s -- in com.objwww.pr.control.it.PostgresDatasetVersionRepositoryTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1087, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ control-app ---
+[INFO] Building jar: /opt/projects/pr_agent_it/control-app/target/control-app-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ control-app ---
+[INFO] Attaching repackaged archive /opt/projects/pr_agent_it/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+22:36:36.114 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+22:36:36.276 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+22:36:36.621 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+22:36:36.623 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+22:36:36.642 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+22:36:36.654 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+22:36:36.656 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+22:36:36.753 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+22:36:36.767 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+22:36:37.026 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: c1dfa5f90613f85db8833a2a454d544c64be0c759d5d6b373aa17732c99a6945
+22:36:37.456 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.702868678S
+22:36:37.467 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+22:36:37.467 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+22:36:37.468 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresOperatorCaseIT
+22:36:37.490 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+22:36:37.564 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: d35efd1fe7269d82a9f33f257083adced1ac0483d58dece7b2b6d6e7cbdd1aa8
+22:36:38.939 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.448872083S
+22:36:38.940 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://localhost:33208/test?loggerLevel=OFF)
+22:36:38.961 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+22:36:39.190 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@7ea08277
+22:36:39.191 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+22:36:39.569 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://localhost:33208/test?loggerLevel=OFF (PostgreSQL 16.15)
+22:36:39.686 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+22:36:39.690 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 30 migrations (execution time 00:00.087s)
+22:36:39.709 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+22:36:39.802 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+22:36:39.901 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+22:36:40.016 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+22:36:40.049 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+22:36:40.083 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+22:36:40.135 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+22:36:40.171 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+22:36:40.236 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+22:36:40.301 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+22:36:40.328 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+22:36:40.399 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+22:36:40.419 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+22:36:40.426 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "12 - am4 state expansion"
+22:36:40.438 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "13 - am4 budget ledger"
+22:36:40.453 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "14 - am4 rca event"
+22:36:40.475 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "15 - am4 tool invocation ledger"
+22:36:40.491 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "16 - am4 evidence snapshot"
+22:36:40.514 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "17 - am4 claim"
+22:36:40.527 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "18 - am4 task edge run scope"
+22:36:40.537 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "19 - am4 tool replay"
+22:36:40.547 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "20 - am5 dataset version"
+22:36:40.562 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "21 - am5 dataset partition"
+22:36:40.581 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "22 - am5 golden candidate"
+22:36:40.601 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "23 - am5 sampling fingerprint"
+22:36:40.609 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "24 - am5 config bundle"
+22:36:40.626 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "25 - am5 canary route"
+22:36:40.643 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "26 - am5 operator case"
+22:36:40.657 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "27 - am5 operator command"
+22:36:40.671 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "28 - am5 monthly partition"
+22:36:40.701 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "29 - am5 retention archive"
+22:36:40.720 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "30 - am6 canary window verdict"
+22:36:40.744 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 30 migrations to schema "public", now at version v30 (execution time 00:00.581s)
+22:36:40.749 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+22:36:40.770 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@f9f3928
+22:36:40.770 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+22:36:40.770 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+22:36:40.785 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@49f40c00
+22:36:40.785 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+22:36:40.786 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+22:36:40.798 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@2f0ed952
+22:36:40.799 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+22:36:40.799 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+22:36:40.811 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@68565bc7
+22:36:40.811 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+22:36:40.956 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:40.954759056Z","rule":"T00_CREATE","to":"OPEN","revision":1,"caseId":"804521f5-76f7-4c81-be1e-80fd51177523"}
+22:36:40.974 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:40.974264752Z","rule":"T60_ESCALATE","to":"OPEN","revision":2,"caseId":"804521f5-76f7-4c81-be1e-80fd51177523"}
+22:36:41.075 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.075004682Z","rule":"T30_RESOLVE","to":"RESOLVED","revision":3,"caseId":"804521f5-76f7-4c81-be1e-80fd51177523"}
+22:36:41.187 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.187492245Z","rule":"T00_CREATE","to":"OPEN","revision":1,"caseId":"11b341b3-112b-49da-a4c4-2e15921b5345"}
+22:36:41.195 [pool-2-thread-1] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.194914663Z","rule":"T10_CLAIM","to":"ACKED","revision":2,"caseId":"11b341b3-112b-49da-a4c4-2e15921b5345"}
+22:36:41.300 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.299970721Z","rule":"T00_CREATE","to":"OPEN","revision":1,"caseId":"ddb31b51-5235-443b-8916-867d76eb12d5"}
+22:36:41.302 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.302597498Z","rule":"T50_MERGE","to":"OPEN","revision":2,"caseId":"ddb31b51-5235-443b-8916-867d76eb12d5"}
+22:36:41.305 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T14:36:41.305335575Z","rule":"T50_MERGE","to":"OPEN","revision":3,"caseId":"ddb31b51-5235-443b-8916-867d76eb12d5"}
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.841 s -- in com.objwww.pr.control.it.PostgresOperatorCaseIT
+[INFO] Running com.objwww.pr.control.it.AlertEvidenceIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.399 s -- in com.objwww.pr.control.it.AlertEvidenceIT
+[INFO] Running com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.402 s -- in com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.560 s -- in com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Running com.objwww.pr.control.it.AlertToolInvocationLedgerIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.371 s -- in com.objwww.pr.control.it.AlertToolInvocationLedgerIT
+[INFO] Running com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.312 s -- in com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT
+[INFO] Running com.objwww.pr.control.it.AlertV12StateExpansionIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.345 s -- in com.objwww.pr.control.it.AlertV12StateExpansionIT
+[INFO] Running com.objwww.pr.control.it.AlertDagCycleGuardIT
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.110 s -- in com.objwww.pr.control.it.AlertDagCycleGuardIT
+[INFO] Running com.objwww.pr.control.it.AlertIncidentBudgetIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.445 s -- in com.objwww.pr.control.it.AlertIncidentBudgetIT
+[INFO] Running com.objwww.pr.control.it.AlertToolReplayStoreIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.397 s -- in com.objwww.pr.control.it.AlertToolReplayStoreIT
+[INFO] Running com.objwww.pr.control.it.Am4E2E06FaultDrillIT
+22:36:44.824 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:44.823807223Z","decision":"COMPLETED","run_id":"a105096f-ab44-4c11-a7e1-f2198dfef562","task_id":"a0bdd7d4-08e2-4390-8102-0e1946f188dd","attempt_id":"eb209f7a-5467-467e-a34a-2f5eca353a18","latency_ms":25}
+22:36:44.832 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task a0bdd7d4-08e2-4390-8102-0e1946f188dd 旧租约提交被拒 owner=e06-worker epoch=1
+22:36:45.042 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:45.042166510Z","decision":"COMPLETED","run_id":"d4c1fc52-4487-4fde-8dd4-3b7c241c991e","task_id":"20ab041a-6e3e-4db9-bb79-f99bfe2e1e0e","attempt_id":"6450beaf-1fc3-4b14-ac8b-f4e3d99579d1","latency_ms":7}
+22:36:45.251 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:45.251112889Z","run_id":"2841e932-2545-4ab4-b413-d5e47115150e"}
+22:36:45.251 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 2841e932-2545-4ab4-b413-d5e47115150e 全任务终态 → REPORTING（报告链组装）
+22:36:45.340 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:45.339964248Z","run_id":"2862719e-e5f1-4e09-8ece-4a2ffc5a83e0"}
+22:36:45.340 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 2862719e-e5f1-4e09-8ece-4a2ffc5a83e0 全任务终态 → REPORTING（报告链组装）
+22:36:45.357 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T14:36:45.357854672Z","run_id":"b3fb177f-fda0-4feb-b7b2-f4c3dccaaf5a"}
+22:36:45.358 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run b3fb177f-fda0-4feb-b7b2-f4c3dccaaf5a 全任务终态 → REPORTING（报告链组装）
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.696 s -- in com.objwww.pr.control.it.Am4E2E06FaultDrillIT
+[INFO] Running com.objwww.pr.control.it.Am4E2E08ReplayIT
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.179 s -- in com.objwww.pr.control.it.Am4E2E08ReplayIT
+[INFO] Running com.objwww.pr.control.it.PostgresArchiveIT
+22:36:45.620 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=legal_hold
+22:36:45.627 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=legal_hold
+22:36:45.775 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=export_failed
+22:36:45.856 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=verify_failed
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.430 s -- in com.objwww.pr.control.it.PostgresArchiveIT
+[INFO] Running com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.343 s -- in com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Running com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.740 s -- in com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.720 s -- in com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] Running com.objwww.pr.control.it.AlertRunBudgetLedgerIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.774 s -- in com.objwww.pr.control.it.AlertRunBudgetLedgerIT
+[INFO] Running com.objwww.pr.control.it.AlertDagPromotionIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.239 s -- in com.objwww.pr.control.it.AlertDagPromotionIT
+[INFO] Running com.objwww.pr.control.it.PostgresCanaryRoutingIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.266 s -- in com.objwww.pr.control.it.PostgresCanaryRoutingIT
+[INFO] Running com.objwww.pr.control.it.AlertClaimIT
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.675 s -- in com.objwww.pr.control.it.AlertClaimIT
+[INFO] Running com.objwww.pr.control.it.PostgresRetentionIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.323 s -- in com.objwww.pr.control.it.PostgresRetentionIT
+[INFO] Running com.objwww.pr.control.it.AlertRcaEventIT
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.682 s -- in com.objwww.pr.control.it.AlertRcaEventIT
+[INFO] Running com.objwww.pr.control.it.AlertGenerationFenceIT
+22:36:50.931 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T14:36:50.930813567Z","decision":"STALE_GENERATION","run_id":"1b97e350-444e-4ec4-b320-aafda1dc4824","task_id":"9736e442-8ac5-4ad6-af45-ef4d5842f9b3","attempt_id":"0125dc64-d1e3-4cb7-a817-0bd90a80ec1d","run_state":"SUPERSEDED"}
+22:36:50.931 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 9736e442-8ac5-4ad6-af45-ef4d5842f9b3 旧代结果作废（run 1b97e350-444e-4ec4-b320-aafda1dc4824 state=SUPERSEDED），task→STALE 零落档
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.187 s -- in com.objwww.pr.control.it.AlertGenerationFenceIT
+[INFO] Running com.objwww.pr.control.it.AlertEvidenceSnapshotIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.226 s -- in com.objwww.pr.control.it.AlertEvidenceSnapshotIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 115, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ control-app ---
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.480 s]
+[INFO] shared-kernel ...................................... SUCCESS [  5.892 s]
+[INFO] control-app ........................................ SUCCESS [ 54.542 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:01 min
+[INFO] Finished at: 2026-09-08T22:36:51+08:00
+[INFO] ------------------------------------------------------------------------
