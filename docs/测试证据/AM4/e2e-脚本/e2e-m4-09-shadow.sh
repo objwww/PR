@@ -73,16 +73,17 @@ SHADOW_EVIDENCE=$(e4_sql "select count(*) from rca_evidence where run_id='$SHADO
 e4_assert_eq "② 影子 run 证据归属影子 run（隔离）" \
     "$([ "$SHADOW_EVIDENCE" -gt 0 ] && echo yes || echo no)" "yes"
 
-# ② 预算/账本隔离：rca_tool_invocation 的影子调用不落在 Holmes run 上
+# ② 预算/账本隔离（195 实证校准）：rca_tool_invocation 只由影子/Native 链写入
+#    （holmes 主链工具在 holmesgpt 容器内执行，AM4 侧工具账本零行；holmes 预算
+#    面 = rca_attempt usage 与 litellm SpendLogs）——隔离即"账本行全部归属影子 run"
 TOOL_ROWS_HOLMES=$(e4_sql "
     select count(*) from rca_tool_invocation where run_id='$HOLMES_RUN_ID'")
 TOOL_ROWS_SHADOW=$(e4_sql "
     select count(*) from rca_tool_invocation where run_id='$SHADOW_RUN_ID'")
 e4_assert_eq "② 影子工具有独立账本行" \
     "$([ "$TOOL_ROWS_SHADOW" -gt 0 ] && echo yes || echo no)" "yes"
-e4_assert_eq "② 两 run 账本行集互斥（run_id 主维度隔离）" \
-    "$(e4_sql "select count(distinct run_id) from rca_tool_invocation
-               where run_id in ('$HOLMES_RUN_ID','$SHADOW_RUN_ID')")" "2"
+e4_assert_eq "② 账本行零串写（holmes 主链零工具账本行）" \
+    "$TOOL_ROWS_HOLMES" "0"
 
 # ③ Holmes 主路径完好：报告落库且 STATE 终态
 HOLMES_REPORT=$(e4_sql "
