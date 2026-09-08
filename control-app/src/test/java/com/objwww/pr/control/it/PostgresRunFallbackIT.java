@@ -156,28 +156,17 @@ class PostgresRunFallbackIT extends PostgresITBase {
 
     @Test
     void publicationWinnerCasHasSingleWinnerUnderRace() throws Exception {
-        // 种 run+task+attempt 链：败者报告经真仓储落档（FK 链完整，INV-AM3-7 诚实记账面）
-        UUID incidentId = seedIncidentOnly("fbwinner");
-        UUID runId = UUID.randomUUID();
-        runs.insert(new RcaRun(runId, incidentId, 0, RunTrigger.INITIAL, RcaRunState.SUCCEEDED,
-                Digest.sha256Of("it-fb-winner"), Instant.now(), Instant.now(), Instant.now(),
-                Instant.now(), null));
-        UUID taskId = UUID.randomUUID();
-        tasks.insert(new RcaTask(taskId, runId, RcaTask.HOLMES_INVESTIGATE, RcaTaskState.DONE,
-                100, Instant.now(), Instant.now(), Instant.now(), null, null, 0, 1, 3,
-                Instant.now(), Instant.now()));
-        UUID attemptId = UUID.randomUUID();
-        attempts.insert(new RcaAttempt(attemptId, taskId, 1, 0, "it",
-                RcaAttemptStatus.SUCCEEDED, null, null, null, Instant.now(),
-                Instant.now(), null));
+        // 种 run+task+attempt+报告链：winner 行有真 FK（winner_report_id/winner_run_id
+        // references rca_report/rca_run）——claim 必须指真实行（生产面在 reports.insert 后调用）
+        WinnerSeed seed = seedWinnerChain("fbwinner");
 
         ExecutorService pool = Executors.newFixedThreadPool(20);
         AtomicInteger won = new AtomicInteger();
         try {
             List<java.util.concurrent.Future<Boolean>> futures =
                     IntStream.range(0, 20)
-                            .mapToObj(i -> pool.submit(() -> winners.claimWinner(incidentId, 0,
-                                    UUID.randomUUID(), UUID.randomUUID(), Instant.now())))
+                            .mapToObj(i -> pool.submit(() -> winners.claimWinner(seed.incidentId(),
+                                    0, seed.reportId(), seed.runId(), Instant.now())))
                             .toList();
             for (var future : futures) {
                 if (future.get(30, TimeUnit.SECONDS)) {
@@ -190,15 +179,15 @@ class PostgresRunFallbackIT extends PostgresITBase {
         assertThat(won.get()).as("并发 claim 恰一赢家").isEqualTo(1);
         assertThat(count("report_generation_winner")).isEqualTo(1);
 
-        // 败者报告仍落档（诚实记账），但夺不到赢家位
+        // 败者报告仍落档（诚实记账），但夺不到赢家位（PK 已占，ON CONFLICT DO NOTHING）
         UUID loserReport = UUID.randomUUID();
-        reports.insert(new RcaReport(loserReport, runId, attemptId, 1,
+        reports.insert(new RcaReport(loserReport, seed.runId(), seed.attempt2(), 1,
                 ValidationStatus.STRUCTURE_VALIDATED, List.of(), "{}", "raw", "m",
                 0, 0, 0, true, Instant.now()));
-        assertThat(winners.claimWinner(incidentId, 0, loserReport, runId, Instant.now()))
-                .isFalse();
-        assertThat(winners.findWinnerReportId(incidentId, 0)).isNotEqualTo(loserReport);
-        assertThat(count("rca_report")).as("败者报告仍落档").isEqualTo(1);
+        assertThat(winners.claimWinner(seed.incidentId(), 0, loserReport, seed.runId(),
+                Instant.now())).isFalse();
+        assertThat(winners.findWinnerReportId(seed.incidentId(), 0)).contains(seed.reportId());
+        assertThat(count("rca_report")).as("败者报告仍落档").isEqualTo(2);
     }
 
     @Test
@@ -206,8 +195,8 @@ class PostgresRunFallbackIT extends PostgresITBase {
         Seed seed = seedNativeFailedRun("fbgrant", 0);
         controlTx.executeWithoutResult(status -> fallback.tryCastFromFailedNative(
                 runs.findById(seed.runId()).orElseThrow(), "TIMEOUT", 1));
-        winners.claimWinner(seed.incidentId(), 0, UUID.randomUUID(), seed.runId(),
-                Instant.now());
+        WinnerSeed w = seedWinnerChain("fbgrant-winner");
+        winners.claimWinner(w.incidentId(), 0, w.reportId(), w.runId(), Instant.now());
 
         // 授权纪律（V33 revoke）：control_app 无 UPDATE/DELETE——栅栏行不可改写
         assertThatThrownBy(() -> controlJdbc.sql(
@@ -230,6 +219,35 @@ class PostgresRunFallbackIT extends PostgresITBase {
     // ------------------------------------------------------------------ 种子
 
     private record Seed(UUID incidentId, UUID runId) {
+    }
+
+    /** winner 链种子：incident+run+task+双 attempt+报告（winner 行 FK 全真） */
+    private record WinnerSeed(UUID incidentId, UUID runId, UUID attempt2, UUID reportId) {
+    }
+
+    private WinnerSeed seedWinnerChain(String tag) {
+        UUID incidentId = seedIncidentOnly(tag);
+        UUID runId = UUID.randomUUID();
+        runs.insert(new RcaRun(runId, incidentId, 0, RunTrigger.INITIAL, RcaRunState.SUCCEEDED,
+                Digest.sha256Of("it-" + tag), Instant.now(), Instant.now(), Instant.now(),
+                Instant.now(), null));
+        UUID taskId = UUID.randomUUID();
+        tasks.insert(new RcaTask(taskId, runId, RcaTask.HOLMES_INVESTIGATE, RcaTaskState.DONE,
+                100, Instant.now(), Instant.now(), Instant.now(), null, null, 0, 1, 3,
+                Instant.now(), Instant.now()));
+        UUID attempt1 = UUID.randomUUID();
+        attempts.insert(new RcaAttempt(attempt1, taskId, 1, 0, "it",
+                RcaAttemptStatus.SUCCEEDED, null, null, null, Instant.now(),
+                Instant.now(), null));
+        UUID attempt2 = UUID.randomUUID();
+        attempts.insert(new RcaAttempt(attempt2, taskId, 2, 0, "it",
+                RcaAttemptStatus.SUCCEEDED, null, null, null, Instant.now(),
+                Instant.now(), null));
+        UUID reportId = UUID.randomUUID();
+        reports.insert(new RcaReport(reportId, runId, attempt1, 1,
+                ValidationStatus.STRUCTURE_VALIDATED, List.of(), "{}", "raw", "m",
+                0, 0, 0, true, Instant.now()));
+        return new WinnerSeed(incidentId, runId, attempt2, reportId);
     }
 
     private Seed seedNativeFailedRun(String tag, int generation) {
