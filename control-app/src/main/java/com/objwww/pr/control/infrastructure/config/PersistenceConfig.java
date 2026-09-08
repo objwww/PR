@@ -238,6 +238,15 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.release.application.ConfigBundleService(repository);
     }
 
+    // M5-10 Canary 决策审计追加面（V25；BA-45：195 真启动实证装配缺口——canaryRouter
+    // 依赖本 bean 而 M5-10 只交付了实现类，IT 手工 new 不能替代 Spring 装配面证据）
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.CanaryDecisionLogRepository canaryDecisionLogRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresCanaryDecisionLogRepository(
+                jdbc);
+    }
+
     // ---------------- AM5 处置域（V26，M5-11 装配；HTTP 面 = M5-12 Operator API） ----------------
 
     @Bean
