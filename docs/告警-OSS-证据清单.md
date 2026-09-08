@@ -184,8 +184,8 @@
 ## E-17 M5 发布门与运维源码级调研（2026-09-06，源码级）【AM5 设计素材】
 
 - **报告**：`docs/告警-调研-M5发布门与运维-v1.md`（12 仓浅克隆逐仓源码核查，commit 经 git rev-parse 核实；细节留档 `var/m5-research/src-detail.md`，克隆仓 `var/m5-research/repos/` 约 880M 未提交 git；取证经 127.0.0.1:7890 代理）。
-- 关键先例：Unleash murmur3(`groupId:id`) 稳定分桶 + flagd 无模偏公式 `(hash*totalWeight)>>32`（fractional.go:196-207）——**Unleash 无 stickiness key 时 random 回退是坑**（flexible-rollout-strategy.ts:26-28），本项目改拒绝放量；Inspect AI cluster bootstrap C/(C-1) 无偏校正（std.py:109-115）+ seed 仅部分 provider 支持须单列 provider fingerprint；OPA bundle 单事务原子激活（plugin.go:607-660）+ decision_id 审计 + EventV1 决策日志带 bundle revision；alerta ISA 18.2 action 驱动状态机（isa_18_2.py:99-140）+ keep (tenant,fingerprint) FOR UPDATE 幂等合并（db.py:5690-5706，但认领无并发保护须自加固 CAS）；PG NOTIFY 三边界（<8000B/8GB 队列/断连丢失）→ 只作唤醒、真身走表+after_seq 游标（Unleash delta API 回放先例）；`DETACH PARTITION CONCURRENTLY`+pg_partman keep_table 支撑"导出校验后 detach、失败不删热数据"，分区表唯一约束必须含分区键；Spring Cloud Config 兼容线已 EOL 不引入。
-- 未核实澄清：**RCA-100 数据集不存在**（phamquiluan/RCAEval 实为 RE1/2/3 共 735 例，microsoft/RCAEval 404）；中文分词 zhparser 现状、HNSW 内存需 195 实测定门。
+- 关键先例：Unleash murmur3(`groupId:id`) 稳定分桶 + flagd 无模偏公式 `(hash*totalWeight)>>32`（fractional.go:196-207）——**Unleash 无 stickiness key 时 random 回退是坑**（flexible-rollout-strategy.ts:26-28），本项目改拒绝放量；Inspect AI clustered SE 的 C/(C-1) 有限 cluster 修正（std.py:109-115）+ seed 仅部分 provider 支持须单列 provider fingerprint——【v1.1 澄清，2026-09-06 G1 评审】C/(C-1) 属 clustered SE 修正，cluster bootstrap 整组重采样不再套该修正，两算法不可混写；OPA bundle 单事务原子激活（plugin.go:607-660）+ decision_id 审计 + EventV1 决策日志带 bundle revision【v1.1：OPA 本体本期延期不引入，仅抄 ConfigBundle 四件套机制】；alerta ISA 18.2 action 驱动状态机（isa_18_2.py:99-140）+ keep (tenant,fingerprint) FOR UPDATE 幂等合并（db.py:5690-5706，但认领无并发保护须自加固 CAS）；PG NOTIFY 三边界（<8000B/8GB 队列/断连丢失）→ 只作唤醒、真身走表+after_seq 游标（Unleash delta API 回放先例）；`DETACH PARTITION CONCURRENTLY`+pg_partman keep_table 支撑"导出校验后 detach、失败不删热数据"，分区表唯一约束必须含分区键；Spring Cloud Config 与本项目 Boot 3.4.5 对应的 2024.0 release train 已退出 OSS 支持且模型不匹配，不引入【v1.1 措辞修正：产品仍在维护，非"已 EOL"】。
+- 未核实澄清：~~**RCA-100 数据集不存在**（phamquiluan/RCAEval 实为 RE1/2/3 共 735 例，microsoft/RCAEval 404）~~【v1.1 推翻，2026-09-06 G1 评审 P0】三个项目被混淆：**RCA-100=阿里云 STAROps RCA-Bench**（103 例 Agentic Ops 故障，v1.1 现行，带 cause/boundary/process 评分协议，answer key 受控需授权核查，sls.aliyun.com/doc/starops/benchmark/rca/rca_benchmark_dataset.html）；**RCAEval=phamquiluan/RCAEval**（RE1/2/3 共 735 例，支持按 Case 下载 Parquet 子集）；**OpenRCA=microsoft/OpenRCA**（微软 LLM RCA Benchmark，不叫 RCAEval）。冻结架构 v1.2（line 761）本就写"RCAEval 小子集静态回放 + RCA-100 Adapter 外部一致性集"。AM5 数据集口径：订单域私有集=主质量门、RCA-100 v1.1 Adapter=辅助门（PUBLIC_BENCHMARK 不冒充 HOLDOUT）、RCAEval RE2/RE3 子集=辅助回归；中文分词 zhparser 现状、HNSW 内存需 195 实测定门。
 
 ## E-16 Harness 与 M4 机制源码级调研（2026-09-06，11 路并行 agent）【AM4 设计素材，源码级】
 
@@ -194,7 +194,18 @@
 - **取证降级声明**：本机 GitHub 直连与 127.0.0.1:7890 代理均不通（2026-09-06），全部仓库经 gh-proxy/codeload 镜像取源码快照，commit SHA 经 GitHub API 逐仓核实记录；星数经 API/shields.io。
 - 关键源码证据示例：Codex `SafetyCheck` 三态（codex-rs/core/src/safety.rs:17）；Gemini TOML 五档优先级+deny 剔工具（packages/core/src/policy/）；OpenCode doom_loop 三连熔断（processor.ts:354-381）；HolmesGPT 双池分离 5/10（env_vars.py:221-234）、spill 双阈值 min(15%,25k)；Keep 双哈希三分支（alert_deduplicator.py:61-116）；Bucket4j PG FOR UPDATE 原子扣减（PostgreSQLSelectForUpdateBasedProxyManager.java:69）；in-toto Statement 三段式 + rekor digest 对 canonical 字节算（entries.go:184/352）；Iceberg snapshot 不可变+CAS（SnapshotProducer.java:480-536）。
 
-## 195 注册表实测记录（2026-09-03，主会话执行）
+## E-18 前端图形库与 UI 语言口径调研（2026-09-07；v1.1 同日评审修正引证与措辞）【前端设计素材】
+
+- **DAG/图渲染选型：Vue Flow（`@vue-flow/core`）+ dagre 自动布局【采纳】**：Vue 3 原生组件、MIT、支持节点事件；维护者明确"布局不是内置能力"，需外接 dagre/ELK 等布局器，官方讨论区有 dagre 示例（discussions/1039）。本项目 DAG 是只读状态投影（节点色=任务状态、点击节点联动事件流），不需要图编辑能力。
+  来源：https://vueflow.dev、https://github.com/bcakmakoglu/vue-flow/discussions/1039【明示】
+  ~~（v1 曾引 React Flow auto-layout 页作组合证据）~~【v1.1 更正】该页是 **React Flow Pro 示例**，不作 Vue Flow 官方组合证据，仅作 xyflow 家族同族参考。
+- **AntV X6【不采用】**：定位图编辑引擎（拖拽编辑/连线桩/插件体系），只读 DAG 投影场景能力过剩；供应链事件属实——2026-05-19 mini Shai-Hulud 攻击中 `@antv/x6` 恶意版本包括 **3.2.7 与 3.3.7**（CI/CD 凭据窃取）。
+  来源：https://osv.dev/vulnerability/MAL-2026-3839、Microsoft 安全博客 2026-05-20（mini-shai-hulud-compromised-antv-npm-packages）【明示】
+- **mermaid【不采用】**：~~点击交互做不到~~【v1.1 更正】官方支持节点 click callback；真实出局理由 = 状态频繁更新需重新生成或额外维护 SVG，与 Vue 状态、选中态、事件流联动不够自然。
+  来源：https://mermaid.js.org/syntax/flowchart.html【明示】
+- **cytoscape.js【不采用】**：~~偏科研分析所以做不了~~【v1.1 更正】其支持事件、运行时样式与多种布局；不选理由 = API 面与能力规模超出只读 DAG 需求，不为够用场景引入大依赖。
+  来源：https://js.cytoscape.org/【明示】
+- **中文显示口径【v1.1 升级为契约，原为经验现象】**：评审坐实现状——Holmes schema 仅有中文字段说明，硬指令只要求纯 JSON，未要求字段值中文（HolmesInvestigationExecutor.java:347 区域）。冻结为：① 机器码（event_type/reason_code/fault_type/canonical 根因码）英文不变（稳定契约，评分不受影响）；② UI 中文名来自版本化词典新增的 display_name_zh 字段；③ prompt 增加硬指令要求 summary/impact/remediation/evidence 字段值使用简体中文；④ 新增中文输出契约测试 + 非中文降级策略（检测违规→按预算重试一次→仍违规则原文展示并落 language 诊断事件）。
 
 | 注册表 | 结果 | 证据 |
 |---|---|---|
@@ -205,3 +216,31 @@
 
 > ~~待办：`docs/告警-调研-Keep替代-v1.md`（Alerta/Karma/Zabbix 等交叉核查）落地后，若与 E-7/E-8 冲突，以一手文档复核为准并在此留处置痕迹。~~
 > **已处置（2026-09-03）**：交叉调研 `docs/告警-调研-Keep替代-v1.md` 落地。处置结果：① E-8 夜莺由"对照组"降级为"出局"（无 AM webhook 入站能力，主会话复核支持）；② 新增 E-11 Alerta 进入 A/B 候选 1；③ E-7 HertzBeat 保留为候选 2，其"收 AM 告警"两方结论一致，RSS 与 webhook-out 粒度仍待部署实测；④ Karma 出局（只读 dashboard 且仅 ghcr）；Keep 再核确认无 docker.io/ghcr 渠道、7.5G 机器上无法本地构建 UI（需 8G Node 堆）。A/B 从"HertzBeat vs 夜莺"更正为"Alerta vs HertzBeat"，已同步进 `docs/告警AM0-部署验证设计.md` v1.1。
+
+## E-20 M6 渐进发布与引擎退场源码级调研（2026-09-08，源码级）【AM6 设计素材；原 E-19 与前端 UI 调研冲突，已纠号】
+
+载体：`docs/告警-调研-M6渐进发布与引擎退场-v1.md`（9 对象，官方文档+源码全文级，来源清单见该文附录）。
+
+- **晋升窗三段式结论（Success/Failed/Inconclusive 停档等人工）【采纳】**：Argo Rollouts analysis 机制骨架（窗口期+指标门+abort 即回退）；不抄其固定节奏自动升档（pause duration/stepWeight）——升档条件=证据达标而非时间到。
+  来源：https://argoproj.github.io/argo-rollouts/features/analysis/【明示】
+- **critical 一票否决 + scored 观察层 两层判定【采纳】**：Kayenta（Netflix ACA Judge）分类结构；不抄 Mann-Whitney 统计栈——1%/10% 档样本量撑不起检验功效，本项目 M5 已冻结 cluster bootstrap 口径。
+  来源：https://github.com/spinnaker/kayenta（NetflixACAJudge.scala / MannWhitneyClassifier.scala）【明示】
+- **flagd fractional 分桶契约同构确认【保持】**：`fractional.go` 全文核对——本项目 CanaryBucketer 与 flagd 同构（murmur3 seed=0 + 无模偏公式），且"缺 stickiness key 拒绝放量"比 flagd nil 兜底更严，保持不放宽；放量用 totalWeight=100 整数权重靠前缀单调性只进不出。
+  来源：https://github.com/open-feature/flagd（core/pkg/evaluator/fractional.go）【明示】
+- **对照期=Scientist 数据模型 + 异步执行【采纳，带红线】**：control/candidate 比对、mismatch 带 context 落库、ignore 白名单；红线=绝不同请求同步双跑（撞预算硬门），抽样率+spend limit 异步旁路为唯一合法形态。
+  来源：https://github.com/github/scientist、https://github.blog（Scientist 1.0 / Move Fast and Fix Things）【明示】
+- **噪声带判定（Diffy+Scientist 双源印证）【采纳】**："不劣化"=引擎间差异 − Holmes 自差异 ≤ 容忍带；先跑 Holmes 自比对校准底噪再定阈值。
+  来源：https://github.com/twitter-archive/diffy【明示】
+- **Strangler Fig 退场五拍子【采纳】**：依赖扫描→恢复演练→回滚制品→物理摘除→历史可读；删除独立成任务、soak 期回切开关全程保留。
+  来源：https://learn.microsoft.com/en-us/azure/architecture/patterns/strangler-fig【明示】
+- **SRE Workbook Ch.16 准则【采纳】**：档位按代表性 Run 数而非墙钟（墙钟只做下限保护）；看板 split by engine；一次一档；禁 before/after 时间对比；切流门指标个位数。
+  来源：https://sre.google/workbook/canarying-releases/【明示】
+- **LLM 评估事实标准三段式【串联采纳】**：offline 金标并排（=M5 HOLDOUT 配对试验已冻结）+ online reference-free 采样（sampling rate+spend limit=HolmesShadowSampler 形态）+ 问题 Run 回流金标（=M5-03 Golden Candidate 通道）。
+  来源：https://docs.langchain.com/langsmith/evaluation-concepts、https://langfuse.com/docs/evaluation/overview【明示】
+- **本体一律不引入【裁定】**：Argo/Flagger/Kayenta 需 K8s；Diffy 已归档且需代理层；LangSmith/Langfuse 为整栈平台（2C4G 承载不起）——只抄机制与数据模型，落码零新依赖。
+- **v1.1 独立复核修正【采纳】**：Google SRE 明示真实生产流量可暴露人工测试遗漏，Argo dry-run 指标不影响 rollout，因此 DRILL/REPLAY 与 LIVE_CANARY 必须数据级隔离，E2E 注入不可作为晋升样本；SRE 同时要求绝对度量，故每窗既比同时段 Holmes control 又查 absolute SLO，防双侧共同恶化。
+  来源：https://sre.google/workbook/canarying-releases/、https://argoproj.github.io/argo-rollouts/features/analysis/【明示】
+- **退场回滚语义修正【采纳】**：Strangler Fig 把 legacy removal 定位为依赖迁完后的最终刻意步骤，完全移除会显著提高 restore/replay 风险；M6-06 增 drain barrier，M6-07 后只承诺经演练制品按 RTO/RPO 恢复，不再称“一键回切”。
+  来源：https://learn.microsoft.com/en-us/azure/architecture/patterns/strangler-fig【明示】
+- **Scientist 适配边界【采纳】**：只借 control/candidate、mismatch context 与 control-vs-control 底噪；其 README 明示 read-only 更安全且 candidate timeout 不受框架保护，本项目生产反向 Shadow 改用 PG 持久工作/租约/预算，不采用请求内双跑或一次性 runner。
+  来源：https://github.com/github/scientist/blob/main/README.md【明示+项目适配推断】
