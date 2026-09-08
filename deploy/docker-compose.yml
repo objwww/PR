@@ -230,6 +230,10 @@ services:
       - no-new-privileges:true
     networks:
       - internal
+      # 部署段适配：导出上游 = demo 栈 collector（opentelemetry-demo 外部网，
+      # 195 实布面）；C-20 隔离的是配置面非网络面——上游不可达只丢遥测不改业务
+      # （INV-AM5-8，E2E-AM5-08 切断场景即断此网向）
+      - otel-demo-upstream
     deploy:
       resources:
         limits:
@@ -250,3 +254,6 @@ networks:
     external: true   # AM2 chaos 管理面私网(deploy/alert 侧孤立；预先 create --internal)
   alert-ab:
     external: true   # echo-receiver(测试机器人)所在网（G0 起）；预先 create
+  otel-demo-upstream:
+    external: true
+    name: opentelemetry-demo   # demo 栈 collector 网（195 实布；otelcol-control 导出上游）
