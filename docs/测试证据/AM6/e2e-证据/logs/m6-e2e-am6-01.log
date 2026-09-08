@@ -1,0 +1,19 @@
+[AM6] E2E-AM6-01 开始 suite=20260908T175148Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T175148Z-am6-01
+[AM6] phase0 前置：nativeReady=true + 发布 1% bundle
+[AM6]   激活前指针（回滚靶）D_PREV=1b90e9bcac755ac34e24db24e95dac8bb93360e77c62c869eb99c0570dae07db
+[AM6]   1% bundle digest=1b90e9bcac755ac34e24db24e95dac8bb93360e77c62c869eb99c0570dae07db
+[AM6] phase1 固定向量注入 5 键（非白名单，percent=1）
+[AM6] phase1 PASS（5/5 决策∈{BUCKETED_HOLMES,BUCKETED_NATIVE} 且 engine 对齐）
+[AM6] phase2 murmur3 独立实现对拍（vector.tsv 共 5 键）
+[AM6] phase2 PASS（/opt/projects/pr_agent_it/e2e-am6/runs/20260908T175148Z-am6-01/murmur-check.txt）
+[AM6] phase3 白名单直达全链（WHITELISTED → NATIVE → SUCCEEDED）
+[AM6]   NATIVE run=4aea1216-89fd-4577-9362-0af324b3c75a（真栈 worker 驱动，超时 300s）
+[AM6] phase3 PASS（全链九断言齐：决策/引擎终态/报告/发布/外发/驱动任务/DAG 终态；replay MISS 降级 DEAD 不阻断）
+[AM6] phase4 黏性只进不出（s3 resolve → 复燃）
+[AM6] phase4 PASS（同键两行同桶 b1=b2=6，且==murmur3 重算）
+[AM6] phase5 回退：rollback → 新 run 全 HOLMES + 历史 NATIVE digest 不变
+[AM6]   回滚靶 digest=0041382295ae4dc989c757a5866a566cc7e3c6806a5ae8db2f19bfe38c195fda（回滚前指针 D_PREV=1b90e9bcac755ac34e24db24e95dac8bb93360e77c62c869eb99c0570dae07db）
+[AM6] phase5 PASS（回滚只影响新 Run；phase3 NATIVE run=4aea1216-89fd-4577-9362-0af324b3c75a digest 固定 1b90e9bcac755ac34e24db24e95dac8bb93360e77c62c869eb99c0570dae07db）
+[AM6] phase6 晋升窗排除实证（M6-01 无采集适配器=装配事实）
+[AM6] phase6 PASS（零样本/零 LIVE 判定；DRILL 不占晋升链语义=IT 案③ CanaryWindowPromotionIT 钉死）
+[AM6] E2E-AM6-01 PASS（suite=20260908T175148Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T175148Z-am6-01）

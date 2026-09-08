@@ -1,0 +1,8 @@
+OK   db_bucket=79 recomputed=79 decision=BUCKETED_HOLMES key=alertname=higherrorrate|service=am6e2e01-s1-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s1-20260908t175148z
+OK   db_bucket=20 recomputed=20 decision=BUCKETED_HOLMES key=alertname=higherrorrate|service=am6e2e01-s2-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s2-20260908t175148z
+OK   db_bucket=6 recomputed=6 decision=BUCKETED_HOLMES key=alertname=higherrorrate|service=am6e2e01-s3-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s3-20260908t175148z
+OK   db_bucket=20 recomputed=20 decision=BUCKETED_HOLMES key=alertname=higherrorrate|service=am6e2e01-s4-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s4-20260908t175148z
+OK   db_bucket=63 recomputed=63 decision=BUCKETED_HOLMES key=alertname=higherrorrate|service=am6e2e01-s5-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s5-20260908t175148z
+SUMMARY checked=5 bad=0
+OK   db_bucket=6 recomputed=6 decision=refire key=alertname=higherrorrate|service=am6e2e01-s3-20260908t175148z:alertname=higherrorrate|service=am6e2e01-s3-20260908t175148z
+SUMMARY checked=1 bad=0

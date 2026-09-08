@@ -1,0 +1,13 @@
+[AM6] E2E-AM6-00 开始 suite=20260908T173520Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T173520Z-am6-00 expect_native_ready=true
+[AM6] phase1 姿态面：canary/status 匿名 401 + 双态断言（期望=true）
+[AM6] phase1 PASS（nativeReady=true，响应已留证 status.json/status-anon.json）
+[AM6] phase2 percent=0 全 Holmes：发布→激活→注入→审计行对拍
+[AM6]   percent=0 bundle digest=fae7b46f48fea07fdb054dcb8c414104239eb13f5273beba9d64bdfd89f9f279
+[AM6] phase2 PASS（/opt/projects/pr_agent_it/e2e-am6/runs/20260908T173520Z-am6-00/phase2-p0-row.txt）
+[AM6] phase3 CANARY_DISABLED 对照：无 canary 段 bundle
+[AM6]   无 canary 段 bundle digest=558490fe178f1a02d5f377d8b8da36a9ed62dc43027c9f886e14df185f80a8a4
+[AM6] phase3 PASS（/opt/projects/pr_agent_it/e2e-am6/runs/20260908T173520Z-am6-00/phase3-nocanary-row.txt）
+[AM6] phase4 uq_rca_run_active_incident 索引回归（活库 indexdef）
+[AM6] phase4 PASS（REPORTING 在活跃集，REPORTING 并发铸造防线在位）
+[AM6] phase5 收尾：重激活 percent=0 基线（digest=fae7b46f48fea07fdb054dcb8c414104239eb13f5273beba9d64bdfd89f9f279）
+[AM6] E2E-AM6-00 PASS（suite=20260908T173520Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260908T173520Z-am6-00）

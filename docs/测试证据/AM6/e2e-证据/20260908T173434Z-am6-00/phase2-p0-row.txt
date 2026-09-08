@@ -1,0 +1,5 @@
+                                                      stickiness_key                                                       |    decision     | percent | canary_bucket | engine |  state  
+---------------------------------------------------------------------------------------------------------------------------+-----------------+---------+---------------+--------+---------
+ alertname=higherrorrate|service=am6e2e00-p0-20260908t173434z:alertname=higherrorrate|service=am6e2e00-p0-20260908t173434z | BUCKETED_HOLMES |       0 |            99 | HOLMES | RUNNING
+(1 row)
+

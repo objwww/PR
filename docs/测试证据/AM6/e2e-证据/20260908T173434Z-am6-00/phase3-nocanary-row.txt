@@ -1,0 +1,5 @@
+                run_id                |    decision     | stickiness_key | canary_bucket | engine 
+--------------------------------------+-----------------+----------------+---------------+--------
+ 5e536506-4b09-4698-b59b-45a8e9176dec | CANARY_DISABLED |                |               | HOLMES
+(1 row)
+

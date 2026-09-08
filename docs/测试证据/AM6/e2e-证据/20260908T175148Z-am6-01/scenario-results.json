@@ -1,0 +1,1 @@
+{"scenario":"E2E-AM6-01","name":"1% Canary 路由机制（白名单直进全链/murmur3 对拍/黏性只进不出/立即回退/晋升窗排除）","fidelity":"real-stack-195","status":"PASS","recorded_at":"2026-09-08T17:52:43Z"}

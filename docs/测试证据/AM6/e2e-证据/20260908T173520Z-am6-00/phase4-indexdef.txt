@@ -1,0 +1,5 @@
+                                                                                                                  indexdef                                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE UNIQUE INDEX uq_rca_run_active_incident ON public.rca_run USING btree (incident_id, engine) WHERE ((state)::text = ANY ((ARRAY['QUEUED'::character varying, 'RUNNING'::character varying, 'REPORTING'::character varying])::text[]))
+(1 row)
+
