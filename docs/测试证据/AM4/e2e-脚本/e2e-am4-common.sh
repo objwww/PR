@@ -124,12 +124,16 @@ e4_quiesce() {   # $1 = FAULT (F1|F2|F3)
     # v11：多轮注入会话可叠加（场景 10 同 fault 连注 5 次），v2 只 off 最新一条
     # 会残留 gauge（11 实证 gauge=6 firing 未回落）——有界循环逐个 off-only
     # （quiesce.py v3：只摘除不等待），最后无参调用统一等静止面。
+    # v12：循环查询剔除 RECOVERING——off 命中的会话进入 RECOVERING 后仍匹配
+    # v11 查询，desc limit 1 每轮重选同一条吃满 409，其下 ACTIVE 会话永远轮
+    # 不到（runall 020412Z 场景 11 gauge=2.0 超时实证）；RECOVERING 自行恢复
+    # 归零，由无参调用统一等静止面。
     i=0
     while [ $i -lt 8 ]; do
         active=$(e4_sql "
             select scenario_id || ' ' || generation from arena.oa_chaos_session
              where fault_type = '$fault'
-               and state in ('PREPARED','ACTIVE','RECOVERING')
+               and state in ('PREPARED','ACTIVE')
              order by created_at desc limit 1")
         [ -z "$active" ] && break
         # 故意词切分：quiesce.py F1 off <scenario_id> <generation>
