@@ -42,6 +42,19 @@ app:
     fallback:
       enabled: ${APP_ALERT_FALLBACK_ENABLED:true}
       daily-budget: ${APP_ALERT_FALLBACK_DAILY_BUDGET:20}
+    # M6-05 Holmes 只读对照期（V34 反向影子）：NATIVE SUCCEEDED run 确定性抽样 →
+    # 影子工作行 → SKIP LOCKED 认领补一轮 Holmes 对照执行 → V32 对照/底噪落账。
+    # enabled 缺省关（既有部署零惊扰）；独立预算与 canary/fallback 预算分账；
+    # lease 必须 > Holmes 最长在途窗（read-timeout 8min）
+    shadow:
+      holmes:
+        enabled: ${APP_ALERT_SHADOW_HOLMES_ENABLED:false}
+        daily-budget: ${APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET:20}
+        sample-rate: ${APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE:100}
+        max-attempts: ${APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS:3}
+        lease: ${APP_ALERT_SHADOW_HOLMES_LEASE:PT15M}
+        poll-interval: ${APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL:PT30S}
+        batch-size: ${APP_ALERT_SHADOW_HOLMES_BATCH_SIZE:2}
     # Holmes 常驻容器凭证桥接（BA-10①/G0-03）：Spring 不会自动把 HOLMES_API_KEY
     # 环境变量映射成 app.alert.holmes.api-key 属性，必须在 yml 显式占位。
     # compose 注入 HOLMES_BASE_URL / HOLMES_API_KEY；AlertFlowConfig 读 app.alert.holmes.*

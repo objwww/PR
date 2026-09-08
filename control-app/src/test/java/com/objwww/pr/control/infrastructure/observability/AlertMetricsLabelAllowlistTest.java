@@ -64,6 +64,23 @@ class AlertMetricsLabelAllowlistTest {
                 "outcome", "CAST").count()).isEqualTo(1.0);
         assertThat(registry.counter("rca_fallback_decision_total",
                 "outcome", "ALREADY_CAST").count()).isEqualTo(2.0);
+        // M6-05：holmes shadow 抽样/工作裁定入账（outcome = 封闭枚举）
+        metrics.holmesShadowSample("ENQUEUED");
+        metrics.holmesShadowSample("BUDGET_EXHAUSTED");
+        metrics.holmesShadowWork("COMPARISON_LANDED");
+        metrics.holmesShadowWork("COMPARISON_LANDED");
+        metrics.holmesShadowWork("CALIBRATION_LANDED");
+        metrics.holmesShadowWork("CAS_LOST");
+        assertThat(registry.counter("rca_holmes_shadow_sample_total",
+                "outcome", "ENQUEUED").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_holmes_shadow_sample_total",
+                "outcome", "BUDGET_EXHAUSTED").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_holmes_shadow_work_total",
+                "outcome", "COMPARISON_LANDED").count()).isEqualTo(2.0);
+        assertThat(registry.counter("rca_holmes_shadow_work_total",
+                "outcome", "CALIBRATION_LANDED").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_holmes_shadow_work_total",
+                "outcome", "CAS_LOST").count()).isEqualTo(1.0);
     }
 
     @Test
@@ -76,6 +93,8 @@ class AlertMetricsLabelAllowlistTest {
         metrics.attemptLatency(5, "HOLMES");
         metrics.engineComparison(true);
         metrics.fallbackDecision("INELIGIBLE_ERROR_CLASS");
+        metrics.holmesShadowSample("RATE_NOT_SELECTED");
+        metrics.holmesShadowWork("INCIDENT_BUSY");
 
         List<String> allowlist = List.of("decision", "validation", "engine", "disagree",
                 "outcome");

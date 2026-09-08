@@ -121,7 +121,9 @@ class RcaWorkerTest {
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP, CanaryRouter.holmesOnly(), fallback, stores.winners);
+                AlertMetrics.NOOP, CanaryRouter.holmesOnly(), fallback, stores.winners,
+                new HolmesShadowSampler(stores.runs, stores.shadowWorks, clock,
+                        AlertMetrics.NOOP, false, 20, 100, 3));
     }
 
     private RcaWorker newWorker(String owner) {

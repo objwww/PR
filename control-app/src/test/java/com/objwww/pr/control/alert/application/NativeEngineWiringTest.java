@@ -125,7 +125,13 @@ class NativeEngineWiringTest {
                 new FallbackService(stores.runs, stores.incidents, stores.tasks,
                         stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(), clock,
                         AlertMetrics.NOOP, true, 20),
-                stores.winners);
+                stores.winners, newSampler(true));
+    }
+
+    /** M6-05 影子抽样面（wiring 测试用真 Sampler；enabled 由用例裁定） */
+    HolmesShadowSampler newSampler(boolean enabled) {
+        return new HolmesShadowSampler(stores.runs, stores.shadowWorks, clock,
+                AlertMetrics.NOOP, enabled, 20, 100, 3);
     }
 
     private ReportCompletedNotifier notifier() {
@@ -313,6 +319,33 @@ class NativeEngineWiringTest {
         assertThat(stores.runs.all()).hasSize(1);
         assertThat(stores.tasks.all()).hasSize(1);
         assertThat(stores.rcaEvents.all()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("M6-05：NATIVE SUCCEEDED run 终态收尾点触发影子抽样入队（确定性 key + 失败 run 不入选）")
+    void nativeSuccessEnqueuesHolmesShadowWork() {
+        ScriptedExecutor nativeExec = new ScriptedExecutor();
+        RcaWorker worker = newWorker(Map.of(RcaEngine.NATIVE, nativeExec), "worker-a");
+
+        deliverFiring("checkout", "材料一");
+        nativeExec.succeedNext();
+        assertThat(worker.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        RcaRun source = stores.runs.all().get(0);
+        assertThat(source.state()).isEqualTo(RcaRunState.SUCCEEDED);
+        // 抽样命中：确定性 shadow_key 对照工作行入库（kind COMPARISON + 同快照同代）
+        assertThat(stores.shadowWorks.all()).hasSize(1);
+        var row = stores.shadowWorks.all().get(0);
+        assertThat(row.shadowKey())
+                .isEqualTo(HolmesShadowSampler.COMPARISON_KEY_PREFIX + source.id());
+        assertThat(row.kind()).isEqualTo("COMPARISON");
+        assertThat(row.nativeRunId()).isEqualTo(source.id());
+        assertThat(row.incidentId()).isEqualTo(source.incidentId());
+        assertThat(row.generation()).isEqualTo(source.generation());
+        assertThat(row.snapshotDigest()).isEqualTo(source.investigationHash().hex());
+        // 终态失败的同 incident run 不入选（由 fallback 面接管）
+        int before = stores.shadowWorks.all().size();
+        assertThat(before).isEqualTo(1);
     }
 
     // ------------------------------------------------------------------ 迷你认账面（CanaryRouterTest 同构）

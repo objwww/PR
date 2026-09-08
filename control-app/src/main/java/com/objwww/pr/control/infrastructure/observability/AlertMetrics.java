@@ -62,6 +62,18 @@ public final class AlertMetrics {
                 "outcome", safe(outcome)).increment();
     }
 
+    /** Holmes shadow 抽样裁定（M6-05）：outcome = HolmesShadowSampler.Outcome 封闭集 */
+    public void holmesShadowSample(String outcome) {
+        registry.counter("rca_holmes_shadow_sample_total",
+                "outcome", safe(outcome)).increment();
+    }
+
+    /** Holmes shadow 工作行处理裁定（M6-05）：outcome = HolmesShadowWorker.Outcome 封闭集 */
+    public void holmesShadowWork(String outcome) {
+        registry.counter("rca_holmes_shadow_work_total",
+                "outcome", safe(outcome)).increment();
+    }
+
     private static String safe(String value) {
         if (value == null || value.isBlank()) {
             return "unknown";

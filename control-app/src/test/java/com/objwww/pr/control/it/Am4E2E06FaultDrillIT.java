@@ -306,7 +306,11 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
                         SlaPolicy.defaults(), AlertClock.system(), AlertMetrics.NOOP,
                         true, 20),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(controlJdbc));
+                        .PostgresReportWinnerRepository(controlJdbc),
+                new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs,
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresHolmesShadowWorkRepository(controlJdbc),
+                        AlertClock.system(), AlertMetrics.NOOP, false, 20, 100, 3));
     }
 
     private AgentRegistry agentRegistry() {

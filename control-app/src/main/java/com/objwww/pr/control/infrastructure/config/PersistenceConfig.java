@@ -277,6 +277,14 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    // M6-05 Holmes shadow 持久工作面（V34；SKIP LOCKED 认领 + 租约 CAS，消费方 = HolmesShadowScheduler）
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository holmesShadowWorkRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresHolmesShadowWorkRepository(
+                jdbc);
+    }
+
     // ---------------- AM5 处置域（V26，M5-11 装配；HTTP 面 = M5-12 Operator API） ----------------
 
     @Bean

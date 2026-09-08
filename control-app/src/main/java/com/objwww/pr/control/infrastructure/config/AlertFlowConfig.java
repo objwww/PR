@@ -249,11 +249,13 @@ public class AlertFlowConfig {
                                                          .FallbackService fallback,
                                                  com.objwww.pr.control.alert.domain.repository
                                                          .ReportWinnerRepository winners,
+                                                 com.objwww.pr.control.alert.application
+                                                         .HolmesShadowSampler holmesShadowSampler,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
                 sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter,
-                fallback, winners);
+                fallback, winners, holmesShadowSampler);
     }
 
     /**
@@ -275,6 +277,55 @@ public class AlertFlowConfig {
         return new com.objwww.pr.control.alert.application.FallbackService(runs, incidents,
                 tasks, events, fallbacks, sla, AlertClock.system(), alertMetrics, enabled,
                 dailyBudget);
+    }
+
+    /**
+     * M6-05 Holmes 只读对照期（V34 反向影子）：NATIVE SUCCEEDED run 确定性抽样入队
+     * 影子工作。{@code app.alert.shadow.holmes.enabled} 缺省关（对既有部署零惊扰），
+     * 195 部署面显式开；独立预算与 canary/fallback 预算分账。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.HolmesShadowSampler holmesShadowSampler(
+            RcaRunRepository runs,
+            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
+            AlertMetrics alertMetrics,
+            @Value("${app.alert.shadow.holmes.enabled:false}") boolean enabled,
+            @Value("${app.alert.shadow.holmes.daily-budget:20}") int dailyBudget,
+            @Value("${app.alert.shadow.holmes.sample-rate:100}") int sampleRate,
+            @Value("${app.alert.shadow.holmes.max-attempts:3}") int maxAttempts) {
+        return new com.objwww.pr.control.alert.application.HolmesShadowSampler(runs, works,
+                AlertClock.system(), alertMetrics, enabled, dailyBudget, sampleRate,
+                maxAttempts);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.HolmesShadowWorker holmesShadowWorker(
+            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
+            RcaRunRepository runs,
+            IncidentRepository incidents,
+            RcaTaskRepository tasks,
+            RcaAttemptRepository attempts,
+            RcaTaskExecutor holmesInvestigationExecutor,
+            com.objwww.pr.control.release.domain.repository.EngineComparisonRepository comparisons,
+            com.objwww.pr.control.release.application.EngineComparisonRecorder recorder,
+            SlaPolicy sla,
+            AlertMetrics alertMetrics,
+            @Value("${app.alert.worker.owner:control-1}") String owner) {
+        return new com.objwww.pr.control.alert.application.HolmesShadowWorker(works, runs,
+                incidents, tasks, attempts, holmesInvestigationExecutor, comparisons,
+                recorder, sla, AlertClock.system(), alertMetrics, owner + "-holmes-shadow");
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.HolmesShadowScheduler holmesShadowScheduler(
+            com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository works,
+            com.objwww.pr.control.alert.application.HolmesShadowWorker worker,
+            @Value("${app.alert.shadow.holmes.lease:PT15M}") java.time.Duration lease,
+            @Value("${app.alert.shadow.holmes.poll-interval:PT30S}") java.time.Duration pollInterval,
+            @Value("${app.alert.shadow.holmes.batch-size:2}") int batchSize) {
+        return new com.objwww.pr.control.alert.application.HolmesShadowScheduler(works,
+                worker, AlertClock.system(), "control-1-holmes-shadow", lease,
+                pollInterval, batchSize);
     }
 
     // ---------------- AM5 M5-09/10：发布与切流（release 域路由决策） ----------------
@@ -424,9 +475,10 @@ public class AlertFlowConfig {
         return new com.objwww.pr.control.alert.application.DagExecutionService(edges, tasks);
     }
 
-    /** 两个消费循环（inbox 投影 + RCA worker）随容器启停（T10 部署启动真执行链） */
+    /** 消费循环（inbox 投影 + RCA worker + M6-05 holmes shadow）随容器启停（T10 部署启动真执行链） */
     @Bean
-    public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker) {
+    public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
+            com.objwww.pr.control.alert.application.HolmesShadowScheduler holmesShadowScheduler) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -434,12 +486,14 @@ public class AlertFlowConfig {
             public void start() {
                 inboxProcessor.start();
                 rcaWorker.start();
+                holmesShadowScheduler.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                holmesShadowScheduler.stop();
                 rcaWorker.stop();
                 inboxProcessor.stop();
             }

@@ -71,6 +71,7 @@ public final class AlertInMemoryStores {
     public final Cas cas = new Cas();
     public final Fallbacks fallbacks = new Fallbacks();
     public final Winners winners = new Winners();
+    public final ShadowWorks shadowWorks = new ShadowWorks();
 
     // ------------------------------------------------------------------ alert_inbox
 
@@ -897,6 +898,112 @@ public final class AlertInMemoryStores {
 
         public synchronized int size() {
             return rows.size();
+        }
+    }
+
+    // ------------------------------------------------------------------ holmes_shadow_work（M6-05）
+
+    /**
+     * V34 工作面模拟：shadow_key 唯一（putIfAbsent）、认领 = LEASED + attempts/epoch
+     * 双 +1、(owner, epoch, LEASED) 三元 CAS 收口、EXHAUSTED 有界。行锁/SKIP LOCKED
+     * 由 Postgres IT 覆盖，此处单线程语义。
+     */
+    public static final class ShadowWorks
+            implements com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository {
+        private final Map<String, com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> rows =
+                new LinkedHashMap<>();
+        private long seq = 0;
+
+        /** 入队时间戳（测试可拨动——预算窗/租约过期场景） */
+        public volatile Instant now = Instant.now();
+
+        @Override
+        public synchronized boolean enqueue(
+                com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow row) {
+            var created = new com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow(
+                    ++seq, row.shadowKey(), row.kind(), row.nativeRunId(), row.incidentId(),
+                    row.generation(), row.snapshotDigest(), "QUEUED", 0, row.maxAttempts(),
+                    null, null, 0, null, null, this.now, this.now);
+            return rows.putIfAbsent(row.shadowKey(), created) == null;
+        }
+
+        @Override
+        public synchronized long countCreatedSince(Instant after) {
+            return rows.values().stream().filter(r -> !r.createdAt().isBefore(after)).count();
+        }
+
+        @Override
+        public synchronized Optional<com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> findByShadowKey(
+                String shadowKey) {
+            return Optional.ofNullable(rows.get(shadowKey));
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> claimBatch(
+                String owner, Instant now, Duration lease, int limit) {
+            List<com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> claimable =
+                    rows.values().stream()
+                            .filter(r -> r.attempts() < r.maxAttempts())
+                            .filter(r -> r.state().equals("QUEUED") || r.state().equals("FAILED")
+                                    || (r.state().equals("LEASED") && r.leaseUntil() != null
+                                            && r.leaseUntil().isBefore(now)))
+                            .sorted(Comparator.comparing(
+                                    com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow::createdAt))
+                            .limit(limit)
+                            .toList();
+            List<com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> out =
+                    new ArrayList<>();
+            for (var r : claimable) {
+                var claimed = new com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow(
+                        r.id(), r.shadowKey(), r.kind(), r.nativeRunId(), r.incidentId(),
+                        r.generation(), r.snapshotDigest(), "LEASED", r.attempts() + 1,
+                        r.maxAttempts(), owner, now.plus(lease), r.leaseEpoch() + 1,
+                        r.tokensSpent(), r.lastError(), r.createdAt(), now);
+                rows.put(r.shadowKey(), claimed);
+                out.add(claimed);
+            }
+            return out;
+        }
+
+        @Override
+        public synchronized int complete(long id, String owner, int leaseEpoch,
+                Integer tokensSpent, Instant now) {
+            var r = findById(id);
+            if (r == null || !r.state().equals("LEASED") || !owner.equals(r.leaseOwner())
+                    || r.leaseEpoch() != leaseEpoch) {
+                return 0;
+            }
+            rows.put(r.shadowKey(), new com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow(
+                    r.id(), r.shadowKey(), r.kind(), r.nativeRunId(), r.incidentId(),
+                    r.generation(), r.snapshotDigest(), "SUCCEEDED", r.attempts(),
+                    r.maxAttempts(), r.leaseOwner(), r.leaseUntil(), r.leaseEpoch(),
+                    tokensSpent, r.lastError(), r.createdAt(), now));
+            return 1;
+        }
+
+        @Override
+        public synchronized int markFailed(long id, String owner, int leaseEpoch,
+                String error, Instant now) {
+            var r = findById(id);
+            if (r == null || !r.state().equals("LEASED") || !owner.equals(r.leaseOwner())
+                    || r.leaseEpoch() != leaseEpoch) {
+                return 0;
+            }
+            String state = r.attempts() >= r.maxAttempts() ? "EXHAUSTED" : "FAILED";
+            rows.put(r.shadowKey(), new com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow(
+                    r.id(), r.shadowKey(), r.kind(), r.nativeRunId(), r.incidentId(),
+                    r.generation(), r.snapshotDigest(), state, r.attempts(),
+                    r.maxAttempts(), r.leaseOwner(), r.leaseUntil(), r.leaseEpoch(),
+                    r.tokensSpent(), error, r.createdAt(), now));
+            return 1;
+        }
+
+        private com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow findById(long id) {
+            return rows.values().stream().filter(r -> r.id() == id).findFirst().orElse(null);
+        }
+
+        public synchronized List<com.objwww.pr.control.alert.domain.repository.HolmesShadowWorkRepository.ShadowWorkRow> all() {
+            return List.copyOf(rows.values());
         }
     }
 

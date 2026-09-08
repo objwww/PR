@@ -75,7 +75,9 @@ public abstract class PostgresITBase {
             // V32（AM6 M6-02 引擎对照结论）——BA-41 同律
             "engine_comparison",
             // V33（AM6 M6-04 run 级 fallback 栅栏 + 发布赢家）——BA-41 同律
-            "run_fallback", "report_generation_winner");
+            "run_fallback", "report_generation_winner",
+            // V34（AM6 M6-05 Holmes shadow 持久工作面）——BA-41 同律
+            "holmes_shadow_work");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

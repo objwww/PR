@@ -153,4 +153,55 @@ class Am6MigrationContractTest {
                 .doesNotContainPattern("grant [a-z ,]*update on engine_comparison")
                 .doesNotContainPattern("grant [a-z ,]*delete on engine_comparison");
     }
+
+    // ---------------- V34（M6-05 Holmes shadow 持久工作面；doc 记 V33，C-68 顺延） ----------------
+
+    private static String normalizedV34() throws IOException {
+        return Files.readString(Path.of(
+                        "src/main/resources/db/migration/V34__am6_engine_shadow_work.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+    }
+
+    @Test
+    void v34CreatesShadowWorkFaceWithLeaseAndBoundedRetryColumns() throws IOException {
+        String sql = normalizedV34();
+
+        // C-65 持久工作面：确定性 shadow_key 唯一（重入队幂等）+ 租约三元
+        // （owner/until/epoch CAS 基准）+ 有界重试（attempts/max_attempts）+
+        // 封闭 kind/state 值域；native_run_id 真 FK（执行锚完整性）
+        assertThat(sql)
+                .contains("create table holmes_shadow_work")
+                .contains("shadow_key text not null unique")
+                .contains("check (kind in ('comparison', 'calibration'))")
+                .contains("native_run_id uuid not null references rca_run(id)")
+                .contains("incident_id uuid not null references incident(id)")
+                .contains("snapshot_digest char(64) not null")
+                .contains("check (state in ('queued', 'leased', 'succeeded', 'failed', 'exhausted'))")
+                .contains("attempts integer not null default 0")
+                .contains("max_attempts integer not null default 3")
+                .contains("lease_owner text")
+                .contains("lease_until timestamptz")
+                .contains("lease_epoch integer not null default 0")
+                .contains("tokens_spent integer")
+                .contains("constraint ck_hsw_generation check (generation >= 0)")
+                .contains("constraint ck_hsw_attempts check (attempts >= 0)")
+                .contains("create index ix_hsw_claim on holmes_shadow_work (state, created_at)")
+                .contains("comment on table holmes_shadow_work");
+    }
+
+    @Test
+    void v34GrantsSelectInsertUpdateButNeverDeleteToControlApp() throws IOException {
+        String sql = normalizedV34();
+
+        // 与 V33 append-only 的授权差异（有意，迁移头注释声明）：租约工作面的
+        // state/lease/attempts UPDATE 是语义的一部分（认领/CAS/有界重试）；
+        // DELETE 仍拒（工作历史不可抹）；BA-42① 序列 USAGE 同律
+        assertThat(sql)
+                .contains("grant select, insert, update on holmes_shadow_work to control_app")
+                .contains("grant usage on sequence holmes_shadow_work_id_seq to control_app")
+                .contains("revoke delete on holmes_shadow_work from control_app")
+                .contains("revoke all on holmes_shadow_work"
+                        + " from publisher_app, notify_app, eval_app, public")
+                .doesNotContainPattern("grant [a-z ,]*delete on holmes_shadow_work");
+    }
 }

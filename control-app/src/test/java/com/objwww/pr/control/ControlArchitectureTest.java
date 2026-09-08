@@ -213,6 +213,22 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M6-05（INV-AM6-5，落码方案 M6-05 节）：Holmes Shadow Sampler 类无
+     * reports/publication/outbox 引用——抽样入队面是纯 V34 工作行写面，零发布
+     * 纪律静态钉死（影子链永不铸报告/发布/通知）。
+     */
+    @Test
+    void holmesShadowSamplerHasNoReportPublicationOrOutboxReference() {
+        noClasses().that().haveSimpleName("HolmesShadowSampler")
+                .or().haveSimpleName("HolmesShadowScheduler")
+                .should().dependOnClassesThat().haveSimpleNameStartingWith("RcaReport")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("Publication")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("Outbox")
+                .orShould().dependOnClassesThat().haveSimpleNameContaining("NotifyOutbox")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

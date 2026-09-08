@@ -147,7 +147,11 @@ class NativeInvestigationExecutorTest {
                         com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
                         clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                         true, 20),
-                stores.winners);
+                stores.winners,
+                new com.objwww.pr.control.alert.application.HolmesShadowSampler(stores.runs,
+                        stores.shadowWorks, clock,
+                        com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
+                        false, 20, 100, 3));
         incidentId = UUID.randomUUID();
         stores.incidents.insert(new Incident(incidentId, "alertname=HighErrorRate|service=checkout",
                 IncidentStatus.FIRING, 0, NOW, NOW, null, null, null, 0, 0, 0, null,

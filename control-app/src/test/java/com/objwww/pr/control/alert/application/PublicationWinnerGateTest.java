@@ -86,7 +86,9 @@ class PublicationWinnerGateTest {
                 new FallbackService(stores.runs, stores.incidents, stores.tasks,
                         stores.rcaEvents, stores.fallbacks, SlaPolicy.defaults(), clock,
                         AlertMetrics.NOOP, true, 20),
-                stores.winners);
+                stores.winners,
+                new com.objwww.pr.control.alert.application.HolmesShadowSampler(stores.runs,
+                        stores.shadowWorks, clock, AlertMetrics.NOOP, false, 20, 100, 3));
         worker = new RcaWorker(stores.tasks, stores.runs, stores.attempts,
                 stores.investigations, stores.incidents, stores.slots, stores.invocations,
                 executor, orchestrator,

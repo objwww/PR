@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.model.EvidencePackageV2;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
@@ -134,6 +135,120 @@ public class EngineComparisonRecorder {
         return new ComparisonOutcome(nativeRunId, comparisonKey, dims, recorded);
     }
 
+    /**
+     * M6-05 反向影子对照：Holmes 影子 run（零报告纪律 → 结论由 Worker 从执行
+     * artifact 预铸，{@link #conclusionFromPackage}）对照 NATIVE 生产 run（claims
+     * 投影），落 V32 一行（shadowExecRef = {@code holmes-shadow-worker}）。
+     *
+     * <p>与 {@link #compareHolmesNative} 的差异仅在 holmes 侧结论来源（预铸 Map
+     * 而非 rca_report 行）；snapshot/比较口径/uq_ec_pair 幂等完全一致。
+     */
+    public ComparisonOutcome compareShadowHolmesNative(UUID shadowHolmesRunId,
+            UUID nativeRunId, String shadowExecRef, Map<String, Object> holmesConclusion) {
+        if (shadowExecRef == null || shadowExecRef.isBlank()) {
+            throw new IllegalArgumentException("shadowExecRef 必填（影子执行审计引用）");
+        }
+        Objects.requireNonNull(holmesConclusion, "holmesConclusion");
+        RcaRun holmes = runs.findById(shadowHolmesRunId).orElseThrow(() ->
+                new IllegalArgumentException("holmes 影子 run 不存在: " + shadowHolmesRunId));
+        runs.findById(nativeRunId).orElseThrow(() ->
+                new IllegalArgumentException("native run 不存在: " + nativeRunId));
+        String snapshotDigest = holmes.investigationHash().hex();
+        String candidateDigest = bundles.activeDigest().map(Digest::hex).orElse("");
+
+        Map<String, Object> holmesOutcome = baseOutcome("HOLMES", holmes);
+        holmesOutcome.putAll(holmesConclusion);
+        Map<String, Object> nativeOutcome = nativeOutcome(nativeRunId);
+        List<Map<String, Object>> flags = disagreeFlags(holmesOutcome, nativeOutcome);
+
+        String comparisonKey = Digest.sha256Of(String.join("\n",
+                shadowHolmesRunId.toString(), nativeRunId.toString(),
+                snapshotDigest, candidateDigest)).hex();
+        boolean recorded = store.append(new EngineComparisonRepository.ComparisonRow(
+                nativeRunId, comparisonKey, shadowExecRef, snapshotDigest,
+                holmesOutcome, nativeOutcome, flags, null, costCompare(
+                holmesOutcome, nativeOutcome)));
+        metrics.engineComparison(!flags.isEmpty());
+        List<String> dims = flags.stream()
+                .map(f -> String.valueOf(f.get("dim")))
+                .distinct()
+                .toList();
+        return new ComparisonOutcome(nativeRunId, comparisonKey, dims, recorded);
+    }
+
+    /**
+     * M6-05 底噪校准：同 snapshot digest 双 Holmes（基线 = 对照期影子结论，
+     * 对照行 = {@code compareShadowHolmesNative} 所落；对照执行 = 本行
+     * calibrationRun）→ 底噪结论落本行 noise_baseline jsonb（V32 M6-02 恒 null
+     * 列的回填面）。行锚仍挂原 native_run_id（对照/校准家族按 native run 聚合，
+     * M6-06 差异台账一次取数）。engine 标签：holmes 侧 HOLMES / 校准侧
+     * HOLMES_CALIB（诚实区分双侧身份）。
+     */
+    public ComparisonOutcome compareHolmesCalibration(UUID nativeRunId, UUID calibrationRunId,
+            String shadowExecRef, Map<String, Object> baselineConclusion,
+            Map<String, Object> calibrationConclusion) {
+        if (shadowExecRef == null || shadowExecRef.isBlank()) {
+            throw new IllegalArgumentException("shadowExecRef 必填（影子执行审计引用）");
+        }
+        Objects.requireNonNull(baselineConclusion, "baselineConclusion");
+        Objects.requireNonNull(calibrationConclusion, "calibrationConclusion");
+        UUID baselineRunId = UUID.fromString(String.valueOf(baselineConclusion.get("run_id")));
+        RcaRun baseline = runs.findById(baselineRunId).orElseThrow(() ->
+                new IllegalArgumentException("holmes 基线 run 不存在: " + baselineRunId));
+        RcaRun calibration = runs.findById(calibrationRunId).orElseThrow(() ->
+                new IllegalArgumentException("holmes 校准 run 不存在: " + calibrationRunId));
+        String snapshotDigest = baseline.investigationHash().hex();
+        String candidateDigest = bundles.activeDigest().map(Digest::hex).orElse("");
+
+        Map<String, Object> baselineOutcome = baseOutcome("HOLMES", baseline);
+        baselineOutcome.putAll(baselineConclusion);
+        Map<String, Object> calibrationOutcome = baseOutcome("HOLMES_CALIB", calibration);
+        calibrationOutcome.putAll(calibrationConclusion);
+        List<Map<String, Object>> flags = disagreeFlags(baselineOutcome, calibrationOutcome);
+        List<String> dims = flags.stream()
+                .map(f -> String.valueOf(f.get("dim")))
+                .distinct()
+                .toList();
+
+        Map<String, Object> noiseBaseline = new LinkedHashMap<>();
+        noiseBaseline.put("native_run_id", nativeRunId.toString());
+        noiseBaseline.put("baseline_run_id", baselineRunId.toString());
+        noiseBaseline.put("calibration_run_id", calibrationRunId.toString());
+        noiseBaseline.put("snapshot_digest", snapshotDigest);
+        noiseBaseline.put("disagree", !flags.isEmpty());
+        noiseBaseline.put("dims", dims);
+
+        String comparisonKey = Digest.sha256Of(String.join("\n",
+                baselineRunId.toString(), calibrationRunId.toString(),
+                snapshotDigest, candidateDigest)).hex();
+        boolean recorded = store.append(new EngineComparisonRepository.ComparisonRow(
+                nativeRunId, comparisonKey, shadowExecRef, snapshotDigest,
+                baselineOutcome, calibrationOutcome, flags, noiseBaseline, costCompare(
+                baselineOutcome, calibrationOutcome)));
+        metrics.engineComparison(!flags.isEmpty());
+        return new ComparisonOutcome(nativeRunId, comparisonKey, dims, recorded);
+    }
+
+    /**
+     * M6-05 执行 artifact → 结论 Map（Worker 预铸面，零报告纪律）：只含结论键
+     * （validation_status/total_tokens/claims/claim_keys/root_cause）；缺件诚实
+     * 留缺（disagreeFlags 缺数不标记）。engine/run_id/latency 由仓储按 DB run 行补。
+     */
+    public static Map<String, Object> conclusionFromPackage(ValidationStatus status,
+            Integer totalTokens, EvidencePackageV2 typedPackage) {
+        Map<String, Object> conclusion = new LinkedHashMap<>();
+        if (status != null) {
+            conclusion.put("validation_status", status.name());
+        }
+        if (totalTokens != null) {
+            conclusion.put("total_tokens", totalTokens);
+        }
+        if (typedPackage != null) {
+            putConclusionFromPackage(conclusion, typedPackage);
+        }
+        return conclusion;
+    }
+
     // ---------------------------------------------------------- 双侧归一化
 
     /** HOLMES 侧归一化结论（报告行 + v2 包解析；缺失/解析失败诚实封装不抛出） */
@@ -198,6 +313,12 @@ public class EngineComparisonRecorder {
             outcome.put("parse_error", e.getMessage());
             return;
         }
+        putConclusionFromPackage(outcome, pkg);
+    }
+
+    /** v2 包（已类型化）→ 结论键装配（conclusionFromPackage 的共用体） */
+    private static void putConclusionFromPackage(Map<String, Object> outcome,
+            EvidencePackageV2 pkg) {
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("total", (long) pkg.claims().size());
         for (ClaimStatus status : List.of(ClaimStatus.TRUE, ClaimStatus.FALSE,

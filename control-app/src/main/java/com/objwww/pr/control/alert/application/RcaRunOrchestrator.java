@@ -94,6 +94,7 @@ public class RcaRunOrchestrator {
     private final CanaryRouter canaryRouter;
     private final FallbackService fallback;
     private final com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners;
+    private final HolmesShadowSampler holmesShadow;
 
     /**
      * M6-04 全量构造（生产装配面）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
@@ -117,7 +118,8 @@ public class RcaRunOrchestrator {
                               AlertMetrics metrics,
                               CanaryRouter canaryRouter,
                               FallbackService fallback,
-                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners) {
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
+                              HolmesShadowSampler holmesShadow) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -135,6 +137,7 @@ public class RcaRunOrchestrator {
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
         this.fallback = Objects.requireNonNull(fallback, "fallback");
         this.winners = Objects.requireNonNull(winners, "winners");
+        this.holmesShadow = Objects.requireNonNull(holmesShadow, "holmesShadow");
     }
 
     /**
@@ -252,6 +255,15 @@ public class RcaRunOrchestrator {
 
         RcaRunStateMachine.requireTransition(run.state(), RcaRunState.SUCCEEDED);
         runs.update(withRunState(run, RcaRunState.SUCCEEDED, now, null));
+        // M6-05 反向影子抽样：NATIVE SUCCEEDED run 按确定性规则入队 V34 影子工作。
+        // 观察面容错（同 fallback 抽取面纪律）：影子入队失败绝不毒化收尾事务。
+        try {
+            holmesShadow.tryEnqueueAfterNativeSuccess(
+                    withRunState(run, RcaRunState.SUCCEEDED, now, null));
+        } catch (RuntimeException e) {
+            log.warn("holmes shadow 抽样入队失败（不影响收尾）run={}: {}", run.id(),
+                    String.valueOf(e.getMessage()));
+        }
         Incident incident = incidents.findByIdForUpdate(run.incidentId()).orElseThrow();
 
         // 分支 1：告警已恢复——清 rerun 线索，不再调查（调查报告已留存）
