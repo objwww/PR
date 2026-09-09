@@ -222,7 +222,9 @@ class PostgresRcaTaskRepositoryIT extends PostgresITBase {
                             @Override
                             public java.util.Optional<com.objwww.pr.control.release.domain.model.ConfigBundle> findByDigest(
                                     com.objwww.pr.shared.Digest digest) {
-                                return java.util.Optional.empty();
+                                // CanaryRouter:156 以 activeDigest 回查 bundle 内容（orElseThrow），
+                                // 必须回真 bundle——BA-58：迁移时回 empty 致 195 真 PG 首跑 NoSuchElement
+                                return java.util.Optional.of(bundle);
                             }
 
                             @Override
