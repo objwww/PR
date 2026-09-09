@@ -1,0 +1,2 @@
+08:44:18.108 [main] WARN com.objwww.pr.control.release.application.CanaryRouter -- canary 爆炸半径达上限，自动停放量: nativeRuns=1 cap=1 bundle=be2802f5ee3f3cd8b48e8bc1048f8896d2f57a771f977c998321f60f5eca0d3d
+08:44:18.112 [main] WARN com.objwww.pr.control.release.application.CanaryRouter -- canary 爆炸半径达上限，自动停放量: nativeRuns=1 cap=1 bundle=be2802f5ee3f3cd8b48e8bc1048f8896d2f57a771f977c998321f60f5eca0d3d

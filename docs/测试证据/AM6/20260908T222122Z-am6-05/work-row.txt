@@ -1,0 +1,5 @@
+ id |   state   |    kind    | attempts | lease_epoch | tokens_spent 
+----+-----------+------------+----------+-------------+--------------
+  5 | SUCCEEDED | COMPARISON |        1 |           1 |         5843
+(1 row)
+

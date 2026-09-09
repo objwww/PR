@@ -1,0 +1,1 @@
+exhausted=0 work_rows_24h=6 daily_budget=20

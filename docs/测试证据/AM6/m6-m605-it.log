@@ -1,0 +1,390 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ pr-agent ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/main/resources
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/projects/pr_agent_it/shared-kernel/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ shared-kernel ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ shared-kernel ---
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ shared-kernel ---
+[INFO] No tests to run.
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 36 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 450 source files with javac [debug parameters release 21] to target/classes
+[WARNING] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/infrastructure/model/RawHttpErrorCapture.java:[23,17] handleError(org.springframework.http.client.ClientHttpResponse) in org.springframework.web.client.ResponseErrorHandler has been deprecated and marked for removal
+[INFO] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: Some input files use unchecked or unsafe operations.
+[INFO] /opt/projects/pr_agent_it/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 5 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 212 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/replay/ShadowToolFaceTest.java: Some input files use or override a deprecated API.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/replay/ShadowToolFaceTest.java: Recompile with -Xlint:deprecation for details.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /opt/projects/pr_agent_it/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+06:08:19.899 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+06:08:20.061 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+06:08:20.367 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+06:08:20.371 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+06:08:20.392 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+06:08:20.403 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+06:08:20.405 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+06:08:20.479 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+06:08:20.484 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+06:08:20.623 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: 94df1a246ed3eb8ff8d773a7a3a4039ceacdff9438b1f592ec2f77bf310153cf
+06:08:21.021 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.542055868S
+06:08:21.027 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+06:08:21.027 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+06:08:21.027 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresHolmesShadowIT
+06:08:21.061 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+06:08:21.125 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 2779797c50303c29ed4bfed518393ac6c86101c499667a77e28e09a14467e24a
+06:08:22.566 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.504766178S
+06:08:22.567 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://localhost:33274/test?loggerLevel=OFF)
+06:08:22.575 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+06:08:22.781 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@6e0cff20
+06:08:22.782 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+06:08:23.100 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://localhost:33274/test?loggerLevel=OFF (PostgreSQL 16.15)
+06:08:23.164 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+06:08:23.169 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 34 migrations (execution time 00:00.042s)
+06:08:23.182 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+06:08:23.236 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+06:08:23.286 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+06:08:23.382 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+06:08:23.403 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+06:08:23.446 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+06:08:23.476 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+06:08:23.515 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+06:08:23.585 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+06:08:23.660 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+06:08:23.682 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+06:08:23.729 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+06:08:23.750 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+06:08:23.759 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "12 - am4 state expansion"
+06:08:23.772 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "13 - am4 budget ledger"
+06:08:23.788 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "14 - am4 rca event"
+06:08:23.801 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "15 - am4 tool invocation ledger"
+06:08:23.812 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "16 - am4 evidence snapshot"
+06:08:23.830 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "17 - am4 claim"
+06:08:23.842 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "18 - am4 task edge run scope"
+06:08:23.853 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "19 - am4 tool replay"
+06:08:23.863 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "20 - am5 dataset version"
+06:08:23.880 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "21 - am5 dataset partition"
+06:08:23.898 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "22 - am5 golden candidate"
+06:08:23.916 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "23 - am5 sampling fingerprint"
+06:08:23.925 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "24 - am5 config bundle"
+06:08:23.938 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "25 - am5 canary route"
+06:08:23.957 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "26 - am5 operator case"
+06:08:23.974 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "27 - am5 operator command"
+06:08:23.991 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "28 - am5 monthly partition"
+06:08:24.049 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "29 - am5 retention archive"
+06:08:24.067 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "30 - am6 canary window verdict"
+06:08:24.088 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "31 - ba52 canary decision fk deferred"
+06:08:24.096 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "32 - am6 engine comparison"
+06:08:24.111 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "33 - am6 run fallback"
+06:08:24.130 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "34 - am6 engine shadow work"
+06:08:24.149 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 34 migrations to schema "public", now at version v34 (execution time 00:00.558s)
+06:08:24.154 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+06:08:24.170 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@2d5ef498
+06:08:24.171 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+06:08:24.171 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+06:08:24.181 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@37b56ac7
+06:08:24.181 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+06:08:24.181 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+06:08:24.191 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@f1868c9
+06:08:24.191 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+06:08:24.191 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+06:08:24.212 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@106d77da
+06:08:24.213 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+06:08:24.725 [main] INFO com.objwww.pr.control.alert.application.HolmesShadowWorker -- {"event":"rca_holmes_shadow_work","ts":"2026-09-08T22:08:24.724593965Z","shadow_key":"holmes-shadow:719242b1-bdbc-4964-a8fb-076ae6f884bc","shadow_run_id":"a71887df-9577-464d-a49d-f37c7da60b12","outcome":"COMPARISON_LANDED"}
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.179 s -- in com.objwww.pr.control.it.PostgresHolmesShadowIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ control-app ---
+[INFO] Building jar: /opt/projects/pr_agent_it/control-app/target/control-app-0.0.1-SNAPSHOT.jar
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ control-app ---
+[INFO] Attaching repackaged archive /opt/projects/pr_agent_it/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+06:08:27.320 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+06:08:27.516 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+06:08:27.864 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+06:08:27.866 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+06:08:27.884 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+06:08:27.895 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+06:08:27.897 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+06:08:27.999 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+06:08:28.006 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+06:08:28.200 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: e7eefea256ffc7ea2bcf90eab5736e909b1ae4b238d4837711f3f0e0a42c6660
+06:08:28.560 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.560524455S
+06:08:28.570 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+06:08:28.570 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+06:08:28.571 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresOperatorCaseIT
+06:08:28.615 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+06:08:28.695 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 53b10fc43d3c3bf53594f36e79132253cc32133fd589fe9943d4b48848fdcaf5
+06:08:29.958 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.342936875S
+06:08:29.958 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://localhost:33276/test?loggerLevel=OFF)
+06:08:29.968 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+06:08:30.173 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@309028af
+06:08:30.175 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+06:08:30.443 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://localhost:33276/test?loggerLevel=OFF (PostgreSQL 16.15)
+06:08:30.516 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+06:08:30.520 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 34 migrations (execution time 00:00.038s)
+06:08:30.533 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+06:08:30.573 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+06:08:30.620 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+06:08:30.711 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+06:08:30.736 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+06:08:30.767 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+06:08:30.804 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+06:08:30.832 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+06:08:30.881 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+06:08:30.969 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+06:08:30.996 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+06:08:31.081 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+06:08:31.112 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+06:08:31.122 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "12 - am4 state expansion"
+06:08:31.147 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "13 - am4 budget ledger"
+06:08:31.167 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "14 - am4 rca event"
+06:08:31.192 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "15 - am4 tool invocation ledger"
+06:08:31.211 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "16 - am4 evidence snapshot"
+06:08:31.228 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "17 - am4 claim"
+06:08:31.245 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "18 - am4 task edge run scope"
+06:08:31.256 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "19 - am4 tool replay"
+06:08:31.268 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "20 - am5 dataset version"
+06:08:31.287 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "21 - am5 dataset partition"
+06:08:31.304 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "22 - am5 golden candidate"
+06:08:31.321 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "23 - am5 sampling fingerprint"
+06:08:31.328 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "24 - am5 config bundle"
+06:08:31.342 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "25 - am5 canary route"
+06:08:31.362 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "26 - am5 operator case"
+06:08:31.378 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "27 - am5 operator command"
+06:08:31.394 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "28 - am5 monthly partition"
+06:08:31.426 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "29 - am5 retention archive"
+06:08:31.447 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "30 - am6 canary window verdict"
+06:08:31.467 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "31 - ba52 canary decision fk deferred"
+06:08:31.475 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "32 - am6 engine comparison"
+06:08:31.494 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "33 - am6 run fallback"
+06:08:31.513 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "34 - am6 engine shadow work"
+06:08:31.529 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 34 migrations to schema "public", now at version v34 (execution time 00:00.611s)
+06:08:31.534 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+06:08:31.547 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@1391af3b
+06:08:31.547 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+06:08:31.547 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+06:08:31.556 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@135a8c6f
+06:08:31.556 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+06:08:31.557 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+06:08:31.565 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@43bf5397
+06:08:31.566 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+06:08:31.566 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+06:08:31.577 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@3679d92e
+06:08:31.577 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+06:08:31.736 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:31.735533511Z","revision":1,"to":"OPEN","rule":"T00_CREATE","caseId":"04d61b69-27c5-40a0-8ef6-8a91bc103df5"}
+06:08:31.748 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:31.748428890Z","revision":2,"to":"OPEN","rule":"T60_ESCALATE","caseId":"04d61b69-27c5-40a0-8ef6-8a91bc103df5"}
+06:08:31.817 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:31.817199192Z","revision":3,"to":"RESOLVED","rule":"T30_RESOLVE","caseId":"04d61b69-27c5-40a0-8ef6-8a91bc103df5"}
+06:08:31.931 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:31.931160133Z","revision":1,"to":"OPEN","rule":"T00_CREATE","caseId":"d0e0224a-598a-4754-aca8-7f8bab7b8c71"}
+06:08:31.937 [pool-2-thread-1] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:31.937475328Z","revision":2,"to":"ACKED","rule":"T10_CLAIM","caseId":"d0e0224a-598a-4754-aca8-7f8bab7b8c71"}
+06:08:32.057 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:32.056929415Z","revision":1,"to":"OPEN","rule":"T00_CREATE","caseId":"2bd4232e-b2c8-457f-90ca-7568154b76bb"}
+06:08:32.061 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:32.061648093Z","revision":2,"to":"OPEN","rule":"T50_MERGE","caseId":"2bd4232e-b2c8-457f-90ca-7568154b76bb"}
+06:08:32.065 [main] INFO com.objwww.pr.control.ops.application.OperatorCaseService -- {"event":"operator_case_transition","ts":"2026-09-08T22:08:32.065513654Z","revision":3,"to":"OPEN","rule":"T50_MERGE","caseId":"2bd4232e-b2c8-457f-90ca-7568154b76bb"}
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.500 s -- in com.objwww.pr.control.it.PostgresOperatorCaseIT
+[INFO] Running com.objwww.pr.control.it.AlertEvidenceIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.341 s -- in com.objwww.pr.control.it.AlertEvidenceIT
+[INFO] Running com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.458 s -- in com.objwww.pr.control.it.PostgresRcaTaskRepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.584 s -- in com.objwww.pr.control.it.AlertV10EvalRunIT
+[INFO] Running com.objwww.pr.control.it.AlertToolInvocationLedgerIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.373 s -- in com.objwww.pr.control.it.AlertToolInvocationLedgerIT
+[INFO] Running com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.306 s -- in com.objwww.pr.control.it.AlertV18TaskEdgeRunScopeIT
+[INFO] Running com.objwww.pr.control.it.PostgresHolmesShadowIT
+06:08:34.441 [main] INFO com.objwww.pr.control.alert.application.HolmesShadowWorker -- {"event":"rca_holmes_shadow_work","ts":"2026-09-08T22:08:34.441597160Z","shadow_run_id":"bf2de88f-9e06-4a9d-9c7c-248505858988","shadow_key":"holmes-shadow:c3986127-278c-48f2-9ebb-7fa584c7de22","outcome":"COMPARISON_LANDED"}
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.729 s -- in com.objwww.pr.control.it.PostgresHolmesShadowIT
+[INFO] Running com.objwww.pr.control.it.AlertV12StateExpansionIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.350 s -- in com.objwww.pr.control.it.AlertV12StateExpansionIT
+[INFO] Running com.objwww.pr.control.it.AlertDagCycleGuardIT
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.139 s -- in com.objwww.pr.control.it.AlertDagCycleGuardIT
+[INFO] Running com.objwww.pr.control.it.AlertIncidentBudgetIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.425 s -- in com.objwww.pr.control.it.AlertIncidentBudgetIT
+[INFO] Running com.objwww.pr.control.it.AlertToolReplayStoreIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.307 s -- in com.objwww.pr.control.it.AlertToolReplayStoreIT
+[INFO] Running com.objwww.pr.control.it.Am4E2E06FaultDrillIT
+06:08:36.233 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T22:08:36.232914310Z","latency_ms":3,"attempt_id":"a70bdb09-d9e1-4746-8cac-c78896ac366a","task_id":"d9a102d4-982b-424b-8689-15914e7d2c83","run_id":"06e81c19-8a3d-42ee-bfea-37212e25d95e","decision":"COMPLETED"}
+06:08:36.235 [main] INFO com.objwww.pr.control.alert.application.HolmesShadowSampler -- {"event":"rca_holmes_shadow_sample","ts":"2026-09-08T22:08:36.235664570Z","run_id":"06e81c19-8a3d-42ee-bfea-37212e25d95e","incident_id":"e4914707-ffef-4acb-96ce-bbfbf4156c55","outcome":"DISABLED"}
+06:08:36.244 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task d9a102d4-982b-424b-8689-15914e7d2c83 旧租约提交被拒 owner=e06-worker epoch=1
+06:08:36.467 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T22:08:36.467185981Z","latency_ms":3,"attempt_id":"06acd3b1-d54b-4a69-b1b5-505f56ac591c","task_id":"23ba76d9-9c85-48ed-b7e8-de857a6238c1","run_id":"6e85fa45-1efd-4b3a-b7ad-64347768e963","decision":"COMPLETED"}
+06:08:36.469 [main] INFO com.objwww.pr.control.alert.application.HolmesShadowSampler -- {"event":"rca_holmes_shadow_sample","ts":"2026-09-08T22:08:36.469069379Z","run_id":"6e85fa45-1efd-4b3a-b7ad-64347768e963","incident_id":"5c6c9e04-fce3-4e6b-b3b2-4ab48b95f844","outcome":"DISABLED"}
+06:08:36.677 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T22:08:36.677180436Z","run_id":"caa4956e-4a83-4c01-b8ba-392cd1959668"}
+06:08:36.677 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run caa4956e-4a83-4c01-b8ba-392cd1959668 全任务终态 → REPORTING（报告链组装）
+06:08:36.768 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T22:08:36.768662617Z","run_id":"c62a6638-4b0b-4a94-b0b7-e7530da167df"}
+06:08:36.768 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run c62a6638-4b0b-4a94-b0b7-e7530da167df 全任务终态 → REPORTING（报告链组装）
+06:08:36.784 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T22:08:36.784339175Z","run_id":"34fca7dc-e29a-471c-bfa0-51007affbdfe"}
+06:08:36.784 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 34fca7dc-e29a-471c-bfa0-51007affbdfe 全任务终态 → REPORTING（报告链组装）
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.681 s -- in com.objwww.pr.control.it.Am4E2E06FaultDrillIT
+[INFO] Running com.objwww.pr.control.it.Am4E2E08ReplayIT
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.181 s -- in com.objwww.pr.control.it.Am4E2E08ReplayIT
+[INFO] Running com.objwww.pr.control.it.PostgresArchiveIT
+06:08:37.056 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=legal_hold
+06:08:37.062 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=legal_hold
+06:08:37.222 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=export_failed
+06:08:37.310 [main] INFO com.objwww.pr.control.ops.application.ArchiveService -- CONTROL_ARCHIVE_REJECTED table=rca_event partition=rca_event_2026_10 gate=verify_failed
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.433 s -- in com.objwww.pr.control.it.PostgresArchiveIT
+[INFO] Running com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.396 s -- in com.objwww.pr.control.it.AlertV7MigrationContractIT
+[INFO] Running com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.790 s -- in com.objwww.pr.control.it.AlertM3RepositoryIT
+[INFO] Running com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.750 s -- in com.objwww.pr.control.it.AlertV9MigrationContractIT
+[INFO] Running com.objwww.pr.control.it.AlertRunBudgetLedgerIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.879 s -- in com.objwww.pr.control.it.AlertRunBudgetLedgerIT
+[INFO] Running com.objwww.pr.control.it.Am6NativeFullChainIT
+06:08:40.351 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-08T22:08:40.351422033Z","run_id":"9c270d9f-e295-43dd-ace8-abcde3512197"}
+06:08:40.351 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 9c270d9f-e295-43dd-ace8-abcde3512197 全任务终态 → REPORTING（报告链组装）
+06:08:40.387 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native 全链完成 run=9c270d9f-e295-43dd-ace8-abcde3512197 reportOutcome=CONFIRMED claims=1 validation=STRUCTURE_VALIDATED 快照=7f4fe07992caef0eb7c9c2612a69a720bc307e34a2f7e5b71f1ea08b9b2f3045
+06:08:40.399 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T22:08:40.399783424Z","latency_ms":69,"attempt_id":"36cb66fb-9183-4191-bdf4-f0ce3f663156","task_id":"27caedde-2492-4a90-9cf9-57a8d02b6454","run_id":"9c270d9f-e295-43dd-ace8-abcde3512197","decision":"COMPLETED"}
+06:08:40.400 [main] INFO com.objwww.pr.control.alert.application.HolmesShadowSampler -- {"event":"rca_holmes_shadow_sample","ts":"2026-09-08T22:08:40.400893194Z","run_id":"9c270d9f-e295-43dd-ace8-abcde3512197","incident_id":"7e2c34d9-40d7-43e9-ac57-35ab6544b406","outcome":"DISABLED"}
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.265 s -- in com.objwww.pr.control.it.Am6NativeFullChainIT
+[INFO] Running com.objwww.pr.control.it.AlertDagPromotionIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.289 s -- in com.objwww.pr.control.it.AlertDagPromotionIT
+[INFO] Running com.objwww.pr.control.it.PostgresCanaryRoutingIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.531 s -- in com.objwww.pr.control.it.PostgresCanaryRoutingIT
+[INFO] Running com.objwww.pr.control.it.AlertClaimIT
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.794 s -- in com.objwww.pr.control.it.AlertClaimIT
+[INFO] Running com.objwww.pr.control.it.PostgresRetentionIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.298 s -- in com.objwww.pr.control.it.PostgresRetentionIT
+[INFO] Running com.objwww.pr.control.it.CanaryWindowPromotionIT
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.174 s -- in com.objwww.pr.control.it.CanaryWindowPromotionIT
+[INFO] Running com.objwww.pr.control.it.AlertRcaEventIT
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.615 s -- in com.objwww.pr.control.it.AlertRcaEventIT
+[INFO] Running com.objwww.pr.control.it.PostgresEngineComparisonIT
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.183 s -- in com.objwww.pr.control.it.PostgresEngineComparisonIT
+[INFO] Running com.objwww.pr.control.it.PostgresRunFallbackIT
+06:08:43.487 [pool-12-thread-2] WARN com.objwww.pr.control.alert.application.FallbackService -- NATIVE run 2c5605b5-fb12-4dc4-81a0-36f856cd7e20 失败（TIMEOUT）→ 恰一次铸 HOLMES fallback run cd5937ab-7cfe-43e3-9dc9-e6e93d52c53f
+06:08:43.488 [pool-12-thread-2] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.487966562Z","outcome":"CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.489 [pool-12-thread-7] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.489240561Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.490 [pool-12-thread-4] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.490580114Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.491 [pool-12-thread-5] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.491659157Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.492 [pool-12-thread-10] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.492783745Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.494 [pool-12-thread-20] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.494080157Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.495 [pool-12-thread-3] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.495047018Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.496 [pool-12-thread-19] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.496012427Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.497 [pool-12-thread-6] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.496997582Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.498 [pool-12-thread-1] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.498471909Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.499 [pool-12-thread-15] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.499531745Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.500 [pool-12-thread-13] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.500587463Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.504 [pool-12-thread-11] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.503939657Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.505 [pool-12-thread-9] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.505117416Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.506 [pool-12-thread-8] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.506351981Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.509 [pool-12-thread-14] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.508932772Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.510 [pool-12-thread-17] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.510141269Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.511 [pool-12-thread-18] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.511245378Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.512 [pool-12-thread-16] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.512302009Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.513 [pool-12-thread-12] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.513364500Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.521 [main] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.521467161Z","outcome":"ALREADY_CAST","error_class":"TIMEOUT","incident_id":"3b4596c4-0a1e-480e-8a1b-f37e47b31fcc","source_run_id":"2c5605b5-fb12-4dc4-81a0-36f856cd7e20"}
+06:08:43.603 [main] WARN com.objwww.pr.control.alert.application.FallbackService -- NATIVE run 1c0ccb88-66b8-4c0c-908f-202e45abcb15 失败（TIMEOUT）→ 恰一次铸 HOLMES fallback run 6990bbe7-943f-48a8-a2a0-a62c01c0e37a
+06:08:43.604 [main] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.604138857Z","outcome":"CAST","error_class":"TIMEOUT","incident_id":"5c899453-5847-4f1a-84e2-441155c1120d","source_run_id":"1c0ccb88-66b8-4c0c-908f-202e45abcb15"}
+06:08:43.802 [main] WARN com.objwww.pr.control.alert.application.FallbackService -- NATIVE run ed5b88b8-cca9-4591-bd64-7d25bac32158 失败（EXECUTOR_ERROR）→ 恰一次铸 HOLMES fallback run f899b1db-a727-4b83-bb94-fd2c8c57af2d
+06:08:43.803 [main] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.803039777Z","outcome":"CAST","error_class":"EXECUTOR_ERROR","incident_id":"fe729b0a-1d9f-4f44-b2ff-f4cbc220f2a1","source_run_id":"ed5b88b8-cca9-4591-bd64-7d25bac32158"}
+06:08:43.805 [main] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.805634444Z","outcome":"INELIGIBLE_ENGINE","error_class":"EXECUTOR_ERROR","incident_id":"fe729b0a-1d9f-4f44-b2ff-f4cbc220f2a1","source_run_id":"f899b1db-a727-4b83-bb94-fd2c8c57af2d"}
+06:08:43.809 [main] INFO com.objwww.pr.control.alert.application.FallbackService -- {"event":"rca_fallback_decision","ts":"2026-09-08T22:08:43.809347407Z","outcome":"INELIGIBLE_ERROR_CLASS","error_class":"ADAPTER_PACKAGE_REJECTED","incident_id":"89c5fd17-f3d3-4ed7-b937-ecb2da43ad69","source_run_id":"393a125c-b2f5-4b89-b6d0-49572ac2059c"}
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.423 s -- in com.objwww.pr.control.it.PostgresRunFallbackIT
+[INFO] Running com.objwww.pr.control.it.AlertGenerationFenceIT
+06:08:44.021 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-08T22:08:44.021188700Z","run_state":"SUPERSEDED","attempt_id":"119d2d36-0e46-4332-a607-4ab39dad2bf2","task_id":"69c41b9e-1c84-4855-811d-ed3a0ab6d930","run_id":"cdbd14db-c671-4312-ad31-71b6f434f32b","decision":"STALE_GENERATION"}
+06:08:44.021 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 69c41b9e-1c84-4855-811d-ed3a0ab6d930 旧代结果作废（run cdbd14db-c671-4312-ad31-71b6f434f32b state=SUPERSEDED），task→STALE 零落档
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.213 s -- in com.objwww.pr.control.it.AlertGenerationFenceIT
+[INFO] Running com.objwww.pr.control.it.AlertEvidenceSnapshotIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.226 s -- in com.objwww.pr.control.it.AlertEvidenceSnapshotIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 133, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ control-app ---
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.353 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.778 s]
+[INFO] control-app ........................................ SUCCESS [ 40.138 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  41.664 s
+[INFO] Finished at: 2026-09-09T06:08:44+08:00
+[INFO] ------------------------------------------------------------------------
