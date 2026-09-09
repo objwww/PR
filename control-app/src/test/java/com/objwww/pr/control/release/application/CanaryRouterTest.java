@@ -252,19 +252,35 @@ class CanaryRouterTest {
     }
 
     @Test
-    @DisplayName("审计行全记录：runId/stickinessKey/bucket/percent/bundleDigest/decision/createdAt")
+    @DisplayName("审计行全记录：NATIVE 出路 runId 随行；HOLMES 意愿出路 runId 落 NULL（BA-60/V35）")
     void decisionRowsCarryFullProvenance() {
-        bundles.publish(bundleWithCanary(10, List.of(), 5));
-        UUID runId = UUID.randomUUID();
-        route(runId, "g", "incident-1");
+        // NATIVE 出路（白名单直进）：审计行七列齐 + runId 在值（同 id run 行必落库）
+        bundles.publish(bundleWithCanary(0, List.of("incident-native"), 5));
+        UUID nativeRunId = UUID.randomUUID();
+        RcaRunRouting nativeRouting = route(nativeRunId, "g", "incident-native");
 
-        CanaryDecisionLogRepository.DecisionRow row = decisions.rows.get(0);
-        assertThat(row.runId()).isEqualTo(runId);
-        assertThat(row.stickinessKey()).isEqualTo("g:incident-1");
-        assertThat(row.bucket()).isNotNull();
-        assertThat(row.percent()).isEqualTo(10);
-        assertThat(row.bundleDigest()).isEqualTo(bundles.active);
-        assertThat(row.createdAt()).isEqualTo(NOW);
+        CanaryDecisionLogRepository.DecisionRow nativeRow = decisions.rows.get(0);
+        assertThat(nativeRouting.engine()).isEqualTo(RcaEngine.NATIVE);
+        assertThat(nativeRow.runId()).isEqualTo(nativeRunId);
+        assertThat(nativeRow.stickinessKey()).isEqualTo("g:incident-native");
+        assertThat(nativeRow.bucket()).isNotNull();
+        assertThat(nativeRow.bundleDigest()).isEqualTo(bundles.active);
+        assertThat(nativeRow.createdAt()).isEqualTo(NOW);
+
+        // HOLMES 意愿出路（percent=0 全落桶）：runId 落 NULL——run 行永不铸，
+        // 携带预生成 id 即幽灵引用（V31 deferred FK 提交点拒杀，BA-60）
+        bundles.publish(bundleWithCanary(0, List.of(), 5));
+        UUID holmesRunId = UUID.randomUUID();
+        RcaRunRouting holmesRouting = route(holmesRunId, "g", "incident-2");
+
+        CanaryDecisionLogRepository.DecisionRow holmesRow = decisions.rows.get(1);
+        assertThat(holmesRouting.engine()).isEqualTo(RcaEngine.HOLMES);
+        assertThat(holmesRouting.decision()).isEqualTo(CanaryDecision.BUCKETED_HOLMES.name());
+        assertThat(holmesRow.runId()).as("HOLMES 意愿决策行 run_id 归属留空").isNull();
+        assertThat(holmesRow.stickinessKey()).isEqualTo("g:incident-2");
+        assertThat(holmesRow.bucket()).isNotNull();
+        assertThat(holmesRow.percent()).isZero();
+        assertThat(holmesRow.bundleDigest()).isEqualTo(bundles.active);
     }
 
     @Test

@@ -204,4 +204,21 @@ class Am6MigrationContractTest {
                         + " from publisher_app, notify_app, eval_app, public")
                 .doesNotContainPattern("grant [a-z ,]*delete on holmes_shadow_work");
     }
+
+    // ---------------- V35（M6-07 BA-60：HOLMES 意愿决策 run_id 摘 NOT NULL） ----------------
+
+    @Test
+    void v35DropsRunIdNotNullKeepingDeferredFkUntouched() throws IOException {
+        String sql = Files.readString(Path.of(
+                        "src/main/resources/db/migration/V35__m607_holmes_wish_decision_run_id_nullable.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+
+        // 退场后 HOLMES 意愿/止损决策照记不铸 run（C-77）——预生成 runId 成幽灵引用
+        // 时 V31 deferred FK 提交点 23503（BA-60）。只摘 NOT NULL；FK 约束本体与
+        // DEFERRABLE 语义 V31 原样（NULL 不经 FK 检查，NATIVE 出路完整性不松）
+        assertThat(sql)
+                .contains("alter table canary_route_decision alter column run_id drop not null")
+                .doesNotContain("drop constraint")
+                .doesNotContain("add constraint");
+    }
 }

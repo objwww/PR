@@ -74,6 +74,11 @@ public class CanaryRouter {
     /**
      * 路由决策（run 铸造点；runId 先于 insert 生成故随请求携带）。
      *
+     * <p>BA-60 / V35：审计行 run_id 只随 NATIVE 出路（WHITELISTED/BUCKETED_NATIVE）
+     * 落值——这些出路必有同 id 的 run 行落库（V31 deferred FK 提交点原子对）；
+     * HOLMES 意愿/止损类出路（BUCKETED_HOLMES 等）M6-07 起永不铸 run，run_id 落
+     * NULL——若照抄预生成 id 即幽灵引用，提交点必 23503。审计其余六列照记不变。
+     *
      * @param groupId stickiness 键组段（如 incident groupKey）；id 为会话/实例段
      */
     public RcaRunRouting route(UUID runId, String groupId, String id) {
@@ -83,7 +88,7 @@ public class CanaryRouter {
         // ① 无 active bundle：全量主路径
         Optional<Digest> active = bundles.activeDigest();
         if (active.isEmpty()) {
-            return record(runId, null, null, 0, null, CanaryDecision.NO_ACTIVE_BUNDLE, now);
+            return record(null, null, null, 0, null, CanaryDecision.NO_ACTIVE_BUNDLE, now);
         }
         Digest configDigest = active.get();
 
@@ -92,7 +97,7 @@ public class CanaryRouter {
         Map<String, Object> canary = canarySection(configDigest);
         Integer percent = intOf(canary.get(PERCENT_KEY));
         if (canary.isEmpty() || percent == null || percent < 0) {
-            return record(runId, null, null, 0, configDigest,
+            return record(null, null, null, 0, configDigest,
                     CanaryDecision.CANARY_DISABLED, now);
         }
         if (percent > TOTAL_WEIGHT) {
@@ -104,7 +109,7 @@ public class CanaryRouter {
         try {
             stickinessKey = CanaryBucketer.normalizedKey(groupId, id);
         } catch (IllegalArgumentException e) {
-            return record(runId, null, null, percent, configDigest,
+            return record(null, null, null, percent, configDigest,
                     CanaryDecision.NO_STICKINESS_KEY, now);
         }
 
@@ -115,7 +120,7 @@ public class CanaryRouter {
 
         // ⑤ NATIVE 执行面未就绪：降级 HOLMES（立即回退为一等操作）
         if (nativeWish && !nativeReady) {
-            return record(runId, stickinessKey, bucket, percent, configDigest,
+            return record(null, stickinessKey, bucket, percent, configDigest,
                     CanaryDecision.NATIVE_DEFERRED, now);
         }
 
@@ -126,17 +131,20 @@ public class CanaryRouter {
             if (nativeRuns >= cap) {
                 log.warn("canary 爆炸半径达上限，自动停放量: nativeRuns={} cap={} bundle={}",
                         nativeRuns, cap, configDigest.hex());
-                return record(runId, stickinessKey, bucket, percent, configDigest,
+                return record(null, stickinessKey, bucket, percent, configDigest,
                         CanaryDecision.BLAST_RADIUS_STOPPED, now);
             }
         }
 
-        // ⑦ 终裁：白名单/桶命中 → NATIVE；否则 HOLMES 主路径
+        // ⑦ 终裁：白名单/桶命中 → NATIVE；否则 HOLMES 主路径。
+        //    BA-60：审计行 run_id 只随 NATIVE 出路落值（HOLMES 意愿永不铸 run，
+        //    幽灵引用会被 V31 deferred FK 在提交点拒杀）
         CanaryDecision decision = whitelisted ? CanaryDecision.WHITELISTED
                 : nativeWish ? CanaryDecision.BUCKETED_NATIVE
                 : CanaryDecision.BUCKETED_HOLMES;
         RcaEngine engine = nativeWish ? RcaEngine.NATIVE : RcaEngine.HOLMES;
-        record(runId, stickinessKey, bucket, percent, configDigest, decision, now);
+        record(nativeWish ? runId : null, stickinessKey, bucket, percent, configDigest,
+                decision, now);
         return new RcaRunRouting(engine, configDigest, stickinessKey, bucket, decision.name());
     }
 

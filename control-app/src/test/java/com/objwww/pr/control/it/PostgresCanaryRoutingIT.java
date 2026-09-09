@@ -241,6 +241,38 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         assertThat(count("canary_route_decision")).isEqualTo(1);
     }
 
+    // --------------------- BA-60：C-77 零铸造的审计归属面（run_id 可空，V35）
+
+    @Test
+    void holmesWillingDecisionRowCommitsWithNullRunId() {
+        // M6-07 C-77：HOLMES 意愿路由=决策行照记、不铸 run。两铸造点先预生成 runId
+        // 传入 route()——若决策行照抄该 id 而 run 行永不落库，V31 deferred FK 在提交点
+        // 必 23503（幽灵引用，BA-53 同型；本地假件无 FK 面全绿不可见）。修复=V35 摘
+        // NOT NULL + 路由器对非 NATIVE 出路落 NULL：照记保留、归属留空、提交无幽灵。
+        Digest digest = publish(Map.of("canary", Map.of("percent", 0)), Instant.now());
+        assertThat(bundles.activate(digest, null, "it", Instant.now())).isTrue();
+        CanaryRouter router = new CanaryRouter(bundles, decisions, true, Instant::now);
+        String key = "alertname=higherror|service=am607-p0";
+
+        controlTx.executeWithoutResult(tx -> {
+            UUID runId = UUID.randomUUID();
+            RcaRunRouting routing = router.route(runId, key, key);
+            assertThat(routing.engine()).isEqualTo(RcaEngine.HOLMES);
+            assertThat(routing.decision()).isEqualTo(CanaryDecision.BUCKETED_HOLMES.name());
+            // C-77 守卫早退形态：run 行不落（对照上一案 NATIVE 原子对）
+        });
+
+        assertThat(count("rca_run")).as("零 run 铸造（C-77）").isZero();
+        assertThat(adminJdbc.sql("""
+                        SELECT count(*) FROM canary_route_decision
+                         WHERE stickiness_key = :k AND run_id IS NULL
+                        """)
+                .param("k", key + ":" + key)
+                .query(Long.class).single())
+                .as("决策行照记且 run_id 归属留空（提交点无幽灵引用）")
+                .isEqualTo(1L);
+    }
+
     /** 活跃态迁移行（同 withRunState 语义：updatedAt=now，出活跃集补 completedAt） */
     private static RcaRun inState(RcaRun r, RcaRunState state) {
         Instant now = Instant.now();
