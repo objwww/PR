@@ -13,14 +13,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * G0-03 桥接回归：application.yml 的告警凭证占位符必须能从环境变量解析。
  *
- * <p>背景（BA-10①）：Spring relaxed binding 不会自动把 {@code HOLMES_API_KEY} 环境变量
- * 映射成 {@code app.alert.holmes.api-key} 属性——yml 显式占位前，
- * {@code AlertFlowConfig} 的 {@code @Value("${app.alert.holmes.api-key}")}（无默认值）
- * 在 docker profile 启动即 placeholder 解析失败。
+ * <p>背景（BA-10①）：Spring relaxed binding 不会自动把环境变量映射成嵌套属性——
+ * yml 显式占位前，{@code @Value} 占位符在 docker profile 启动即解析失败。
+ * M6-07：holmes 凭证桥接（app.alert.holmes.*）随第二引擎退场摘除，
+ * 本测试的两个 holmes 案同步删除；webhook bearer 桥接与 Hikari 预算钉保留。
  *
  * <p>本测试直接用 StandardEnvironment + application.yml 验证解析链：
- * 环境变量在场→透传值；缺席→解析为空串（可解析，不是 null）——bean 不会因占位符炸掉，
- * 凭证缺失由启动自检（AlertSelfCheck）按 holmesEnabled 语义拦截。
+ * 环境变量在场→透传值；缺席→解析为空串（可解析，不是 null）——bean 不会因占位符炸掉。
  */
 class AlertConfigBridgeTest {
 
@@ -36,26 +35,14 @@ class AlertConfigBridgeTest {
     }
 
     @Test
-    void holmesApiKeyBridgesFromEnvironmentVariable() throws Exception {
+    void holmesBridgeKeysAreGoneAfterRetirement() throws Exception {
+        // M6-07：桥接面摘除后 holmes 键族不可解析（null 而非空串）——
+        // 防止 yml 残留死占位符悄悄复活
         StandardEnvironment env = loadYml();
-        System.setProperty("HOLMES_API_KEY", "stub-holmes-key");
-        try {
-            assertThat(env.getProperty("app.alert.holmes.api-key"))
-                    .isEqualTo("stub-holmes-key");
-        } finally {
-            System.clearProperty("HOLMES_API_KEY");
-        }
-    }
-
-    @Test
-    void holmesApiKeyResolvesToEmptyWhenEnvironmentAbsent() throws Exception {
-        StandardEnvironment env = loadYml();
-        System.clearProperty("HOLMES_API_KEY");
-        // 可解析为空串（占位符失败与空值是两回事；后者交给自检拦截）
-        assertThat(env.getProperty("app.alert.holmes.api-key")).isEqualTo("");
-        // base-url 带容器内网默认值
-        assertThat(env.getProperty("app.alert.holmes.base-url"))
-                .isEqualTo("http://holmes:8080");
+        assertThat(env.getProperty("app.alert.holmes.api-key")).isNull();
+        assertThat(env.getProperty("app.alert.holmes.base-url")).isNull();
+        assertThat(env.getProperty("app.alert.fallback.enabled")).isNull();
+        assertThat(env.getProperty("app.alert.shadow.holmes.enabled")).isNull();
     }
 
     @Test

@@ -13,46 +13,38 @@ class AlertSelfCheckTest {
     @Test
     void violations_empty_when_all_requirements_met() {
         Map<String, String> env = Map.of(
-                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "test-token",
-                "HOLMES_API_KEY", "holmes-key"
+                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "test-token"
         );
         var db = fakeDbWithFullPrivileges();
 
-        List<String> violations = AlertSelfCheck.violations(env, db, true);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations).isEmpty();
     }
 
     @Test
     void violations_when_webhook_token_missing() {
-        Map<String, String> env = Map.of("HOLMES_API_KEY", "holmes-key");
+        Map<String, String> env = Map.of();
         var db = fakeDbWithFullPrivileges();
 
-        List<String> violations = AlertSelfCheck.violations(env, db, false);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations)
                 .hasSize(1)
                 .anyMatch(v -> v.contains("ALERTMANAGER_WEBHOOK_BEARER_TOKEN"));
     }
 
+    /**
+     * M6-07（BA-59）：Holmes 退场后 HOLMES_API_KEY 缺席不再是违规——原凭证门
+     * （holmesEnabled=true 时强制键在场）随第二引擎生产入口摘除而拆除；
+     * .env 键已回收，启动门对 holmes 零感知。
+     */
     @Test
-    void violations_when_holmes_key_missing_and_enabled() {
+    void holmes_key_absence_is_not_a_violation() {
         Map<String, String> env = Map.of("ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token");
         var db = fakeDbWithFullPrivileges();
 
-        List<String> violations = AlertSelfCheck.violations(env, db, true);
-
-        assertThat(violations)
-                .hasSize(1)
-                .anyMatch(v -> v.contains("HOLMES_API_KEY"));
-    }
-
-    @Test
-    void no_holmes_violation_when_disabled() {
-        Map<String, String> env = Map.of("ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token");
-        var db = fakeDbWithFullPrivileges();
-
-        List<String> violations = AlertSelfCheck.violations(env, db, false);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations).isEmpty();
     }
@@ -60,8 +52,7 @@ class AlertSelfCheckTest {
     @Test
     void violations_when_v7_table_privilege_missing() {
         Map<String, String> env = Map.of(
-                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token",
-                "HOLMES_API_KEY", "key"
+                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token"
         );
         var db = new FakeDbProbe(Map.of(
                 "alert_inbox", List.of("SELECT", "INSERT"), // 缺 UPDATE（V7 不检查 DELETE）
@@ -75,7 +66,7 @@ class AlertSelfCheckTest {
                 "scheduler_slot", List.of("SELECT", "INSERT", "UPDATE")
         ));
 
-        List<String> violations = AlertSelfCheck.violations(env, db, true);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations)
                 .hasSize(1)
@@ -99,7 +90,7 @@ class AlertSelfCheckTest {
                 "scheduler_slot", List.of("SELECT", "INSERT", "UPDATE", "DELETE")
         ));
 
-        List<String> violations = AlertSelfCheck.violations(env, db, false);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations)
                 .hasSize(2)
@@ -113,8 +104,7 @@ class AlertSelfCheckTest {
         // 旧自检把它当普通业务表要求 UPDATE，真栈（按 V7 授权）启动必红。
         // 本用例在旧代码上红（误报 UPDATE 违规），修复后绿。
         Map<String, String> env = Map.of(
-                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token",
-                "HOLMES_API_KEY", "key"
+                "ALERTMANAGER_WEBHOOK_BEARER_TOKEN", "token"
         );
         var db = new FakeDbProbe(Map.of(
                 "alert_inbox", List.of("SELECT", "INSERT", "UPDATE"),
@@ -128,7 +118,7 @@ class AlertSelfCheckTest {
                 "scheduler_slot", List.of("SELECT", "UPDATE")
         ));
 
-        List<String> violations = AlertSelfCheck.violations(env, db, true);
+        List<String> violations = AlertSelfCheck.violations(env, db);
 
         assertThat(violations).isEmpty();
     }

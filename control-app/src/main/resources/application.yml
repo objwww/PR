@@ -36,31 +36,10 @@ app:
       bearer: ${CONTROL_WEBHOOK_BEARER_TOKEN:}
       allowed-receivers: rca-oncall
       allowed-scopes: rca_system
-    # M6-04 run 级 fallback（V33）：NATIVE run 的安全/运行故障恰一次铸 HOLMES RERUN。
-    # enabled 是 M6-06/07 Holmes 退场预演/下线的 sanctioned 闸（缺省开）；
-    # daily-budget = 独立 fallback 预算（滚动 24h 占位窗计数，与 canary 预算分账）
-    fallback:
-      enabled: ${APP_ALERT_FALLBACK_ENABLED:true}
-      daily-budget: ${APP_ALERT_FALLBACK_DAILY_BUDGET:20}
-    # M6-05 Holmes 只读对照期（V34 反向影子）：NATIVE SUCCEEDED run 确定性抽样 →
-    # 影子工作行 → SKIP LOCKED 认领补一轮 Holmes 对照执行 → V32 对照/底噪落账。
-    # enabled 缺省关（既有部署零惊扰）；独立预算与 canary/fallback 预算分账；
-    # lease 必须 > Holmes 最长在途窗（read-timeout 8min）
-    shadow:
-      holmes:
-        enabled: ${APP_ALERT_SHADOW_HOLMES_ENABLED:false}
-        daily-budget: ${APP_ALERT_SHADOW_HOLMES_DAILY_BUDGET:20}
-        sample-rate: ${APP_ALERT_SHADOW_HOLMES_SAMPLE_RATE:100}
-        max-attempts: ${APP_ALERT_SHADOW_HOLMES_MAX_ATTEMPTS:3}
-        lease: ${APP_ALERT_SHADOW_HOLMES_LEASE:PT15M}
-        poll-interval: ${APP_ALERT_SHADOW_HOLMES_POLL_INTERVAL:PT30S}
-        batch-size: ${APP_ALERT_SHADOW_HOLMES_BATCH_SIZE:2}
-    # Holmes 常驻容器凭证桥接（BA-10①/G0-03）：Spring 不会自动把 HOLMES_API_KEY
-    # 环境变量映射成 app.alert.holmes.api-key 属性，必须在 yml 显式占位。
-    # compose 注入 HOLMES_BASE_URL / HOLMES_API_KEY；AlertFlowConfig 读 app.alert.holmes.*
-    holmes:
-      base-url: ${HOLMES_BASE_URL:http://holmes:8080}
-      api-key: ${HOLMES_API_KEY:}
+    # M6-07 Holmes 退场：app.alert.fallback.*（V33 铸造面 bean 已拆）、
+    # app.alert.shadow.holmes.*（V34 观察面 bean 已拆）、app.alert.holmes.*（凭证桥接，
+    # 服务与 .env 键已回收）三键族随之摘除——不留死闸（决策记录 §9 步骤⑦裁定）。
+    # 历史形态见 git tag pre-holmes-removal。
   # AM5 M5-09：ConfigBundle 发布/回滚 API 鉴权（release 角色共享凭证，O-4 用户体系
   # 落地前的形态；键名与 compose 三方统一沿 alert.webhook.bearer 惯例）
   release:

@@ -18,18 +18,16 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 public class SelfCheckConfig {
 
     /**
-     * holmesEnabled（BA-10① 收尾）：默认 true——AM1 的 RCA 执行面就是 Holmes，
-     * 凭证缺失必须在启动时 fail-closed，而不是等第一次调查 401。
-     * 显式置 app.alert.holmes.enabled=false 可关闭该检查（如纯投影调试部署）。
+     * M6-07：holmesEnabled 旋钮随 Holmes 退场摘除（原 ${app.alert.holmes.enabled:true}
+     * 凭证门要求 HOLMES_API_KEY 在场，密钥回收后 195 真启动即崩——BA-59）。
+     * 第二引擎已无生产入口，其凭证不再是启动前置。
      */
     @Bean
     public StartupSelfCheckRunner controlStartupSelfCheck(
-            JdbcClient jdbc,
-            @org.springframework.beans.factory.annotation.Value(
-                    "${app.alert.holmes.enabled:true}") boolean holmesEnabled) {
+            JdbcClient jdbc) {
         EnvironmentProbe env = EnvironmentProbe.system();
         DbPrivilegeProbe db = DbPrivilegeProbe.postgres(jdbc);
         return new StartupSelfCheckRunner("control",
-                () -> ControlSelfCheck.violations(env.all(), db, holmesEnabled));
+                () -> ControlSelfCheck.violations(env.all(), db));
     }
 }

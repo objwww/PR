@@ -11,13 +11,14 @@ import java.util.Map;
  * 每条违规产出一句人话文案；只出现变量名/表名/权限名，永不出现值。
  *
  * <p>AM1-T00 清障后：PR 域检查项（outbox_command 权限等）随死代码删除；
- * 告警域检查项（V7 表权限、webhook/Holmes 凭证存在性）由 AM1-T09 AlertSelfCheck 增补。
+ * 告警域检查项（V7 表权限、webhook 凭证存在性）由 AM1-T09 AlertSelfCheck 增补；
+ * Holmes 凭证检查随 M6-07 退场摘除（第二引擎无生产入口，凭证键已回收）。
  *
  * <p>当前判定清单：
  * <ol>
  *   <li>模型 key（AGENT_MODEL_API_KEY）存在（M3 模型治理保留面，AM4 复用）；</li>
  *   <li>DB 角色对 model_call_ledger 有 INSERT 权（V5 授权配错早发现）；</li>
- *   <li>告警域自检（AlertSelfCheck，AM1-T09）：webhook token、Holmes 凭证、V7 九表权限。</li>
+ *   <li>告警域自检（AlertSelfCheck，AM1-T09）：webhook token、V7 九表权限。</li>
  * </ol>
  */
 public final class ControlSelfCheck {
@@ -33,13 +34,11 @@ public final class ControlSelfCheck {
      *
      * @param env 环境变量
      * @param db DB 权限探针
-     * @param holmesEnabled 是否启用 HolmesGPT
      * @return 违规列表（空 = 通过）
      */
     public static List<String> violations(
             Map<String, String> env,
-            DbPrivilegeProbe db,
-            boolean holmesEnabled
+            DbPrivilegeProbe db
     ) {
         List<String> violations = new ArrayList<>();
 
@@ -55,15 +54,8 @@ public final class ControlSelfCheck {
         }
 
         // 告警域自检（AM1-T09）
-        violations.addAll(AlertSelfCheck.violations(env, db::hasTablePrivilege, holmesEnabled));
+        violations.addAll(AlertSelfCheck.violations(env, db::hasTablePrivilege));
 
         return violations;
-    }
-
-    /**
-     * 兼容性重载（不检查告警域）。
-     */
-    public static List<String> violations(Map<String, String> env, DbPrivilegeProbe db) {
-        return violations(env, db, false);
     }
 }
