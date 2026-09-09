@@ -1,0 +1,8 @@
+total 48
+-rw-rw-r-- 1 root root 13896 Sep  9 05:55 alert-compose-pre-removal.yml
+-rw-rw-r-- 1 root root 13170 Sep  9 05:55 deploy-compose-pre-removal.yml
+-rw------- 1 root root   920 Sep  9 07:50 dotenv-alert-pre-key-recycle.bak
+-rw------- 1 root root  2100 Sep  9 07:50 dotenv-deploy-pre-key-recycle.bak
+-rw------- 1 root root  2100 Sep  9 06:42 dotenv-pre-removal.bak
+-rw-r--r-- 1 root root    72 Sep  9 06:43 holmesgpt-image-digest.txt
+3ff560c82eec8e1b11467ccfa60b6632cec56e1972963fa64ea34740a29f7767  /opt/backups/pre-v35-run-id-nullable/pr_agent-pre-v35.sql.gz

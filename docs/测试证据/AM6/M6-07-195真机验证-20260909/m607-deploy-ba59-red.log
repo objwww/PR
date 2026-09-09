@@ -1,0 +1,56 @@
+== [T0] jar 在位（verify3 产物） ==
+-rw-r--r-- 1 root root 40218691 Sep  9 08:06 /opt/build/pr/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar
+-rw-r--r-- 1 root root  1176985 Sep  9 08:06 /opt/build/pr/control-app/target/control-app-0.0.1-SNAPSHOT.jar
+== [T1] docker compose build control-app ==
+#9 [control-app] exporting to image
+#9 exporting layers 0.1s done
+#9 writing image sha256:42797986956cefaa5e31a524ce01ffb4e191dd40619c95c7fbe61f9da220bd4c done
+#9 naming to docker.io/pr-agent/control-app:0.0.1-SNAPSHOT done
+#9 DONE 0.1s
+== [T2] 主栈 up -d（仅 control-app 因 env 映射变更而重建） ==
+ Container deploy-postgres-1  Running
+ Container deploy-otelcol-control-1  Running
+ Container deploy-migrate-1  Created
+ Container deploy-notify-app-1  Running
+ Container deploy-control-app-1  Recreate
+ Container deploy-control-app-1  Recreated
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Starting
+ Container deploy-migrate-1  Started
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+== [T3] 健康轮询（最长 120s） ==
+poll#0 health=000
+poll#1 health=000
+poll#2 health=000
+poll#3 health=000
+poll#4 health=000
+poll#5 health=000
+poll#6 health=000
+poll#7 health=000
+poll#8 health=000
+poll#9 health=000
+poll#10 health=000
+poll#11 health=000
+poll#12 health=000
+poll#13 health=000
+poll#14 health=000
+poll#15 health=000
+poll#16 health=000
+poll#17 health=000
+poll#18 health=000
+poll#19 health=000
+poll#20 health=000
+poll#21 health=000
+poll#22 health=000
+poll#23 health=000
+HEALTH_FAILED

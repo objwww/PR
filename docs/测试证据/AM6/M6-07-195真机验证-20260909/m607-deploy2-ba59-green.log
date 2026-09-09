@@ -1,0 +1,61 @@
+PKG_SHA_REMOTE=e954fc9c11fef064a9860d3137d4a29ec6e848682547d7307b556ed08f2323ac
+PKG_SHA_LOCAL_EXPECT=e954fc9c11fef064a9860d3137d4a29ec6e848682547d7307b556ed08f2323ac
+== [P0] 停崩溃循环容器 ==
+deploy-control-app-1
+== [P1] 解包 + blob 探针 ==
+PROBE=fd2b28fa179b1fe9122245ab3c0e7b1a269ed283ea6280986128c9442ad813e6
+PROBE_EXPECT=fd2b28fa179b1fe9122245ab3c0e7b1a269ed283ea6280986128c9442ad813e6
+== [P2] 全量回归（verify4=BA-59 修复官方绿） ==
+[INFO] Tests run: 961, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 133, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+== [P3] 重建镜像 ==
+#9 writing image sha256:afc5728087812fdd23472f5745d4cf3cacc9cff4493726c53bccc8520cc882cd done
+#9 naming to docker.io/pr-agent/control-app:0.0.1-SNAPSHOT done
+#9 DONE 0.1s
+== [P4] 主栈滚动 ==
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+== [P5] 健康轮询 ==
+poll#0 health=000
+poll#1 health=000
+poll#2 health=000
+poll#3 health=200
+== [P6] 启动日志断言（自检通过/零 holmes/零 FAILED） ==
+1
+NO_APP_FAILED (good)
+NO_HOLMES_TOKEN (good)
+== [P7] 容器 env 面 holmes 零命中 ==
+ZERO_HOLMES_ENV (good)
+== [P8] alert 栈 up -d --remove-orphans ==
+ Container holmesgpt-am1  Stopping
+ Container holmesgpt-am1  Stopped
+ Container holmesgpt-am1  Removing
+ Container holmesgpt-am1  Removed
+ Container alert-litellm-bootstrap-1  Created
+ Container litellm-am3  Running
+ Container flagd-admin-am3  Running
+ Container prometheus-am0  Running
+ Container alertmanager-am0  Running
+ Container alert-arena-migrate-1  Created
+ Container alert-arena-chaos-admin-1  Running
+ Container alert-order-arena-1  Running
+ Container alert-arena-migrate-1  Starting
+ Container alert-litellm-bootstrap-1  Starting
+ Container alert-litellm-bootstrap-1  Started
+ Container alert-arena-migrate-1  Started
+== [P9] holmesgpt 容器/镜像面断言 ==
+NO_HOLMESGPT_CONTAINER (good)
+
+deploy-control-app-1	Up 16 seconds
+litellm-am3	Up 23 hours (healthy)
+alert-litellm-bootstrap-1	Up Less than a second
+prometheus-am0	Up 4 days
+alertmanager-am0	Up 18 hours
+DEPLOY2_DONE

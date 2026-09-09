@@ -1,0 +1,2 @@
+run=9b7b51c6-b940-42f2-8587-7b6f41e26b4e|report=d86f99fd-6bf9-4e83-80ef-4ef54bd7ebaa|pkg_bytes=467
+restore-read RTO=1s（口径同 M6-06 restore；无 holmesgpt 容器环境）

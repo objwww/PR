@@ -1,0 +1,22 @@
+[AM6] E2E-AM6-07 开始 suite=20260909T011231Z runs=/opt/projects/pr_agent_it/e2e-am6/runs/20260909T011231Z-am6-07
+[AM6] phase0 退场姿态：health 200 + nativeReady + holmes 容器/卷/网络全零
+[AM6]   进场指针 D_PREV=6d44f490bf638ce0bd3081491e7d7254d629b4c445bd6ad373d80a8fd6c8e2c9（M6-05 percent=0 锚，回滚靶留档）
+[AM6] phase0 PASS（health 200/nativeReady/无 holmes 容器卷、alert-net 无 holmes、litellm 在场）
+[AM6] phase1 percent=0 → BUCKETED_HOLMES 决策照记、run_id 留空、零 run 铸造
+[AM6] phase1 PASS（决策行 run_id 留空/同键零 run/守卫日志 1 次；digest=6763ff4692a0c9a4dac8bfe4347d8e3b568530ba37b430c12700948a176b3bb1）
+[AM6] phase2 WHITELISTED → NATIVE 全链（run_id 非空 → SUCCEEDED → 生产收尾）
+[AM6]   NATIVE run=28343bb3-8a63-4116-9da8-1fa0bfab7a98（真栈 agents 驱动，超时 420s）
+[AM6] phase2 PASS（NATIVE 全链：原子对审计/终态/报告/发布/外发/驱动任务/DAG≥3 终态）
+[AM6] phase3 历史回放：HOLMES 计数零增 + 审计 V35 前后两态共存可查
+[AM6]   审计两态：legacy_with_run=46 retired_without_run=2 native_pair=8
+[AM6]   HOLMES SUCCEEDED 快照（phase3 时点）=137（与 phase5 复核零增）
+[AM6] phase3 PASS（审计查询全绿：两态共存 + NATIVE 原子对 join 可读）
+[AM6] phase4 密钥归并：.env/容器 env/双栈渲染 holmes 键族全零
+[AM6] phase4 PASS（.env/容器 env/双栈渲染四零命中；键值零回显）
+[AM6] phase5 drain barrier 回放（M6-06 v2 语义 B1~B4）+ HOLMES 计数复核
+[AM6] phase5 PASS（B1~B4=0|0|0|0；HOLMES 计数 137 零增）
+[AM6] phase6 制品恢复实跑：封存清单 + pg_dump sha256 复验 + 最旧 HOLMES 报告读回 RTO
+[AM6] phase6 PASS（制品封存/备份 sha256 恒等/最旧报告读回 1s；不宣称一键回切=C-69，回滚仅发布指针面 D_PREV=6d44f490bf638ce0bd3081491e7d7254d629b4c445bd6ad373d80a8fd6c8e2c9）
+[AM6] phase7 收官：percent=100 全量 NATIVE（无白名单）→ BUCKETED_NATIVE → SUCCEEDED
+[AM6] phase7 PASS（M6 弧终点：全量 NATIVE 收官 active=99f1e6cf002cf46c3998c7f5e45a2f41bc323f0d33339df6163f8548541de73a；D_PREV=6d44f490bf638ce0bd3081491e7d7254d629b4c445bd6ad373d80a8fd6c8e2c9 留档）
+[AM6] E2E-AM6-07 PASS（suite=20260909T011231Z，证据=/opt/projects/pr_agent_it/e2e-am6/runs/20260909T011231Z-am6-07）

@@ -1,0 +1,6 @@
+== PG 侧 FK 23503（BA-60 旧镜像复发，01:02Z 窗口） ==
+2026-09-09 01:02:07.521 UTC [14593] ERROR:  insert or update on table "canary_route_decision" violates foreign key constraint "canary_route_decision_run_id_fkey"
+2026-09-09 01:02:17.561 UTC [14593] ERROR:  insert or update on table "canary_route_decision" violates foreign key constraint "canary_route_decision_run_id_fkey"
+2026-09-09 01:02:27.578 UTC [14593] ERROR:  insert or update on table "canary_route_decision" violates foreign key constraint "canary_route_decision_run_id_fkey"
+2026-09-09 01:02:37.590 UTC [14593] ERROR:  insert or update on table "canary_route_decision" violates foreign key constraint "canary_route_decision_run_id_fkey"
+2026-09-09 01:02:47.606 UTC [14593] ERROR:  insert or update on table "canary_route_decision" violates foreign key constraint "canary_route_decision_run_id_fkey"

@@ -1,0 +1,50 @@
+== [T0] jar 在位（verify5 产物，4d3ff32 字节等价树） ==
+-rw-r--r-- 1 root root 40218778 Sep  9 08:48 /opt/build/pr/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar
+-rw-r--r-- 1 root root  1176932 Sep  9 08:48 /opt/build/pr/control-app/target/control-app-0.0.1-SNAPSHOT.jar
+== [T1] docker compose build control-app ==
+#9 [control-app] exporting to image
+#9 exporting layers 0.1s done
+#9 writing image sha256:430a3fd3c505fe088c4be64bb6700d2a823e1c45078682971cc3cae18e07664e done
+#9 naming to docker.io/pr-agent/control-app:0.0.1-SNAPSHOT done
+#9 DONE 0.1s
+== [T2] 主栈 up -d（control-app 重建） ==
+ Container deploy-otelcol-control-1  Running
+ Container deploy-postgres-1  Running
+ Container deploy-migrate-1  Created
+ Container deploy-notify-app-1  Running
+ Container deploy-control-app-1  Recreate
+ Container deploy-control-app-1  Recreated
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Starting
+ Container deploy-migrate-1  Started
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Waiting
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+== [T3] 健康轮询（最长 120s） ==
+poll#0 health=000
+poll#1 health=000
+poll#2 health=000
+poll#3 health=200
+== [T4] 启动日志断言面 ==
+NO_APP_FAILED (good)
+NO_HOLMES_TOKEN (good)
+== [T5] 新镜像 digest ==
+sha256:430a3fd3c505fe088c4be64bb6700d2a823e1c45078682971cc3cae18e07664e
+== [T6] alert 栈姿态复断（remove-orphans 幂等） ==
+ Container alert-arena-migrate-1  Starting
+ Container alert-arena-migrate-1  Started
+ Container alert-litellm-bootstrap-1  Started
+== [T7] holmesgpt 移除 + alert-net 成员 + litellm 未受扰 ==
+NO_HOLMESGPT_CONTAINER (good)
+alert-arena-migrate-1 deploy-postgres-1 alert-order-arena-1 alert-litellm-bootstrap-1 alertmanager-am0 litellm-am3 deploy-control-app-1 prometheus-am0 
+deploy-control-app-1	Up 16 seconds
+litellm-am3	Up 24 hours (healthy)
+alert-litellm-bootstrap-1	Up Less than a second
