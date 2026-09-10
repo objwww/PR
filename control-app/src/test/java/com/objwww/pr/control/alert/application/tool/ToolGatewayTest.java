@@ -230,4 +230,31 @@ class ToolGatewayTest {
                 .isInstanceOfSatisfying(ToolControlPlaneException.class,
                         e -> assertThat(e.reason()).isEqualTo(ToolControlReason.AUTH_FAILED));
     }
+
+    @Test
+    void utW11_bulkhead满则明确拒绝_模型可见背压文案() throws Exception {
+        // EX-A4a（F17）：单槽池被占 + 有界队列(1)满 → 第三个 submit 即
+        // RejectedExecutionException，映射为模型可见背压固定文案（不静默排队）
+        ExecutorService busyPool = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0L,
+                TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(1),
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            busyPool.submit(() -> release.await(5, TimeUnit.SECONDS));
+            busyPool.submit(() -> release.await(5, TimeUnit.SECONDS)); // 队列满
+            ToolGateway gateway = gateway(
+                    new ToolRegistry.Registration(definition("t.tool", ToolRisk.R0, 1_000, 16),
+                            countingExecutor()),
+                    new ToolPolicy(Set.of("t.tool")), busyPool);
+            ToolModelVisibleException e = catchThrowableOfType(
+                    () -> gateway.invoke(invocation("t.tool", Map.of("q", "x"))),
+                    ToolModelVisibleException.class);
+            assertThat(e.reason()).isEqualTo(ToolModelVisibleReason.REMOTE_UNAVAILABLE);
+            assertThat(e).hasMessage("工具调用通道拥塞（背压拒绝，可稍后重试）");
+            assertThat(remoteCalls.get()).isZero();
+        } finally {
+            release.countDown();
+            busyPool.shutdownNow();
+        }
+    }
 }

@@ -117,7 +117,8 @@ class Am4ShadowTriggerTest {
 
         assertThat(evidence.rows).hasSize(3);
         assertThat(evidence.rows).allSatisfy(e ->
-                assertThat(e.scope().get("input_snapshot_digest")).isEqualTo(snapshot.hex()));
+                assertThat(e.scope().get("investigation_input_digest"))
+                        .isEqualTo(snapshot.hex()));
         assertThat(evidence.rows).extracting(EvidenceEnvelope::source)
                 .containsExactlyInAnyOrder("prometheus", "logs", "change");
         assertThat(ledger.succeeded).isEqualTo(3);
@@ -256,7 +257,7 @@ class Am4ShadowTriggerTest {
                 tools, gateway, evidence, ledger, mapper);
         ChangeAgent change = new ChangeAgent(profile("change", ChangeAgent.TOOL_NAME),
                 tools, gateway, evidence, ledger, mapper);
-        NativeRcaAgent nativeRca = new NativeRcaAgent(evidence, claims,
+        NativeRcaAgent nativeRca = new NativeRcaAgent(evidence, snapshots, claims,
                 new ClaimReducer(Set.of("holmes", "prometheus"), "ut-policy"));
         EngineComparisonRecorder recorder = new EngineComparisonRecorder(
                 new NoBundles(), stores.runs, stores.reports, claims, comparisons,
@@ -428,6 +429,7 @@ class Am4ShadowTriggerTest {
     private static final class TriggerSnapshots implements EvidenceSnapshotRepository {
 
         private final Map<UUID, Frozen> byRun = new ConcurrentHashMap<>();
+        private final Map<UUID, List<SnapshotMemberRow>> bySnapshotId = new ConcurrentHashMap<>();
 
         private record Frozen(FrozenSnapshot frozen, List<SnapshotMemberRow> members) {
         }
@@ -435,17 +437,23 @@ class Am4ShadowTriggerTest {
         @Override
         public boolean freeze(FrozenSnapshot snapshot, List<SnapshotMemberRow> members) {
             byRun.put(snapshot.runId(), new Frozen(snapshot, List.copyOf(members)));
+            bySnapshotId.put(snapshot.snapshotId(), List.copyOf(members));
             return true;
         }
 
+        /** EX-A4a（F05）：find 真实按 (run,digest) 解析——黑板=成员表由 agent 消费 */
         @Override
         public Optional<FrozenSnapshot> find(UUID runId, String snapshotDigest) {
-            return Optional.empty();
+            return byRun.values().stream()
+                    .filter(f -> f.frozen().runId().equals(runId)
+                            && f.frozen().snapshotDigest().equals(snapshotDigest))
+                    .map(Frozen::frozen)
+                    .findFirst();
         }
 
         @Override
         public List<SnapshotMemberRow> membersOf(UUID snapshotId) {
-            return List.of();
+            return bySnapshotId.getOrDefault(snapshotId, List.of());
         }
     }
 

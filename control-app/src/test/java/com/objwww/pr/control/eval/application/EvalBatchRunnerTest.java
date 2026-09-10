@@ -266,9 +266,15 @@ class EvalBatchRunnerTest {
 
     private EvalBatchRunner runner(ScriptedDriver driver, RcaRunResolver resolver,
                                    RecordingEvalRuns repo, EvalBatchRunner.EvalClock clock) {
+        return runner(driver, resolver, repo, clock, (alertname, maxWaitSeconds) -> true);
+    }
+
+    private EvalBatchRunner runner(ScriptedDriver driver, RcaRunResolver resolver,
+                                   RecordingEvalRuns repo, EvalBatchRunner.EvalClock clock,
+                                   IncidentResolutionProbe incidentProbe) {
         return new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
-                Map.of("FlagdScenarioDriver", driver), new StubProbe(), resolver,
-                scorer(), repo, new BaselineReportGenerator(), metadata(), 2, clock);
+                Map.of("FlagdScenarioDriver", driver), new StubProbe(), incidentProbe,
+                resolver, scorer(), repo, new BaselineReportGenerator(), metadata(), 2, clock);
     }
 
     private static EvalRunMetadata metadata() {
@@ -333,6 +339,34 @@ class EvalBatchRunnerTest {
         assertThat(blocked.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
         assertThat(blocked.failureSampleJson()).contains("gate_blocked");
         assertThat(blocked.fnCount()).isEqualTo(1);
+        assertThat(result.finalized()).isTrue();
+        assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("上轮 incident 未 RESOLVED：下一轮 prev_round_not_resolved 落档、不注入、门关闭")
+    void prevRoundUnresolvedBlocksInjectionAndClosesGate() {
+        UUID runId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        // R1 前 episode 干净（放行）→ R1 正常走通；R2 前残留（FIRING）→ 判败关门
+        boolean[] probeAnswers = {true, false};
+        int[] calls = {0};
+        IncidentResolutionProbe probe = (alertname, maxWaitSeconds) ->
+                probeAnswers[Math.min(calls[0]++, probeAnswers.length - 1)];
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        EvalBatchRunner batch = runner(driver, new StubResolver(runId, null), repo,
+                new StepClock(), probe);
+
+        EvalBatchRunner.BatchResult result = batch.runBatch();
+
+        assertThat(driver.activations).isEqualTo(1);
+        assertThat(driver.deactivations).isEqualTo(1);
+        assertThat(repo.cases).hasSize(2);
+        assertThat(repo.cases.get(0).verdict()).isEqualTo(ScoringVerdict.DECIDABLE);
+        EvalCaseResult blocked = repo.cases.get(1);
+        assertThat(blocked.roundNo()).isEqualTo(2);
+        assertThat(blocked.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
+        assertThat(blocked.failureSampleJson()).contains("prev_round_not_resolved");
         assertThat(result.finalized()).isTrue();
         assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
     }

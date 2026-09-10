@@ -85,6 +85,13 @@
             <artifactId>micrometer-tracing-bridge-brave</artifactId>
         </dependency>
 
+        <!-- EX-C3a：认证最小闭环——Spring Security 6 服务端会话（浏览器）+ 机器静态 bearer
+             过滤器；禁自建 token 表+HMAC（卡面机制裁定见执行日志） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- 测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

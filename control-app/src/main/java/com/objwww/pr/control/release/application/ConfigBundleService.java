@@ -25,6 +25,10 @@ public class ConfigBundleService {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigBundleService.class);
 
+    /** EX-B1 变更事实固定面：变更对象 = 本控制面自身，环境 = 生产 */
+    static final String CHANGE_SERVICE = "control-app";
+    static final String CHANGE_ENVIRONMENT = "production";
+
     private final ConfigBundleRepository repository;
 
     public ConfigBundleService(ConfigBundleRepository repository) {
@@ -65,7 +69,7 @@ public class ConfigBundleService {
         Objects.requireNonNull(digest, "digest 不得为 null");
         ConfigBundle target = repository.findByDigest(digest)
                 .orElseThrow(() -> new IllegalArgumentException("未知 bundle digest: " + digest));
-        return movePointer(target, by, "activate");
+        return movePointer(target, by, "ACTIVATE");
     }
 
     /** 回滚：pointer 指回 toDigest（必须已发布）；历史 bundle 行零改写（INV-AM5-5） */
@@ -73,7 +77,7 @@ public class ConfigBundleService {
         Objects.requireNonNull(toDigest, "toDigest 不得为 null");
         ConfigBundle target = repository.findByDigest(toDigest)
                 .orElseThrow(() -> new IllegalArgumentException("未知 bundle digest: " + toDigest));
-        return movePointer(target, by, "rollback");
+        return movePointer(target, by, "ROLLBACK");
     }
 
     /** GET /active 响应面：未激活 → 空 */
@@ -89,12 +93,19 @@ public class ConfigBundleService {
                 candidate.content(), candidate.createdBy(), candidate.createdAt());
     }
 
+    /**
+     * EX-B1：指针移动与变更事实同事务——幂等重放早退（零事件）、CAS 败者事务内零插入
+     * （评审 B1 两裁定）；仅 ROLLBACK 携 rollback_of（回滚前生效 digest）。
+     */
     private ActivationResult movePointer(ConfigBundle target, String by, String action) {
         Digest current = repository.activeDigest().orElse(null);
         if (current != null && current.equals(target.bundleDigest())) {
             return new ActivationResult(current, target.revision(), false);
         }
-        if (!repository.activate(target.bundleDigest(), current, by, Instant.now())) {
+        ConfigBundleRepository.ActivationFact fact = new ConfigBundleRepository.ActivationFact(
+                action, CHANGE_SERVICE, CHANGE_ENVIRONMENT,
+                "ROLLBACK".equals(action) ? current : null);
+        if (!repository.activate(target.bundleDigest(), current, by, Instant.now(), fact)) {
             // 并发竞争败者：expected 已漂移，调用方以 409 携最新投影回显
             log.warn("{} CAS 竞争失败: target={} by={}", action, target.bundleDigest(), by);
             return new ActivationResult(repository.activeDigest().orElse(null),

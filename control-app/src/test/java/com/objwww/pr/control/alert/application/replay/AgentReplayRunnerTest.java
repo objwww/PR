@@ -51,7 +51,9 @@ class AgentReplayRunnerTest {
     private static final long RESULT_LIMIT_BYTES = 65_536L;
 
     private static final String TIME_RANGE = "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z";
-    private static final String SNAPSHOT = "ab".repeat(32);
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            SNAPSHOT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    "ab".repeat(32));
     /** 注册执行器只会返回的"活执行"字节：结构性不可达，误降级即暴露 */
     private static final byte[] LIVE_ONLY_RESPONSE =
             "{\"status\":\"live-only\"}".getBytes(StandardCharsets.UTF_8);

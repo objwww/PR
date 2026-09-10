@@ -2,6 +2,7 @@ package com.objwww.pr.control.infrastructure.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.objwww.pr.control.alert.application.tool.ToolExecutor;
 import com.objwww.pr.control.alert.application.tool.ToolGateway;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
@@ -10,6 +11,8 @@ import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
+import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
+import com.objwww.pr.control.alert.domain.tool.ToolControlReason;
 import com.objwww.pr.control.alert.domain.tool.ToolDefinition;
 import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
 import com.objwww.pr.control.alert.domain.tool.ToolPolicy;
@@ -36,6 +39,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Prometheus 契约真网络面（AM4 M4-27 任务行：WireMock/Prometheus 契约）：
@@ -115,6 +119,84 @@ class PrometheusMetricsWireMockTest {
         assertThat(result.outcome()).isEqualTo(AgentOutcome.FAILED);
         assertThat(result.errorClass()).isEqualTo("RATE_LIMITED");
         assertThat(evidence.ledger.rows.get(0).reason()).isEqualTo(ToolReasonCode.RATE_LIMITED);
+    }
+
+    @Test
+    void oversizedResponseIsAboundedAtLimitPlusOneNotFullyBuffered() {
+        // EX-A4a（F17）有界流读：limit=256，响应 10KB——executor 读到 257 字节即断
+        // （控制面 RESULT_OVERSIZE），不把 10KB 全量搬进内存
+        WIREMOCK.resetAll();
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/query_range"))
+                .willReturn(aResponse().withHeader("Content-Type", "application/json")
+                        .withBody("x".repeat(10 * 1_024))));
+        MemEvidence evidence = new MemEvidence();
+        PrometheusQueryExecutor executor = new PrometheusQueryExecutor(base());
+        ToolRegistry registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
+                smallLimitDefinition(256), executor)));
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors
+                .newFixedThreadPool(1);
+        ToolGateway gateway = new ToolGateway(registry,
+                new ToolPolicy(Set.of("prometheus.query")), pool,
+                java.time.Clock.systemUTC(), null);
+        try {
+            assertThatThrownBy(() -> gateway.invoke(gatewayInvocation(query())))
+                    .isInstanceOfSatisfying(ToolControlPlaneException.class,
+                            e -> assertThat(e.reason())
+                                    .isEqualTo(ToolControlReason.RESULT_OVERSIZE));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void windowSpanAndStepSemanticsAreValidatedBeforeHttp() {
+        // EX-A4a（F17）语义约束：窗幅 ≤3600s、step ≤60s——executor 域内校验先于触网
+        PrometheusQueryExecutor executor =
+                new PrometheusQueryExecutor("http://prometheus-invalid:9090");
+        // 窗幅超限（4800s）
+        assertThatThrownBy(() -> executor.execute(new ToolExecutor.ToolExecution(
+                Map.of("query", "up", "start", "1757059200", "end", "1757064000",
+                        "step", "30s"),
+                System.currentTimeMillis() + 5_000, 65_536)))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("窗幅");
+        // step 超限（2m=120s > 60s）
+        assertThatThrownBy(() -> executor.execute(new ToolExecutor.ToolExecution(
+                Map.of("query", "up", "start", "1757059200", "end", "1757059260",
+                        "step", "2m"),
+                System.currentTimeMillis() + 5_000, 65_536)))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("step");
+        // 倒挂窗同样拒（end-start < 0）
+        assertThatThrownBy(() -> executor.execute(new ToolExecutor.ToolExecution(
+                Map.of("query", "up", "start", "1757059260", "end", "1757059200",
+                        "step", "30s"),
+                System.currentTimeMillis() + 5_000, 65_536)))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("窗幅");
+    }
+
+    /** limit 收紧的 prometheus 定义（schema 同形，仅 resultLimitBytes 变小） */
+    private static ToolDefinition smallLimitDefinition(long limitBytes) {
+        Map<String, Object> properties = new java.util.LinkedHashMap<>();
+        properties.put("query", Map.of("type", "string"));
+        properties.put("start", Map.of("type", "string"));
+        properties.put("end", Map.of("type", "string"));
+        properties.put("step", Map.of("type", "string"));
+        Map<String, Object> schema = new java.util.LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("properties", properties);
+        schema.put("required", List.of("query", "start", "end", "step"));
+        return new ToolDefinition("prometheus.query", "1", schema, ToolRisk.R0, 5000,
+                limitBytes);
+    }
+
+    private static ToolGateway.ToolInvocation gatewayInvocation(
+            MetricsAgent.MetricsQuery query) {
+        return new ToolGateway.ToolInvocation(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 1, MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION,
+                "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z", MetricsAgent.argsOf(query),
+                null);
     }
 
     // ------------------------------------------------------------------ 夹具

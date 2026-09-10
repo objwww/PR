@@ -14,9 +14,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Logs Agent（AM4 M4-28）：只做一种 R0 日志查询。数据源限制（评审 P0-7）：当前无
- * 冻结的实时日志源，数据面 = replay fixture（{@code ReplayToolExecutor}），不得宣称
- * Live E2E；Live 需先冻结数据源清单+只读凭证+ToolDefinition+部署契约。
+ * Logs Agent（AM4 M4-28；EX-B2 真实源换绑）：只做一种 R0 日志查询。数据面 =
+ * {@code LogQueryExecutor} 真查 Loki（盘点门签字后换绑，见 docs/告警-EXB2-logs真实源.md）；
+ * 无数据三态 EMPTY/SOURCE_UNAVAILABLE/QUERY_FAILED 各有确定结局，禁止 fixture 顶替。
  */
 public class LogsAgent extends SingleToolEvidenceAgent {
 
@@ -35,6 +35,15 @@ public class LogsAgent extends SingleToolEvidenceAgent {
                 registry, gateway, evidence, ledger, mapper);
     }
 
+    /** EX-A1 全参形态（生产装配唯一入口）：预算门 + 熔断门直通基座 */
+    public LogsAgent(AgentProfile profile, ToolRegistry registry, ToolInvoker gateway,
+            EvidenceRepository evidence, RcaToolInvocationLedger ledger, ObjectMapper mapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard doomLoopGuard) {
+        super(profile, new ToolSpec(TOOL_NAME, TOOL_VERSION, EVIDENCE_TYPE, SOURCE),
+                registry, gateway, evidence, ledger, mapper, budgetGate, doomLoopGuard);
+    }
+
     public AgentResult investigate(CallContext ctx, LogsQuery query) {
         return investigate(ctx, argsOf(query));
     }
@@ -46,11 +55,12 @@ public class LogsAgent extends SingleToolEvidenceAgent {
         return args;
     }
 
-    /** 日志工具定义（replay 数据面；R0 显式） */
+    /** 日志查询工具定义（Loki 真源；service 可选，allowlist 面 executor 域内判） */
     public static ToolDefinition toolDefinition(long timeoutMillis, long resultLimitBytes) {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("since", Map.of("type", "string"));
         properties.put("until", Map.of("type", "string"));
+        properties.put("service", Map.of("type", "string"));
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", properties);

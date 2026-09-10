@@ -22,6 +22,9 @@ public interface WebhookTransport {
     /** 传输异常 → SendResult 分类（纯函数，离线可测） */
     final class Classifier {
 
+        private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+
         private Classifier() {
         }
 
@@ -39,11 +42,21 @@ public interface WebhookTransport {
                     "outcome_unknown: " + error.getMessage());
         }
 
-        /** 状态码 → SendResult（429 读 Retry-After，缺省 60s） */
+        /**
+         * 状态码 + 回执 body → SendResult（429 读 Retry-After，缺省 60s）。
+         *
+         * <p>F20（EX-C2a）：HTTP 200 不等于业务送达——钉钉/企微以 200+errcode 回执业务
+         * 结局，errcode≠0 是"平台已受理并明确拒绝"（签名错/关键词不符/限流），不得标
+         * SENT。分类裁定：errcode=0 → Delivered；errcode≠0 → Retryable（进持久重试，
+         * 预算/期限双闸封顶，last_error 记 business_code+errmsg 片段）；2xx 但 body
+         * 非 errcode JSON（回执形态不可证）→ OutcomeUnknown（终态留档人工复核，不自动
+         * 重发）。回执语义：机器人接收≠值班员阅读。
+         */
         public static NotificationChannel.SendResult fromStatus(int status,
-                                                                String retryAfterHeader) {
+                                                                String retryAfterHeader,
+                                                                String body) {
             if (status >= 200 && status < 300) {
-                return new NotificationChannel.SendResult.Delivered();
+                return classifyAck(body);
             }
             if (status == 429) {
                 return new NotificationChannel.SendResult.RateLimited(
@@ -53,6 +66,37 @@ public interface WebhookTransport {
                 return new NotificationChannel.SendResult.Retryable("http_" + status);
             }
             return new NotificationChannel.SendResult.Permanent("http_" + status);
+        }
+
+        /** 2xx 回执解析：errcode 数字字段是唯一送达事实（钉钉/企微共同契约） */
+        private static NotificationChannel.SendResult classifyAck(String body) {
+            if (body == null || body.isBlank()) {
+                return new NotificationChannel.SendResult.OutcomeUnknown("empty_ack_body");
+            }
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = JSON.readTree(body);
+                if (node.isObject() && node.has("errcode") && node.get("errcode").isNumber()) {
+                    int code = node.get("errcode").asInt();
+                    if (code == 0) {
+                        return new NotificationChannel.SendResult.Delivered();
+                    }
+                    String errmsg = node.has("errmsg") && node.get("errmsg").isTextual()
+                            ? node.get("errmsg").asText() : "";
+                    return new NotificationChannel.SendResult.Retryable(
+                            "business_code_" + code + ": " + snippet(errmsg));
+                }
+                return new NotificationChannel.SendResult.OutcomeUnknown(
+                        "unparseable_ack_body");
+            } catch (Exception e) {
+                return new NotificationChannel.SendResult.OutcomeUnknown(
+                        "unparseable_ack_body");
+            }
+        }
+
+        /** errmsg 片段截断（审计卫生：last_error 只留诊断必需） */
+        static String snippet(String text) {
+            String safe = text == null ? "" : text.strip();
+            return safe.length() <= 120 ? safe : safe.substring(0, 120) + "…";
         }
 
         static long parseRetryAfter(String header) {

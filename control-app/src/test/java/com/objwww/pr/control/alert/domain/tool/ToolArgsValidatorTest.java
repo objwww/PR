@@ -87,4 +87,36 @@ class ToolArgsValidatorTest {
         assertThatThrownBy(() -> ToolArgsValidator.validate(withRequired, null))
                 .hasMessageContaining("q");
     }
+
+    @Test
+    void utV06_maxLength超限拒绝_界内放行() {
+        // EX-A4a（F17）：schema 关键字收紧——string 长度上限
+        ToolDefinition d = schema(Map.of(
+                "query", Map.of("type", "string", "maxLength", 5)), List.of("query"));
+        assertThatCode(() -> ToolArgsValidator.validate(d, Map.of("query", "up")))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> ToolArgsValidator.validate(d, Map.of("query", "123456")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("query")
+                .hasMessageContaining("maxLength");
+    }
+
+    @Test
+    void utV07_pattern不匹配拒绝_全匹配放行() {
+        // EX-A4a（F17）：epoch 秒/step 形状约束（MetricsAgent schema 同款 pattern）
+        ToolDefinition d = schema(Map.of(
+                "start", Map.of("type", "string", "pattern", "^\\d{1,10}$"),
+                "step", Map.of("type", "string", "pattern", "^\\d{1,4}(ms|s|m|h)$")),
+                List.of());
+        assertThatCode(() -> ToolArgsValidator.validate(d,
+                Map.of("start", "1757059200", "step", "30s")))
+                .doesNotThrowAnyException();
+        // 负数 epoch / 非法 step 单位 / 部分 matches 也不行（find→matches 全匹配语义）
+        assertThatThrownBy(() -> ToolArgsValidator.validate(d,
+                Map.of("start", "-1757059200", "step", "30s")))
+                .hasMessageContaining("start");
+        assertThatThrownBy(() -> ToolArgsValidator.validate(d,
+                Map.of("start", "1", "step", "30x")))
+                .hasMessageContaining("step");
+    }
 }

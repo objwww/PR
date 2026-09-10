@@ -282,8 +282,10 @@ class AlertInboxProcessorTest {
         assertThat(group2.state()).isEqualTo(InboxState.RETRY_WAIT);
         assertThat(group2.decision()).isEqualTo(InboxDecision.DEFERRED);
         assertThat(group2.nextRetryAt()).isNotNull();
-        assertThat(stores.events.all()).hasSize(1);          // 组2 零 event
-        assertThat(stores.incidents.all()).hasSize(1);      // 零新 incident
+        // EX-A4b（F18）：组2 事实已入通道（event+incident 落库），仅新调查被暂扣
+        // （incident.waitingReason=DEFERRED、无 run）；inbox 行仍 RETRY_WAIT 补投
+        assertThat(stores.events.all()).hasSize(2);
+        assertThat(stores.incidents.all()).hasSize(2);
 
         // 未到 next_retry_at：不重领
         clock.now = clock.now.plusSeconds(10);
@@ -298,7 +300,10 @@ class AlertInboxProcessorTest {
         assertThat(stores.inbox.findById(group2Id).orElseThrow().state())
                 .isEqualTo(InboxState.PROCESSED);
         assertThat(stores.incidents.all()).hasSize(2);
-        assertThat(stores.runs.all()).hasSize(2);   // incident2 的 run 补投铸出
+        // EX-A4b（F18/F24）：补投重投影 = 重复通知 → 不重铸；调查补铸归重驱扫描面
+        assertThat(stores.runs.all()).hasSize(1);
+        assertThat(stores.incidents.findByKeyForUpdate("alertname=HighLatency|service=cart")
+                .orElseThrow().waitingReason()).isEqualTo("DEFERRED");
     }
 
     // ------------------------------------------------------------------ 幂等/升级/新 episode/RERUN

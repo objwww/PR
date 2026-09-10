@@ -130,20 +130,36 @@ class SnapshotShadowRouterTest {
         return verdicts.size();
     }
 
-    /** Candidate 侧：注记证据 → NativeRcaAgent → Claim 落库（真实 Agent 代码） */
+    /** Candidate 侧：注记证据 → 冻结成员黑板 → NativeRcaAgent → Claim 落库（真实 Agent 代码） */
     private int candidateRun(String snapshotDigest, RunBudget budget) {
         budget.consume(RunBudget.Kind.TOOL_CALL, 1);
         MemEvidence evidence = new MemEvidence();
         evidence.insert(annotatedEvidence(snapshotDigest));
-        NativeRcaAgent candidate = new NativeRcaAgent(evidence, candidateClaims, reducer);
-        NativeRcaAgent.NativeResult result = candidate.investigate(RUN_ID, snapshotDigest,
+        // EX-A4a（F05）：黑板=冻结快照成员
+        com.objwww.pr.control.alert.support.AlertInMemoryStores.Snapshots snapshots =
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.Snapshots();
+        snapshots.freeze(new com.objwww.pr.control.alert.domain.evidence
+                        .EvidenceSnapshotRepository.FrozenSnapshot(UUID.randomUUID(), RUN_ID,
+                        snapshotDigest, GENERATION, "cfg", "tools", null),
+                evidence.rows.stream()
+                        .map(e -> new com.objwww.pr.control.alert.domain.evidence
+                                .EvidenceSnapshotRepository.SnapshotMemberRow(
+                                e.evidenceId(), e.evidenceType(), e.payloadDigest()))
+                        .toList());
+        NativeRcaAgent candidate = new NativeRcaAgent(evidence, snapshots, candidateClaims,
+                reducer);
+        NativeRcaAgent.NativeResult result = candidate.investigate(RUN_ID,
+                new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                        snapshotDigest),
+                new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
+                        snapshotDigest),
                 GENERATION);
         return result.verdicts().size();
     }
 
     private EvidenceEnvelope annotatedEvidence(String snapshotDigest) {
         Map<String, Object> scope = new LinkedHashMap<>();
-        scope.put("input_snapshot_digest", snapshotDigest);
+        scope.put("investigation_input_digest", snapshotDigest);
         scope.put("claim_key", "cpu_saturation");
         scope.put("claim_status", "TRUE");
         scope.put("reason", "cpu over threshold");

@@ -127,9 +127,11 @@ public class PostgresRunBudgetLedger implements RunBudgetLedger {
         settleFrom(key, "PROVISIONAL", "'RESERVED'");
     }
 
+    /** usage 缺失：entry → UNMATCHED，账面不动（不伪造零）。EX-A1：RESERVED 亦可直达
+     *  （调用成功但服务端 usage 缺失——无需先过 PROVISIONAL 悬挂态），V13 ck 兼容 */
     @Override
     public void markUnmatched(ReservationKey key) {
-        settleFrom(key, "UNMATCHED", "'PROVISIONAL'");
+        settleFrom(key, "UNMATCHED", "'RESERVED', 'PROVISIONAL'");
     }
 
     private boolean entryExists(ReservationKey key) {

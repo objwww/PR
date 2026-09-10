@@ -29,10 +29,12 @@ class ConfigBundleServiceTest {
     private final InMemoryBundles repository = new InMemoryBundles();
     private final ConfigBundleService service = new ConfigBundleService(repository);
 
-    /** 测试内存认账面：记录 CAS 调用与行改写面（历史行零改写可断言） */
+    /** 测试内存认账面：记录 CAS 调用与行改写面（历史行零改写可断言）；EX-B1 记变更事实 */
     static final class InMemoryBundles implements ConfigBundleRepository {
         final List<ConfigBundle> rows = new ArrayList<>();
         final List<String> casCalls = new ArrayList<>();
+        /** EX-B1：随 moved=true 落档的变更事实（5 参 activate 命中时记录） */
+        final List<ConfigBundleRepository.ActivationFact> changeFacts = new ArrayList<>();
         long revisionSeq = 0;
         Digest active;
         Instant activatedAt;
@@ -81,6 +83,16 @@ class ConfigBundleServiceTest {
             activatedAt = at;
             activatedBy = by;
             return true;
+        }
+
+        @Override
+        public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at,
+                ConfigBundleRepository.ActivationFact fact) {
+            boolean moved = activate(toDigest, expectedCurrent, by, at);
+            if (moved && fact != null) {
+                changeFacts.add(fact);
+            }
+            return moved;
         }
     }
 
@@ -194,5 +206,52 @@ class ConfigBundleServiceTest {
         assertThat(view.get().bundleDigest()).isEqualTo(d1);
         assertThat(view.get().revision()).isEqualTo(1L);
         assertThat(view.get().activatedAt()).isNotNull();
+    }
+
+    // --------------------------------------------- EX-B1 变更事实面（与生效同事务）
+
+    @Test
+    @DisplayName("EX-B1：激活/回滚各随 moved 指针产出变更事实——ACTIVATE 零 rollbackOf，ROLLBACK 携回滚前 digest")
+    void activateAndRollbackCarryChangeFacts() {
+        Digest d1 = service.publish(content("v7"), "op").bundleDigest();
+        Digest d2 = service.publish(content("v8"), "op").bundleDigest();
+
+        service.activate(d1, "op");
+        service.activate(d2, "op");
+        ActivationResult rollback = service.rollback(d1, "op");
+        assertThat(rollback.moved()).isTrue();
+
+        assertThat(repository.changeFacts).hasSize(3);
+        ConfigBundleRepository.ActivationFact first = repository.changeFacts.get(0);
+        assertThat(first.action()).isEqualTo("ACTIVATE");
+        assertThat(first.rollbackOf()).isNull();
+        ConfigBundleRepository.ActivationFact rb = repository.changeFacts.get(2);
+        assertThat(rb.action()).isEqualTo("ROLLBACK");
+        assertThat(rb.rollbackOf()).isEqualTo(d2);
+        for (ConfigBundleRepository.ActivationFact fact : repository.changeFacts) {
+            assertThat(fact.service()).isEqualTo(ConfigBundleService.CHANGE_SERVICE);
+            assertThat(fact.environment()).isEqualTo(ConfigBundleService.CHANGE_ENVIRONMENT);
+        }
+    }
+
+    @Test
+    @DisplayName("EX-B1：幂等重放（重复激活/回滚到当前）零 CAS 零变更事实；CAS 败者零事实")
+    void replayAndCasLoserProduceNoChangeFact() {
+        Digest d1 = service.publish(content("v7"), "op").bundleDigest();
+        Digest d2 = service.publish(content("v8"), "op").bundleDigest();
+        service.activate(d1, "op");
+
+        service.activate(d1, "op");
+        service.rollback(d1, "op");
+
+        assertThat(repository.changeFacts).hasSize(1);
+        assertThat(repository.casCalls).hasSize(1);
+
+        // CAS 败者（expected 漂移）：5 参走到仓储 false 分支，事务内零事实
+        boolean moved = repository.activate(d2, null, "intruder",
+                Instant.now(), new ConfigBundleRepository.ActivationFact(
+                        "ACTIVATE", "x", "y", null));
+        assertThat(moved).isFalse();
+        assertThat(repository.changeFacts).hasSize(1);
     }
 }

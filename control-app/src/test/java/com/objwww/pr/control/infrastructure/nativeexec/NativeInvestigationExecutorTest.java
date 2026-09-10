@@ -9,6 +9,7 @@ import com.objwww.pr.control.alert.application.PlanCompiler;
 import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
 import com.objwww.pr.control.alert.application.ReportCompletedNotifier;
+import com.objwww.pr.control.alert.application.RunBudgetGate;
 import com.objwww.pr.control.alert.application.agent.AgentRegistry;
 import com.objwww.pr.control.alert.application.agent.ChangeAgent;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
@@ -19,6 +20,7 @@ import com.objwww.pr.control.alert.application.tool.ReplayToolGateway;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.budget.BudgetKind;
+import com.objwww.pr.control.alert.domain.budget.ReservationKey;
 import com.objwww.pr.control.alert.domain.claim.ClaimIdentity;
 import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
 import com.objwww.pr.control.alert.domain.claim.ClaimProjection;
@@ -51,6 +53,7 @@ import com.objwww.pr.control.alert.domain.tool.ToolDefinition;
 import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
 import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
 import com.objwww.pr.control.alert.domain.tool.ToolReplayStore;
+import com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.infrastructure.tool.ReplayToolExecutor;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
@@ -115,12 +118,13 @@ class NativeInvestigationExecutorTest {
         AgentReplayRunner runner = new AgentReplayRunner(
                 new ReplayToolGateway(replayRegistry(), new TestReplayStore()));
         MetricsAgent metrics = new MetricsAgent(profile("metrics", MetricsAgent.TOOL_NAME),
-                replayRegistry(), runner, evidence, new TestLedger(), MAPPER);
+                replayRegistry(), runner, evidence, stores.toolLedger, MAPPER);
         LogsAgent logs = new LogsAgent(profile("logs", LogsAgent.TOOL_NAME),
-                replayRegistry(), runner, evidence, new TestLedger(), MAPPER);
+                replayRegistry(), runner, evidence, stores.toolLedger, MAPPER);
         ChangeAgent change = new ChangeAgent(profile("change", ChangeAgent.TOOL_NAME),
-                replayRegistry(), runner, evidence, new TestLedger(), MAPPER);
-        NativeRcaAgent nativeRcaAgent = new NativeRcaAgent(evidence, claims, reducer);
+                replayRegistry(), runner, evidence, stores.toolLedger, MAPPER);
+        NativeRcaAgent nativeRcaAgent = new NativeRcaAgent(evidence, snapshots, claims,
+                reducer);
 
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), stores.tasks, new EdgeStore(),
@@ -132,7 +136,9 @@ class NativeInvestigationExecutorTest {
                 stores.runs, evidence, snapshots, metrics, logs, change, nativeRcaAgent,
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
                 "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP);
+                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
+                new RunBudgetGate(new InMemoryRunBudgetLedger()), generousLimits(),
+                stores.toolLedger);
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls,
@@ -149,6 +155,79 @@ class NativeInvestigationExecutorTest {
     }
 
     // ------------------------------------------------------------------ 全链
+
+    @Test
+    @DisplayName("EX-A0 F14 冻结时间窗：Run 冻结列在场必用（铸时锚），禁止执行期现取窗口")
+    void frozenWindowIsUsedInsteadOfExecutionClock() {
+        Instant mintedAt = NOW.minusSeconds(120);
+        UUID runId = castNativeRunWithInputs(mintedAt);
+        bundles.publish(nativeBundle(proposal()));
+        NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
+
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        // 三调查任务产出的证据 scope time_range = 冻结窗口（≠执行钟 NOW 面）
+        String frozenRange = (mintedAt.minusSeconds(600).getEpochSecond()) + "/"
+                + mintedAt.getEpochSecond();
+        assertThat(evidence.rows).hasSize(3);
+        assertThat(evidence.rows).allSatisfy(e ->
+                assertThat(e.scope()).containsEntry("time_range", frozenRange));
+        // run 冻结输入身份面在场（RoutingView 读回）
+        var view = stores.runs.findRoutingById(runId).orElseThrow();
+        assertThat(view.investigationInputDigest()).hasSize(64);
+        assertThat(view.windowStart()).isEqualTo(mintedAt.minusSeconds(600));
+        assertThat(view.windowEnd()).isEqualTo(mintedAt);
+    }
+
+    /** 证据产出型执行器：三 Agent 挂固定成功响应（scope 携带 ctx 的 timeRange/输入身份） */
+    private NativeInvestigationExecutor executorWithEvidenceProducingTools() {
+        return executorWithEvidenceProducingTools(
+                new RunBudgetGate(new InMemoryRunBudgetLedger()));
+    }
+
+    /** 同上，预算门外部持有（EX-A3 b2：预算占用保留断言需要直读账面） */
+    private NativeInvestigationExecutor executorWithEvidenceProducingTools(
+            RunBudgetGate gate) {
+        byte[] successWithSeries = "{\"status\":\"success\",\"data\":{\"result\":[{\"x\":1}]}}"
+                .getBytes(StandardCharsets.UTF_8);
+        com.objwww.pr.control.alert.application.tool.ToolInvoker fixedTools =
+                invocation -> new com.objwww.pr.control.alert.application.tool.ToolGateway.ToolInvocationResult(
+                        com.objwww.pr.control.alert.application.tool.ToolGateway.ToolInvocationResult.Kind.EXECUTED,
+                        "fixed", successWithSeries);
+        // agent 挂同一预算门（TOOL_CALL 消费点在 agent 侧）——重驱非免费的账面才真实
+        MetricsAgent metrics = new MetricsAgent(profile("metrics", MetricsAgent.TOOL_NAME),
+                replayRegistry(), fixedTools, evidence, stores.toolLedger, MAPPER, gate,
+                com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive());
+        LogsAgent logs = new LogsAgent(profile("logs", LogsAgent.TOOL_NAME),
+                replayRegistry(), fixedTools, evidence, stores.toolLedger, MAPPER, gate,
+                com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive());
+        ChangeAgent change = new ChangeAgent(profile("change", ChangeAgent.TOOL_NAME),
+                replayRegistry(), fixedTools, evidence, stores.toolLedger, MAPPER, gate,
+                com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive());
+        return new NativeInvestigationExecutor(bundles,
+                new DeterministicSupervisor(
+                        new PlanCompiler(agentRegistry(), stores.tasks, new EdgeStore(),
+                                withoutTransaction()),
+                        new com.objwww.pr.control.alert.application.DagExecutionService(
+                                new EdgeStore(), stores.tasks),
+                        stores.runs, stores.tasks, withoutTransaction(), clock),
+                stores.tasks, stores.runs, evidence, snapshots, metrics, logs, change,
+                new NativeRcaAgent(evidence, snapshots, claims,
+                        new ClaimReducer(Set.of(), POLICY_VERSION)),
+                claims, new EvidencePackageValidator(65_536, 32, 4_096),
+                "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
+                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
+                gate, generousLimits(), stores.toolLedger);
+    }
+
+    /** EX-A1：本件焦点非预算面，宽限额只保证 openRun/TOOL_CALL 硬闸不误伤全链用例 */
+    private static Map<BudgetKind, Long> generousLimits() {
+        return Map.of(BudgetKind.STEP, 256L, BudgetKind.TOOL_CALL, 256L,
+                BudgetKind.EVIDENCE, 256L, BudgetKind.SUBTASK, 64L);
+    }
 
     @Test
     @DisplayName("全链：提案落图→驱动（回放 MISS 降级 DEAD）→快照→REPORTING→报告 engine=NATIVE")
@@ -244,6 +323,203 @@ class NativeInvestigationExecutorTest {
         assertThat(claims.appended).isEmpty();
     }
 
+    // ------------------------------------------------ EX-A3 F08/F09 四阶段恢复
+
+    /** 完跑一轮（三任务 DONE、3 证据、3 SUCCESS 行）后按 key 取 DAG 任务行 */
+    private RcaTask dagTask(UUID runId, String key) {
+        return stores.tasks.findByRunId(runId).stream()
+                .filter(t -> t.taskKey().equals(key)).findFirst().orElseThrow();
+    }
+
+    /** 状态翻转（模拟 driver 崩溃残留的任务现场；其余列原样） */
+    private void flipTask(RcaTask task, RcaTaskState to) {
+        stores.tasks.update(new RcaTask(task.id(), task.runId(), task.taskKey(), to,
+                task.priority(), task.availableAt(), task.readySince(), task.deadlineAt(),
+                task.leaseOwner(), task.leaseUntil(), task.leaseEpoch(),
+                task.attemptCount(), task.maxAttempts(), task.createdAt(), NOW));
+    }
+
+    @Test
+    @DisplayName("EX-A3 b4 阶段④：任务与结果已提交 → 重驱零动作（重放读取既有结论）")
+    void stage4_committedTasksAreSkipped() {
+        UUID runId = castNativeRun();
+        bundles.publish(nativeBundle(proposal()));
+        NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        int evidenceBefore = evidence.rows.size();
+        int ledgerBefore = stores.toolLedger.rows.size();
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        assertThat(evidence.rows).hasSize(evidenceBefore);
+        assertThat(stores.toolLedger.rows).hasSize(ledgerBefore);
+        assertThat(stores.tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE)))
+                .allSatisfy(t -> assertThat(t.state()).isEqualTo(RcaTaskState.DONE));
+    }
+
+    @Test
+    @DisplayName("EX-A3 b3 阶段③：结果已落库任务未完成 → result_ref 幂等收尾，零触网零新行")
+    void stage3_resultRefIdempotentCompletionWithoutNetwork() {
+        UUID runId = castNativeRun();
+        bundles.publish(nativeBundle(proposal()));
+        NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        // 崩溃窗：SUCCESS 收据在账但任务停在 RUNNING（insert→succeed→DONE 之间被杀）
+        RcaTask metrics = dagTask(runId, "investigate-metrics");
+        flipTask(metrics, RcaTaskState.RUNNING);
+        int evidenceBefore = evidence.rows.size();
+        int ledgerBefore = stores.toolLedger.rows.size();
+
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        assertThat(dagTask(runId, "investigate-metrics").state())
+                .as("阶段③：从 result_ref 幂等收尾 DONE").isEqualTo(RcaTaskState.DONE);
+        assertThat(evidence.rows).as("零新证据（零触网）").hasSize(evidenceBefore);
+        assertThat(stores.toolLedger.rows).as("零新账本行（不重复调用）")
+                .hasSize(ledgerBefore);
+        var metricsRows = stores.toolLedger.rows.values().stream()
+                .filter(r -> r.identity.taskId().equals(metrics.id())).toList();
+        assertThat(metricsRows).hasSize(1);
+        assertThat(metricsRows.get(0).resultRef)
+                .as("checkpoint result_ref 在账（agent 落值面）").isNotNull();
+    }
+
+    @Test
+    @DisplayName("EX-A3 b2 阶段②：请求已发出结果未知 → 旧行 UNKNOWN 预算占用保留 + 新物理请求成对（不免费重发）")
+    void stage2_pendingOrphanMarkedUnknownAndRedrivenAsNewBudgetedCall() {
+        UUID runId = castNativeRun();
+        bundles.publish(nativeBundle(proposal()));
+        com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
+                new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
+        NativeInvestigationExecutor driving =
+                executorWithEvidenceProducingTools(new RunBudgetGate(budgetLedger));
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        // 崩溃窗：invoke 在途——悬挂 PENDING 行 + PROVISIONAL 预留（发送资格已取得）；
+        // 原 SUCCESS 收据随崩溃窗清除（单调用任务：收据在账即走阶段③，轮不到阶段②）
+        RcaTask metrics = dagTask(runId, "investigate-metrics");
+        UUID orphanAttempt = UUID.randomUUID();
+        ReservationKey orphanKey = new ReservationKey(runId, metrics.id(), orphanAttempt,
+                99, BudgetKind.TOOL_CALL);
+        budgetLedger.ensureLimit(runId, BudgetKind.TOOL_CALL, 256);
+        budgetLedger.reserve(orphanKey, 1);
+        budgetLedger.provisional(orphanKey);
+        stores.toolLedger.rows.values()
+                .removeIf(r -> r.identity.taskId().equals(metrics.id()));
+        stores.toolLedger.open(new RcaToolInvocationLedger.InvocationIdentity(
+                UUID.randomUUID(), runId, metrics.id(), orphanAttempt, 99,
+                MetricsAgent.TOOL_NAME, "1", Digest.sha256Of("orphan").hex()));
+        flipTask(metrics, RcaTaskState.RUNNING);
+        long consumedBeforeRedrive = budgetLedger.consumedOf(runId, BudgetKind.TOOL_CALL);
+        int evidenceBefore = evidence.rows.size();
+
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        var orphanRow = stores.toolLedger.rows.values().stream()
+                .filter(r -> r.identity.callSeq() == 99).findFirst().orElseThrow();
+        assertThat(orphanRow.state).as("发送后结果未知 → UNKNOWN 诚实归档")
+                .isEqualTo(ToolInvocationState.UNKNOWN);
+        assertThat(orphanRow.reason).isEqualTo(ToolReasonCode.TRANSPORT_UNKNOWN);
+        assertThat(budgetLedger.stateOf(orphanKey)).as("预算占用保留（不退款不免费）")
+                .isEqualTo("PROVISIONAL");
+        var metricsRows = stores.toolLedger.rows.values().stream()
+                .filter(r -> r.identity.taskId().equals(metrics.id())).toList();
+        assertThat(metricsRows).hasSize(2);
+        var reDriven = metricsRows.stream()
+                .filter(r -> r.state == ToolInvocationState.SUCCESS).findFirst().orElseThrow();
+        assertThat(reDriven.identity.callSeq())
+                .as("重驱=新 call_seq 新预算（call_seq 跨 attempt 单调）")
+                .isGreaterThan(99L);
+        assertThat(evidence.rows).as("只读工具同冻结窗重查=留新观察记录")
+                .hasSize(evidenceBefore + 1);
+        assertThat(dagTask(runId, "investigate-metrics").state()).isEqualTo(RcaTaskState.DONE);
+        assertThat(budgetLedger.consumedOf(runId, BudgetKind.TOOL_CALL))
+                .as("新物理请求消耗新预算单位（重驱非免费：种子前 3 + 孤儿 1 + 重驱 1）")
+                .isEqualTo(consumedBeforeRedrive + 1);
+        assertThat(stores.tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                .filter(t -> t.state() == RcaTaskState.RUNNING)).as("无永久 RUNNING").isEmpty();
+    }
+
+    @Test
+    @DisplayName("EX-A3 b1 阶段①：任务开始未取得发送资格（无账本行）→ 常规重驱；FAILED 回执孤儿 → DEAD 不重复调用")
+    void stage1_noReceiptOrphansAndFailedReceipts() {
+        UUID runId = castNativeRun();
+        bundles.publish(nativeBundle(proposal()));
+        NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+        int evidenceAfterFirstPass = evidence.rows.size();
+
+        // b1a：任务 RUNNING 但零账本行（迁移后、open 前被杀）→ 常规重驱
+        RcaTask change = dagTask(runId, "investigate-change");
+        stores.toolLedger.rows.values()
+                .removeIf(r -> r.identity.taskId().equals(change.id()));
+        flipTask(change, RcaTaskState.RUNNING);
+        int evidenceBeforeRedrive = evidence.rows.size();
+        long maxPriorCallSeq = stores.toolLedger.rows.values().stream()
+                .mapToLong(r -> r.identity.callSeq()).max().orElse(0);
+
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        assertThat(dagTask(runId, "investigate-change").state())
+                .isEqualTo(RcaTaskState.DONE);
+        assertThat(evidence.rows).hasSize(evidenceBeforeRedrive + 1);
+        var changeRows = stores.toolLedger.rows.values().stream()
+                .filter(r -> r.identity.taskId().equals(change.id())).toList();
+        assertThat(changeRows).hasSize(1);
+        assertThat(changeRows.get(0).identity.callSeq())
+                .as("call_seq 跨 attempt 单调（从既有 checkpoint 最大值续起）")
+                .isEqualTo(maxPriorCallSeq + 1);
+
+        // b1b：FAILED 回执孤儿（收尾前被杀）→ DEAD 降级，不重复调用
+        RcaTask logs = dagTask(runId, "investigate-logs");
+        flipTask(logs, RcaTaskState.RUNNING);
+        stores.toolLedger.rows.values().stream()
+                .filter(r -> r.identity.taskId().equals(logs.id()))
+                .forEach(r -> {
+                    r.state = ToolInvocationState.FAILED;
+                    r.reason = ToolReasonCode.TRANSPORT_UNKNOWN;
+                });
+        int evidenceBeforeFailedCase = evidence.rows.size();
+        int ledgerBeforeFailedCase = stores.toolLedger.rows.size();
+
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        assertThat(dagTask(runId, "investigate-logs").state())
+                .as("已知失败回执 → DEAD（缺源降级），不重复调用")
+                .isEqualTo(RcaTaskState.DEAD);
+        assertThat(evidence.rows).hasSize(evidenceBeforeFailedCase);
+        assertThat(stores.toolLedger.rows).hasSize(ledgerBeforeFailedCase);
+        assertThat(evidenceAfterFirstPass).isEqualTo(3);
+        assertThat(stores.tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                .filter(t -> t.state() == RcaTaskState.RUNNING)).as("无永久 RUNNING").isEmpty();
+    }
+
     // ------------------------------------------------------------------ 夹具
 
     /** 铸 NATIVE run + driver task（模拟投影铸造点产物；路由四列随行） */
@@ -253,17 +529,39 @@ class NativeInvestigationExecutorTest {
                 RcaRunState.QUEUED, Digest.sha256Of("material"), NOW, NOW, null, null, null);
         stores.runs.insertRouted(run, new RcaRunRouting(RcaEngine.NATIVE,
                 Digest.sha256Of("bundle-v1"), "g:checkout", 42, "BUCKETED_NATIVE"));
+        insertDriverTask(runId);
+        markDriverLeased(runId);
+        return runId;
+    }
+
+    /** EX-A0 铸点：路由四列 + 调查输入三列（输入 digest/冻结窗口）随行落库 */
+    private UUID castNativeRunWithInputs(Instant mintedAt) {
+        UUID runId = UUID.randomUUID();
+        RcaRun run = new RcaRun(runId, incidentId, GENERATION, RunTrigger.INITIAL,
+                RcaRunState.QUEUED, Digest.sha256Of("material"), NOW, NOW, null, null, null);
+        stores.runs.insertRouted(run, new RcaRunRouting(RcaEngine.NATIVE,
+                        Digest.sha256Of("bundle-v1"), "g:checkout", 42, "BUCKETED_NATIVE"),
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
+                        stores.incidents.findById(incidentId).orElseThrow(), mintedAt));
+        insertDriverTask(runId);
+        markDriverLeased(runId);
+        return runId;
+    }
+
+    private void insertDriverTask(UUID runId) {
         stores.tasks.insert(new RcaTask(UUID.randomUUID(), runId,
                 RcaTask.taskKeyFor(RcaEngine.NATIVE), RcaTaskState.READY, 5, NOW, NOW,
                 Instant.MAX, null, null, 0, 0, 3, NOW, NOW));
-        // 模拟 worker 领取（finishTask 租约栅栏的当前租约锚：owner+epoch）
+    }
+
+    /** 模拟 worker 领取（finishTask 租约栅栏的当前租约锚：owner+epoch） */
+    private void markDriverLeased(UUID runId) {
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         stores.tasks.update(new RcaTask(driver.id(), driver.runId(), driver.taskKey(),
                 RcaTaskState.LEASED, driver.priority(), driver.availableAt(),
                 driver.readySince(), driver.deadlineAt(), "worker-a",
                 NOW.plus(Duration.ofMinutes(5)), 0, 1, driver.maxAttempts(),
                 driver.createdAt(), NOW));
-        return runId;
     }
 
     private RcaAttempt newAttempt(RcaTask driver) {
@@ -432,10 +730,12 @@ class NativeInvestigationExecutorTest {
 
     static final class TestSnapshots implements EvidenceSnapshotRepository {
         final List<FrozenSnapshot> frozen = new ArrayList<>();
+        private final Map<UUID, List<SnapshotMemberRow>> members = new LinkedHashMap<>();
 
         @Override
-        public boolean freeze(FrozenSnapshot snapshot, List<SnapshotMemberRow> members) {
+        public boolean freeze(FrozenSnapshot snapshot, List<SnapshotMemberRow> memberRows) {
             frozen.add(snapshot);
+            members.put(snapshot.snapshotId(), List.copyOf(memberRows));
             return true;
         }
 
@@ -445,26 +745,12 @@ class NativeInvestigationExecutorTest {
                     && s.snapshotDigest().equals(snapshotDigest)).findFirst();
         }
 
+        /** EX-A4a（F05）黑板面：成员行落账 + evidence_id 序稳定 */
         @Override
         public List<SnapshotMemberRow> membersOf(UUID snapshotId) {
-            return List.of();
-        }
-    }
-
-    static final class TestLedger implements RcaToolInvocationLedger {
-        @Override
-        public void open(InvocationIdentity identity) {
-        }
-
-        @Override
-        public boolean succeed(UUID operationId) {
-            return true;
-        }
-
-        @Override
-        public boolean fail(UUID operationId, ToolInvocationState terminal,
-                ToolReasonCode reasonCode) {
-            return true;
+            return members.getOrDefault(snapshotId, List.of()).stream()
+                    .sorted(java.util.Comparator.comparing(SnapshotMemberRow::evidenceId))
+                    .toList();
         }
     }
 

@@ -134,7 +134,8 @@ class NativeEngineWiringTest {
     /** 映射表构造（M6-01 分派面）；holmesOnly = 仅 HOLMES 绑定 */
     private RcaWorker newWorker(Map<RcaEngine, RcaTaskExecutor> executors, String owner) {
         return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
-                stores.incidents, stores.slots, stores.invocations, executors, newOrchestrator(),
+                stores.incidents, stores.slots, stores.invocations, stores.toolLedger,
+                executors, newOrchestrator(),
                 TransactionOperations.withoutTransaction(), clock, owner, "rca",
                 Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
                 Duration.ofMinutes(1), Duration.ofMinutes(10), 2);

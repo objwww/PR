@@ -57,10 +57,12 @@ public final class ToolGateway implements ToolInvoker {
                 .toList();
     }
 
-    /** 一次调用请求（幂等/审计身份五元组 + 工具语义字段） */
+    /** 一次调用请求（幂等/审计身份五元组 + 工具语义字段；EX-A0：输入身份=调查输入绑定） */
     public record ToolInvocation(UUID runId, UUID taskId, UUID attemptId, long callSeq,
             String toolName, String toolVersion, String timeRange,
-            Map<String, Object> args, String inputSnapshotDigest) {
+            Map<String, Object> args,
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+                    investigationInputDigest) {
     }
 
     /** 调用结局：EXECUTED（真实执行）或 VALIDATE_ONLY（R2/R3 意图记录，零执行） */
@@ -86,7 +88,8 @@ public final class ToolGateway implements ToolInvoker {
         }
         String digest = ActionDigest.of(new ActionEnvelope("rca", invocation.toolName(),
                 invocation.toolVersion(), registration.definition().schemaHash(),
-                invocation.args(), invocation.timeRange(), invocation.inputSnapshotDigest()));
+                invocation.args(), invocation.timeRange(),
+                invocation.investigationInputDigest()));
         ToolRisk risk = registration.definition().risk();
         if (!risk.executable()) {
             recordIntent(invocation, digest, risk);
@@ -108,8 +111,15 @@ public final class ToolGateway implements ToolInvoker {
         long deadline = clock.millis() + registration.definition().timeoutMillis();
         ToolExecutor.ToolExecution execution = new ToolExecutor.ToolExecution(
                 invocation.args(), deadline, registration.definition().resultLimitBytes());
-        Future<byte[]> future = callPool.submit(
-                () -> registration.executor().execute(execution));
+        Future<byte[]> future;
+        try {
+            future = callPool.submit(() -> registration.executor().execute(execution));
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            // EX-A4a（F17）：bulkhead 满则明确拒绝——独立池有界队列的背压语义，
+            // 不静默排队也不靠兜底映射；模型可见族（可退避重试）
+            throw new ToolModelVisibleException(ToolModelVisibleReason.REMOTE_UNAVAILABLE,
+                    "工具调用通道拥塞（背压拒绝，可稍后重试）");
+        }
         try {
             return future.get(deadline - clock.millis(), TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {

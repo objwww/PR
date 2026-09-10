@@ -73,6 +73,10 @@ class Am4ShadowFullChainG2Test {
     private static final Instant NOW = Instant.parse("2026-09-05T08:00:00Z");
     private static final long GENERATION = 7L;
     private static final String SNAPSHOT = "ab".repeat(32);
+    /** EX-A0：工具/Agent 上下文的输入身份（类型化；SNAPSHOT 字符串保留给 router.compare(String)） */
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            INPUT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    SNAPSHOT);
     private static final long DEADLINE = 9_000_000_000_000L;
     private static final String POLICY_VERSION = "g2-policy";
     private static final String HOLMES_PACKAGE = ("{\"claims\":["
@@ -90,6 +94,8 @@ class Am4ShadowFullChainG2Test {
     private final G2ClaimStore candidateClaims = new G2ClaimStore();
     private final G2Evidence candidateEvidence = new G2Evidence();
     private final G2Ledger candidateLedger = new G2Ledger();
+    private final AlertInMemoryStores.Snapshots candidateSnapshots =
+            new AlertInMemoryStores.Snapshots();
     private final ClaimReducer reducer = new ClaimReducer(
             Set.of("holmes", "prometheus"), POLICY_VERSION);
 
@@ -135,7 +141,7 @@ class Am4ShadowFullChainG2Test {
         // ③ 证据轴：回放产出的证据全部盖章同 snapshot digest，账本全 SUCCESS
         assertThat(candidateEvidence.rows).hasSize(4); // 3 回放原始 + 1 断言注记
         assertThat(candidateEvidence.rows).allSatisfy(e ->
-                assertThat(e.scope().get("input_snapshot_digest")).isEqualTo(SNAPSHOT));
+                assertThat(e.scope().get("investigation_input_digest")).isEqualTo(SNAPSHOT));
         assertThat(candidateLedger.rows).hasSize(3);
         assertThat(candidateLedger.rows).allSatisfy(r ->
                 assertThat(r.state()).isEqualTo(ToolInvocationState.SUCCESS));
@@ -232,7 +238,9 @@ class Am4ShadowFullChainG2Test {
         AgentReplayRunner runner = new AgentReplayRunner(
                 new ReplayToolGateway(shadowRegistry(), new G2ReplayStore()));
         MetricsAgent.CallContext ctx = new MetricsAgent.CallContext(runId, UUID.randomUUID(),
-                UUID.randomUUID(), 1L, GENERATION, snapshotDigest,
+                UUID.randomUUID(), 1L, GENERATION,
+                new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                        snapshotDigest),
                 "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z");
         MetricsAgent metrics = new MetricsAgent(metricsProfile(), shadowRegistry(), runner,
                 candidateEvidence, candidateLedger, ReplayJson.MAPPER);
@@ -258,9 +266,23 @@ class Am4ShadowFullChainG2Test {
         // 断言注记证据（注记生产者归后续批次；M4-30 消费面在此验证）
         candidateEvidence.insert(annotatedEvidence(runId, snapshotDigest));
 
-        NativeRcaAgent candidate = new NativeRcaAgent(candidateEvidence, candidateClaims,
-                reducer);
-        return candidate.investigate(runId, snapshotDigest, GENERATION).verdicts().size();
+        // EX-A4a（F05）：黑板=冻结快照成员——先冻结当前证据集再推导
+        List<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow>
+                members = candidateEvidence.rows.stream()
+                .map(e -> new com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow(
+                        e.evidenceId(), e.evidenceType(), e.payloadDigest()))
+                .toList();
+        candidateSnapshots.freeze(new com.objwww.pr.control.alert.domain.evidence
+                .EvidenceSnapshotRepository.FrozenSnapshot(UUID.randomUUID(), runId,
+                snapshotDigest, GENERATION, "cfg", "tools", null), members);
+        NativeRcaAgent candidate = new NativeRcaAgent(candidateEvidence, candidateSnapshots,
+                candidateClaims, reducer);
+        return candidate.investigate(runId,
+                new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                        snapshotDigest),
+                new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
+                        snapshotDigest),
+                GENERATION).verdicts().size();
     }
 
     private ToolRegistry shadowRegistry() {
@@ -275,7 +297,7 @@ class Am4ShadowFullChainG2Test {
 
     private EvidenceEnvelope annotatedEvidence(UUID runId, String snapshotDigest) {
         Map<String, Object> scope = new LinkedHashMap<>();
-        scope.put("input_snapshot_digest", snapshotDigest);
+        scope.put("investigation_input_digest", snapshotDigest);
         scope.put("claim_key", "cpu_saturation");
         scope.put("claim_status", "TRUE");
         scope.put("reason", "cpu over threshold");
@@ -292,21 +314,21 @@ class Am4ShadowFullChainG2Test {
                 1L, MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION,
                 "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z", MetricsAgent.argsOf(
                         new MetricsAgent.MetricsQuery("cpu_usage_percent", "1757059200",
-                                "1757059260", "30s")), SNAPSHOT);
+                                "1757059260", "30s")), INPUT);
     }
 
     private ToolGateway.ToolInvocation logsInvocation(UUID runId) {
         return new ToolGateway.ToolInvocation(runId, UUID.randomUUID(), UUID.randomUUID(),
                 2L, LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
                 "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z", LogsAgent.argsOf(
-                        new LogsAgent.LogsQuery("1757059200", "1757059260")), SNAPSHOT);
+                        new LogsAgent.LogsQuery("1757059200", "1757059260")), INPUT);
     }
 
     private ToolGateway.ToolInvocation changeInvocation(UUID runId) {
         return new ToolGateway.ToolInvocation(runId, UUID.randomUUID(), UUID.randomUUID(),
                 3L, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
                 "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z", ChangeAgent.argsOf(
-                        new ChangeAgent.ChangeQuery("1757059200", "1757059260")), SNAPSHOT);
+                        new ChangeAgent.ChangeQuery("1757059200", "1757059260")), INPUT);
     }
 
     private static AgentProfile metricsProfile() {

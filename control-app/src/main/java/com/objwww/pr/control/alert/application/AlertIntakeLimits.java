@@ -3,6 +3,15 @@ package com.objwww.pr.control.alert.application;
 /**
  * 入口尺寸限制（§6.4"全部可配"；AM 侧配套 webhook_configs max_alerts=100/timeout=10s）。
  */
+
+//各字段含义
+//字段	默认值	含义
+//maxBodyBytes	512 * 1024 = 512 KiB	HTTP 请求体原始最大字节数，防止请求体过大
+//maxAlerts	200	一次请求中最多允许的告警条数
+//maxLabelChars	2_000	单个标签值/标签内容最大字符数，注释说“单值 2KB”
+//maxTotalLabelChars	32_000	所有标签合计最大字符数，防止标签总量爆炸
+//maxDepth	32	JSON 或嵌套结构最大深度，防止深层嵌套攻击
+//gzipMaxBytes	2 * 1024 * 1024 = 2 MiB	gzip 解压后的最大字节数，防止压缩炸弹
 public record AlertIntakeLimits(
         int maxBodyBytes,
         int maxAlerts,

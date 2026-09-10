@@ -58,7 +58,7 @@ class AlertEvidenceSnapshotIT extends PostgresITBase {
         EvidenceEnvelope b = insertEvidence("error-rate-5xx");
         EvidenceSnapshotBuilder.SnapshotInput input = input(
                 member(a), member(b));
-        String digest = EvidenceSnapshotBuilder.digest(input);
+        String digest = EvidenceSnapshotBuilder.digest(input).hex();
 
         EvidenceSnapshotRepository.FrozenSnapshot snapshot = new EvidenceSnapshotRepository.FrozenSnapshot(
                 UUID.randomUUID(), runId, digest, 0, CONFIG, TOOLS, null);
@@ -79,7 +79,7 @@ class AlertEvidenceSnapshotIT extends PostgresITBase {
     @Test
     void itS2_迟到证据不改旧快照_成员表零更新路径() {
         EvidenceEnvelope first = insertEvidence("metric-1");
-        String digest = EvidenceSnapshotBuilder.digest(input(member(first)));
+        String digest = EvidenceSnapshotBuilder.digest(input(member(first))).hex();
         snapshots.freeze(new EvidenceSnapshotRepository.FrozenSnapshot(
                 UUID.randomUUID(), runId, digest, 0, CONFIG, TOOLS, null),
                 List.of(new EvidenceSnapshotRepository.SnapshotMemberRow(first.evidenceId(),
@@ -96,7 +96,7 @@ class AlertEvidenceSnapshotIT extends PostgresITBase {
     @Test
     void itS3_parent链_相邻快照可追溯() {
         EvidenceEnvelope e1 = insertEvidence("gen0-fact");
-        String d1 = EvidenceSnapshotBuilder.digest(input(member(e1)));
+        String d1 = EvidenceSnapshotBuilder.digest(input(member(e1))).hex();
         snapshots.freeze(new EvidenceSnapshotRepository.FrozenSnapshot(
                 UUID.randomUUID(), runId, d1, 0, CONFIG, TOOLS, null),
                 List.of(new EvidenceSnapshotRepository.SnapshotMemberRow(e1.evidenceId(),
@@ -105,7 +105,7 @@ class AlertEvidenceSnapshotIT extends PostgresITBase {
         EvidenceEnvelope e2 = insertEvidence("gen0-fact-2");
         EvidenceSnapshotBuilder.SnapshotInput input2 = new EvidenceSnapshotBuilder.SnapshotInput(
                 0, "cfg-changed" + "c".repeat(4), TOOLS, List.of(member(e2)));
-        String d2 = EvidenceSnapshotBuilder.digest(input2);
+        String d2 = EvidenceSnapshotBuilder.digest(input2).hex();
         assertThat(d2).isNotEqualTo(d1);
         snapshots.freeze(new EvidenceSnapshotRepository.FrozenSnapshot(
                 UUID.randomUUID(), runId, d2, 0, input2.configDigest(), TOOLS, d1),

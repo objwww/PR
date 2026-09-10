@@ -51,8 +51,12 @@ class ReplayToolGatewayTest {
 
     private static final String TIME_RANGE = "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z";
     private static final String TIME_RANGE_ALT = "2026-09-05T08:00:00Z/2026-09-05T09:00:00Z";
-    private static final String SNAPSHOT = "ab".repeat(32);
-    private static final String SNAPSHOT_ALT = "cd".repeat(32);
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            SNAPSHOT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    "ab".repeat(32));
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            SNAPSHOT_ALT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    "cd".repeat(32));
 
     private static final byte[] RECORDED_RESPONSE =
             "{\"status\":\"success\"}".getBytes(StandardCharsets.UTF_8);
@@ -232,7 +236,8 @@ class ReplayToolGatewayTest {
                 SNAPSHOT);
     }
 
-    private ToolGateway.ToolInvocation withSnapshot(String snapshot) {
+    private ToolGateway.ToolInvocation withSnapshot(
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest snapshot) {
         return new ToolGateway.ToolInvocation(RUN_ID, TASK_ID, ATTEMPT_ID, CALL_SEQ,
                 TOOL_PROM, MetricsAgent.TOOL_VERSION, TIME_RANGE, Map.of(
                         "query", "up", "start", "0", "end", "1", "step", "30s"),

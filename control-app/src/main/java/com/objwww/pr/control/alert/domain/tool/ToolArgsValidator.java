@@ -41,10 +41,25 @@ public final class ToolArgsValidator {
                 throw new IllegalArgumentException(
                         "INVALID_ARGS: 未声明参数（additionalProperties=false 硬拒绝）: " + key);
             }
-            String expectedType = ((Map<?, ?>) expected).get("type").toString();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> constraint = (Map<String, Object>) expected;
+            String expectedType = constraint.get("type").toString();
             if (!typeMatches(expectedType, e.getValue())) {
                 throw new IllegalArgumentException(
                         "INVALID_ARGS: 参数 " + key + " 类型应为 " + expectedType);
+            }
+            // EX-A4a（F17）：schema 关键字收紧——maxLength/pattern（string 形状约束）
+            if (e.getValue() instanceof String s) {
+                Object maxLength = constraint.get("maxLength");
+                if (maxLength instanceof Number cap && s.length() > cap.longValue()) {
+                    throw new IllegalArgumentException(
+                            "INVALID_ARGS: 参数 " + key + " 超过 maxLength=" + cap);
+                }
+                Object pattern = constraint.get("pattern");
+                if (pattern instanceof String regex && !s.matches(regex)) {
+                    throw new IllegalArgumentException(
+                            "INVALID_ARGS: 参数 " + key + " 不匹配 pattern=" + regex);
+                }
             }
         }
     }

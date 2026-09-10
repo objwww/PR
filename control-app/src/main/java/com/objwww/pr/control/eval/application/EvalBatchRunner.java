@@ -26,6 +26,10 @@ import java.util.UUID;
  * <ul>
  *   <li><b>next_round_gate</b>：上一轮恢复回执 criteriaMet+alertsResolved 双真才允许
  *       下一轮/下一场景——门未开则剩余轮记 TIMEOUT_OR_ABSENT（gate_blocked）不注入；</li>
+ *   <li><b>prev_episode_resolved</b>：每轮注入前先确认目标 alertname 的 incident 已落
+ *       RESOLVED（2026-09-09 S3 smoke 坐实：Prometheus resolved ≠ 链已消费 resolved，
+ *       同指纹再 firing 被 AM repeat_interval 抑制且 incident 未 RESOLVED 不铸新 run）——
+ *       预算耗尽该轮显式判 prev_round_not_resolved 并关门，禁止静默带残留现场注入；</li>
  *   <li><b>失败不中断且落档</b>：单轮任何异常 = 该轮落失败样本，finally 解除注入，
  *       批继续；</li>
  *   <li>评分对象 = {@link SingleCaseScorer}（final-validated-report-v1，禁挑最优）；</li>
@@ -40,6 +44,7 @@ public class EvalBatchRunner {
     private final GoldenScenarioRegistry registry;
     private final Map<String, ScenarioDriver> driversByRole;
     private final AlertProbe alertProbe;
+    private final IncidentResolutionProbe incidentProbe;
     private final RcaRunResolver rcaRunResolver;
     private final SingleCaseScorer scorer;
     private final EvalRunRepository evalRuns;
@@ -65,6 +70,7 @@ public class EvalBatchRunner {
     public EvalBatchRunner(GoldenScenarioRegistry registry,
                            Map<String, ScenarioDriver> driversByRole,
                            AlertProbe alertProbe,
+                           IncidentResolutionProbe incidentProbe,
                            RcaRunResolver rcaRunResolver,
                            SingleCaseScorer scorer,
                            EvalRunRepository evalRuns,
@@ -75,6 +81,7 @@ public class EvalBatchRunner {
         this.registry = Objects.requireNonNull(registry);
         this.driversByRole = Objects.requireNonNull(driversByRole);
         this.alertProbe = Objects.requireNonNull(alertProbe);
+        this.incidentProbe = Objects.requireNonNull(incidentProbe);
         this.rcaRunResolver = Objects.requireNonNull(rcaRunResolver);
         this.scorer = Objects.requireNonNull(scorer);
         this.evalRuns = Objects.requireNonNull(evalRuns);
@@ -109,6 +116,19 @@ public class EvalBatchRunner {
                                 round, "TIMEOUT_OR_ABSENT", "{\"reason\":\"gate_blocked\"}"));
                         continue;
                     }
+                    if (!prevEpisodeResolved(golden)) {
+                        // 上轮 episode 残留（incident 未 RESOLVED）：显式判败 + 关门，
+                        // 禁止静默带残留现场注入（S3 smoke R2 run_not_found 的修复面）
+                        EvalCaseResult blocked = absentCase(evalRunId, golden, round,
+                                "{\"reason\":\"prev_round_not_resolved\"}");
+                        results.add(blocked);
+                        persist(blocked);
+                        failures.add(new BaselineReportGenerator.CaseFailure(golden.scenarioId(),
+                                round, "TIMEOUT_OR_ABSENT",
+                                "{\"reason\":\"prev_round_not_resolved\"}"));
+                        gateOpen = false;
+                        continue;
+                    }
                     RoundOutcome outcome = runRound(evalRunId, golden, round, driver);
                     if (outcome.result() != null) {
                         results.add(outcome.result());
@@ -128,6 +148,27 @@ public class EvalBatchRunner {
 
     private record RoundOutcome(EvalCaseResult result, boolean gateOpen,
                                 List<BaselineReportGenerator.CaseFailure> failures) {
+    }
+
+    /**
+     * 注入前确认目标 alertname 的 incident episode 已关闭（RESOLVED/无行）。预算 =
+     * 本轮 max_resolved_wait_seconds（覆盖 AM resolve_timeout + resolved webhook 链
+     * 延迟，S3 smoke 实测 B 段 endsAt→resolved 投递 ~2.5min）；无期望症状码的场景
+     * 无告警面，直接放行。
+     */
+    private boolean prevEpisodeResolved(GoldenCase golden) {
+        if (golden.expectedSymptomCodes().isEmpty()) {
+            return true;
+        }
+        String alertname = golden.expectedSymptomCodes().getFirst();
+        boolean resolved = incidentProbe.awaitIncidentResolved(alertname,
+                golden.timing().maxResolvedWaitSeconds());
+        if (!resolved) {
+            log.warn("场景 {} 注入前 incident 未 resolved（alertname={}，预算 {}s 耗尽）"
+                    + "——本轮判 prev_round_not_resolved 并关门",
+                    golden.scenarioId(), alertname, golden.timing().maxResolvedWaitSeconds());
+        }
+        return resolved;
     }
 
     private RoundOutcome runRound(UUID evalRunId, GoldenCase golden, int round,

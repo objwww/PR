@@ -50,7 +50,7 @@ public final class WebhookChannel implements NotificationChannel {
             WebhookTransport.Response response = transport.post(url,
                     requestBody(notification));
             return WebhookTransport.Classifier.fromStatus(response.status(),
-                    response.retryAfterHeader());
+                    response.retryAfterHeader(), response.body());
         } catch (WebhookTransport.TransportFailure e) {
             return WebhookTransport.Classifier.fromTransport(e.getCause());
         }

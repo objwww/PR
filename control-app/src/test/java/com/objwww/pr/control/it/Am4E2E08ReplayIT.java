@@ -65,6 +65,10 @@ class Am4E2E08ReplayIT extends PostgresITBase {
                     .getBytes(StandardCharsets.UTF_8);
     private static final String SNAPSHOT =
             Digest.sha256Of("e08-frozen-snapshot").value();
+    /** EX-A0：输入身份类型化常量（SNAPSHOT 字符串保留给 String 面 helper） */
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            INPUT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    Digest.sha256Of("e08-frozen-snapshot").value());
     private static final String TIME_RANGE =
             "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z";
     private static final long GENERATION = 0L;
@@ -155,7 +159,7 @@ class Am4E2E08ReplayIT extends PostgresITBase {
         Map<String, Object> baseArgs = LogsAgent.argsOf(
                 new LogsAgent.LogsQuery("1757059200", "1757059260"));
         assertThatThrownBy(() -> runner.invoke(invocation(runId, LogsAgent.TOOL_NAME,
-                "2", TIME_RANGE, baseArgs, SNAPSHOT)))
+                "2", TIME_RANGE, baseArgs, INPUT)))
                 .isInstanceOf(ToolControlPlaneException.class)
                 .hasMessageContaining("UNKNOWN_TOOL");
 
@@ -175,7 +179,7 @@ class Am4E2E08ReplayIT extends PostgresITBase {
         // （change + logs 同 schema args）会与 change 录制键完全同键 → HIT 而非 REPLAY_MISS
         gateway.record(invocation(runId, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
                 TIME_RANGE, LogsAgent.argsOf(
-                        new LogsAgent.LogsQuery("1757059200", "1757059270")), SNAPSHOT),
+                        new LogsAgent.LogsQuery("1757059200", "1757059270")), INPUT),
                 FIXTURE);
     }
 
@@ -194,7 +198,7 @@ class Am4E2E08ReplayIT extends PostgresITBase {
 
         MetricsAgent.CallContext ctx = new MetricsAgent.CallContext(
                 runId, UUID.randomUUID(), UUID.randomUUID(), 1L, GENERATION,
-                SNAPSHOT, TIME_RANGE);
+                INPUT, TIME_RANGE);
         metrics.investigate(ctx,
                 new MetricsAgent.MetricsQuery("cpu_usage_percent", "1757059200",
                         "1757059260", "30s"));
@@ -204,8 +208,21 @@ class Am4E2E08ReplayIT extends PostgresITBase {
 
         ClaimReducer reducer = new ClaimReducer(
                 Set.of("prometheus", "logs-agent", "change-agent"), POLICY_VERSION);
-        NativeRcaAgent rca = new NativeRcaAgent(evidence, claims, reducer);
-        return new RoundResult(runner, rca.investigate(runId, SNAPSHOT, GENERATION)
+        // EX-A4a（F05）：黑板=冻结快照成员——回放证据集冻结为 SNAPSHOT 后再推导
+        var snapshotRepo = new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvidenceSnapshotRepository(controlJdbc, controlTx);
+        snapshotRepo.freeze(new com.objwww.pr.control.alert.domain.evidence
+                        .EvidenceSnapshotRepository.FrozenSnapshot(UUID.randomUUID(), runId,
+                        SNAPSHOT, GENERATION, "cfg", "tools", null),
+                evidence.findByRunId(runId).stream()
+                        .map(e -> new com.objwww.pr.control.alert.domain.evidence
+                                .EvidenceSnapshotRepository.SnapshotMemberRow(
+                                e.evidenceId(), e.evidenceType(), e.payloadDigest()))
+                        .toList());
+        NativeRcaAgent rca = new NativeRcaAgent(evidence, snapshotRepo, claims, reducer);
+        return new RoundResult(runner, rca.investigate(runId, INPUT,
+                new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
+                        SNAPSHOT), GENERATION)
                 .verdicts());
     }
 
@@ -229,14 +246,16 @@ class Am4E2E08ReplayIT extends PostgresITBase {
                 new LogsAgent.LogsQuery("1757059200", "1757059260"));
         List<ToolGateway.ToolInvocation> list = new ArrayList<>();
         list.add(invocation(runId, ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION,
-                TIME_RANGE, baseArgs, SNAPSHOT));
+                TIME_RANGE, baseArgs, INPUT));
         list.add(invocation(runId, LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
                 TIME_RANGE, LogsAgent.argsOf(
-                        new LogsAgent.LogsQuery("1757059200", "1757059261")), SNAPSHOT));
+                        new LogsAgent.LogsQuery("1757059200", "1757059261")), INPUT));
         list.add(invocation(runId, LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
-                "2026-09-05T07:51:00Z/2026-09-05T08:00:00Z", baseArgs, SNAPSHOT));
+                "2026-09-05T07:51:00Z/2026-09-05T08:00:00Z", baseArgs, INPUT));
         list.add(invocation(runId, LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION,
-                TIME_RANGE, baseArgs, Digest.sha256Of("e08-other-snapshot").value()));
+                TIME_RANGE, baseArgs,
+                new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                        Digest.sha256Of("e08-other-snapshot").value())));
         return list;
     }
 
@@ -244,21 +263,22 @@ class Am4E2E08ReplayIT extends PostgresITBase {
         return invocation(runId, MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION,
                 TIME_RANGE, MetricsAgent.argsOf(new MetricsAgent.MetricsQuery(
                         "cpu_usage_percent", "1757059200", "1757059260", "30s")),
-                SNAPSHOT);
+                INPUT);
     }
 
     private ToolGateway.ToolInvocation logsInvocation(UUID runId, String toolName) {
         return invocation(runId, toolName, LogsAgent.TOOL_VERSION, TIME_RANGE,
                 LogsAgent.argsOf(new LogsAgent.LogsQuery("1757059200", "1757059260")),
-                SNAPSHOT);
+                INPUT);
     }
 
     private ToolGateway.ToolInvocation invocation(UUID runId, String toolName,
             String toolVersion, String timeRange, Map<String, Object> args,
-            String snapshotDigest) {
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+                    investigationInputDigest) {
         return new ToolGateway.ToolInvocation(runId, UUID.randomUUID(),
                 UUID.randomUUID(), 1L, toolName, toolVersion, timeRange, args,
-                snapshotDigest);
+                investigationInputDigest);
     }
 
     private static AgentProfile profile(String name, String toolName) {

@@ -28,10 +28,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FencedNotifyExecutorTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
+    private static final Duration MAX_AGE = Duration.ofHours(24);
 
     private FakeStore store;
     private StubRouter router;
     private FencedNotifyExecutor executor;
+    private Instant currentTime = NOW;
 
     @BeforeEach
     void setUp() {
@@ -41,15 +43,19 @@ class FencedNotifyExecutorTest {
                 router, (failedAttempts, from, retryAfter) -> retryAfter > 0
                 ? from.plusSeconds(retryAfter)
                 : from.plus(Duration.ofMinutes((long) Math.pow(2, failedAttempts - 1))),
-                NOW);
+                () -> currentTime, MAX_AGE);
     }
 
     private ClaimedNotification notification() {
+        return notificationCreatedAt(NOW.minusSeconds(1));
+    }
+
+    private ClaimedNotification notificationCreatedAt(Instant createdAt) {
         return new ClaimedNotification(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), "dingtalk-test", "am3-notice-v1", UUID.randomUUID(),
                 "{\"operation_id\":\"" + UUID.randomUUID()
                         + "\",\"notice\":\"候选\",\"summary\":\"s\",\"candidate\":true}",
-                0, 5, 7);
+                0, 5, 7, createdAt);
     }
 
     @Test
@@ -61,6 +67,54 @@ class FencedNotifyExecutorTest {
         assertThat(executor.execute(n)).isEqualTo(Outcome.SENT);
         assertThat(store.sent.get(n.id())).isEqualTo(NOW);
         assertThat(store.synced).containsExactly(n.publicationId());
+    }
+
+    @Test
+    @DisplayName("B-41：时钟逐次取值——sent_at 跟随真实执行时刻，期限闸随墙钟推进")
+    void clockIsReadPerExecutionNotFrozenAtConstruction() {
+        router.channel = (rendered, operationId) -> new NotificationChannel.SendResult.Delivered();
+
+        ClaimedNotification first = notification();
+        assertThat(executor.execute(first)).isEqualTo(Outcome.SENT);
+        assertThat(store.sent.get(first.id())).isEqualTo(NOW);
+
+        Instant later = NOW.plus(Duration.ofHours(2));
+        currentTime = later;
+        ClaimedNotification second = notification();
+        assertThat(executor.execute(second)).isEqualTo(Outcome.SENT);
+        assertThat(store.sent.get(second.id()))
+                .as("sent_at 必须是发送时刻（B-41：bean 创建时刻冻结 = 撒谎）")
+                .isEqualTo(later);
+
+        // 期限闸：RETRY_WAIT 行老化跨过 max-notification-age 后，重试必须被墙钟闸击落
+        router.channel = (rendered, operationId) -> new NotificationChannel.SendResult.RateLimited(30L);
+        ClaimedNotification aging = notificationCreatedAt(NOW.minusSeconds(1));
+        assertThat(executor.execute(aging)).isEqualTo(Outcome.RETRY_WAIT);
+        currentTime = NOW.minusSeconds(1).plus(MAX_AGE).plusSeconds(1);
+        assertThat(executor.execute(aging)).isEqualTo(Outcome.DEAD);
+        assertThat(store.deadReason.get(aging.id())).contains("notification_deadline_exceeded");
+    }
+
+    @Test
+    @DisplayName("EX-C2a 最长通知期限：行龄超 max-notification-age → DEAD（不无限退避），attempt 未耗尽同样终态")
+    void retryBeyondDeadlineIsDead() {
+        ClaimedNotification aged = notificationCreatedAt(NOW.minus(MAX_AGE).minusSeconds(1));
+        router.channel = (rendered, operationId) ->
+                new NotificationChannel.SendResult.Retryable("http_503");
+
+        assertThat(executor.execute(aged)).isEqualTo(Outcome.DEAD);
+        assertThat(store.deadReason.get(aged.id())).contains("notification_deadline_exceeded");
+
+        // 429 面（不耗预算）同样受墙钟期限封顶
+        ClaimedNotification agedLimited = notificationCreatedAt(NOW.minus(MAX_AGE).minusSeconds(1));
+        router.channel = (rendered, operationId) ->
+                new NotificationChannel.SendResult.RateLimited(30L);
+        assertThat(executor.execute(agedLimited)).isEqualTo(Outcome.DEAD);
+        assertThat(store.deadReason.get(agedLimited.id()))
+                .contains("notification_deadline_exceeded");
+
+        // 期限内的行照常重试（对照面）
+        assertThat(executor.execute(notification())).isEqualTo(Outcome.RETRY_WAIT);
     }
 
     @Test
@@ -88,7 +142,7 @@ class FencedNotifyExecutorTest {
         ClaimedNotification exhausted = new ClaimedNotification(UUID.randomUUID(),
                 first.publicationId(), first.reportId(), first.channel(),
                 first.templateVersion(), first.operationId(), first.payloadJson(),
-                4, 5, 7);
+                4, 5, 7, NOW.minusSeconds(1));
         assertThat(executor.execute(exhausted)).isEqualTo(Outcome.DEAD);
         assertThat(store.deadReason.get(exhausted.id())).contains("retry_budget_exhausted");
     }
@@ -121,7 +175,7 @@ class FencedNotifyExecutorTest {
 
         ClaimedNotification badPayload = new ClaimedNotification(UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), "dingtalk-test", "v1",
-                UUID.randomUUID(), "not-json", 0, 5, 7);
+                UUID.randomUUID(), "not-json", 0, 5, 7, NOW.minusSeconds(1));
         router.channel = (rendered, operationId) -> {
             throw new AssertionError("渲染失败的行绝不允许触网");
         };
@@ -131,7 +185,7 @@ class FencedNotifyExecutorTest {
         ClaimedNotification unknownChannel = new ClaimedNotification(UUID.randomUUID(),
                 UUID.randomUUID(), UUID.randomUUID(), "ghost-channel", "v1",
                 UUID.randomUUID(), badPayload.payloadJson().replace("not-json", "{\"operation_id\":\"" + UUID.randomUUID() + "\"}"),
-                0, 5, 7);
+                0, 5, 7, NOW.minusSeconds(1));
         assertThat(executor.execute(unknownChannel)).isEqualTo(Outcome.DEAD);
         assertThat(store.deadReason.get(unknownChannel.id())).contains("channel_not_configured");
     }

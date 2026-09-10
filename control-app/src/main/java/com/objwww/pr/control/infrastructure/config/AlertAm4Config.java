@@ -28,25 +28,22 @@ import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
 import com.objwww.pr.control.alert.domain.tool.ToolPolicy;
 import com.objwww.pr.control.infrastructure.persistence.PostgresToolReplayStore;
+import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
 import com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor;
-import com.objwww.pr.control.infrastructure.tool.ReplayToolExecutor;
+import com.objwww.pr.control.infrastructure.tool.LogQueryExecutor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * AM4 Native 影子链装配（docker profile 手工装配，同 {@link AlertFlowConfig} 惯例）：
@@ -74,8 +71,17 @@ public class AlertAm4Config {
 
     private static final String PROMETHEUS_BASE_URL_KEY =
             "${app.alert.am4.prometheus.base-url:http://prometheus:9090}";
-    private static final String LOGS_FIXTURE_CLASSPATH = "am4/fixtures/logs-query.json";
-    private static final String CHANGE_FIXTURE_CLASSPATH = "am4/fixtures/change-query.json";
+    /** EX-B2：logs 真实源（Loki 试验资源，契约 §3 准入条件）；fixture 退役
+     * （Phase 3 门第 1 条：生产 profile 零 Replay 挂点——logs/change 全真源） */
+    private static final String LOGS_LOKI_BASE_URL_KEY =
+            "${app.alert.am4.logs.loki.base-url:http://loki:3100}";
+    private static final String LOGS_SERVICE_ALLOWLIST_KEY =
+            "${app.alert.am4.logs.service-allowlist:control-app,checkout,frontend,recommendation}";
+    /** EX-B1：change fixture 已迁 test 资源（生产镜像零 change 假件，P1-03） */
+    static final String CHANGE_FIXTURE_CLASSPATH = "am4/fixtures/change-query.json";
+    /** EX-B1 change.query 服务白名单（越出 = INVALID_ARGS；缺省仅自身，fail-closed） */
+    private static final String CHANGE_SERVICE_ALLOWLIST_KEY =
+            "${app.alert.am4.change.service-allowlist:control-app}";
     private static final String ALLOWED_TOOLS_KEY =
             "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query}";
     private static final String SHADOW_MAX_CALLS_KEY =
@@ -97,6 +103,10 @@ public class AlertAm4Config {
             "${app.alert.am4.budget.evidences:8}";
     private static final String BUDGET_SUBTASKS_KEY =
             "${app.alert.am4.budget.subtasks:1}";
+    /** EX-A1 熔断阈值（签名级连续无进展；≤0 回退 5） */
+    private static final String DOOM_MAX_NO_PROGRESS_KEY =
+            "${app.alert.am4.doom-loop.max-consecutive-no-progress:5}";
+    private static final String DOOM_POLICY_VERSION = "am4-doom-v1";
     private static final String REDUCER_ALLOWLIST_KEY =
             "${app.alert.am4.reducer.readonly-allowlist:holmes,prometheus}";
     private static final String REDUCER_POLICY_VERSION_KEY =
@@ -108,25 +118,74 @@ public class AlertAm4Config {
     private static final long SHADOW_WINDOW_MILLIS_DEFAULT = 60_000L;
     private static final long SHADOW_MAX_CALLS_DEFAULT = 60L;
     private static final int SHADOW_POOL_SIZE_DEFAULT = 2;
+    /** EX-A4a（F17）bulkhead 队列容量（满即 Abort 拒绝，不静默排队） */
+    private static final int SHADOW_QUEUE_CAPACITY = 16;
 
     // ------------------------------------------------------------------ 工具面
 
-    /** 生产工具注册面：prometheus.query 真实执行 + logs/change 冻结 fixture 回放 */
+    /**
+     * EX-A1 预算门（F15）：全系统唯一预算所有者的 bean 装配——消费点为三 Agent 的
+     * TOOL_CALL 硬闸与 executor 的 run 开局限额（openRun）。账本本体在
+     * PersistenceConfig（V13）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate(
+            com.objwww.pr.control.alert.domain.budget.RunBudgetLedger runBudgetLedger) {
+        return new com.objwww.pr.control.alert.application.RunBudgetGate(runBudgetLedger);
+    }
+
+    /** EX-A1 熔断门：签名级连续无进展熔断（粘滞，人工/新代际解除；轮询豁免集空） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard(
+            @Value(DOOM_MAX_NO_PROGRESS_KEY) long maxConsecutiveNoProgress) {
+        long threshold = maxConsecutiveNoProgress > 0 ? maxConsecutiveNoProgress : 5L;
+        return new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard(
+                new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.Policy(
+                        threshold, DOOM_POLICY_VERSION, java.util.Set.of()));
+    }
+
+    /** EX-A1 run 开局限额四维（既有 budget.* 键；openRun 逐维幂等 upsert） */
+    @Bean
+    public java.util.Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long>
+            am4BudgetLimits(@Value(BUDGET_STEP_KEY) long budgetStep,
+                    @Value(BUDGET_TOOL_CALLS_KEY) long budgetToolCalls,
+                    @Value(BUDGET_EVIDENCES_KEY) long budgetEvidences,
+                    @Value(BUDGET_SUBTASKS_KEY) long budgetSubtasks) {
+        java.util.Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> limits =
+                new java.util.LinkedHashMap<>();
+        limits.put(com.objwww.pr.control.alert.domain.budget.BudgetKind.STEP, budgetStep);
+        limits.put(com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL, budgetToolCalls);
+        limits.put(com.objwww.pr.control.alert.domain.budget.BudgetKind.EVIDENCE, budgetEvidences);
+        limits.put(com.objwww.pr.control.alert.domain.budget.BudgetKind.SUBTASK, budgetSubtasks);
+        return limits;
+    }
+
+    /**
+     * 生产工具注册面（EX-B2 后全真源，Phase 3 门第 1 条达成）：prometheus.query 真查 +
+     * logs.query 真 Loki（试验资源，盘点门签字后换绑）+ change.query 真实变更源
+     * （EX-B1 换绑：V40 change_event 只读查询）——零 ReplayToolExecutor 挂点。
+     */
     @Bean
     public ToolRegistry am4ToolRegistry(
             @Value(PROMETHEUS_BASE_URL_KEY) String prometheusBaseUrl,
             @Value(TOOL_TIMEOUT_KEY) long timeoutMillis,
-            @Value(TOOL_RESULT_LIMIT_KEY) long resultLimitBytes) {
+            @Value(TOOL_RESULT_LIMIT_KEY) long resultLimitBytes,
+            JdbcClient jdbc,
+            @Value(LOGS_LOKI_BASE_URL_KEY) String lokiBaseUrl,
+            @Value(LOGS_SERVICE_ALLOWLIST_KEY) String logsServiceAllowlist,
+            @Value(CHANGE_SERVICE_ALLOWLIST_KEY) String changeServiceAllowlist) {
         return new ToolRegistry(List.of(
                 new ToolRegistry.Registration(
                         MetricsAgent.toolDefinition(timeoutMillis, resultLimitBytes),
                         new PrometheusQueryExecutor(prometheusBaseUrl)),
                 new ToolRegistry.Registration(
                         LogsAgent.toolDefinition(timeoutMillis, resultLimitBytes),
-                        new ReplayToolExecutor(fixtureBytes(LOGS_FIXTURE_CLASSPATH))),
+                        new LogQueryExecutor(lokiBaseUrl,
+                                Set.of(logsServiceAllowlist.split(",")))),
                 new ToolRegistry.Registration(
                         ChangeAgent.toolDefinition(timeoutMillis, resultLimitBytes),
-                        new ReplayToolExecutor(fixtureBytes(CHANGE_FIXTURE_CLASSPATH)))));
+                        new ChangeQueryExecutor(jdbc,
+                                Set.of(changeServiceAllowlist.split(","))))));
     }
 
     /** 工具策略（M4-16）：空策略硬失败在 ToolPolicy 构造期兜底 */
@@ -155,11 +214,21 @@ public class AlertAm4Config {
         return new AgentReplayRunner(am4ReplayGateway);
     }
 
-    /** 影子面独立调用池（独立并发槽；容器关停时回收） */
+    /**
+     * 影子面独立调用池（独立并发槽；容器关停时回收）。
+     * EX-A4a（F17）bulkhead：FixedThreadPool 的无界队列换 ArrayBlockingQueue(16)
+     * + Abort——满即拒绝，Gateway 显式映射模型可见族背压文案，不静默排队。
+     */
     @Bean(destroyMethod = "shutdown")
     public ExecutorService am4ShadowPool(
             @Value(SHADOW_POOL_SIZE_KEY) int poolSize) {
-        return Executors.newFixedThreadPool(poolSize);
+        int threads = poolSize > 0 ? poolSize : SHADOW_POOL_SIZE_DEFAULT;
+        java.util.concurrent.ThreadPoolExecutor pool = new java.util.concurrent.ThreadPoolExecutor(
+                threads, threads, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(SHADOW_QUEUE_CAPACITY),
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        pool.allowCoreThreadTimeOut(false);
+        return pool;
     }
 
     /**
@@ -212,41 +281,53 @@ public class AlertAm4Config {
         return new AgentRegistry(List.of(metrics, logs, change));
     }
 
-    /** Metrics Agent（在线影子形态：工具出口 = 影子面） */
+    /** Metrics Agent（在线影子形态：工具出口 = 影子面；EX-A1 全参=预算门+熔断门） */
     @Bean
     public MetricsAgent am4MetricsAgent(AgentRegistry am4AgentRegistry,
             ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
-            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
+            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard) {
         return new MetricsAgent(am4AgentRegistry.require("metrics", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
-                evidenceRepository, rcaToolInvocationLedger, objectMapper);
+                evidenceRepository, rcaToolInvocationLedger, objectMapper,
+                runBudgetGate, am4DoomLoopGuard);
     }
 
     /** Logs Agent（在线影子形态） */
     @Bean
     public LogsAgent am4LogsAgent(AgentRegistry am4AgentRegistry,
             ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
-            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
+            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard) {
         return new LogsAgent(am4AgentRegistry.require("logs", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
-                evidenceRepository, rcaToolInvocationLedger, objectMapper);
+                evidenceRepository, rcaToolInvocationLedger, objectMapper,
+                runBudgetGate, am4DoomLoopGuard);
     }
 
     /** Change Agent（在线影子形态） */
     @Bean
     public ChangeAgent am4ChangeAgent(AgentRegistry am4AgentRegistry,
             ReadOnlyToolFace am4ShadowToolFace, EvidenceRepository evidenceRepository,
-            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper) {
+            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard) {
         return new ChangeAgent(am4AgentRegistry.require("change", AGENT_VERSION),
                 am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
-                evidenceRepository, rcaToolInvocationLedger, objectMapper);
+                evidenceRepository, rcaToolInvocationLedger, objectMapper,
+                runBudgetGate, am4DoomLoopGuard);
     }
 
-    /** Native RCA Agent（M4-30）：消费结构化黑板出 Claim，不直接发布报告 */
+    /** Native RCA Agent（M4-30）：消费结构化黑板出 Claim，不直接发布报告；EX-A4a（F05）黑板=冻结快照成员 */
     @Bean
     public NativeRcaAgent am4NativeRcaAgent(EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository
+                    evidenceSnapshotRepository,
             ClaimStore claimStore, ClaimReducer am4ClaimReducer) {
-        return new NativeRcaAgent(evidenceRepository, claimStore, am4ClaimReducer);
+        return new NativeRcaAgent(evidenceRepository, evidenceSnapshotRepository,
+                claimStore, am4ClaimReducer);
     }
 
     /** Claim 归并（M4-22）：规则驱动消重/冲突/覆盖，降级续跑白名单配置化 */
@@ -275,18 +356,4 @@ public class AlertAm4Config {
     }
 
     // ------------------------------------------------------------------ 内部
-
-    /** classpath 冻结 fixture 字节（缺失/空 = 启动期硬失败，同影子只读面惯例） */
-    static byte[] fixtureBytes(String classpathLocation) {
-        try {
-            byte[] bytes = new ClassPathResource(classpathLocation).getInputStream()
-                    .readAllBytes();
-            if (bytes.length == 0) {
-                throw new IllegalStateException("fixture 不得为空: " + classpathLocation);
-            }
-            return bytes;
-        } catch (IOException e) {
-            throw new UncheckedIOException("fixture 读取失败: " + classpathLocation, e);
-        }
-    }
 }

@@ -106,16 +106,26 @@ public class NotifyConfig {
 
     @Bean
     public FencedNotifyExecutor fencedNotifyExecutor(
+            // B-53 同律：dutyNotifyAdapter 亦实现 NotifyOutboxStore——两执行器各自钉源
+            @org.springframework.beans.factory.annotation.Qualifier("notifyOutboxStore")
             com.objwww.pr.notify.domain.port.NotifyOutboxStore store,
+            @org.springframework.beans.factory.annotation.Qualifier("notificationRenderer")
             NotificationRenderer renderer,
+            @org.springframework.beans.factory.annotation.Qualifier("channelRouter")
             FencedNotifyExecutor.ChannelRouter router,
-            FencedNotifyExecutor.Backoff backoff) {
-        return new FencedNotifyExecutor(store, renderer, router, backoff, Instant.now());
+            FencedNotifyExecutor.Backoff backoff,
+            @Value("${app.notify.max-notification-age-seconds:86400}") long maxAgeSeconds) {
+        // EX-C2a：最长通知期限（墙钟闸，默认 24h）——attempt 预算之外的「不无限退避」封顶。
+        // B-41：clock 传 Supplier（Instant::now）——传值会把启动时刻冻结成永恒"现在"。
+        return new FencedNotifyExecutor(store, renderer, router, backoff, Instant::now,
+                java.time.Duration.ofSeconds(maxAgeSeconds));
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
     public NotifyOutboxClaimer notifyOutboxClaimer(
+            @org.springframework.beans.factory.annotation.Qualifier("notifyOutboxStore")
             com.objwww.pr.notify.domain.port.NotifyOutboxStore store,
+            @org.springframework.beans.factory.annotation.Qualifier("fencedNotifyExecutor")
             FencedNotifyExecutor executor,
             @Value("${app.notify.owner-id:}") String ownerId,
             @Value("${app.notify.lease-seconds:60}") long leaseSeconds,
@@ -126,6 +136,62 @@ public class NotifyConfig {
         String owner = ownerId == null || ownerId.isBlank()
                 ? InetAddress.getLocalHost().getHostName() : ownerId;
         return new NotifyOutboxClaimer(store, executor, owner,
+                java.time.Duration.ofSeconds(leaseSeconds), batchSize,
+                idleSleepMs, errorSleepMs);
+    }
+
+    // ---------------- M7-14：duty_delivery 投递面（复用执行器/领取循环，适配器换表） ----------------
+
+    @Bean
+    public com.objwww.pr.notify.domain.port.NotifyOutboxStore dutyNotifyAdapter(JdbcClient jdbc) {
+        return new com.objwww.pr.notify.infrastructure.persistence.PostgresDutyNotifyAdapter(jdbc);
+    }
+
+    @Bean
+    public DutyChannelRouter dutyChannelRouter(JdbcClient jdbc, Environment env,
+                                               JdkWebhookTransport transport) {
+        return new DutyChannelRouter(jdbc, env, transport);
+    }
+
+    @Bean
+    public com.objwww.pr.notify.domain.service.DutyNotificationRenderer dutyNotificationRenderer(
+            @Value("${app.notify.max-field-chars:500}") int maxFieldChars,
+            @Value("${app.notify.max-total-chars:3800}") int maxTotalChars) {
+        return new com.objwww.pr.notify.domain.service.DutyNotificationRenderer(
+                maxFieldChars, maxTotalChars);
+    }
+
+    /**
+     * duty 执行器：与报告 outbox 同一套 FencedNotifyExecutor（B-41 加固的栅栏/退避/
+     * 期限单源复用）——只换渲染器（值班卡片）/路由器（duty_channel 行）/存储适配器。
+     */
+    @Bean
+    public FencedNotifyExecutor dutyFencedExecutor(
+            @org.springframework.beans.factory.annotation.Qualifier("dutyNotifyAdapter")
+            com.objwww.pr.notify.domain.port.NotifyOutboxStore dutyNotifyAdapter,
+            com.objwww.pr.notify.domain.service.DutyNotificationRenderer renderer,
+            DutyChannelRouter router,
+            FencedNotifyExecutor.Backoff backoff,
+            @Value("${app.duty.max-notification-age-seconds:86400}") long maxAgeSeconds) {
+        return new FencedNotifyExecutor(dutyNotifyAdapter, renderer, router, backoff,
+                Instant::now, java.time.Duration.ofSeconds(maxAgeSeconds));
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public NotifyOutboxClaimer dutyDeliveryClaimer(
+            @org.springframework.beans.factory.annotation.Qualifier("dutyNotifyAdapter")
+            com.objwww.pr.notify.domain.port.NotifyOutboxStore dutyNotifyAdapter,
+            @org.springframework.beans.factory.annotation.Qualifier("dutyFencedExecutor")
+            FencedNotifyExecutor dutyFencedExecutor,
+            @Value("${app.duty.owner-id:}") String ownerId,
+            @Value("${app.duty.lease-seconds:60}") long leaseSeconds,
+            @Value("${app.duty.batch-size:10}") int batchSize,
+            @Value("${app.duty.idle-sleep-ms:2000}") long idleSleepMs,
+            @Value("${app.duty.error-sleep-ms:10000}") long errorSleepMs)
+            throws java.net.UnknownHostException {
+        String owner = (ownerId == null || ownerId.isBlank()
+                ? InetAddress.getLocalHost().getHostName() : ownerId) + "-duty";
+        return new NotifyOutboxClaimer(dutyNotifyAdapter, dutyFencedExecutor, owner,
                 java.time.Duration.ofSeconds(leaseSeconds), batchSize,
                 idleSleepMs, errorSleepMs);
     }

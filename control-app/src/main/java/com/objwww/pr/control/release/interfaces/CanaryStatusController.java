@@ -6,16 +6,12 @@ import com.objwww.pr.control.release.domain.repository.CanaryWindowVerdictReposi
 import com.objwww.pr.control.release.domain.repository.CanaryWindowVerdictRepository.VerdictRow;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
 import com.objwww.pr.shared.Digest;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +24,8 @@ import java.util.UUID;
  * canary 段（percent/上限/白名单规模）、NATIVE 实跑决策计数（爆炸半径重数源）、
  * 可选窗判定序列（rolloutId+candidateDigest 双参）。
  *
- * <p>RBAC 现状（O-4）：沿 ConfigBundleController 惯例——静态 bearer
- * （{@code app.release.api.bearer}）+ 常量时间比较；零仓储触达返回 401。
+ * <p>EX-C3a：验签归 SecurityFilterChain（ROLE_RELEASE 机器线或会话用户），401 由
+ * 安全链入口点承担，手抄 bearer 验签摘除。
  */
 @RestController
 @Profile("docker")
@@ -43,30 +39,21 @@ public class CanaryStatusController {
     private final CanaryDecisionLogRepository decisions;
     private final CanaryWindowVerdictRepository windows;
     private final Capability capability;
-    private final byte[] expectedBearer;
 
     public CanaryStatusController(ConfigBundleRepository bundles,
                                   CanaryDecisionLogRepository decisions,
                                   CanaryWindowVerdictRepository windows,
-                                  Capability capability,
-                                  @Value("${app.release.api.bearer}") String bearerToken) {
+                                  Capability capability) {
         this.bundles = bundles;
         this.decisions = decisions;
         this.windows = windows;
         this.capability = capability;
-        this.expectedBearer = (bearerToken == null ? "" : bearerToken)
-                .getBytes(StandardCharsets.UTF_8);
     }
 
     @GetMapping(path = "/api/canary/status")
     public ResponseEntity<Map<String, Object>> status(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "rolloutId", required = false) String rolloutId,
             @RequestParam(value = "candidateDigest", required = false) String candidateDigest) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).body(Map.of("error", "unauthorized"));
-        }
-
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("nativeReady", capability.ready());
         if (!capability.missing().isEmpty()) {
@@ -126,15 +113,5 @@ public class CanaryStatusController {
         view.put("windowStart", row.windowStart() == null ? null : row.windowStart().toString());
         view.put("windowEnd", row.windowEnd() == null ? null : row.windowEnd().toString());
         return view;
-    }
-
-    /** 常量时间比较（Bearer 验签；ConfigBundleController 同构） */
-    private boolean authorized(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            return false;
-        }
-        byte[] provided = authorizationHeader.substring("Bearer ".length())
-                .getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(provided, expectedBearer);
     }
 }

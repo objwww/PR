@@ -1,0 +1,97 @@
+package com.objwww.pr.control.eval.interfaces;
+
+import com.objwww.pr.control.eval.application.EvalQueryService;
+import org.springframework.context.annotation.Profile;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * UI-5 评测只读查询投影 API（/api/eval/**；全 GET 零写面，ROLE_OPERATOR 归
+ * SecurityFilterChain 矩阵，与 /api/v1/** 同式）。DTO 为 record（EvalQueryService 内）；
+ * 400/404 应答沿用 {"error": ...} 惯例。
+ *
+ * <ul>
+ *   <li>GET /api/eval/runs——eval_run 列表（state 过滤 + 键集游标，limit 默认 50
+ *       上限 200，排序 started_at DESC）；</li>
+ *   <li>GET /api/eval/runs/{runId}——单对象 + caseCount；未知 id → 404；</li>
+ *   <li>GET /api/eval/runs/{runId}/cases——逐案例评分（verdict 过滤 + 键集游标，
+ *       排序 scenario_id/round_no ASC）；未知 run → 404；</li>
+ *   <li>GET /api/eval/datasets——数据集版本清单（case_version 计数 + 族聚合；
+ *       RLS 面下只含 control_app 可见的非 HOLDOUT 行）。</li>
+ * </ul>
+ * 六维分析/评分器/发布门无持久化数据，不开端点（前端空态明示）。
+ */
+@RestController
+@Profile("docker")
+@RequestMapping(path = "/api/eval", produces = MediaType.APPLICATION_JSON_VALUE)
+public class EvalQueryController {
+
+    private final EvalQueryService query;
+
+    public EvalQueryController(EvalQueryService query) {
+        this.query = query;
+    }
+
+    @GetMapping("/runs")
+    public ResponseEntity<?> runs(@RequestParam(required = false) String state,
+                                  @RequestParam(required = false) String cursor,
+                                  @RequestParam(required = false, defaultValue = "50") int limit) {
+        try {
+            return ResponseEntity.ok(query.listRuns(state, cursor, Math.clamp(limit, 1, 200)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/runs/{runId}")
+    public ResponseEntity<?> run(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.detail(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
+    @GetMapping("/runs/{runId}/cases")
+    public ResponseEntity<?> cases(@PathVariable String runId,
+                                   @RequestParam(required = false) String verdict,
+                                   @RequestParam(required = false) String cursor,
+                                   @RequestParam(required = false, defaultValue = "50") int limit) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        try {
+            return query.listCases(id, verdict, cursor, Math.clamp(limit, 1, 200))
+                    .<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(404)
+                            .body(Map.of("error", "eval run 不存在")));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/datasets")
+    public EvalQueryService.DatasetListResponse datasets() {
+        return query.datasets();
+    }
+
+    private static UUID parseId(String raw) {
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+}

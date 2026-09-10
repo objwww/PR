@@ -4,7 +4,7 @@ import com.objwww.pr.control.alert.application.EventQueryService;
 import com.objwww.pr.control.alert.application.RunQueryService;
 import com.objwww.pr.control.alert.application.SseStreamService;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.objwww.pr.control.infrastructure.auth.AuthenticatedActor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -28,7 +26,8 @@ import java.util.UUID;
 /**
  * rca_run 查询/事件流 API（M5-13 §M5-13③；字段级以 mocks/runs.js 为准）。
  *
- * <p>鉴权两层：REST 走 O-4 过渡 bearer（operator 角色，X-Operator-Id 留主体）；
+ * <p>鉴权两层（EX-C3a 起由 SecurityFilterChain 统一承担）：REST 走会话或机器
+ * bearer（ROLE_OPERATOR，subject=认证主体，X-Operator-Id 自报面摘除）；
  * SSE 走 stream ticket（POST 换票 → GET 带票开流）——禁止 URL 带长效 token，
  * 票 TTL 30s 单次绑 run+主体（{@link SseStreamService}）。
  *
@@ -44,37 +43,25 @@ public class EventQueryController {
     private final EventQueryService events;
     private final SseStreamService sse;
     private final RcaRunRepository runs;
-    private final byte[] expectedBearer;
 
     public EventQueryController(RunQueryService runQuery, EventQueryService events,
-                                SseStreamService sse, RcaRunRepository runs,
-                                @Value("${app.operator.api.bearer}") String bearerToken) {
+                                SseStreamService sse, RcaRunRepository runs) {
         this.runQuery = runQuery;
         this.events = events;
         this.sse = sse;
         this.runs = runs;
-        this.expectedBearer = (bearerToken == null ? "" : bearerToken)
-                .getBytes(StandardCharsets.UTF_8);
     }
 
     // ------------------------------------------------------------------ REST 查询
 
     @GetMapping(path = "/api/rca-runs", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> list(
-            @RequestHeader(value = "Authorization", required = false) String authorization) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).build();
-        }
-        return ResponseEntity.ok(runQuery.list());
+    public Map<String, Object> list() {
+        return runQuery.list();
     }
 
     @GetMapping(path = "/api/rca-runs/{runId}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> detail(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String runId) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).build();
-        }
         UUID id = parseRunId(runId);
         if (id == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
@@ -87,13 +74,9 @@ public class EventQueryController {
     /** 初次读取 {@code ?after_seq=0}；gap=true → 客户端按 latestSeq 全量重同步 */
     @GetMapping(path = "/api/rca-runs/{runId}/events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> events(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
             @PathVariable String runId,
             @RequestParam(name = "after_seq", defaultValue = "0") long afterSeq,
             @RequestParam(name = "limit", defaultValue = "100") int limit) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).build();
-        }
         UUID id = parseRunId(runId);
         if (id == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
@@ -116,16 +99,11 @@ public class EventQueryController {
 
     // ------------------------------------------------------------------ SSE 换票 + 流
 
-    /** 换流票：TTL 30s 单次绑 run+主体（O-4：subject 取 X-Operator-Id，缺省 operator） */
+    /** 换流票：TTL 30s 单次绑 run+主体（subject=认证主体，X-Operator-Id 自报面摘除） */
     @PostMapping(path = "/api/rca-runs/{runId}/events/stream-ticket",
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> streamTicket(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "X-Operator-Id", required = false) String operatorId,
             @PathVariable String runId) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).build();
-        }
         UUID id = parseRunId(runId);
         if (id == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
@@ -133,7 +111,7 @@ public class EventQueryController {
         if (!runs.findById(id).isPresent()) {
             return ResponseEntity.status(404).body(Map.of("error", "run 不存在"));
         }
-        String ticket = sse.issueTicket(id, subject(operatorId), Instant.now());
+        String ticket = sse.issueTicket(id, AuthenticatedActor.name(), Instant.now());
         return ResponseEntity.ok(Map.of("ticket", ticket));
     }
 
@@ -246,26 +224,11 @@ public class EventQueryController {
         return Math.max(0, afterSeq);
     }
 
-    private static String subject(String operatorId) {
-        return operatorId == null || operatorId.isBlank() ? "operator"
-                : operatorId.trim();
-    }
-
     private static UUID parseRunId(String runId) {
         try {
             return UUID.fromString(runId);
         } catch (IllegalArgumentException | NullPointerException e) {
             return null;
         }
-    }
-
-    /** 常量时间比较（O-4 过渡 bearer；OperatorApiController 同构） */
-    private boolean authorized(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            return false;
-        }
-        byte[] provided = authorizationHeader.substring("Bearer ".length())
-                .getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(provided, expectedBearer);
     }
 }

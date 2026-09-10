@@ -42,6 +42,20 @@ public interface RcaTaskRepository {
     /** 崩溃回收扫描：LEASED 且 lease_until < now */
     List<RcaTask> findExpiredLeased(Instant now);
 
+    /**
+     * EX-A2（F10）：过期租约原子回收——四条件同语句（id + state='LEASED' +
+     * lease_until < :now + lease_epoch = :expectedEpoch）：读快照后原 worker 心跳已续
+     * （lease_until 前移）/已他人重领（epoch+1）/他回收者已收敛（state≠LEASED）任一发生
+     * 即 0 行 = 竞态失败，调用方零补救。target=RETRY_WAIT（活跃 run 重排）或
+     * STALE（死 run 不复活，M4-07）；readyAt 为退避后的 available_at/ready_since，
+     * 租约列清空，epoch/attempt_count 不动。默认实现不可用（条件写必须真实现）。
+     */
+    default boolean reclaimExpired(UUID id, long expectedEpoch, Instant now,
+                                   RcaTaskState target, Instant readyAt) {
+        throw new UnsupportedOperationException(
+                "reclaimExpired 需原子条件写实现: " + getClass().getName());
+    }
+
     Optional<RcaTask> findById(UUID id);
 
     /** run 全量任务（推进器输入；返回序 = id 升序，稳定可复现） */

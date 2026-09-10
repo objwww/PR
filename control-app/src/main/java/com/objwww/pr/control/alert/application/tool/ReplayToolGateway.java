@@ -102,6 +102,7 @@ public final class ReplayToolGateway {
             ToolRegistry.Registration registration) {
         return ActionDigest.of(new ActionEnvelope("rca", invocation.toolName(),
                 invocation.toolVersion(), registration.definition().schemaHash(),
-                invocation.args(), invocation.timeRange(), invocation.inputSnapshotDigest()));
+                invocation.args(), invocation.timeRange(),
+                invocation.investigationInputDigest()));
     }
 }

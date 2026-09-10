@@ -29,7 +29,11 @@ public final class ActionDigest {
         canonicalForm.put("schemaVersion", envelope.schemaVersion());
         canonicalForm.put("canonicalArgs", envelope.args());
         canonicalForm.put("timeRange", envelope.timeRange());
-        canonicalForm.put("inputSnapshotDigest", envelope.inputSnapshotDigest());
+        // EX-A0 F23 wire 冻结：canonical 键保留 v1 名 inputSnapshotDigest（改名=digest
+        // 全量漂移=replay 夹具报废；值语义自 EX-A0 起 = 调查输入身份，改名须升
+        // canonicalizationVersion 另开评审）
+        canonicalForm.put("inputSnapshotDigest", envelope.investigationInputDigest() == null
+                ? null : envelope.investigationInputDigest().hex());
         canonicalForm.put("canonicalizationVersion", InternalCanonicalJsonV1.VERSION);
         return Digests.sha256Hex(InternalCanonicalJsonV1.canonicalize(canonicalForm));
     }

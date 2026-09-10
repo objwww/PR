@@ -9,6 +9,7 @@ import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.SynonymLexicon;
 import com.objwww.pr.control.eval.domain.repository.EvalRunRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresEvalRunRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentResolutionProbe;
 import com.objwww.pr.control.infrastructure.persistence.PostgresInvestigationResultRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaReportRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository;
@@ -133,6 +134,17 @@ public class EvalRunnerConfig {
     }
 
     @Bean
+    public IncidentResolutionProbe incidentResolutionProbe(JdbcClient jdbc) {
+        return new PostgresIncidentResolutionProbe(jdbc, millis -> {
+            try {
+                Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+    }
+
+    @Bean
     public RcaRunResolver rcaRunResolver(JdbcClient jdbc,
             @Value("${app.alert.eval.run-tag:}") String runTag) {
         return new PostgresRcaRunResolver(jdbc, millis -> {
@@ -191,6 +203,7 @@ public class EvalRunnerConfig {
                                            ArenaChaosScenarioDriver arena,
                                            InfrastructureScenarioDriver infra,
                                            AlertProbe alertProbe,
+                                           IncidentResolutionProbe incidentProbe,
                                            RcaRunResolver resolver,
                                            SingleCaseScorer scorer,
                                            EvalRunRepository evalRuns,
@@ -200,7 +213,7 @@ public class EvalRunnerConfig {
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
                         "InfrastructureScenarioDriver", infra),
-                alertProbe, resolver, scorer, evalRuns, generator, metadata,
+                alertProbe, incidentProbe, resolver, scorer, evalRuns, generator, metadata,
                 2, systemClock());
     }
 

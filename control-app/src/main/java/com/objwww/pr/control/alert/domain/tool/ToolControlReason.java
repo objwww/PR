@@ -12,5 +12,7 @@ public enum ToolControlReason {
     AUTH_FAILED,
     BUDGET_EXHAUSTED,
     STALE_GENERATION,
-    RESULT_OVERSIZE
+    RESULT_OVERSIZE,
+    /** EX-B2：日志源对良构查询回 4xx（LogQL 拒收/版本语义差）——工具侧缺陷，不进重试循环 */
+    QUERY_FAILED
 }

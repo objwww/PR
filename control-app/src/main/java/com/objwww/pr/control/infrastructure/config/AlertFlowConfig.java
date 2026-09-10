@@ -270,6 +270,9 @@ public class AlertFlowConfig {
             ObjectProvider<EvidencePackageValidator> validator,
             NativeCapabilityProbe probe,
             com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics,
+            ObjectProvider<com.objwww.pr.control.alert.application.RunBudgetGate> budgetGate,
+            ObjectProvider<Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long>> budgetLimits,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
@@ -281,7 +284,13 @@ public class AlertFlowConfig {
                 metricsAgent.getIfAvailable(), logsAgent.getIfAvailable(),
                 changeAgent.getIfAvailable(), nativeRcaAgent.getIfAvailable(),
                 claims.getIfAvailable(), validator.getIfAvailable(),
-                metricsExpr, toolRegistryDigest, AlertClock.system(), alertMetrics);
+                metricsExpr, toolRegistryDigest, AlertClock.system(), alertMetrics,
+                java.util.Objects.requireNonNull(budgetGate.getIfAvailable(),
+                        "RunBudgetGate 缺件（EX-A1 预算面为 NATIVE 必要件）"),
+                java.util.Objects.requireNonNull(budgetLimits.getIfAvailable(),
+                        "预算限额面缺件（EX-A1 am4BudgetLimits）"),
+                java.util.Objects.requireNonNull(toolLedger,
+                        "工具调用账本缺件（EX-A3 恢复 checkpoint 面）"));
     }
 
     /** 状态观察面（C-64）的能力快照：装配时定格，interfaces 不触探针类型（分层缝） */
@@ -320,6 +329,7 @@ public class AlertFlowConfig {
                                IncidentRepository incidents,
                                SchedulerSlotRepository slots,
                                ExternalInvocationRepository invocations,
+                               com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
                                ObjectProvider<NativeInvestigationExecutor> nativeExecutor,
                                RcaRunOrchestrator orchestrator,
                                TransactionOperations tx,
@@ -339,9 +349,9 @@ public class AlertFlowConfig {
             executors.put(RcaEngine.NATIVE, nativeExecutorInstance);
         }
         return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
-                invocations, executors, orchestrator, tx, AlertClock.system(), owner, slotScope,
-                taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace,
-                investigationSchemaVersion);
+                invocations, toolLedger, executors, orchestrator, tx, AlertClock.system(),
+                owner, slotScope, taskLease, heartbeatInterval, pollInterval, retryBackoff,
+                hangingGrace, investigationSchemaVersion);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */
@@ -352,10 +362,27 @@ public class AlertFlowConfig {
         return new com.objwww.pr.control.alert.application.DagExecutionService(edges, tasks);
     }
 
-    /** 消费循环（inbox 投影 + RCA worker）随容器启停（T10 部署启动真执行链；
+    /** EX-A4b（F24）：等待重驱扫描循环——WAITING_CAPABILITY/DEFERRED 事故恢复后补铸 */
+    @Bean
+    public com.objwww.pr.control.alert.application.IncidentWaitingRedrive incidentWaitingRedrive(
+            IncidentRepository incidents,
+            RcaRunRepository runs,
+            RcaTaskRepository tasks,
+            CanaryRouter canaryRouter,
+            DeferredPolicy deferredPolicy,
+            SlaPolicy sla,
+            @Value("${app.alert.redrive.poll-interval:PT30S}") Duration pollInterval) {
+        return new com.objwww.pr.control.alert.application.IncidentWaitingRedrive(
+                incidents, runs, tasks, canaryRouter, deferredPolicy, sla,
+                AlertClock.system(), pollInterval);
+    }
+
+    /** 消费循环（inbox 投影 + RCA worker + 等待重驱）随容器启停（T10 部署启动真执行链；
      *  M6-05 holmes shadow 调度循环已随退场摘除） */
     @Bean
-    public SmartLifecycle alertFlowLifecycle(AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker) {
+    public SmartLifecycle alertFlowLifecycle(
+            AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
+            com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -363,12 +390,14 @@ public class AlertFlowConfig {
             public void start() {
                 inboxProcessor.start();
                 rcaWorker.start();
+                redrive.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                redrive.stop();
                 rcaWorker.stop();
                 inboxProcessor.stop();
             }

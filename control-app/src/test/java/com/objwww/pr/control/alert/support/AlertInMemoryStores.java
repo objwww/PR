@@ -72,6 +72,10 @@ public final class AlertInMemoryStores {
     public final Fallbacks fallbacks = new Fallbacks();
     public final Winners winners = new Winners();
     public final ShadowWorks shadowWorks = new ShadowWorks();
+    /** EX-A4a（F16）：第一方工具账本假件（PENDING 悬挂回收面） */
+    public final ToolLedger toolLedger = new ToolLedger();
+    /** EX-A4a（F05）：证据快照假件（黑板=冻结成员面） */
+    public final Snapshots snapshots = new Snapshots();
 
     // ------------------------------------------------------------------ alert_inbox
 
@@ -238,13 +242,22 @@ public final class AlertInMemoryStores {
         }
 
         @Override
-        public synchronized void insert(Incident incident) {
+        public synchronized boolean insert(Incident incident) {
+            // EX-A4b（F19）：对齐 PG ON CONFLICT DO NOTHING——冲突返回 false，不抛异常
             boolean dup = rows.values().stream()
                     .anyMatch(i -> i.incidentKey().equals(incident.incidentKey()));
             if (dup) {
-                throw new DuplicateKeyException("incident_key 唯一模拟");
+                return false;
             }
             rows.put(incident.id(), incident);
+            return true;
+        }
+
+        @Override
+        public synchronized List<Incident> findWaitingForRedrive() {
+            return rows.values().stream()
+                    .filter(i -> "FIRING".equals(i.status().name()) && i.waitingReason() != null)
+                    .toList();
         }
 
         @Override
@@ -273,6 +286,8 @@ public final class AlertInMemoryStores {
         /** 路由四列读视图（insertRouted 录入；普通 insert 按 DB 默认 = HOLMES/null/null/null） */
         private final Map<UUID, com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView>
                 routings = new LinkedHashMap<>();
+        /** EX-A2（F12）：修订锚镜像 last_event_seq——仅 updateIfRevision 推进（同 PG update 不推进） */
+        private final Map<UUID, Long> runRevisions = new LinkedHashMap<>();
 
         @Override
         public synchronized void insert(RcaRun run) {
@@ -289,10 +304,28 @@ public final class AlertInMemoryStores {
         public synchronized void insertRouted(RcaRun run,
                 com.objwww.pr.control.alert.domain.model.RcaRunRouting routing) {
             insert(run);
-            routings.put(run.id(), new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
+            routings.put(run.id(), view(routing, null, null, null));
+        }
+
+        /** EX-A0：铸点身份三列随行录入（F14 冻结面；fake 与 Postgres 读写语义对齐） */
+        @Override
+        public synchronized void insertRouted(RcaRun run,
+                com.objwww.pr.control.alert.domain.model.RcaRunRouting routing,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs) {
+            insert(run);
+            routings.put(run.id(), view(routing, inputs.inputDigest().hex(),
+                    inputs.windowStart(), inputs.windowEnd()));
+        }
+
+        private static com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView
+        view(com.objwww.pr.control.alert.domain.model.RcaRunRouting routing,
+                String investigationInputDigest, java.time.Instant windowStart,
+                java.time.Instant windowEnd) {
+            return new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
                     routing.engine(),
                     routing.configDigest() == null ? null : routing.configDigest().hex(),
-                    routing.stickinessKey(), routing.bucket()));
+                    routing.stickinessKey(), routing.bucket(),
+                    investigationInputDigest, windowStart, windowEnd);
         }
 
         @Override
@@ -311,6 +344,19 @@ public final class AlertInMemoryStores {
                 return false;
             }
             rows.put(run.id(), run);
+            return true;
+        }
+
+        /** EX-A2（F12）：与 Postgres CAS 同语义——修订+活跃态同 WHERE，胜出修订 +1 */
+        @Override
+        public synchronized boolean updateIfRevision(RcaRun run, long expectedRevision) {
+            if (!rows.containsKey(run.id())
+                    || runRevisions.getOrDefault(run.id(), 0L) != expectedRevision
+                    || !rows.get(run.id()).state().isActive()) {
+                return false;
+            }
+            rows.put(run.id(), run);
+            runRevisions.put(run.id(), expectedRevision + 1);
             return true;
         }
 
@@ -339,13 +385,15 @@ public final class AlertInMemoryStores {
             return Optional.of(routings.getOrDefault(id,
                     new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
                             com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES,
-                            null, null, null)));
+                            null, null, null, null, null, null)));
         }
 
         @Override
         public synchronized java.util.OptionalLong currentRevision(UUID id) {
-            // fake 无事件账本语义（计数器与事件同事务推进）——修订锚恒 0
-            return rows.containsKey(id) ? java.util.OptionalLong.of(0) : java.util.OptionalLong.empty();
+            // EX-A2：修订镜像计数器（仅 updateIfRevision 推进，镜像 PG last_event_seq 语义）
+            return rows.containsKey(id)
+                    ? java.util.OptionalLong.of(runRevisions.getOrDefault(id, 0L))
+                    : java.util.OptionalLong.empty();
         }
 
         /** C-61 判定源镜像：routings 缺记录 = 普通 insert 存量行 = DB 默认 HOLMES */
@@ -355,7 +403,7 @@ public final class AlertInMemoryStores {
                     && routings.getOrDefault(r.id(),
                             new com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView(
                                     com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES,
-                                    null, null, null)).engine()
+                                    null, null, null, null, null, null)).engine()
                             == com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE);
         }
 
@@ -434,6 +482,23 @@ public final class AlertInMemoryStores {
                     .filter(t -> t.state() == RcaTaskState.LEASED
                             && t.leaseUntil() != null && t.leaseUntil().isBefore(now))
                     .toList();
+        }
+
+        /** EX-A2（F10）：与 Postgres 四条件回收同语义（含 lease_until<now 复核） */
+        @Override
+        public synchronized boolean reclaimExpired(UUID id, long expectedEpoch, Instant now,
+                                                   RcaTaskState target, Instant readyAt) {
+            RcaTask t = rows.get(id);
+            if (t == null || t.state() != RcaTaskState.LEASED
+                    || t.leaseUntil() == null || !t.leaseUntil().isBefore(now)
+                    || t.leaseEpoch() != expectedEpoch) {
+                return false;
+            }
+            rows.put(id, new RcaTask(t.id(), t.runId(), t.taskKey(), target,
+                    t.priority(), readyAt, readyAt, t.deadlineAt(),
+                    null, null, t.leaseEpoch(),
+                    t.attemptCount(), t.maxAttempts(), t.createdAt(), now));
+            return true;
         }
 
         @Override
@@ -1061,6 +1126,167 @@ public final class AlertInMemoryStores {
 
         public synchronized List<com.objwww.pr.control.alert.domain.model.NotifyOutboxEntry> all() {
             return List.copyOf(rows);
+        }
+    }
+
+    // ------------------------------------ evidence_snapshot（EX-A4a F05 黑板面假件）
+
+    /**
+     * 快照假件（V16 同构：freeze 幂等——同 (run,digest) 返回 false 零成员写入；
+     * membersOf evidence_id 序稳定；无更新路径）。P1-05 行为面与 PG 一致。
+     */
+    public static final class Snapshots implements
+            com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.FrozenSnapshot>
+                rows = new LinkedHashMap<>();
+        private final Map<UUID, List<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow>>
+                members = new LinkedHashMap<>();
+
+        @Override
+        public synchronized boolean freeze(
+                com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.FrozenSnapshot snapshot,
+                List<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow> memberRows) {
+            boolean dup = rows.values().stream().anyMatch(r ->
+                    r.runId().equals(snapshot.runId())
+                            && r.snapshotDigest().equals(snapshot.snapshotDigest()));
+            if (dup) {
+                return false;
+            }
+            rows.put(snapshot.snapshotId(), snapshot);
+            members.put(snapshot.snapshotId(), List.copyOf(memberRows));
+            return true;
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.FrozenSnapshot> find(
+                UUID runId, String snapshotDigest) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId)
+                            && r.snapshotDigest().equals(snapshotDigest))
+                    .findFirst();
+        }
+
+        /** 成员清单 evidence_id 序稳定（PG 面同序契约） */
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow> membersOf(
+                UUID snapshotId) {
+            return members.getOrDefault(snapshotId, List.of()).stream()
+                    .sorted(java.util.Comparator.comparing(
+                            com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository.SnapshotMemberRow::evidenceId))
+                    .toList();
+        }
+    }
+
+    // --------------------------------- 工具调用账本假件（EX-A4a F16 恢复扫描面）
+
+    /**
+     * V15 同构假件：PENDING 先行 → 终态 CAS 单向（首回执生效）；
+     * reclaimPendingOlderThan 镜像 PG 单语句语义（PENDING + started_at &lt; cutoff →
+     * UNKNOWN/TRANSPORT_UNKNOWN，返回收敛行数）。
+     */
+    public static final class ToolLedger implements
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger {
+        /** operationId → [identity, state, reason, startedAt, settledAt] */
+        public final Map<UUID, Row> rows = new LinkedHashMap<>();
+
+        public static final class Row {
+            public final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger.InvocationIdentity identity;
+            public com.objwww.pr.control.alert.domain.tool.ToolInvocationState state;
+            public com.objwww.pr.control.alert.domain.tool.ToolReasonCode reason;
+            public final Instant startedAt;
+            public Instant settledAt;
+            public UUID resultRef;
+
+            Row(InvocationIdentity identity, Instant startedAt) {
+                this.identity = identity;
+                this.state = com.objwww.pr.control.alert.domain.tool.ToolInvocationState.PENDING;
+                this.startedAt = startedAt;
+            }
+        }
+
+        @Override
+        public void open(InvocationIdentity identity) {
+            rows.put(identity.operationId(), new Row(identity, Instant.now()));
+        }
+
+        @Override
+        public boolean succeed(UUID operationId) {
+            return settle(operationId,
+                    com.objwww.pr.control.alert.domain.tool.ToolInvocationState.SUCCESS,
+                    null);
+        }
+
+        @Override
+        public boolean fail(UUID operationId,
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState terminal,
+                com.objwww.pr.control.alert.domain.tool.ToolReasonCode reasonCode) {
+            return settle(operationId, terminal, reasonCode);
+        }
+
+        private synchronized boolean settle(UUID operationId,
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState terminal,
+                com.objwww.pr.control.alert.domain.tool.ToolReasonCode reasonCode) {
+            Row row = rows.get(operationId);
+            if (row == null || row.state
+                    != com.objwww.pr.control.alert.domain.tool.ToolInvocationState.PENDING) {
+                return false;
+            }
+            row.state = terminal;
+            row.reason = reasonCode;
+            row.settledAt = Instant.now();
+            return true;
+        }
+
+        /** 打开时间回拨（测试用：把 PENDING 行造老） */
+        public synchronized void agePending(UUID operationId, Instant startedAt) {
+            Row row = rows.get(operationId);
+            if (row != null) {
+                rows.put(operationId, new Row(row.identity, startedAt));
+            }
+        }
+
+        /** EX-A3（F09）：结果引用随账落档（CAS 锚 PENDING，succeed 前调用） */
+        @Override
+        public synchronized boolean markResultRef(UUID operationId, UUID evidenceId) {
+            Row row = rows.get(operationId);
+            if (row == null || row.state
+                    != com.objwww.pr.control.alert.domain.tool.ToolInvocationState.PENDING) {
+                return false;
+            }
+            row.resultRef = evidenceId;
+            return true;
+        }
+
+        /** EX-A3（F08）：恢复读——按 (run,task) 取账本行，call_seq 序 */
+        @Override
+        public synchronized java.util.List<com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger.InvocationRecovery> findRecoveryByTask(
+                UUID runId, UUID taskId) {
+            return rows.values().stream()
+                    .filter(r -> r.identity.runId().equals(runId)
+                            && r.identity.taskId().equals(taskId))
+                    .sorted(java.util.Comparator
+                            .comparingLong((Row r) -> r.identity.callSeq())
+                            .thenComparing(r -> r.identity.operationId()))
+                    .map(r -> new com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger.InvocationRecovery(
+                            r.identity.operationId(), r.identity.callSeq(),
+                            r.identity.attemptId(), r.identity.actionDigest(),
+                            r.state, r.resultRef))
+                    .toList();
+        }
+
+        @Override
+        public synchronized int reclaimPendingOlderThan(Instant cutoff) {
+            int swept = 0;
+            for (Row row : rows.values()) {
+                if (row.state == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.PENDING
+                        && row.startedAt.isBefore(cutoff)) {
+                    row.state = com.objwww.pr.control.alert.domain.tool.ToolInvocationState.UNKNOWN;
+                    row.reason = com.objwww.pr.control.alert.domain.tool.ToolReasonCode.TRANSPORT_UNKNOWN;
+                    row.settledAt = Instant.now();
+                    swept++;
+                }
+            }
+            return swept;
         }
     }
 }

@@ -22,7 +22,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ul>
  *   <li>order-arena 只入 alert-net，mem_limit=512m（M2-01 冻结）；</li>
  *   <li>arena-chaos-admin 只入 eval-mgmt、零宿主端口；</li>
- *   <li>holmesgpt 不入 eval-mgmt（管理面对告警执行面不可达的拓扑前提）；</li>
+ *   <li>holmesgpt 已退场（M6-07 服务整块摘除，静态钉=不在场防复活；原 C-3
+ *       「不入 eval-mgmt」随退场升格）；</li>
  *   <li>arena-migrate 单一事实源直挂 order-arena 迁移目录、owner=postgres、schema=arena；</li>
  *   <li>主栈 postgres 加入 alert-net + eval-mgmt（arena 两角色触库的唯一通路）。</li>
  * </ul>
@@ -74,9 +75,11 @@ class ComposeTopologyContractTest {
     }
 
     @Test
-    void holmesgptDoesNotJoinEvalMgmt() {
-        Map<String, Object> holmes = service(alertCompose, "holmesgpt");
-        assertThat(networkNames(holmes)).doesNotContain("eval-mgmt");
+    void holmesgptRetiredFromAlertStack() {
+        // M6-07 Holmes 退场：服务整块摘除（历史树封存=git tag）。原 C-3 断言
+        // （不入 eval-mgmt）随服务移除升格为「不在场」——静态钉防复活。
+        Map<String, Object> services = (Map<String, Object>) alertCompose.get("services");
+        assertThat(services).as("M6-07 退场后 holmesgpt 不得复活").doesNotContainKey("holmesgpt");
     }
 
     @Test
@@ -148,7 +151,8 @@ class ComposeTopologyContractTest {
 
     @Test
     void existingAlertStackServicesPreserved() {
-        for (String name : new String[]{"prometheus", "alertmanager", "holmesgpt"}) {
+        // M6-07：holmesgpt 退出存量清单（退场）；prometheus/alertmanager 保留
+        for (String name : new String[]{"prometheus", "alertmanager"}) {
             assertThat(service(alertCompose, name)).isNotNull();
         }
     }

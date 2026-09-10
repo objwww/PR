@@ -87,6 +87,48 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .update();
     }
 
+    /**
+     * EX-A0：路由四列 + 调查输入三列（V36 investigation_input_digest/window_start/
+     * window_end）随铸造一次落行——Run 创建时冻结身份与时间窗，执行期只读不重算。
+     */
+    @Override
+    public void insertRouted(RcaRun run, RcaRunRouting routing,
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs) {
+        jdbc.sql("""
+                INSERT INTO rca_run (
+                    id, incident_id, generation, trigger_kind, state, investigation_hash,
+                    created_at, updated_at, started_at, finished_at, last_error,
+                    engine, config_digest, stickiness_key, canary_bucket,
+                    investigation_input_digest, window_start, window_end
+                ) VALUES (
+                    :id, :incidentId, :generation, :trigger, :state, :investigationHash,
+                    :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
+                    :engine, :configDigest, :stickinessKey, :bucket,
+                    :investigationInputDigest, :windowStart, :windowEnd
+                )
+                """)
+                .param("id", run.id())
+                .param("incidentId", run.incidentId())
+                .param("generation", run.generation())
+                .param("trigger", run.trigger().name())
+                .param("state", run.state().name())
+                .param("investigationHash", run.investigationHash().value())
+                .param("createdAt", Timestamp.from(run.createdAt()))
+                .param("updatedAt", Timestamp.from(run.updatedAt()))
+                .param("startedAt", ts(run.startedAt()))
+                .param("finishedAt", ts(run.finishedAt()))
+                .param("lastError", JsonbText.encode(run.lastError()))
+                .param("engine", routing.engine().name())
+                .param("configDigest", routing.configDigest() == null
+                        ? null : routing.configDigest().hex())
+                .param("stickinessKey", routing.stickinessKey())
+                .param("bucket", routing.bucket())
+                .param("investigationInputDigest", inputs.inputDigest().hex())
+                .param("windowStart", Timestamp.from(inputs.windowStart()))
+                .param("windowEnd", Timestamp.from(inputs.windowEnd()))
+                .update();
+    }
+
     @Override
     public Optional<RcaRun> findByIdForUpdate(UUID id) {
         List<RcaRun> rows = jdbc.sql("SELECT * FROM rca_run WHERE id = :id FOR UPDATE")
@@ -122,11 +164,38 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .update() > 0;
     }
 
+    /**
+     * EX-A2（F12/P1-04）：修订条件写——修订锚 last_event_seq + 活跃态守卫同 WHERE，
+     * SET 修订号 +1。单语句 CAS：取消/开跑的线性化点即本语句的提交。
+     */
+    @Override
+    public boolean updateIfRevision(RcaRun run, long expectedRevision) {
+        return jdbc.sql("""
+                UPDATE rca_run SET
+                    state = :state, started_at = :startedAt, finished_at = :finishedAt,
+                    last_error = CAST(:lastError AS jsonb), updated_at = :updatedAt,
+                    last_event_seq = last_event_seq + 1
+                 WHERE id = :id AND last_event_seq = :expected
+                   AND state IN ('QUEUED', 'RUNNING', 'REPORTING')
+                """)
+                .param("state", run.state().name())
+                .param("startedAt", ts(run.startedAt()))
+                .param("finishedAt", ts(run.finishedAt()))
+                .param("lastError", JsonbText.encode(run.lastError()))
+                .param("updatedAt", Timestamp.from(run.updatedAt()))
+                .param("id", run.id())
+                .param("expected", expectedRevision)
+                .update() > 0;
+    }
+
     @Override
     public Optional<RcaRun> findActiveByIncidentId(UUID incidentId) {
+        // EX-A4a（F13）：活跃判定与 RcaRunState.isActive()/V12 uq 索引谓词三面统一——
+        // REPORTING 组装期同 incident 不得再铸（守卫与约束同源，不再 23505 对撞）
         List<RcaRun> rows = jdbc.sql("""
                         SELECT * FROM rca_run
-                         WHERE incident_id = :incidentId AND state IN ('QUEUED', 'RUNNING')
+                         WHERE incident_id = :incidentId
+                           AND state IN ('QUEUED', 'RUNNING', 'REPORTING')
                          ORDER BY created_at DESC LIMIT 1
                         """)
                 .param("incidentId", incidentId)
@@ -145,7 +214,8 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
     @Override
     public Optional<RcaRunRepository.RoutingView> findRoutingById(UUID id) {
         return jdbc.sql("""
-                        SELECT engine, config_digest, stickiness_key, canary_bucket
+                        SELECT engine, config_digest, stickiness_key, canary_bucket,
+                               investigation_input_digest, window_start, window_end
                           FROM rca_run WHERE id = :id
                         """)
                 .param("id", id)
@@ -153,7 +223,10 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                         RcaStateContract.parseEngine(rs.getString("engine")),
                         rs.getString("config_digest"),
                         rs.getString("stickiness_key"),
-                        rs.getObject("canary_bucket", Integer.class)))
+                        rs.getObject("canary_bucket", Integer.class),
+                        rs.getString("investigation_input_digest"),
+                        instantOf(rs.getTimestamp("window_start")),
+                        instantOf(rs.getTimestamp("window_end"))))
                 .optional();
     }
 
@@ -182,6 +255,10 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
 
     private static Timestamp ts(java.time.Instant instant) {
         return instant == null ? null : Timestamp.from(instant);
+    }
+
+    private static java.time.Instant instantOf(Timestamp timestamp) {
+        return timestamp == null ? null : timestamp.toInstant();
     }
 
     private RcaRun mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {

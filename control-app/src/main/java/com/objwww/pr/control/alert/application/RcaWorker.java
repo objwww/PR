@@ -45,11 +45,17 @@ public class RcaWorker {
 
     private static final Logger log = LoggerFactory.getLogger(RcaWorker.class);
 
-    /** 单轮循环结果（观测/测试断言） */
+    /**
+     * 单轮循环结果（观测/测试断言）
+     */
     public enum CycleOutcome {EXECUTED, IDLE, SLOTS_BUSY}
 
+    /**
+     * @param revision 领取事务内读得的 run 修订锚（EX-A2 F12：markRunRunning CAS 输入，
+     *                 领取→开跑之间取消落地时 CAS 败，run 不复活）
+     */
     public record ClaimedWork(int slotNo, long slotEpoch, RcaTask task, RcaRun run,
-                              Incident incident, RcaEngine engine) {
+                              Incident incident, RcaEngine engine, long revision) {
     }
 
     private final RcaTaskRepository tasks;
@@ -59,6 +65,8 @@ public class RcaWorker {
     private final IncidentRepository incidents;
     private final SchedulerSlotRepository slots;
     private final ExternalInvocationRepository invocations;
+    /** EX-A4a（F16）：第一方工具账本 PENDING 悬挂回收（BA-13② 同律第三账本） */
+    private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
     /** 引擎执行器映射表（M6-01）：分派面唯一权威，无默认回退——缺绑定即 fail-closed */
     private final Map<RcaEngine, RcaTaskExecutor> executors;
     private final RcaRunOrchestrator orchestrator;
@@ -86,6 +94,7 @@ public class RcaWorker {
                      IncidentRepository incidents,
                      SchedulerSlotRepository slots,
                      ExternalInvocationRepository invocations,
+                     com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
                      RcaTaskExecutor executor,
                      RcaRunOrchestrator orchestrator,
                      TransactionOperations tx,
@@ -99,6 +108,7 @@ public class RcaWorker {
                      Duration hangingGrace,
                      int investigationSchemaVersion) {
         this(tasks, runs, attempts, investigationResults, incidents, slots, invocations,
+                toolLedger,
                 Map.of(RcaEngine.HOLMES, Objects.requireNonNull(executor, "executor 不得为 null")),
                 orchestrator, tx, clock, owner, slotScope, taskLease, heartbeatInterval,
                 pollInterval, retryBackoff, hangingGrace, investigationSchemaVersion);
@@ -112,6 +122,7 @@ public class RcaWorker {
                      IncidentRepository incidents,
                      SchedulerSlotRepository slots,
                      ExternalInvocationRepository invocations,
+                     com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
                      Map<RcaEngine, RcaTaskExecutor> executors,
                      RcaRunOrchestrator orchestrator,
                      TransactionOperations tx,
@@ -131,6 +142,7 @@ public class RcaWorker {
         this.incidents = Objects.requireNonNull(incidents);
         this.slots = Objects.requireNonNull(slots);
         this.invocations = Objects.requireNonNull(invocations);
+        this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.executors = Objects.requireNonNull(executors, "executors 不得为 null");
         if (executors.isEmpty()) {
             throw new IllegalArgumentException("executors 映射表不得为空");
@@ -178,12 +190,10 @@ public class RcaWorker {
             RcaTaskState target = runActive ? RcaTaskState.RETRY_WAIT : RcaTaskState.STALE;
             // 崩溃回收也是一次状态迁移（LEASED→RETRY_WAIT/STALE），过状态机（BA-11①/G0-07）
             RcaTaskStateMachine.requireTransition(task.state(), target);
-            Instant readyAt = now.plus(retryBackoff);
-            RcaTask back = new RcaTask(task.id(), task.runId(), task.taskKey(),
-                    target, task.priority(), readyAt, readyAt,
-                    task.deadlineAt(), null, null, task.leaseEpoch(),
-                    task.attemptCount(), task.maxAttempts(), task.createdAt(), now);
-            if (tasks.update(back)) {
+            // EX-A2（F10）：四条件原子回收（含 lease_until<now 复核）——读后心跳已续/
+            // 已他人重领/他回收者已收敛 = 0 行竞态失败，不计数零补救
+            if (tasks.reclaimExpired(task.id(), task.leaseEpoch(), now, target,
+                    now.plus(retryBackoff))) {
                 reclaimed++;
                 log.warn("task {} 租约过期回收 owner={} → {}", task.id(), task.leaseOwner(), target);
             }
@@ -193,8 +203,7 @@ public class RcaWorker {
     }
 
     private void markHangingInvocationsUnknown(Instant now) {
-        Instant grace = now.minus(hangingGrace);
-        for (ExternalInvocation invocation : invocations.findHangingStarted(grace)) {
+        Instant grace = now.minus(hangingGrace);        for (ExternalInvocation invocation : invocations.findHangingStarted(grace)) {
             ExternalInvocation unknown = new ExternalInvocation(
                     invocation.id(), invocation.invocationId(), invocation.callSeq(),
                     invocation.runId(), invocation.taskId(), invocation.attemptId(),
@@ -215,6 +224,12 @@ public class RcaWorker {
                     ExecutionStatus.UNKNOWN, ValidationStatus.NOT_VALIDATED, null,
                     null, null, null, null, null, now));
             log.warn("悬挂调查记录 {} STARTED→UNKNOWN（崩溃回收）", hanging.id());
+        }
+        // EX-A4a（F16）：第一方工具账本 PENDING 悬挂回收（进程死后的孤儿回执永不达；
+        // 单语句条件写，阈值与上两账本同源 hangingGrace——必须长于单次在途调用）
+        int pendingSwept = toolLedger.reclaimPendingOlderThan(grace);
+        if (pendingSwept > 0) {
+            log.warn("工具调用账本 {} 行 PENDING→UNKNOWN（崩溃回收）", pendingSwept);
         }
     }
 
@@ -245,8 +260,11 @@ public class RcaWorker {
             RcaEngine engine = runs.findRoutingById(task.runId())
                     .map(RcaRunRepository.RoutingView::engine)
                     .orElse(RcaEngine.HOLMES);
+            // EX-A2（F12）：run 行已在本事务 FOR UPDATE 锁下——修订锚随工作快照携带，
+            // 供 markRunRunning CAS（领取→开跑缝窗的取消栅栏）
+            long revision = runs.currentRevision(task.runId()).orElse(0);
             return Optional.of(new ClaimedWork(acquired.slotNo(), acquired.leaseEpoch(),
-                    task, run, incident, engine));
+                    task, run, incident, engine, revision));
         });
     }
 
@@ -262,7 +280,9 @@ public class RcaWorker {
         ClaimedWork work = workOpt.get();
         Instant now = clock.now();
 
-        orchestrator.markRunRunning(work.run(), now);
+        // EX-A2（F12）：开跑 CAS 化——取消在领取与开跑之间落地时修订号已推进，
+        // CAS 败 = run 保持 CANCELLED 不复活（晚到结果由 finishTask fence 收敛 STALE）
+        orchestrator.markRunRunning(work.run(), work.revision(), now);
         RcaAttempt attempt = new RcaAttempt(UUID.randomUUID(), work.task().id(),
                 work.task().attemptCount(), work.task().leaseEpoch(), owner,
                 RcaAttemptStatus.STARTED, null, null, null, now, null, null);

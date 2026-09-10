@@ -16,8 +16,11 @@ import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.shared.Digest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -44,14 +47,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * EventQueryController 契约（M5-13 §M5-13③；落码方案验收"断线重连/游标/权限"单测面）：
- * RBAC 正反、runs 列表/详情投影、events 游标+level 面、stream ticket 单次/绑主体、
+ * runs 列表/详情投影、events 游标+level 面、stream ticket 单次/绑主体、
  * Last-Event-ID 续传（SSE 单次排水 + asyncDispatch）。
+ * EX-C3a：bearer RBAC 面上移 SecurityFilterChain（SecurityConfigTest 链级覆盖）；
+ * 主体 = 测试侧铸入 SecurityContext 的认证（AuthenticatedActor 面）。
  */
 class EventQueryControllerTest {
 
     private static final Instant NOW = Instant.parse("2026-09-08T10:00:00Z");
     private static final Supplier<Instant> CLOCK = () -> NOW;
-    private static final String BEARER = "Bearer op-token-1";
 
     private final StubRuns runs = new StubRuns();
     private final StubEvents eventRows = new StubEvents();
@@ -66,30 +70,22 @@ class EventQueryControllerTest {
         RunQueryService runQuery = new RunQueryService(runs, new StubTasks(), new StubEdges(), CLOCK);
         SseStreamService sse = new SseStreamService(events, Duration.ofSeconds(30));
         mvc = MockMvcBuilders.standaloneSetup(
-                        new EventQueryController(runQuery, events, sse, runs, "op-token-1"))
+                        new EventQueryController(runQuery, events, sse, runs))
                 .build();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("operator", null, java.util.List.of()));
     }
 
-    // ------------------------------------------------------------------ RBAC 正反
-
-    @Test
-    void rbacRejectsMissingAndWrongBearer() throws Exception {
-        mvc.perform(get("/api/rca-runs")).andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/rca-runs").header("Authorization", "Bearer wrong"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/rca-runs/" + runId + "/events")
-                        .header("Authorization", "Bearer wrong"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/rca-runs/" + runId + "/events/stream-ticket")
-                        .header("Authorization", "Bearer wrong"))
-                .andExpect(status().isUnauthorized());
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     // ------------------------------------------------------------------ 列表/详情
 
     @Test
     void listReturnsSummaryAndRowShape() throws Exception {
-        mvc.perform(get("/api/rca-runs").header("Authorization", BEARER))
+        mvc.perform(get("/api/rca-runs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary.buckets.mine").value(0))
                 .andExpect(jsonPath("$.summary.sla.projectionLag").value(nullValue()))
@@ -99,13 +95,13 @@ class EventQueryControllerTest {
 
     @Test
     void detailReturnsProjectionOr404() throws Exception {
-        mvc.perform(get("/api/rca-runs/" + runId).header("Authorization", BEARER))
+        mvc.perform(get("/api/rca-runs/" + runId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.run.id").value(runId.toString()))
                 .andExpect(jsonPath("$.run.severity").value(nullValue()))
                 .andExpect(jsonPath("$.tasks").isArray())
                 .andExpect(jsonPath("$.edges").isArray());
-        mvc.perform(get("/api/rca-runs/" + UUID.randomUUID()).header("Authorization", BEARER))
+        mvc.perform(get("/api/rca-runs/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
 
@@ -118,8 +114,7 @@ class EventQueryControllerTest {
                 row(2, "TASK_RETRY_SCHEDULED", "{\"task_id\":\"ROOT_CAUSE\",\"summary\":\"退避 90s\"}"),
                 row(3, "TOOL_CALL_FAILED", "{\"task_id\":\"ROOT_CAUSE\",\"summary\":\"REMOTE_5XX\"}")));
 
-        mvc.perform(get("/api/rca-runs/" + runId + "/events")
-                        .header("Authorization", BEARER))
+        mvc.perform(get("/api/rca-runs/" + runId + "/events"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.events[0].seq").value(1))
                 .andExpect(jsonPath("$.events[0].type").value("RUN_STARTED"))
@@ -131,14 +126,12 @@ class EventQueryControllerTest {
                 .andExpect(jsonPath("$.gap").value(false));
 
         mvc.perform(get("/api/rca-runs/" + runId + "/events")
-                        .header("Authorization", BEARER)
                         .param("after_seq", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.events.length()").value(1))
                 .andExpect(jsonPath("$.events[0].seq").value(3));
 
-        mvc.perform(get("/api/rca-runs/" + UUID.randomUUID() + "/events")
-                        .header("Authorization", BEARER))
+        mvc.perform(get("/api/rca-runs/" + UUID.randomUUID() + "/events"))
                 .andExpect(status().isNotFound());
     }
 
@@ -150,8 +143,7 @@ class EventQueryControllerTest {
                 row(1, "RUN_STARTED", "{\"summary\":\"a\"}"),
                 row(2, "TASK_LEASED", "{\"task_id\":\"METRICS\",\"summary\":\"领取\"}")));
 
-        String ticket = mvc.perform(post("/api/rca-runs/" + runId + "/events/stream-ticket")
-                        .header("Authorization", BEARER))
+        String ticket = mvc.perform(post("/api/rca-runs/" + runId + "/events/stream-ticket"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ticket").isString())
                 .andReturn().getResponse().getContentAsString()
@@ -192,8 +184,7 @@ class EventQueryControllerTest {
     }
 
     private String issueTicket() throws Exception {
-        return mvc.perform(post("/api/rca-runs/" + runId + "/events/stream-ticket")
-                        .header("Authorization", BEARER))
+        return mvc.perform(post("/api/rca-runs/" + runId + "/events/stream-ticket"))
                 .andReturn().getResponse().getContentAsString()
                 .replaceAll(".*\"ticket\":\"([^\"]+)\".*", "$1");
     }
@@ -255,7 +246,8 @@ class EventQueryControllerTest {
 
         @Override
         public Optional<RoutingView> findRoutingById(UUID id) {
-            return Optional.of(new RoutingView(RcaEngine.HOLMES, null, null, null));
+            return Optional.of(new RoutingView(RcaEngine.HOLMES, null, null, null,
+                    null, null, null));
         }
 
         @Override

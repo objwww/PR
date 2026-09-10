@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.application.PlanCompiler;
 import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
 import com.objwww.pr.control.alert.application.ReportCompletedNotifier;
+import com.objwww.pr.control.alert.application.RunBudgetGate;
 import com.objwww.pr.control.alert.application.agent.AgentRegistry;
 import com.objwww.pr.control.alert.application.agent.ChangeAgent;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
@@ -37,6 +38,7 @@ import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
 import com.objwww.pr.control.alert.domain.tool.ToolReplayStore;
+import com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
@@ -132,7 +134,8 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 replayRegistry(), runner, evidence, ledger, MAPPER);
         ChangeAgent change = new ChangeAgent(profile("change", ChangeAgent.TOOL_NAME),
                 replayRegistry(), runner, evidence, ledger, MAPPER);
-        NativeRcaAgent nativeRcaAgent = new NativeRcaAgent(evidence, claims, reducer);
+        NativeRcaAgent nativeRcaAgent = new NativeRcaAgent(evidence,
+                new PostgresEvidenceSnapshotRepository(jdbc, controlTx), claims, reducer);
 
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), tasks,
@@ -145,7 +148,13 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 metrics, logs, change, nativeRcaAgent, claims,
                 new EvidencePackageValidator(65_536, 32, 4_096),
                 "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                AlertClock.system(), AlertMetrics.NOOP);
+                AlertClock.system(), AlertMetrics.NOOP,
+                new RunBudgetGate(new InMemoryRunBudgetLedger()),
+                // EX-A1：本件焦点非预算面，宽限额只保证 openRun/TOOL_CALL 硬闸不误伤全链
+                Map.of(BudgetKind.STEP, 256L, BudgetKind.TOOL_CALL, 256L,
+                        BudgetKind.EVIDENCE, 256L, BudgetKind.SUBTASK, 64L),
+                // EX-A3：恢复 checkpoint 读面（真 PG 账本）
+                ledger);
         orchestrator = new RcaRunOrchestrator(tasks, runs, attempts,
                 new PostgresRcaReportRepository(jdbc), incidents,
                 new PostgresSchedulerSlotRepository(jdbc),

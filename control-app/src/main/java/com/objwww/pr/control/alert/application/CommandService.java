@@ -101,9 +101,15 @@ public class CommandService {
         switch (cmd.type()) {
             case CANCEL -> {
                 RcaRunStateMachine.requireTransition(run.state(), RcaRunState.CANCELLED);
-                runs.update(new RcaRun(run.id(), run.incidentId(), run.generation(),
+                // EX-A2（F12/P1-04）：修订条件写 = 取消线性化点——CAS 与状态迁移同语句
+                // （锚 last_event_seq + 活跃态守卫），finishTask 先提交 SUCCEEDED/FAILED
+                // 或并发命令已推进修订 → 0 行 = 失去资格，REJECTED_STALE 零事件零变更
+                if (!runs.updateIfRevision(new RcaRun(run.id(), run.incidentId(), run.generation(),
                         run.trigger(), RcaRunState.CANCELLED, run.investigationHash(),
-                        run.createdAt(), now.get(), run.startedAt(), now.get(), run.lastError()));
+                        run.createdAt(), now.get(), run.startedAt(), now.get(), run.lastError()),
+                        cmd.expectedRevision())) {
+                    return reject(cmd, OperatorCommand.State.REJECTED_STALE, replayed);
+                }
                 appender.appendIndependent(cmd.runId(), new RcaEventAppender.EventDraft(
                         UUID.randomUUID(), "RUN_CANCELLED",
                         eventJson("cancelled by operator", "CANCELLED")));

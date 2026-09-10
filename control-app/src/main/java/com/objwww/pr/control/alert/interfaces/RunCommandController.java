@@ -3,18 +3,15 @@ package com.objwww.pr.control.alert.interfaces;
 import com.objwww.pr.control.alert.application.CommandService;
 import com.objwww.pr.control.alert.domain.model.OperatorCommand;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.objwww.pr.control.infrastructure.auth.AuthenticatedActor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +24,8 @@ import java.util.UUID;
  * <p>状态 → HTTP 面：APPLIED=200；REJECTED_STALE=409（旧 revision，零副作用）；
  * REJECTED_FORBIDDEN=403（终态 Run 越权）；幂等重放返回原 commandId/state（含
  * 原拒绝码）。批量评测命令明确不在本期（开放项 O-2，落码方案 §M5-14③ annot 原文）。
+ * EX-C3a：验签归 SecurityFilterChain（ROLE_OPERATOR）；actor=认证主体，
+ * X-Operator-Id 自报面摘除。
  */
 @RestController
 @Profile("docker")
@@ -34,27 +33,18 @@ public class RunCommandController {
 
     private final CommandService service;
     private final RcaRunRepository runs;
-    private final byte[] expectedBearer;
 
-    public RunCommandController(CommandService service, RcaRunRepository runs,
-                                @Value("${app.operator.api.bearer}") String bearerToken) {
+    public RunCommandController(CommandService service, RcaRunRepository runs) {
         this.service = service;
         this.runs = runs;
-        this.expectedBearer = (bearerToken == null ? "" : bearerToken)
-                .getBytes(StandardCharsets.UTF_8);
     }
 
     @PostMapping(path = "/api/rca-runs/{runId}/commands",
             consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> submit(
-            @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestHeader(value = "X-Operator-Id", required = false) String operatorId,
             @PathVariable String runId,
             @RequestBody Map<String, Object> body) {
-        if (!authorized(authorization)) {
-            return ResponseEntity.status(401).body(Map.of("error", "unauthorized"));
-        }
         UUID id = parseRunId(runId);
         if (id == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
@@ -75,7 +65,7 @@ public class RunCommandController {
                 ? copyOf(p) : Map.of();
 
         CommandService.Result result = service.submit(id, type, idempotencyKey,
-                expectedRevision, payload, actor(operatorId));
+                expectedRevision, payload, truncate(AuthenticatedActor.name()));
         return respond(result);
     }
 
@@ -113,12 +103,9 @@ public class RunCommandController {
         return out;
     }
 
-    private static String actor(String operatorId) {
-        if (operatorId == null || operatorId.isBlank()) {
-            return "operator";
-        }
-        String trimmed = operatorId.trim();
-        return trimmed.length() > 64 ? trimmed.substring(0, 64) : trimmed;
+    /** actor 截断面沿旧 actor()（审计列宽防御） */
+    private static String truncate(String actor) {
+        return actor.length() > 64 ? actor.substring(0, 64) : actor;
     }
 
     private static UUID parseRunId(String runId) {
@@ -127,15 +114,5 @@ public class RunCommandController {
         } catch (IllegalArgumentException | NullPointerException e) {
             return null;
         }
-    }
-
-    /** 常量时间比较（O-4 过渡 bearer；OperatorApiController 同构） */
-    private boolean authorized(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            return false;
-        }
-        byte[] provided = authorizationHeader.substring("Bearer ".length())
-                .getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(provided, expectedBearer);
     }
 }

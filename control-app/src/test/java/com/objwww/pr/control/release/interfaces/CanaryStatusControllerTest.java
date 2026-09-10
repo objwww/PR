@@ -26,13 +26,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * M6-01 CanaryStatusController UT（C-64 只读观察面；standalone MockMvc + fakes，
- * ConfigBundleControllerTest 同构）：401 面零读库、就绪/缺件/capability digest
- * 投影、active bundle canary 段投影、NATIVE 决策计数、窗判定序列查询面。
+ * ConfigBundleControllerTest 同构）：就绪/缺件/capability digest 投影、active
+ * bundle canary 段投影、NATIVE 决策计数、窗判定序列查询面。
+ * EX-C3a：无 bearer → 401 面上移 SecurityFilterChain（SecurityConfigTest 链级覆盖）。
  */
 class CanaryStatusControllerTest {
 
-    private static final String BEARER = "test-release-token";
-    private static final String AUTH = "Authorization";
 
     private InMemoryBundles bundles;
     private CountingDecisions decisions;
@@ -49,14 +48,7 @@ class CanaryStatusControllerTest {
     private void readyMvc() {
         mvc = MockMvcBuilders.standaloneSetup(new CanaryStatusController(bundles,
                 decisions, windows,
-                new Capability(true, List.of(), "c".repeat(64)), BEARER)).build();
-    }
-
-    @Test
-    @DisplayName("无 bearer → 401（零仓储触达）")
-    void unauthorizedIs401() throws Exception {
-        readyMvc();
-        mvc.perform(get("/api/canary/status")).andExpect(status().isUnauthorized());
+                new Capability(true, List.of(), "c".repeat(64)))).build();
     }
 
     @Test
@@ -71,7 +63,7 @@ class CanaryStatusControllerTest {
         decisions.nativeCount = 3;
         readyMvc();
 
-        mvc.perform(get("/api/canary/status").header(AUTH, "Bearer " + BEARER))
+        mvc.perform(get("/api/canary/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nativeReady").value(true))
                 .andExpect(jsonPath("$.capabilityDigest").value("c".repeat(64)))
@@ -89,7 +81,7 @@ class CanaryStatusControllerTest {
         decisions.nativeCount = 0;
         readyMvc();
 
-        mvc.perform(get("/api/canary/status").header(AUTH, "Bearer " + BEARER))
+        mvc.perform(get("/api/canary/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nativeReady").value(true))
                 .andExpect(jsonPath("$.activeBundleDigest").doesNotExist())
@@ -102,10 +94,9 @@ class CanaryStatusControllerTest {
     void projectsMissingWhenCapabilityIncomplete() throws Exception {
         mvc = MockMvcBuilders.standaloneSetup(new CanaryStatusController(bundles,
                 decisions, windows,
-                new Capability(false, List.of("metricsAgent", "metricsExpr"), null),
-                BEARER)).build();
+                new Capability(false, List.of("metricsAgent", "metricsExpr"), null))).build();
 
-        mvc.perform(get("/api/canary/status").header(AUTH, "Bearer " + BEARER))
+        mvc.perform(get("/api/canary/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nativeReady").value(false))
                 .andExpect(jsonPath("$.missing[0]").value("metricsAgent"))
@@ -132,7 +123,7 @@ class CanaryStatusControllerTest {
                 "PASS", List.of(), Instant.parse("2026-09-09T00:00:01Z")));
         readyMvc();
 
-        mvc.perform(get("/api/canary/status").header(AUTH, "Bearer " + BEARER)
+        mvc.perform(get("/api/canary/status")
                         .param("rolloutId", rollout.toString())
                         .param("candidateDigest", candidate))
                 .andExpect(status().isOk())
@@ -140,7 +131,7 @@ class CanaryStatusControllerTest {
                 .andExpect(jsonPath("$.windows[0].verdict").value("PASS"))
                 .andExpect(jsonPath("$.windows[1].windowSeq").value(2));
 
-        mvc.perform(get("/api/canary/status").header(AUTH, "Bearer " + BEARER)
+        mvc.perform(get("/api/canary/status")
                         .param("rolloutId", rollout.toString()))
                 .andExpect(status().isBadRequest());
     }

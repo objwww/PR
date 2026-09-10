@@ -24,6 +24,7 @@
         <module>order-arena</module>
         <module>arena-chaos-admin</module>
         <module>notify-app</module>
+        <module>duty-adapter</module>
     </modules>
 
     <properties>

@@ -57,9 +57,8 @@ class AlertInMemoryStoresTest {
         Incident incident = incident(UUID.randomUUID(), "key-1");
         store.incidents.insert(incident);
 
-        assertThatThrownBy(() -> store.incidents.insert(
-                incident(UUID.randomUUID(), "key-1")))
-                .isInstanceOf(DuplicateKeyException.class);
+        // EX-A4b（F19）：incident 冲突 = 布尔面（对齐 PG ON CONFLICT DO NOTHING），不再抛
+        assertThat(store.incidents.insert(incident(UUID.randomUUID(), "key-1"))).isFalse();
 
         // 活跃 run 部分唯一（23505 模拟）
         store.runs.insert(run(incident.id(), RcaRunState.QUEUED));

@@ -27,8 +27,9 @@ public class PostgresRcaToolInvocationLedger implements RcaToolInvocationLedger 
     public void open(InvocationIdentity identity) {
         tx.executeWithoutResult(status -> jdbc.sql("""
                 insert into rca_tool_invocation(id, run_id, task_id, attempt_id, call_seq,
-                    tool_name, tool_version, action_digest, state)
-                values (:id, :run, :task, :attempt, :seq, :tool, :version, :digest, 'PENDING')
+                    tool_name, tool_version, action_digest, action_seq, state)
+                values (:id, :run, :task, :attempt, :seq, :tool, :version, :digest, :seq,
+                    'PENDING')
                 """)
                 .param("id", identity.operationId()).param("run", identity.runId())
                 .param("task", identity.taskId()).param("attempt", identity.attemptId())
@@ -66,5 +67,52 @@ public class PostgresRcaToolInvocationLedger implements RcaToolInvocationLedger 
                 .param("id", operationId)
                 .update());
         return updated != null && updated == 1;
+    }
+
+    /** EX-A4a（F16）：悬挂 PENDING 单语句回收 → UNKNOWN/TRANSPORT_UNKNOWN（CAS 语义在 WHERE state） */
+    @Override
+    public int reclaimPendingOlderThan(java.time.Instant cutoff) {
+        Integer updated = tx.execute(status -> jdbc.sql("""
+                        update rca_tool_invocation
+                           set state = 'UNKNOWN', reason_code = 'TRANSPORT_UNKNOWN',
+                               settled_at = now()
+                         where state = 'PENDING' and started_at < :cutoff
+                        """)
+                .param("cutoff", java.sql.Timestamp.from(cutoff))
+                .update());
+        return updated == null ? 0 : updated;
+    }
+
+    /** EX-A3（F09）：结果引用随账落档——CAS 锚 PENDING（succeed 前调用） */
+    @Override
+    public boolean markResultRef(UUID operationId, UUID evidenceId) {
+        Integer updated = tx.execute(status -> jdbc.sql("""
+                        update rca_tool_invocation
+                           set result_ref = :ref
+                         where id = :id and state = 'PENDING'
+                        """)
+                .param("ref", evidenceId).param("id", operationId)
+                .update());
+        return updated != null && updated == 1;
+    }
+
+    /** EX-A3（F08）：恢复读——某 run 某任务账本行（call_seq 序），四阶段分诊输入 */
+    @Override
+    public java.util.List<InvocationRecovery> findRecoveryByTask(UUID runId, UUID taskId) {
+        return tx.execute(status -> jdbc.sql("""
+                        SELECT id, call_seq, attempt_id, action_digest, state, result_ref
+                          FROM rca_tool_invocation
+                         WHERE run_id = :run AND task_id = :task
+                         ORDER BY call_seq, id
+                        """)
+                .param("run", runId).param("task", taskId)
+                .query((rs, n) -> new InvocationRecovery(
+                        rs.getObject("id", UUID.class),
+                        rs.getLong("call_seq"),
+                        rs.getObject("attempt_id", UUID.class),
+                        rs.getString("action_digest"),
+                        ToolInvocationState.valueOf(rs.getString("state")),
+                        rs.getObject("result_ref", UUID.class)))
+                .list());
     }
 }

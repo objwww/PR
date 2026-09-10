@@ -18,6 +18,9 @@ import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
 import com.objwww.pr.control.alert.domain.service.AlertIdentityFactory;
 import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
 import com.objwww.pr.control.alert.domain.service.SlaPolicy;
+import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
+import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
+import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.alert.support.TestFixtures;
 import com.objwww.pr.control.release.application.CanaryRouter;
@@ -130,7 +133,7 @@ class RcaWorkerTest {
 
     private RcaWorker newWorker(String owner) {
         return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
-                stores.incidents, stores.slots, stores.invocations,
+                stores.incidents, stores.slots, stores.invocations, stores.toolLedger,
                 java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
                         executor),
                 orchestrator, TransactionOperations.withoutTransaction(), clock, owner, "rca",
@@ -465,6 +468,82 @@ class RcaWorkerTest {
         assertThat(stores.invocations.all().get(0).finishedAt()).isNotNull();
     }
 
+    // ------------------------------------------------------------------ EX-A2（F10/F12）租约与提交栅栏
+
+    @Test
+    @DisplayName("EX-A2 F10：reclaimExpired 四条件语义——epoch 不符 0 行；胜出清租约且 epoch 不动；已收敛再回收 0 行")
+    void reclaimExpiredConditionalSemantics() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
+        assertThat(work).isPresent();
+        RcaTask held = work.get().task();
+        Instant readyAt = clock.now.plus(Duration.ofMinutes(1));
+
+        // epoch 不符（已被他人重领的镜像）→ 0 行竞态失败
+        assertThat(stores.tasks.reclaimExpired(held.id(), held.leaseEpoch() + 5, clock.now,
+                RcaTaskState.RETRY_WAIT, readyAt)).isFalse();
+        assertThat(stores.tasks.findById(held.id()).orElseThrow().state())
+                .isEqualTo(RcaTaskState.LEASED);
+
+        // epoch 相符且已过期 → 回收胜：RETRY_WAIT、租约列清空、epoch/attempt 不动
+        clock.now = clock.now.plus(Duration.ofMinutes(6));
+        assertThat(stores.tasks.reclaimExpired(held.id(), held.leaseEpoch(), clock.now,
+                RcaTaskState.RETRY_WAIT, readyAt)).isTrue();
+        RcaTask reclaimed = stores.tasks.findById(held.id()).orElseThrow();
+        assertThat(reclaimed.state()).isEqualTo(RcaTaskState.RETRY_WAIT);
+        assertThat(reclaimed.leaseOwner()).isNull();
+        assertThat(reclaimed.leaseUntil()).isNull();
+        assertThat(reclaimed.leaseEpoch()).isEqualTo(held.leaseEpoch());
+        assertThat(reclaimed.availableAt()).isEqualTo(readyAt);
+        assertThat(reclaimed.attemptCount()).isEqualTo(held.attemptCount());
+
+        // 已收敛（state≠LEASED）再回收 → 0 行（他回收者已胜的镜像）
+        assertThat(stores.tasks.reclaimExpired(held.id(), held.leaseEpoch(), clock.now,
+                RcaTaskState.RETRY_WAIT, readyAt)).isFalse();
+    }
+
+    @Test
+    @DisplayName("EX-A2 F10：心跳已续的租约不回收（lease_until<now 复核在条件写内）")
+    void reclaimLosesWhenHeartbeatRenewedLease() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
+        assertThat(work).isPresent();
+        RcaTask held = work.get().task();
+
+        // 原 5 分钟租约在 T+6 已过期，但 worker 在 T+3 心跳续到 T+8——T+6 时刻不得被回收
+        clock.now = clock.now.plus(Duration.ofMinutes(3));
+        stores.tasks.heartbeat(held.id(), "worker-a", held.leaseEpoch(), clock.now,
+                Duration.ofMinutes(5));
+        clock.now = clock.now.plus(Duration.ofMinutes(3));
+
+        assertThat(stores.tasks.reclaimExpired(held.id(), held.leaseEpoch(), clock.now,
+                RcaTaskState.RETRY_WAIT, clock.now.plus(Duration.ofMinutes(1)))).isFalse();
+        assertThat(stores.tasks.findById(held.id()).orElseThrow().state())
+                .as("活租约不得被回收夺走").isEqualTo(RcaTaskState.LEASED);
+        assertThat(worker.recoverExpired()).as("恢复扫描对续期租约零回收").isZero();
+    }
+
+    @Test
+    @DisplayName("EX-A2 F12：取消在领取与开跑之间落地 → markRunRunning CAS 败，run 不复活")
+    void markRunRunningLosesCasWhenCancelledAfterClaim() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
+        assertThat(work).isPresent();
+        RcaRun run = work.get().run();
+
+        // 模拟取消事务先胜：QUEUED→CANCELLED 的修订条件写成功（修订号 0→1）
+        assertThat(stores.runs.updateIfRevision(new RcaRun(run.id(), run.incidentId(),
+                run.generation(), run.trigger(), RcaRunState.CANCELLED, run.investigationHash(),
+                run.createdAt(), clock.now, run.startedAt(), clock.now, null),
+                work.get().revision())).isTrue();
+
+        // worker 迟到开跑：CAS 锚旧修订号 → 0 行，run 保持 CANCELLED 不复活
+        assertThat(orchestrator.markRunRunning(work.get().run(), work.get().revision(),
+                clock.now)).isFalse();
+        assertThat(stores.runs.findById(run.id()).orElseThrow().state())
+                .isEqualTo(RcaRunState.CANCELLED);
+    }
+
     // ------------------------------------------------------------------ M3-04/08 落档语义
 
     @Test
@@ -513,6 +592,33 @@ class RcaWorkerTest {
                 .isEqualTo(com.objwww.pr.control.alert.domain.model.ExecutionStatus.UNKNOWN);
         assertThat(recovered.validationStatus()).isEqualTo(ValidationStatus.NOT_VALIDATED);
         assertThat(recovered.finishedAt()).isNotNull();
+    }
+
+    // ------------------------------------------------------------------ EX-A4a（F16）工具调用账本悬挂回收
+
+    @Test
+    @DisplayName("EX-A4a F16：恢复扫描把宽限外 PENDING 工具账本行 UNKNOWN 化（孤儿回执诚实归档），宽限内在途不动")
+    void recoverExpiredSweepsPendingToolLedgerRowsToUnknown() {
+        UUID agedOp = UUID.randomUUID();
+        stores.toolLedger.open(new RcaToolInvocationLedger.InvocationIdentity(agedOp,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1,
+                "prometheus.query", "1", Digests.sha256Hex("aged")));
+        stores.toolLedger.agePending(agedOp, clock.now.minus(Duration.ofMinutes(20)));
+        UUID freshOp = UUID.randomUUID();
+        stores.toolLedger.open(new RcaToolInvocationLedger.InvocationIdentity(freshOp,
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 2,
+                "prometheus.query", "1", Digests.sha256Hex("fresh")));
+
+        assertThat(worker.recoverExpired()).as("无过期 task，纯账本扫描").isZero();
+
+        var swept = stores.toolLedger.rows.get(agedOp);
+        assertThat(swept.state).isEqualTo(ToolInvocationState.UNKNOWN);
+        assertThat(swept.reason).isEqualTo(ToolReasonCode.TRANSPORT_UNKNOWN);
+        assertThat(swept.settledAt).isNotNull();
+        var inFlight = stores.toolLedger.rows.get(freshOp);
+        assertThat(inFlight.state).as("宽限内在途调用不被误杀")
+                .isEqualTo(ToolInvocationState.PENDING);
+        assertThat(inFlight.reason).isNull();
     }
 
     // ------------------------------------------------------------------ slot 并发语义

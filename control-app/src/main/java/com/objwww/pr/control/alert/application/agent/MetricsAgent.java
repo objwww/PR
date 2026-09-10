@@ -35,6 +35,15 @@ public class MetricsAgent extends SingleToolEvidenceAgent {
                 registry, gateway, evidence, ledger, mapper);
     }
 
+    /** EX-A1 全参形态（生产装配唯一入口）：预算门 + 熔断门直通基座 */
+    public MetricsAgent(AgentProfile profile, ToolRegistry registry, ToolInvoker gateway,
+            EvidenceRepository evidence, RcaToolInvocationLedger ledger, ObjectMapper mapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard doomLoopGuard) {
+        super(profile, new ToolSpec(TOOL_NAME, TOOL_VERSION, EVIDENCE_TYPE, SOURCE),
+                registry, gateway, evidence, ledger, mapper, budgetGate, doomLoopGuard);
+    }
+
     /** 一次 R0 指标查询 → 证据（或 NO_DATA / FAILED） */
     public AgentResult investigate(CallContext ctx, MetricsQuery query) {
         return investigate(ctx, argsOf(query));
@@ -50,13 +59,17 @@ public class MetricsAgent extends SingleToolEvidenceAgent {
         return args;
     }
 
-    /** Prometheus 工具定义（R0 必须显式声明——null 缺省从严 R3 即 VALIDATE_ONLY） */
+    /**
+     * Prometheus 工具定义（R0 必须显式声明——null 缺省从严 R3 即 VALIDATE_ONLY）。
+     * EX-A4a（F17）schema 约束：query/step 形状 maxLength+pattern 收紧（语义上限在
+     * PrometheusQueryExecutor 域内判——窗幅 ≤3600s、step ≤60s）。
+     */
     public static ToolDefinition toolDefinition(long timeoutMillis, long resultLimitBytes) {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("query", Map.of("type", "string"));
-        properties.put("start", Map.of("type", "string"));
-        properties.put("end", Map.of("type", "string"));
-        properties.put("step", Map.of("type", "string"));
+        properties.put("query", Map.of("type", "string", "maxLength", 512));
+        properties.put("start", Map.of("type", "string", "pattern", "^\\d{1,10}$"));
+        properties.put("end", Map.of("type", "string", "pattern", "^\\d{1,10}$"));
+        properties.put("step", Map.of("type", "string", "pattern", "^\\d{1,4}(ms|s|m|h)$"));
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("properties", properties);

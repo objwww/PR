@@ -54,21 +54,26 @@ public class PostgresIncidentRepository implements IncidentRepository {
     }
 
     @Override
-    public void insert(Incident incident) {
-        jdbc.sql("""
+    public boolean insert(Incident incident) {
+        // EX-A4b（F19）：ON CONFLICT DO NOTHING——首见并发冲突在同一事务内可继续
+        // （普通 INSERT 唯一冲突后 PG 事务中断，catch+重查面失效）；false=他人已铸
+        return jdbc.sql("""
                 INSERT INTO incident (
                     id, incident_key, status, generation,
                     episode_started_at, last_firing_starts_at, resolved_at,
                     last_investigation_hash, pending_investigation_hash,
                     received_count, distinct_event_count, notification_count,
-                    current_rca_run_id, first_seen_at, last_event_at, created_at, updated_at
+                    current_rca_run_id, first_seen_at, last_event_at, created_at, updated_at,
+                    waiting_reason
                 ) VALUES (
                     :id, :incidentKey, :status, :generation,
                     :episodeStartedAt, :lastFiringStartsAt, :resolvedAt,
                     :lastInvestigationHash, :pendingInvestigationHash,
                     :receivedCount, :distinctEventCount, :notificationCount,
-                    :currentRcaRunId, :firstSeenAt, :lastEventAt, :createdAt, :updatedAt
+                    :currentRcaRunId, :firstSeenAt, :lastEventAt, :createdAt, :updatedAt,
+                    :waitingReason
                 )
+                ON CONFLICT (incident_key) DO NOTHING
                 """)
                 .param("id", incident.id())
                 .param("incidentKey", incident.incidentKey())
@@ -87,7 +92,18 @@ public class PostgresIncidentRepository implements IncidentRepository {
                 .param("lastEventAt", Timestamp.from(incident.lastEventAt()))
                 .param("createdAt", Timestamp.from(incident.createdAt()))
                 .param("updatedAt", Timestamp.from(incident.updatedAt()))
-                .update();
+                .param("waitingReason", incident.waitingReason())
+                .update() == 1;
+    }
+
+    @Override
+    public List<Incident> findWaitingForRedrive() {
+        // B-36：SELECT_BASE 尾无空白，文本块首行终止符被消费——拼接必须自带前导空格，
+        // 否则成 `incidentWHERE`（195 真栈 BadSqlGrammar 实证；B-25 律：新查询面必须真 PG 过）
+        return jdbc.sql(SELECT_BASE
+                        + " WHERE status = 'FIRING' AND waiting_reason IS NOT NULL"
+                        + " ORDER BY first_seen_at, id LIMIT 50")
+                .query(this::mapRow).list();
     }
 
     @Override
@@ -105,6 +121,7 @@ public class PostgresIncidentRepository implements IncidentRepository {
                     notification_count = :notificationCount,
                     current_rca_run_id = :currentRcaRunId,
                     last_event_at = :lastEventAt,
+                    waiting_reason = :waitingReason,
                     updated_at = :updatedAt
                  WHERE id = :id
                 """)
@@ -120,6 +137,7 @@ public class PostgresIncidentRepository implements IncidentRepository {
                 .param("notificationCount", incident.notificationCount())
                 .param("currentRcaRunId", incident.currentRcaRunId())
                 .param("lastEventAt", Timestamp.from(incident.lastEventAt()))
+                .param("waitingReason", incident.waitingReason())
                 .param("updatedAt", Timestamp.from(incident.updatedAt()))
                 .param("id", incident.id())
                 .update() > 0;
@@ -162,6 +180,7 @@ public class PostgresIncidentRepository implements IncidentRepository {
                 rs.getTimestamp("first_seen_at").toInstant(),
                 rs.getTimestamp("last_event_at").toInstant(),
                 rs.getTimestamp("created_at").toInstant(),
-                rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getString("waiting_reason"));
     }
 }

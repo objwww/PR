@@ -48,19 +48,48 @@ class MetricsAgentTest {
     private static final UUID TASK = UUID.randomUUID();
     private static final UUID ATTEMPT = UUID.randomUUID();
     private static final String TIME_RANGE = "2026-09-05T07:50:00Z/2026-09-05T08:00:00Z";
-    private static final String SNAPSHOT = "fc" + "a".repeat(62);
+    private static final com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+            SNAPSHOT = new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                    "fc" + "a".repeat(62));
 
     private final MemLedger ledger = new MemLedger();
     private final MemEvidence evidence = new MemEvidence();
     private final ObjectMapper mapper = new ObjectMapper();
 
     private MetricsAgent agent(ToolExecutor executor, ToolPolicy policy) {
+        return agent(executor, policy, evidence, ledger);
+    }
+
+    /** EX-A3 次序钉形态：账本/证据仓可替换（观测 insert→markResultRef→succeed） */
+    private MetricsAgent agent(ToolExecutor executor, ToolPolicy policy,
+            EvidenceRepository evidenceStore, RcaToolInvocationLedger ledgerStore) {
         ToolRegistry registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
                 prometheusDefinition(), executor)));
         ExecutorService pool = Executors.newFixedThreadPool(2);
         ToolGateway gateway = new ToolGateway(registry, policy, pool,
                 java.time.Clock.systemUTC(), null);
-        return new MetricsAgent(profile(), registry, gateway, evidence, ledger, mapper);
+        return new MetricsAgent(profile(), registry, gateway, evidenceStore, ledgerStore,
+                mapper);
+    }
+
+    /** EX-A1 全参形态（预算门 + 熔断门，无预算语义的旧 helper 走 permissive 缺省） */
+    private MetricsAgent gatedAgent(
+            com.objwww.pr.control.alert.application.RunBudgetGate gate,
+            ToolExecutor executor) {
+        return gatedAgent(gate,
+                com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive(), executor);
+    }
+
+    private MetricsAgent gatedAgent(
+            com.objwww.pr.control.alert.application.RunBudgetGate gate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard guard,
+            ToolExecutor executor) {
+        ToolRegistry registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
+                prometheusDefinition(), executor)));
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ToolGateway gateway = new ToolGateway(registry, policyFor("prometheus.query"), pool,
+                java.time.Clock.systemUTC(), null);
+        return new MetricsAgent(profile(), registry, gateway, evidence, ledger, mapper, gate, guard);
     }
 
     // ------------------------------------------------------------------ 主路径
@@ -82,7 +111,7 @@ class MetricsAgentTest {
         assertThat(stored.evidenceType()).isEqualTo("metrics.query_range");
         assertThat(stored.source()).isEqualTo("prometheus");
         assertThat(stored.observedGeneration()).isEqualTo(3L);
-        assertThat(stored.scope()).containsEntry("input_snapshot_digest", SNAPSHOT);
+        assertThat(stored.scope()).containsEntry("investigation_input_digest", SNAPSHOT.hex());
         assertThat(stored.canonicalPayload()).contains("cpu_usage_percent");
         assertThat(ledger.rows).hasSize(1);
         assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.SUCCESS);
@@ -99,6 +128,46 @@ class MetricsAgentTest {
 
         agent.investigate(context(), query());
         assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.SUCCESS);
+    }
+
+    @Test
+    void resultRefLandsBetweenInsertAndSucceed() {
+        // EX-A3（F09）checkpoint 次序钉：insert → markResultRef → succeed——
+        // 阶段③恢复以「SUCCESS 行 + result_ref 可解析证据」判定幂等收尾；
+        // 引用晚于收尾落账 = 崩溃窗内恢复面永远读不到结果引用（恢复语义塌回重驱）
+        List<String> events = new ArrayList<>();
+        List<UUID> refs = new ArrayList<>();
+        MemEvidence watchedEvidence = new MemEvidence() {
+            @Override
+            public void insert(EvidenceEnvelope envelope) {
+                events.add("insert");
+                super.insert(envelope);
+            }
+        };
+        MemLedger watchedLedger = new MemLedger() {
+            @Override
+            public boolean markResultRef(UUID operationId, UUID evidenceId) {
+                events.add("markResultRef");
+                refs.add(evidenceId);
+                return true;
+            }
+
+            @Override
+            public boolean succeed(UUID operationId) {
+                events.add("succeed");
+                return super.succeed(operationId);
+            }
+        };
+        MetricsAgent agent = agent(args -> fixtureBytes(), policyFor("prometheus.query"),
+                watchedEvidence, watchedLedger);
+
+        MetricsAgent.AgentResult result = agent.investigate(
+                context(), new MetricsAgent.MetricsQuery("cpu_usage_percent",
+                        "1757059200", "1757059260", "30s"));
+
+        assertThat(result.outcome()).isEqualTo(MetricsAgent.AgentOutcome.EVIDENCE_PRODUCED);
+        assertThat(events).containsExactly("insert", "markResultRef", "succeed");
+        assertThat(refs).containsExactly(result.evidenceIds().get(0));
     }
 
     @Test
@@ -204,14 +273,223 @@ class MetricsAgentTest {
 
         String schemaHash = prometheusDefinition().schemaHash();
         String expected = ActionDigest.of(new ActionEnvelope("rca", "prometheus.query", "1",
-                schemaHash, MetricsAgent.argsOf(query()), TIME_RANGE, SNAPSHOT));
-        assertThat(ledger.rows.get(0).actionDigest()).isEqualTo(expected);
+                schemaHash, MetricsAgent.argsOf(query()), TIME_RANGE, SNAPSHOT));        assertThat(ledger.rows.get(0).actionDigest()).isEqualTo(expected);
+    }
+
+    // ------------------------------------------------------------------ EX-A1 预算门（P1-02）
+
+    @Test
+    void budgetExhaustedRefusesCallWithZeroRemoteAndZeroLedger() {
+        // P1-02：准入拒绝 = 零触网、零调用账本行（open 在 remote 段内未达）、FAILED BUDGET_EXHAUSTED
+        com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
+                new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
+        budgetLedger.ensureLimit(RUN, BudgetKind.TOOL_CALL, 0);
+        java.util.concurrent.atomic.AtomicInteger remote = new java.util.concurrent.atomic.AtomicInteger();
+        MetricsAgent agent = gatedAgent(
+                new com.objwww.pr.control.alert.application.RunBudgetGate(budgetLedger),
+                args -> {
+                    remote.incrementAndGet();
+                    return fixtureBytes();
+                });
+
+        MetricsAgent.AgentResult result = agent.investigate(context(), query());
+
+        assertThat(result.outcome()).isEqualTo(MetricsAgent.AgentOutcome.FAILED);
+        assertThat(result.errorClass()).isEqualTo("BUDGET_EXHAUSTED");
+        assertThat(remote.get()).as("耗尽路径零远程（INV-AM4-9）").isZero();
+        assertThat(ledger.rows).as("未达 open：零调用账本行").isEmpty();
+        assertThat(budgetLedger.consumedOf(RUN, BudgetKind.TOOL_CALL)).isZero();
+    }
+
+    @Test
+    void successfulCallReservesAndCommitsToolCallUnit() {
+        com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
+                new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
+        budgetLedger.ensureLimit(RUN, BudgetKind.TOOL_CALL, 4);
+        MetricsAgent agent = gatedAgent(
+                new com.objwww.pr.control.alert.application.RunBudgetGate(budgetLedger),
+                args -> fixtureBytes());
+
+        agent.investigate(context(), query());
+
+        com.objwww.pr.control.alert.domain.budget.ReservationKey key =
+                new com.objwww.pr.control.alert.domain.budget.ReservationKey(
+                        RUN, TASK, ATTEMPT, 1, BudgetKind.TOOL_CALL);
+        assertThat(budgetLedger.stateOf(key)).isEqualTo("COMMITTED");
+        assertThat(budgetLedger.consumedOf(RUN, BudgetKind.TOOL_CALL)).isEqualTo(1);
+    }
+
+    @Test
+    void modelVisibleFailureProvisionalNotRefunded() {
+        // 发送后失败 = 保守占用 PROVISIONAL 等对账（不免费重发，P1-03）
+        com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
+                new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
+        budgetLedger.ensureLimit(RUN, BudgetKind.TOOL_CALL, 4);
+        MetricsAgent agent = gatedAgent(
+                new com.objwww.pr.control.alert.application.RunBudgetGate(budgetLedger),
+                args -> {
+                    throw new ToolModelVisibleException(ToolModelVisibleReason.TIMEOUT_RETRYABLE,
+                            "工具调用超时（可重试）");
+                });
+
+        MetricsAgent.AgentResult result = agent.investigate(context(), query());
+
+        assertThat(result.outcome()).isEqualTo(MetricsAgent.AgentOutcome.FAILED);
+        com.objwww.pr.control.alert.domain.budget.ReservationKey key =
+                new com.objwww.pr.control.alert.domain.budget.ReservationKey(
+                        RUN, TASK, ATTEMPT, 1, BudgetKind.TOOL_CALL);
+        assertThat(budgetLedger.stateOf(key)).isEqualTo("PROVISIONAL");
+        assertThat(budgetLedger.consumedOf(RUN, BudgetKind.TOOL_CALL)).isEqualTo(1);
+    }
+
+    @Test
+    void recordWriteFailureReleasesReservation() {
+        // P1-02 场景③：预留成功但调用记录写失败 → 预留撤销 RELEASED 可核、账面归零
+        com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
+                new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
+        budgetLedger.ensureLimit(RUN, BudgetKind.TOOL_CALL, 4);
+        MemLedger brokenLedger = new MemLedger() {
+            @Override
+            public void open(InvocationIdentity identity) {
+                throw new IllegalStateException("调用记录写失败（存储面故障模拟）");
+            }
+        };
+        ToolRegistry registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
+                prometheusDefinition(), args -> fixtureBytes())));
+        ToolGateway gateway = new ToolGateway(registry, policyFor("prometheus.query"),
+                Executors.newFixedThreadPool(2), java.time.Clock.systemUTC(), null);
+        MetricsAgent agent = new MetricsAgent(profile(), registry, gateway, evidence,
+                brokenLedger, mapper,
+                new com.objwww.pr.control.alert.application.RunBudgetGate(budgetLedger),
+                com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive());
+
+        assertThatThrownBy(() -> agent.investigate(context(), query()))
+                .isInstanceOf(IllegalStateException.class);
+        com.objwww.pr.control.alert.domain.budget.ReservationKey key =
+                new com.objwww.pr.control.alert.domain.budget.ReservationKey(
+                        RUN, TASK, ATTEMPT, 1, BudgetKind.TOOL_CALL);
+        assertThat(budgetLedger.stateOf(key)).as("预留撤销可核").isEqualTo("RELEASED");
+        assertThat(budgetLedger.consumedOf(RUN, BudgetKind.TOOL_CALL)).isZero();
+    }
+
+    @Test
+    void doomLoopTrippedSignatureFailsFastZeroRemote() {
+        // P1-02/EX-A1 §4：阈值 1，一次 NO_DATA 即熔断；下一次同签名零触网直拒
+        com.objwww.pr.control.alert.domain.budget.DoomLoopGuard guard =
+                new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard(
+                        new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.Policy(
+                                1, "doom-test", java.util.Set.of()));
+        java.util.concurrent.atomic.AtomicInteger remote = new java.util.concurrent.atomic.AtomicInteger();
+        MetricsAgent agent = gatedAgent(
+                new com.objwww.pr.control.alert.application.RunBudgetGate(
+                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                guard,
+                args -> {
+                    remote.incrementAndGet();
+                    return """
+                            {"status":"success","data":{"resultType":"matrix","result":[]}}
+                            """.getBytes(StandardCharsets.UTF_8);
+                });
+
+        assertThat(agent.investigate(context(), query()).outcome())
+                .isEqualTo(MetricsAgent.AgentOutcome.NO_DATA);   // 命中放行，record 触发熔断
+        MetricsAgent.AgentResult second = agent.investigate(context(), query());
+        assertThat(second.outcome()).isEqualTo(MetricsAgent.AgentOutcome.FAILED);
+        assertThat(second.errorClass()).isEqualTo("DOOM_LOOP_TRIPPED");
+        assertThat(remote.get()).as("熔断后零触网").isEqualTo(1);
+        assertThat(ledger.rows).as("熔断直拒零账本行").hasSize(1);
+    }
+
+    @Test
+    void doomLoopProgressResetsNoProgressCounter() {
+        com.objwww.pr.control.alert.domain.budget.DoomLoopGuard guard =
+                new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard(
+                        new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.Policy(
+                                2, "doom-test", java.util.Set.of()));
+        MetricsAgent agent = gatedAgent(
+                new com.objwww.pr.control.alert.application.RunBudgetGate(
+                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                guard,
+                args -> fixtureBytes());
+
+        // 三次物理请求（各自 callSeq——生产重试铸造新 callSeq；同参数=同 doom 签名跨重试稳定）
+        assertThat(agent.investigate(context(1), query()).outcome())
+                .isEqualTo(MetricsAgent.AgentOutcome.EVIDENCE_PRODUCED);   // 有进展
+        assertThat(agent.investigate(context(2), query()).outcome())
+                .isEqualTo(MetricsAgent.AgentOutcome.EVIDENCE_PRODUCED);
+        assertThat(agent.investigate(context(3), query()).outcome())
+                .isEqualTo(MetricsAgent.AgentOutcome.EVIDENCE_PRODUCED);
+        assertThat(guard.trippedSignatures()).as("连续有进展不熔断").isEmpty();
+    }
+
+    // ------------------------------------------------------------------ EX-A4a（F16/F17）
+
+    @Test
+    void unknownSegmentFailureLedgersUnknownAndRethrows() {
+        // F16：invoke 返回后的本地段（解析/落库/结算）未分类异常 = 结果未知 →
+        // 账本 UNKNOWN（不假 FAILED）+ 原样重抛。远端异常经 Gateway 已脱敏为
+        // 模型可见族（见 ToolGatewayTest 错误两族），不进本分岔。
+        EvidenceRepository broken = new EvidenceRepository() {
+            @Override
+            public void insert(EvidenceEnvelope envelope) {
+                throw new IllegalStateException("证据落库失败（存储面故障模拟）");
+            }
+
+            @Override
+            public Optional<EvidenceEnvelope> findById(UUID id) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<EvidenceEnvelope> findByRunId(UUID runId) {
+                return List.of();
+            }
+        };
+        ToolRegistry registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
+                prometheusDefinition(), args -> fixtureBytes())));
+        MetricsAgent agent = new MetricsAgent(profile(), registry,
+                new ToolGateway(registry, policyFor("prometheus.query"),
+                        Executors.newFixedThreadPool(2), java.time.Clock.systemUTC(), null),
+                broken, ledger, mapper);
+
+        assertThatThrownBy(() -> agent.investigate(context(), query()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.UNKNOWN);
+        assertThat(ledger.rows.get(0).reason()).isEqualTo(ToolReasonCode.TRANSPORT_UNKNOWN);
+    }
+
+    @Test
+    void seriesOverCapIsTerminalOversizeWithLedgerFailed() {
+        // F17：序列数超上限 = 查询过宽，控制面终止族——账本 FAILED 后原样重抛（drive() 降级 DEAD）
+        StringBuilder series = new StringBuilder("[");
+        for (int i = 0; i <= SingleToolEvidenceAgent.MAX_SERIES; i++) {
+            if (i > 0) {
+                series.append(',');
+            }
+            series.append("{\"metric\":{\"s\":\"").append(i).append("\"},\"values\":[]}");
+        }
+        series.append(']');
+        String body = "{\"status\":\"success\",\"data\":{\"resultType\":\"matrix\","
+                + "\"result\":" + series + "}}";
+        MetricsAgent agent = agent(args -> body.getBytes(StandardCharsets.UTF_8),
+                policyFor("prometheus.query"));
+
+        assertThatThrownBy(() -> agent.investigate(context(), query()))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("RESULT_OVERSIZE");
+        assertThat(evidence.rows).as("超宽查询零证据落库").isEmpty();
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.FAILED);
+        assertThat(ledger.rows.get(0).reason()).isEqualTo(ToolReasonCode.TRANSPORT_UNKNOWN);
     }
 
     // ------------------------------------------------------------------ 夹具
 
     private static MetricsAgent.CallContext context() {
-        return new MetricsAgent.CallContext(RUN, TASK, ATTEMPT, 1, 3L, SNAPSHOT, TIME_RANGE);
+        return context(1);
+    }
+
+    private static MetricsAgent.CallContext context(long callSeq) {
+        return new MetricsAgent.CallContext(RUN, TASK, ATTEMPT, callSeq, 3L, SNAPSHOT, TIME_RANGE);
     }
 
     private static MetricsAgent.MetricsQuery query() {
@@ -252,7 +530,7 @@ class MetricsAgentTest {
     }
 
     /** 账本内存件：open/终态 CAS 语义与 V15 一致（PENDING→终态单向单次） */
-    private static final class MemLedger implements RcaToolInvocationLedger {
+    private static class MemLedger implements RcaToolInvocationLedger {
         record Row(UUID operationId, UUID runId, UUID taskId, UUID attemptId, long callSeq,
                 String toolName, String toolVersion, String actionDigest,
                 ToolInvocationState state, ToolReasonCode reason) {
@@ -293,8 +571,8 @@ class MetricsAgentTest {
         }
     }
 
-    /** 证据仓储内存件 */
-    private static final class MemEvidence implements EvidenceRepository {
+    /** 证据仓储内存件（EX-A3 次序钉需匿名子类观测 insert，故不 final） */
+    private static class MemEvidence implements EvidenceRepository {
         final List<EvidenceEnvelope> rows = new ArrayList<>();
 
         @Override

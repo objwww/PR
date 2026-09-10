@@ -50,35 +50,66 @@ class WebhookChannelTest {
     }
 
     @Test
-    @DisplayName("状态码分类：2xx 投递；429 读 Retry-After（缺省 60s、上限 3600s）；5xx 可重试；4xx 终态")
+    @DisplayName("状态码分类：2xx 按 errcode 判；429 读 Retry-After（缺省 60s、上限 3600s）；5xx 可重试；4xx 终态")
     void classifiesStatuses() {
-        assertThat(WebhookTransport.Classifier.fromStatus(200, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(200, null, "{\"errcode\":0}"))
                 .isInstanceOf(NotificationChannel.SendResult.Delivered.class);
-        assertThat(WebhookTransport.Classifier.fromStatus(204, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(204, null, "{\"errcode\":0}"))
                 .isInstanceOf(NotificationChannel.SendResult.Delivered.class);
 
         var limited = (NotificationChannel.SendResult.RateLimited)
-                WebhookTransport.Classifier.fromStatus(429, "120");
+                WebhookTransport.Classifier.fromStatus(429, "120", "{}");
         assertThat(limited.retryAfterSeconds()).isEqualTo(120);
 
         var limitedDefault = (NotificationChannel.SendResult.RateLimited)
-                WebhookTransport.Classifier.fromStatus(429, null);
+                WebhookTransport.Classifier.fromStatus(429, null, "{}");
         assertThat(limitedDefault.retryAfterSeconds()).isEqualTo(60);
 
         var limitedJunk = (NotificationChannel.SendResult.RateLimited)
-                WebhookTransport.Classifier.fromStatus(429, "not-a-number");
+                WebhookTransport.Classifier.fromStatus(429, "not-a-number", "{}");
         assertThat(limitedJunk.retryAfterSeconds()).isEqualTo(60);
 
-        assertThat(WebhookTransport.Classifier.fromStatus(500, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(500, null, "{}"))
                 .isInstanceOf(NotificationChannel.SendResult.Retryable.class);
-        assertThat(WebhookTransport.Classifier.fromStatus(503, "300"))
+        assertThat(WebhookTransport.Classifier.fromStatus(503, "300", "{}"))
                 .isInstanceOf(NotificationChannel.SendResult.Retryable.class);
-        assertThat(WebhookTransport.Classifier.fromStatus(400, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(400, null, "{}"))
                 .isInstanceOf(NotificationChannel.SendResult.Permanent.class);
-        assertThat(WebhookTransport.Classifier.fromStatus(401, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(401, null, "{}"))
                 .isInstanceOf(NotificationChannel.SendResult.Permanent.class);
-        assertThat(WebhookTransport.Classifier.fromStatus(404, null))
+        assertThat(WebhookTransport.Classifier.fromStatus(404, null, "{}"))
                 .isInstanceOf(NotificationChannel.SendResult.Permanent.class);
+    }
+
+    @Test
+    @DisplayName("F20 业务码判定：HTTP 200 + errcode≠0 不标 SENT（→Retryable 带业务码）；errcode=0 才 Delivered")
+    void f20BusinessCodeFaces() {
+        var rejected = (NotificationChannel.SendResult.Retryable)
+                WebhookTransport.Classifier.fromStatus(200, null,
+                        "{\"errcode\":310000,\"errmsg\":\"sign not match\"}");
+        assertThat(rejected.error()).contains("business_code_310000").contains("sign not match");
+
+        assertThat(WebhookTransport.Classifier.fromStatus(200, null,
+                        "{\"errcode\":0,\"errmsg\":\"ok\"}"))
+                .isInstanceOf(NotificationChannel.SendResult.Delivered.class);
+
+        // 回执形态不可证：2xx 但 body 非 errcode JSON（空/纯文本/异形）→ 结果未知不自动重发
+        assertThat(WebhookTransport.Classifier.fromStatus(200, null, "ok"))
+                .isInstanceOf(NotificationChannel.SendResult.OutcomeUnknown.class);
+        assertThat(WebhookTransport.Classifier.fromStatus(200, null, ""))
+                .isInstanceOf(NotificationChannel.SendResult.OutcomeUnknown.class);
+        assertThat(WebhookTransport.Classifier.fromStatus(200, null,
+                        "{\"foo\":\"no errcode field\"}"))
+                .isInstanceOf(NotificationChannel.SendResult.OutcomeUnknown.class);
+
+        // 渠道端到端：假 transport 回 200+errcode≠0 → send 结果必须不是 Delivered
+        RecordingTransport lyingRobot = new RecordingTransport(List.of(
+                new WebhookTransport.Response(200, null,
+                        "{\"errcode\":130101,\"errmsg\":\"hint: limit exceeded\"}")));
+        var viaChannel = (NotificationChannel.SendResult.Retryable)
+                channel(WebhookChannel.Platform.DINGTALK, lyingRobot)
+                        .send(notification, UUID.randomUUID());
+        assertThat(viaChannel.error()).contains("business_code_130101");
     }
 
     @Test

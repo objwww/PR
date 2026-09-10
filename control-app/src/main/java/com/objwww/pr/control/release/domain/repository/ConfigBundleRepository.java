@@ -34,4 +34,19 @@ public interface ConfigBundleRepository {
      * （null = 未激活态）时落位。false = 并发竞争败者（调用方 409）。
      */
     boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at);
+
+    /**
+     * 激活/回滚事实（EX-B1）：与 pointer CAS 同事务落 change_event——配置生效与变更
+     * 证据同生死（评审 B1：控制器事后写事件失败 = 生效但证据缺失）。CAS 败者事务内
+     * 零插入；幂等重放在服务层早退，不触本方法。rollbackOf 仅 ROLLBACK 行携带
+     * （回滚前生效 digest），ACTIVATE 为 null。
+     */
+    record ActivationFact(String action, String service, String environment, Digest rollbackOf) {
+    }
+
+    /** 带 ChangeFact 记档的激活；未升级实现退化为纯 CAS（4 参），事实面不强制 */
+    default boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at,
+            ActivationFact fact) {
+        return activate(toDigest, expectedCurrent, by, at);
+    }
 }

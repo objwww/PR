@@ -77,7 +77,15 @@ public abstract class PostgresITBase {
             // V33（AM6 M6-04 run 级 fallback 栅栏 + 发布赢家）——BA-41 同律
             "run_fallback", "report_generation_winner",
             // V34（AM6 M6-05 Holmes shadow 持久工作面）——BA-41 同律
-            "holmes_shadow_work");
+            "holmes_shadow_work",
+            // V13（AM4 预算账本）——BA-41 同律：此前零消费者故缺表不显形，
+            // EX-A1BudgetAdmissionIT 起成为真 PG 消费者（EX-A1 首钉）
+            "run_budget_state", "run_budget_entry",
+            // V40（EX-B1 变更事实）——BA-41 同律（config_bundle 两表仍由组件测试自管）
+            "change_event",
+            // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
+            "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
+            "duty_override", "duty_channel", "duty_member", "duty_schedule");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
@@ -99,6 +107,8 @@ public abstract class PostgresITBase {
     protected static JdbcClient evalJdbc;
     protected static TransactionTemplate controlTx;
     protected static TransactionTemplate publisherTx;
+    /** EX-B1：admin 侧事务（SET ROLE deploy_app + INSERT 同连接面——池化下两条 sql() 可能异连） */
+    protected static TransactionTemplate adminTx;
 
     private static synchronized void ensureStarted() {
         if (adminDs != null) {
@@ -159,6 +169,7 @@ public abstract class PostgresITBase {
         evalJdbc = JdbcClient.create(evalDs);
         controlTx = new TransactionTemplate(new DataSourceTransactionManager(controlDs));
         publisherTx = new TransactionTemplate(new DataSourceTransactionManager(publisherDs));
+        adminTx = new TransactionTemplate(new DataSourceTransactionManager(adminDs));
     }
 
     private static HikariDataSource pool(String user, String password, int size) {

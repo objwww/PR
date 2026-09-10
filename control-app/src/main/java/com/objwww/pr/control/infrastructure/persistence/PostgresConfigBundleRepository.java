@@ -68,6 +68,22 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
                AND bundle_digest IS NOT DISTINCT FROM CAST(:expected AS char(64))
             """;
 
+    /**
+     * EX-B1（V40）：激活/回滚事实行——与上方 CAS 同一 tx.execute（Thread 绑连接同事务），
+     * INSERT 失败整事务回滚 = 配置生效与证据同生死；CAS 0 行则零 INSERT（败者零事件）。
+     */
+    private static final String INSERT_CHANGE_EVENT_SQL = """
+            INSERT INTO change_event (
+                id, deploy_id, source, action, service, environment,
+                image_digest, config_digest, commit_sha, actor,
+                started_at, effective_at, rollback_of, status
+            ) VALUES (
+                :id, :deployId, 'config_activation', :action, :service, :environment,
+                NULL, :configDigest, NULL, :actor,
+                NULL, :effectiveAt, :rollbackOf, 'SUCCEEDED'
+            )
+            """;
+
     private final JdbcClient jdbc;
     private final TransactionTemplate tx;
 
@@ -136,6 +152,40 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
                 .param("at", Timestamp.from(at))
                 .param("by", by)
                 .update());
+        return updated != null && updated == 1;
+    }
+
+    /** EX-B1：CAS 与 change_event 行同事务（评审 B1"与生效同事务"的落地面） */
+    @Override
+    public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at,
+            ActivationFact fact) {
+        if (fact == null) {
+            return activate(toDigest, expectedCurrent, by, at);
+        }
+        Integer updated = tx.execute(status -> {
+            int moved = jdbc.sql(ACTIVATE_SQL)
+                    .param("toDigest", toDigest.hex())
+                    .param("expected", expectedCurrent == null ? null : expectedCurrent.hex())
+                    .param("at", Timestamp.from(at))
+                    .param("by", by)
+                    .update();
+            if (moved != 1) {
+                return 0; // CAS 败者：事务内零 INSERT（同事务面自动成立）
+            }
+            jdbc.sql(INSERT_CHANGE_EVENT_SQL)
+                    .param("id", java.util.UUID.randomUUID())
+                    .param("deployId", java.util.UUID.randomUUID().toString())
+                    .param("action", fact.action())
+                    .param("service", fact.service())
+                    .param("environment", fact.environment())
+                    .param("configDigest", toDigest.hex())
+                    .param("actor", by)
+                    .param("effectiveAt", Timestamp.from(at))
+                    .param("rollbackOf",
+                            fact.rollbackOf() == null ? null : fact.rollbackOf().hex())
+                    .update();
+            return 1;
+        });
         return updated != null && updated == 1;
     }
 

@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.model.InboxState;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.alert.domain.model.AlertInbox;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
+import com.objwww.pr.control.ops.duty.support.DutyTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -60,8 +61,11 @@ class AlertWebhookControllerTest {
     private MockMvc build(AlertInboxRepository inbox) {
         AlertIntakeService intake = new AlertIntakeService(inbox, AlertIntakeLimits.defaults(),
                 () -> FIXED);
+        // EX-C3a：bearer 验签归 SecurityFilterChain（SecurityConfigTest 链级覆盖）；
+        // standalone 面只验 controller 自身语义。M7-13：值班派发用记录假件
         return MockMvcBuilders.standaloneSetup(
-                new AlertWebhookController(intake, router(inbox), BEARER)).build();
+                new AlertWebhookController(intake, router(inbox),
+                        new DutyTestSupport.RecordingDispatch())).build();
     }
 
     private static String validBody() {
@@ -110,23 +114,9 @@ class AlertWebhookControllerTest {
         assertThat(row.envelope().payloadDigest().value()).hasSize(64);
     }
 
-    // ---------------- EX-A01：伪 bearer → 401 零落库 ----------------
-
-    @Test
-    void exA01ForgedBearerIs401WithZeroPersistence() throws Exception {
-        mvc.perform(post("/webhooks/alertmanager")
-                        .header("Authorization", "Bearer wrong-token")
-                        .contentType("application/json")
-                        .content(validBody()))
-                .andExpect(status().isUnauthorized());
-
-        mvc.perform(post("/webhooks/alertmanager")
-                        .contentType("application/json")
-                        .content(validBody()))
-                .andExpect(status().isUnauthorized());
-
-        assertThat(stores.inbox.all()).isEmpty();   // INV-AM1-1：未验签零落库
-    }
+    // ---------------- EX-A01：伪 bearer → 401 ----------------
+    // EX-C3a 迁出面：webhook bearer 验签（伪/缺 → 401 零落库）已上移 SecurityFilterChain，
+    // 链级红绿见 SecurityConfigTest；INV-AM1-1（未验签零落库）语义不变（安全链 401 先于 controller）。
 
     // ---------------- EX-A02：畸形 JSON → 400 零落库 ----------------
 
@@ -156,7 +146,8 @@ class AlertWebhookControllerTest {
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, tight, () -> FIXED);
         MockMvc tightMvc = MockMvcBuilders
                 .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, tight),
-                        BEARER)).build();
+                        new DutyTestSupport.RecordingDispatch()))
+                .build();
 
         tightMvc.perform(post("/webhooks/alertmanager")
                         .header("Authorization", "Bearer " + BEARER)
@@ -207,7 +198,8 @@ class AlertWebhookControllerTest {
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, shallow, () -> FIXED);
         MockMvc shallowMvc = MockMvcBuilders
                 .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, shallow),
-                        BEARER)).build();
+                        new DutyTestSupport.RecordingDispatch()))
+                .build();
 
         String deep = "{\"version\":\"4\",\"receiver\":\"r\",\"groupKey\":\"g\",\"status\":\"firing\","
                 + "\"deep\":" + "[".repeat(64) + "]".repeat(64) + ",\"alerts\":[]}";
@@ -231,7 +223,8 @@ class AlertWebhookControllerTest {
         AlertIntakeService intake = new AlertIntakeService(stores.inbox, tight, () -> FIXED);
         MockMvc tightMvc = MockMvcBuilders
                 .standaloneSetup(new AlertWebhookController(intake, router(stores.inbox, tight),
-                        BEARER)).build();
+                        new DutyTestSupport.RecordingDispatch()))
+                .build();
 
         tightMvc.perform(post("/webhooks/alertmanager")
                         .header("Authorization", "Bearer " + BEARER)
@@ -278,18 +271,33 @@ class AlertWebhookControllerTest {
                 }
                 """;
 
-        mvc.perform(post("/webhooks/alertmanager")
+        DutyTestSupport.RecordingDispatch duty = new DutyTestSupport.RecordingDispatch();
+        AlertIntakeService intake = new AlertIntakeService(stores.inbox,
+                AlertIntakeLimits.defaults(), () -> FIXED);
+        MockMvc dutyMvc = MockMvcBuilders.standaloneSetup(
+                new AlertWebhookController(intake, router(stores.inbox), duty)).build();
+
+        dutyMvc.perform(post("/webhooks/alertmanager")
                         .header("Authorization", "Bearer " + CONTROL_BEARER)
                         .contentType("application/json")
                         .content(controlGroup))
                 .andExpect(status().isAccepted())
-                .andExpect(jsonPath("$.routed").value("oncall"));
+                .andExpect(jsonPath("$.routed").value("oncall"))
+                .andExpect(jsonPath("$.dutyNotificationId").isNotEmpty());
 
         // 直写 PROCESSED+SUPPRESSED：审计在、claim 面不可达（不创建 Incident/Run）
         assertThat(stores.inbox.all()).hasSize(1);
         AlertInbox row = stores.inbox.all().get(0);
         assertThat(row.state()).isEqualTo(InboxState.PROCESSED);
         assertThat(row.decision()).isEqualTo(InboxDecision.SUPPRESSED);
+
+        // M7-13：值班派发收到组级标识摘要（startsAt/labels/groupKey 供身份铸造）
+        assertThat(duty.groups).hasSize(1);
+        assertThat(duty.groups.get(0).groupKey()).isEqualTo("g:RCA_SYSTEM:collector");
+        assertThat(duty.groups.get(0).startsAt())
+                .isEqualTo(Instant.parse("2026-09-03T09:00:00Z"));
+        assertThat(duty.groups.get(0).commonLabels()).containsEntry("monitoring_scope",
+                "rca_system");
     }
 
     @Test

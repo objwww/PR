@@ -106,4 +106,33 @@ class ClaimVerdictTest {
                 List.of("e"), " ")).isInstanceOf(IllegalArgumentException.class); // 策略版本必填
         assertThat(ok.fingerprint()).isNotNull();
     }
+
+    // ---------------------------------------------- EX-A4a（F06）四类型存储契约
+
+    @Test
+    void kind缺省为HYPOTHESIS_保守形态禁默认ROOT_CAUSE() {
+        // 11 参 compat 构造（存量调用点全量）→ kind=HYPOTHESIS；
+        // 结构性禁止"无类型断言默认成根因"（F06 症状自动升级为根因的消灭面）
+        assertThat(verdict("r-1", List.of("ev-1"), List.of("src-a")).kind())
+                .isEqualTo(ClaimKind.HYPOTHESIS);
+        ClaimVerdict explicit = new ClaimVerdict("k", "scope", "tr", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.SINGLE_SOURCE, List.of("s"), "r",
+                List.of("e"), "p", ClaimKind.ROOT_CAUSE);
+        assertThat(explicit.kind()).isEqualTo(ClaimKind.ROOT_CAUSE);
+        assertThatThrownBy(() -> new ClaimVerdict("k", "scope", "tr", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.SINGLE_SOURCE, List.of("s"), "r",
+                List.of("e"), "p", null))
+                .isInstanceOf(NullPointerException.class); // kind 必填（canonical 面）
+    }
+
+    @Test
+    void kind不入双哈希_准入元数据非内容身份() {
+        // 同一断言不同 kind：fingerprint/contentHash 双哈希全等（M4 回放比对稳定）
+        ClaimVerdict hypothesis = verdict("r-1", List.of("ev-1"), List.of("src-a"));
+        ClaimVerdict rootCause = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.ROOT_CAUSE);
+        assertThat(rootCause.fingerprint()).isEqualTo(hypothesis.fingerprint());
+        assertThat(rootCause.contentHash()).isEqualTo(hypothesis.contentHash());
+    }
 }

@@ -80,6 +80,26 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository(jdbc);
     }
 
+    /** EX-C3a：认证事件审计面（V42 auth_event；append-only） */
+    @Bean
+    public com.objwww.pr.control.auth.domain.AuthEventRepository authEventRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresAuthEventRepository(jdbc);
+    }
+
+    /** AUTH-1：平台账号仓储（V44 platform_user；password_hash 唯一读出口=findForAuth） */
+    @Bean
+    public com.objwww.pr.control.auth.domain.PlatformUserRepository platformUserRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresPlatformUserRepository(jdbc);
+    }
+
+    /** AUTH-1：平台账号 UserDetailsService（SecurityConfig 双提供者之 DB 面） */
+    @Bean
+    public com.objwww.pr.control.infrastructure.auth.PlatformUserDetailsService platformUserDetailsService(
+            com.objwww.pr.control.auth.domain.PlatformUserRepository platformUserRepository) {
+        return new com.objwww.pr.control.infrastructure.auth.PlatformUserDetailsService(
+                platformUserRepository);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository(jdbc);
@@ -337,6 +357,56 @@ public class PersistenceConfig {
             com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository) {
         return new com.objwww.pr.control.alert.application.RunQueryService(
                 rcaRunRepository, rcaTaskRepository, taskEdgeRepository, java.time.Instant::now);
+    }
+
+    // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentQueryReader(
+                jdbc, objectMapper);
+    }
+
+    /** cases 口径复用 OperatorQueryService、duty/未读复用 DutyStore——总览跨域装配不新造口径 */
+    @Bean
+    public com.objwww.pr.control.alert.application.IncidentQueryService incidentQueryService(
+            com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader,
+            com.objwww.pr.control.ops.duty.domain.DutyStore dutyStore,
+            com.objwww.pr.control.ops.application.OperatorQueryService operatorQueryService) {
+        return new com.objwww.pr.control.alert.application.IncidentQueryService(
+                incidentQueryReader, dutyStore, operatorQueryService, java.time.Instant::now);
+    }
+
+    // ---------------- UI-5 评测只读查询投影（/api/eval/**；V45 授权面；HTTP 面 = eval/interfaces EvalQueryController） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEvalQueryReader(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalQueryService evalQueryService(
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalQueryService(
+                evalQueryReader, objectMapper);
+    }
+
+    // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------
+
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.AgentOpsReader agentOpsReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresAgentOpsReader(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.ops.application.AgentOpsSummaryService agentOpsSummaryService(
+            com.objwww.pr.control.ops.domain.repository.AgentOpsReader agentOpsReader) {
+        return new com.objwww.pr.control.ops.application.AgentOpsSummaryService(
+                agentOpsReader, java.time.Instant::now);
     }
 
     // ---------------- AM5 命令域（V27，M5-14 装配；HTTP 面 = alert/interfaces RunCommandController） ----------------

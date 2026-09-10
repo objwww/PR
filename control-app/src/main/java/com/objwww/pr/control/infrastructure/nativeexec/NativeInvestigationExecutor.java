@@ -25,6 +25,10 @@ import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.ValidationStatus;
+import com.objwww.pr.control.alert.domain.identity.ConfigDigest;
+import com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest;
+import com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest;
+import com.objwww.pr.control.alert.domain.identity.InvestigationInputs;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
@@ -51,8 +55,9 @@ import java.util.UUID;
  * 提案（active bundle {@code native.proposal} 段；缺失/非法 fail-closed，模型无
  * 调度权 INV-AM4-2 顺延）→ {@link DeterministicSupervisor#startRun} 落图 →
  * DAG 调查任务逐个驱动（复用 AM4 三 Agent 与只读工具面；单任务失败 = 缺源降级
- * DEAD 续跑；M6-01 只驱动 READY 态——崩溃孤儿 RUNNING 态 fail-closed 不续跑，
- * 孤儿领养归 M6-04 加固）→ 冻结证据快照（configDigest = 路由 bundle digest，
+ * DEAD 续跑；EX-A3 F08/F09 四阶段恢复：READY 正常驱动，LEASED/RUNNING 崩溃孤儿
+ * 领养分诊——已提交跳过/结果落库幂等收尾/发送后未知 UNKNOWN+新物理请求重驱/
+ * FAILED 回执降级 DEAD，无永久 RUNNING）→ 冻结证据快照（configDigest = 路由 bundle digest，
  * Run 启动固定）→ advance 入 REPORTING → {@link NativeRcaAgent} 产 Claim →
  * {@link ReportAssembler} 组装 → {@link NativeReportAdapter} 适配 →
  * {@link ExecutionResult#success} 交 worker 复用 finishTask 收尾链落报告/发布
@@ -77,8 +82,6 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
 
     private static final String NATIVE_SECTION = "native";
     private static final String PROPOSAL_KEY = "proposal";
-    private static final long RANGE_WINDOW_SECS = 600L;
-    private static final String STEP = "30s";
     private static final String MODEL = "native-deterministic-v1";
 
     private final ConfigBundleRepository bundles;
@@ -97,6 +100,9 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private final String metricsExpr;
     private final String toolRegistryDigest;
     private final AlertClock clock;
+    private final com.objwww.pr.control.alert.application.RunBudgetGate budgetGate;
+    private final Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> budgetLimits;
+    private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
 
     public NativeInvestigationExecutor(ConfigBundleRepository bundles,
             DeterministicSupervisor supervisor, RcaTaskRepository tasks,
@@ -105,7 +111,10 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
             ClaimStore claims, EvidencePackageValidator validator,
             String metricsExpr, String toolRegistryDigest, AlertClock clock,
-            AlertMetrics metrics) {
+            AlertMetrics metrics,
+            com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
+            Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> budgetLimits,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger) {
         this.bundles = Objects.requireNonNull(bundles, "bundles");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
@@ -128,6 +137,11 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         this.toolRegistryDigest = toolRegistryDigest;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        // EX-A1：全系统唯一预算所有者的 run 开局准入面（F15；agent 侧 TOOL_CALL 硬闸）
+        this.budgetGate = Objects.requireNonNull(budgetGate, "budgetGate");
+        this.budgetLimits = Objects.requireNonNull(budgetLimits, "budgetLimits");
+        // EX-A3（F08/F09）：恢复分诊的 checkpoint 读面（账本=P1-03 持久事实源）
+        this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
     }
 
     @Override
@@ -135,12 +149,25 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             RcaAttempt attempt, Runnable heartbeat) {
         long beginNanos = System.nanoTime();
         // ① 身份/提案源 fail-closed：无路由 digest = 快照身份面缺失；无提案段 = 终态失败
-        String configDigest = runs.findRoutingById(run.id())
-                .map(RcaRunRepository.RoutingView::configDigest).orElse(null);
-        if (configDigest == null || configDigest.isBlank()) {
+        // （EX-A0 F04：configDigest 只作配置身份；输入身份/时间窗从 Run 冻结列读）
+        RcaRunRepository.RoutingView routing =
+                runs.findRoutingById(run.id()).orElse(null);
+        if (routing == null || routing.configDigest() == null
+                || routing.configDigest().isBlank()) {
             return ExecutionResult.terminal("CONFIG_DIGEST_MISSING",
                     "NATIVE run 无路由 configDigest（快照身份面缺失）: " + run.id());
         }
+        ConfigDigest configDigest = new ConfigDigest(routing.configDigest());
+        InvestigationInputDigest inputDigest = routing.investigationInputDigest() == null
+                ? null : new InvestigationInputDigest(routing.investigationInputDigest());
+        boolean frozenWindow = routing.windowStart() != null && routing.windowEnd() != null;
+        if (inputDigest != null && !frozenWindow) {
+            return ExecutionResult.terminal("INVESTIGATION_IDENTITY_INCONSISTENT",
+                    "run 冻结输入身份在場而时间窗缺失（铸造面损坏）: " + run.id());
+        }
+
+        // EX-A1 F15：run 开局限额一次落账（幂等；消费点=agent 的 TOOL_CALL 硬闸）
+        budgetGate.openRun(run.id(), budgetLimits);
         Optional<Map<String, Object>> proposal = proposalOf();
         if (proposal.isEmpty()) {
             return ExecutionResult.terminal("PROPOSAL_MISSING",
@@ -155,10 +182,11 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         }
         heartbeat.run();
 
-        // ③④ DAG 驱动 + 冻结证据快照（configDigest = 路由 bundle digest）
+        // ③④ DAG 驱动（冻结时间窗）+ 冻结证据快照（configDigest 只进快照身份面）
         long generation = run.generation();
-        investigate(run.id(), generation, configDigest, heartbeat);
-        String snapshotDigest = freezeSnapshot(run.id(), generation, configDigest);
+        investigate(run.id(), attempt.id(), generation, inputDigest, routing, heartbeat);
+        EvidenceSnapshotDigest snapshotDigest =
+                freezeSnapshot(run.id(), generation, configDigest.hex());
 
         // ⑤ 推进入 REPORTING（全任务终态；未进入 = 链面异常，终态失败不产报告）
         supervisor.advance(run.id());
@@ -170,14 +198,15 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         }
 
         // ⑥ 断言推导 + 装配 + 适配（确认根因/诚实 unknown 三态，FUT-12 语义分歧不回退）
-        NativeRcaAgent.NativeResult nativeResult =
-                nativeRcaAgent.investigate(run.id(), snapshotDigest, generation);
+        // EX-A0：输入比对输入、Claim 绑定输出快照——两身份分型，混用编译期拒绝
+        NativeRcaAgent.NativeResult nativeResult = nativeRcaAgent.investigate(run.id(),
+                inputDigest, snapshotDigest, generation);
         List<ClaimVerdict> activeClaims = claims.findByRunId(run.id()).stream()
                 .filter(row -> row.lifecycle() == ClaimLifecycle.ACTIVE)
                 .map(NativeInvestigationExecutor::toVerdict)
                 .toList();
         ReportAssembler.AssembledReport assembled = ReportAssembler.assemble(
-                snapshotDigest, activeClaims);
+                snapshotDigest.hex(), activeClaims);
         NativeReportAdapter.Adapted adapted = NativeReportAdapter.adapt(assembled);
 
         // ⑦ 自家包过自家验证链；SUCCEEDED 与 REJECTED_* 同权落档（INV-AM3-7）
@@ -226,42 +255,125 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         return out;
     }
 
-    /** 三调查任务驱动（Am4ShadowTrigger 同语义：READY→LEASED→RUNNING→DONE/DEAD） */
-    private void investigate(UUID runId, long generation, String snapshotDigest,
+    /**
+     * 三调查任务驱动（Am4ShadowTrigger 同语义：READY→LEASED→RUNNING→DONE/DEAD）。
+     * EX-A0 F14：时间窗 = Run 冻结列（铸点 [铸造时刻-600s, 铸造时刻]），执行期禁止
+     * 静默改取"执行时最近十分钟"；存量行（冻结列缺席）回退旧行为并 WARN 留痕。
+     * EX-A4a（F16）：attemptId = worker 持久铸造的驱动 attempt（RcaWorker 一 attempt
+     * 一记录锚）——账本行引用真实持久 attempt，零随机 UUID 幽灵引用。
+     * EX-A3（F08）：call_seq 跨 attempt 单调——本轮从既有 checkpoint 最大值续起。
+     */
+    private void investigate(UUID runId, UUID attemptId, long generation,
+            InvestigationInputDigest inputDigest, RcaRunRepository.RoutingView routing,
             Runnable heartbeat) {
-        Instant end = clock.now();
+        Instant end = routing.windowEnd() != null ? routing.windowEnd() : clock.now();
+        if (routing.windowStart() == null || routing.windowEnd() == null) {
+            log.warn("run {} 无冻结时间窗（存量行兼容面），回退执行时窗口——F14 冻结语义缺失",
+                    runId);
+        }
+        Instant start = routing.windowStart() != null
+                ? routing.windowStart() : end.minusSeconds(InvestigationInputs.RANGE_WINDOW_SECS);
         String endEpoch = Long.toString(end.getEpochSecond());
-        String startEpoch = Long.toString(end.minusSeconds(RANGE_WINDOW_SECS).getEpochSecond());
+        String startEpoch = Long.toString(start.getEpochSecond());
         String timeRange = startEpoch + "/" + endEpoch;
-        long callSeq = 0;
-        for (RcaTask dagTask : tasks.findByRunId(runId)) {
-            if (dagTask.taskKey().equals(RcaTask.NATIVE_INVESTIGATE)) {
-                continue;   // driver task 本体不入 DAG 驱动
+        List<RcaTask> dagTasks = tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE)).toList();
+        long callSeq = dagTasks.stream()
+                .flatMap(t -> toolLedger.findRecoveryByTask(runId, t.id()).stream())
+                .mapToLong(com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger
+                        .InvocationRecovery::callSeq)
+                .max().orElse(0);
+        for (RcaTask dagTask : dagTasks) {
+            if (dagTask.state() == RcaTaskState.DONE
+                    || dagTask.state() == RcaTaskState.DEAD) {
+                continue;   // 阶段④：已提交任务不占 call_seq（计号=物理请求，非任务槽位）
             }
             callSeq++;
             SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
-                    runId, dagTask.id(), UUID.randomUUID(), callSeq, generation,
-                    snapshotDigest, timeRange);
+                    runId, dagTask.id(), attemptId, callSeq, generation,
+                    inputDigest, timeRange);
             drive(dagTask, ctx, startEpoch, endEpoch);
             heartbeat.run();
         }
     }
 
-    /** 单任务驱动：成功 DONE；失败/拒绝/未注册 key = 缺源降级 DEAD 续跑；迁移失败跳过 */
+    /**
+     * 单任务驱动（EX-A3 四阶段恢复分诊，docs/告警-EXA3-可恢复驱动.md §2——恢复语义
+     * 整段替换 v1.0 的"无回执按幂等键重驱"；领养面：LEASED/RUNNING 孤儿不再跳过）：
+     *
+     * <ul>
+     *   <li>阶段④ 已提交（DONE）——跳过，结论重放读取既有 Claim/报告面；</li>
+     *   <li>阶段③ 结果已落库（SUCCESS 行 + result_ref 在库证据）——幂等收尾
+     *       RUNNING→DONE，零触网零新行零新证据；</li>
+     *   <li>阶段② 发送后结果未知（PENDING 悬挂）——先 UNKNOWN 诚实归档（预算占用
+     *       不动，PROVISIONAL 留对账），再以新 call_seq/新预算重驱一次物理请求
+     *       （只读工具：同冻结窗、留新观察记录）；既有 UNKNOWN/悬空 SUCCESS 同走重驱；</li>
+     *   <li>阶段① 未取得发送资格（无在途/未知行）——常规驱动；FAILED 回执孤儿=
+     *       已知失败 → DEAD（缺源降级），不重复调用。</li>
+     * </ul>
+     * 不变量：恢复一遍后无永久 RUNNING；恢复不重复调用（账本行可证）。
+     */
     private void drive(RcaTask dagTask, SingleToolEvidenceAgent.CallContext ctx,
             String startEpoch, String endEpoch) {
-        if (!tasks.transitionState(dagTask.id(), RcaTaskState.READY, RcaTaskState.LEASED)
-                || !tasks.transitionState(dagTask.id(), RcaTaskState.LEASED,
-                        RcaTaskState.RUNNING)) {
-            log.warn("DAG 任务 {} 状态迁移失败（非 READY/已被驱动），跳过 key={}",
+        if (dagTask.state() == RcaTaskState.DONE || dagTask.state() == RcaTaskState.DEAD) {
+            return;   // 阶段④：任务与结果已提交（DEAD=缺源降级终态同不吃回）
+        }
+        var prior = toolLedger.findRecoveryByTask(ctx.runId(), dagTask.id()).stream()
+                .toList();
+
+        // 阶段③：结果已落库 → result_ref 幂等收尾，零触网
+        var recovered = prior.stream().filter(r ->
+                        r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.SUCCESS
+                                && r.resultRef() != null
+                                && evidence.findById(r.resultRef()).isPresent())
+                .findFirst();
+        if (recovered.isPresent()) {
+            if (tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE)) {
+                log.info("DAG 任务 {} 阶段③恢复：result_ref 幂等收尾（零触网）key={}",
+                        dagTask.id(), dagTask.taskKey());
+            }
+            return;
+        }
+
+        // 领养准入：READY 走正常迁移；LEASED/RUNNING 孤儿接管（driver 独占保证单驱动）
+        boolean adopted = dagTask.state() == RcaTaskState.RUNNING;
+        if (dagTask.state() == RcaTaskState.LEASED) {
+            adopted = tasks.transitionState(dagTask.id(), RcaTaskState.LEASED,
+                    RcaTaskState.RUNNING);
+        } else if (!adopted) {
+            adopted = tasks.transitionState(dagTask.id(), RcaTaskState.READY, RcaTaskState.LEASED)
+                    && tasks.transitionState(dagTask.id(), RcaTaskState.LEASED,
+                            RcaTaskState.RUNNING);
+        }
+        if (!adopted) {
+            log.warn("DAG 任务 {} 状态迁移失败（非 READY/LEASED/RUNNING），跳过 key={}",
                     dagTask.id(), dagTask.taskKey());
             return;
         }
+
+        // 阶段②：PENDING 悬挂 → UNKNOWN 归档（发送后结果未知；预算占用不动），
+        // 随后新物理请求重驱（新 call_seq=新预算预留，不默认免费重发）
+        for (var row : prior) {
+            if (row.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.PENDING) {
+                ledgerMarkUnknown(row);
+            }
+        }
+        boolean knownFailed = prior.stream().allMatch(r ->
+                r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.FAILED);
+        if (!prior.isEmpty() && knownFailed) {
+            // 已知失败回执孤儿：降级 DEAD，不重复调用
+            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            log.warn("DAG 任务 {} FAILED 回执孤儿 → DEAD（不重复调用）key={}",
+                    dagTask.id(), dagTask.taskKey());
+            return;
+        }
+
         SingleToolEvidenceAgent.AgentResult result;
         try {
             result = switch (dagTask.taskKey()) {
                 case TASK_METRICS -> metricsAgent.investigate(ctx,
-                        new MetricsAgent.MetricsQuery(metricsExpr, startEpoch, endEpoch, STEP));
+                        new MetricsAgent.MetricsQuery(metricsExpr, startEpoch, endEpoch,
+                                InvestigationInputs.STEP));
                 case TASK_LOGS -> logsAgent.investigate(ctx,
                         new LogsAgent.LogsQuery(startEpoch, endEpoch));
                 case TASK_CHANGE -> changeAgent.investigate(ctx,
@@ -281,16 +393,27 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE);
     }
 
+    private void ledgerMarkUnknown(
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger.InvocationRecovery row) {
+        toolLedger.fail(row.operationId(),
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState.UNKNOWN,
+                com.objwww.pr.control.alert.domain.tool.ToolReasonCode.TRANSPORT_UNKNOWN);
+        log.warn("阶段②恢复：悬挂 PENDING → UNKNOWN（发送后结果未知，预算占用保留）op={}",
+                row.operationId());
+    }
+
     /** 冻结证据快照（M4-20 惯例：成员 = 本 run 全部证据 (type,payload_digest)） */
-    private String freezeSnapshot(UUID runId, long generation, String configDigest) {
+    private EvidenceSnapshotDigest freezeSnapshot(UUID runId, long generation,
+            String configDigest) {
         List<EvidenceEnvelope> rows = evidence.findByRunId(runId);
         List<EvidenceSnapshotBuilder.Member> members = rows.stream()
                 .map(e -> new EvidenceSnapshotBuilder.Member(e.evidenceType(), e.payloadDigest()))
                 .toList();
-        String digest = EvidenceSnapshotBuilder.digest(new EvidenceSnapshotBuilder.SnapshotInput(
-                generation, configDigest, toolRegistryDigest, members));
+        EvidenceSnapshotDigest digest = EvidenceSnapshotBuilder.digest(
+                new EvidenceSnapshotBuilder.SnapshotInput(
+                        generation, configDigest, toolRegistryDigest, members));
         snapshots.freeze(new EvidenceSnapshotRepository.FrozenSnapshot(UUID.randomUUID(),
-                runId, digest, generation, configDigest, toolRegistryDigest, null),
+                        runId, digest.hex(), generation, configDigest, toolRegistryDigest, null),
                 rows.stream().map(e -> new EvidenceSnapshotRepository.SnapshotMemberRow(
                         e.evidenceId(), e.evidenceType(), e.payloadDigest())).toList());
         return digest;

@@ -24,6 +24,11 @@ import java.util.TreeSet;
  * 双哈希均对内部字段 map 做 InternalCanonicalJsonV1 规范化后 sha256（字段序无关；
  * kind 标签分隔两个哈希空间）。sources/evidenceRefs 构造即排序去重——内容哈希与
  * 输入顺序无关（可复现）。
+ *
+ * <p>EX-A4a（F06）：{@link ClaimKind} 四类型存储契约——kind 是<b>准入元数据非内容
+ * 身份</b>，不进 fingerprint/contentHash 双哈希（回放比对稳定）；11 参 compat 构造
+ * 默认 {@link ClaimKind#HYPOTHESIS}（无类型断言的保守形态，结构性禁止默认
+ * ROOT_CAUSE）。类型准入/转换逻辑归 R7c 单一责任人（P1-01）。
  */
 public record ClaimVerdict(
         String claimKey,
@@ -36,7 +41,18 @@ public record ClaimVerdict(
         List<String> sources,
         String reason,
         List<String> evidenceRefs,
-        String policyVersion) {
+        String policyVersion,
+        ClaimKind kind) {
+
+    /** 11 参 compat 构造（存量调用点零改动）：kind 缺省 = HYPOTHESIS（保守形态） */
+    public ClaimVerdict(String claimKey, String scope, String timeRange,
+            long observedGeneration, String snapshotDigest, ClaimStatus status,
+            EvidenceBasis evidenceBasis, List<String> sources, String reason,
+            List<String> evidenceRefs, String policyVersion) {
+        this(claimKey, scope, timeRange, observedGeneration, snapshotDigest, status,
+                evidenceBasis, sources, reason, evidenceRefs, policyVersion,
+                ClaimKind.HYPOTHESIS);
+    }
 
     public ClaimVerdict {
         requireNonBlank(claimKey, "claimKey");
@@ -49,6 +65,7 @@ public record ClaimVerdict(
         }
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(evidenceBasis, "evidenceBasis");
+        Objects.requireNonNull(kind, "kind");
         // snapshotDigest 可为 null（无快照约束）；canonicalize 对 null 输出 "null"
         sources = sortedDistinct(sources, "sources");
         evidenceRefs = sortedDistinct(evidenceRefs, "evidenceRefs");

@@ -98,6 +98,7 @@ class PublicationWinnerGateTest {
                 "rca", AlertMetrics.NOOP, nativeRouter, stores.winners);
         worker = new RcaWorker(stores.tasks, stores.runs, stores.attempts,
                 stores.investigations, stores.incidents, stores.slots, stores.invocations,
+                stores.toolLedger,
                 java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
                         executor),
                 orchestrator,

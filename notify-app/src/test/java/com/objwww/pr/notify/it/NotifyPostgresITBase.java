@@ -34,7 +34,10 @@ public abstract class NotifyPostgresITBase {
             "alert_inbox", "alert_event", "incident", "rca_run", "rca_task", "rca_attempt",
             "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
             "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox",
-            "eval_case_result", "eval_run");
+            "eval_case_result", "eval_run",
+            // M7-11 V43 值班八表（依赖序：delivery 先于 notification/layer）
+            "duty_delivery", "duty_notification", "duty_override", "duty_layer_member",
+            "duty_layer", "duty_schedule", "duty_channel", "duty_member");
 
     @SuppressWarnings("resource")
     protected static final PostgreSQLContainer<?> PG =

@@ -1,5 +1,6 @@
 package com.objwww.pr.control.alert.domain.evidence;
 
+import com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest;
 import com.objwww.pr.control.alert.domain.tool.InternalCanonicalJsonV1;
 import com.objwww.pr.shared.Digests;
 
@@ -27,7 +28,7 @@ public final class EvidenceSnapshotBuilder {
     public record Member(String evidenceType, String payloadDigest) {
     }
 
-    /** 快照输入：代际 + 配置摘要 + 工具注册表摘要 + 成员集 */
+    /** 快照输入：代际 + 配置摘要 + 工具注册表摘要 + 成员集（摘要串保持 String——影子执行者侧身份非 hex64） */
     public record SnapshotInput(long observedGeneration, String configDigest,
             String toolRegistryDigest, List<Member> members) {
 
@@ -36,7 +37,8 @@ public final class EvidenceSnapshotBuilder {
         }
     }
 
-    public static String digest(SnapshotInput input) {
+    /** 输出 = 输出证据集身份（EX-A0 F04 三身份之一；输入侧身份归 InvestigationInputDigest，两型不互转） */
+    public static EvidenceSnapshotDigest digest(SnapshotInput input) {
         List<Map<String, Object>> sortedMembers = new ArrayList<>();
         input.members().stream()
                 .sorted(Comparator.comparing(Member::payloadDigest)
@@ -53,7 +55,8 @@ public final class EvidenceSnapshotBuilder {
         canonicalForm.put("configDigest", input.configDigest());
         canonicalForm.put("toolRegistryDigest", input.toolRegistryDigest());
         canonicalForm.put("members", sortedMembers);
-        return Digests.sha256Hex(InternalCanonicalJsonV1.canonicalize(canonicalForm));
+        return new EvidenceSnapshotDigest(
+                Digests.sha256Hex(InternalCanonicalJsonV1.canonicalize(canonicalForm)));
     }
 
     private EvidenceSnapshotBuilder() {

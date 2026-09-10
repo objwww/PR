@@ -28,5 +28,15 @@ app:
     error-sleep-ms: 10000
     retry-base-seconds: 30
     retry-cap-seconds: 1800
+    # EX-C2a：最长通知期限（墙钟闸，秒；attempt 预算之外的「不无限退避」封顶）
+    max-notification-age-seconds: 86400
     max-field-chars: 500
     max-total-chars: 3800
+
+  # M7-14：duty_delivery 投递面（复用 notify 循环参数面；期限与报告面同值对齐）
+  duty:
+    lease-seconds: 60
+    batch-size: 10
+    idle-sleep-ms: 2000
+    error-sleep-ms: 10000
+    max-notification-age-seconds: 86400

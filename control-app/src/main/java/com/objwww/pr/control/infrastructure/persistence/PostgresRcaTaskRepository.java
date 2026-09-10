@@ -158,6 +158,24 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 .list();
     }
 
+    /** EX-A2（F10）：四条件同语句原子回收——0 行 = 心跳已续/已重领 epoch+1/他回收者已收敛 */
+    @Override
+    public boolean reclaimExpired(UUID id, long expectedEpoch, Instant now,
+                                  RcaTaskState target, Instant readyAt) {
+        return jdbc.sql("""
+                UPDATE rca_task SET
+                    state = :target, available_at = :readyAt, ready_since = :readyAt,
+                    lease_owner = null, lease_until = null, updated_at = :now
+                 WHERE id = :id AND state = 'LEASED'
+                   AND lease_until < :now AND lease_epoch = :epoch
+                """)
+                .param("target", target.name())
+                .param("readyAt", Timestamp.from(readyAt))
+                .param("now", Timestamp.from(now))
+                .param("id", id).param("epoch", expectedEpoch)
+                .update() > 0;
+    }
+
     @Override
     public Optional<RcaTask> findById(UUID id) {
         List<RcaTask> rows = jdbc.sql("SELECT * FROM rca_task WHERE id = :id")

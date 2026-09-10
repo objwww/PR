@@ -160,9 +160,16 @@ public class Am4ShadowTrigger {
                         + " reason=" + started.rejectReason());
             }
             investigate(shadow.id(), holmes.generation(), snapshotDigest);
-            freezeSnapshot(shadow.id(), holmes.generation());
+            // F05 黑板身份：agent 只认冻结成员表——快照 digest 必须是 freeze 落库的
+            // 内容 digest（holmes hash 是输入身份，走 inputDigest 面，两者不得混用）
+            String frozenDigest = freezeSnapshot(shadow.id(), holmes.generation());
             supervisor.advance(shadow.id());
-            nativeRcaAgent.investigate(shadow.id(), snapshotDigest, holmes.generation());
+            nativeRcaAgent.investigate(shadow.id(),
+                    new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                            snapshotDigest),
+                    new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
+                            frozenDigest),
+                    holmes.generation());
             // M6-02 观察面成账：影子结论对照 HOLMES 主路径 run 落 V32 engine_comparison
             // （HOLMES 侧守卫的落账动作；无 GT 只记 disagreement 不判对错）
             comparisonRecorder.compareHolmesNative(holmesRunId, shadow.id(),
@@ -206,7 +213,9 @@ public class Am4ShadowTrigger {
             transition(task.id(), RcaTaskState.LEASED, RcaTaskState.RUNNING);
             SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
                     runId, task.id(), UUID.randomUUID(), callSeq, generation,
-                    snapshotDigest, timeRange);
+                    new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                            snapshotDigest),
+                    timeRange);
             SingleToolEvidenceAgent.AgentResult result;
             try {
                 result = switch (task.taskKey()) {
@@ -235,20 +244,24 @@ public class Am4ShadowTrigger {
         }
     }
 
-    /** 冻结证据快照（M4-20）：成员 = 本 run 全部证据 (type,payload_digest)，代际参与输入 */
-    private void freezeSnapshot(UUID runId, long generation) {
+    /**
+     * 冻结证据快照（M4-20）：成员 = 本 run 全部证据 (type,payload_digest)，代际参与输入；
+     * 返回冻结内容 digest（F05 黑板身份——agent 的快照面唯一合法取值）。
+     */
+    private String freezeSnapshot(UUID runId, long generation) {
         List<EvidenceEnvelope> rows = evidence.findByRunId(runId);
         List<EvidenceSnapshotBuilder.Member> members = rows.stream()
                 .map(e -> new EvidenceSnapshotBuilder.Member(e.evidenceType(), e.payloadDigest()))
                 .toList();
         String digest = EvidenceSnapshotBuilder.digest(new EvidenceSnapshotBuilder.SnapshotInput(
-                generation, EXECUTOR_CONFIG_DIGEST, EXECUTOR_TOOL_REGISTRY_DIGEST, members));
+                generation, EXECUTOR_CONFIG_DIGEST, EXECUTOR_TOOL_REGISTRY_DIGEST, members)).hex();
         snapshots.freeze(
                 new EvidenceSnapshotRepository.FrozenSnapshot(UUID.randomUUID(), runId, digest,
                         generation, EXECUTOR_CONFIG_DIGEST, EXECUTOR_TOOL_REGISTRY_DIGEST, null),
                 rows.stream().map(e -> new EvidenceSnapshotRepository.SnapshotMemberRow(
                         e.evidenceId(), e.evidenceType(), e.payloadDigest())).toList());
         System.out.println(TASK_OUTCOME_MARKER + "snapshot=" + digest);
+        return digest;
     }
 
     /** 固定提案：三调查任务全并行（零边 = 全根任务，PlanCompiler 语义面合法） */

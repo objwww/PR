@@ -39,7 +39,7 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
             )
             returning id, publication_id, report_id, channel, template_version,
                       operation_id, payload_json::text as payload_json,
-                      attempt_count, max_attempts, lease_epoch
+                      attempt_count, max_attempts, lease_epoch, created_at
             """;
 
     private static final String MARK_SENT_SQL = """
@@ -112,7 +112,8 @@ public class PostgresNotifyOutboxStore implements NotifyOutboxStore {
                         rs.getString("payload_json"),
                         rs.getInt("attempt_count"),
                         rs.getInt("max_attempts"),
-                        rs.getLong("lease_epoch")))
+                        rs.getLong("lease_epoch"),
+                        rs.getTimestamp("created_at").toInstant()))
                 .list();
     }
 

@@ -10,6 +10,10 @@ spring:
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
   flyway:
     enabled: false
+  # EX-C3a：会话 8h 过期（LoginView 提示面承诺）；服务端会话由 Spring Security 管理
+  servlet:
+    session:
+      timeout: 8h
   ai:
     # M3：模型调用全走手工装配的双路由（M3ModelGatewayConfig），自动配置的单一
     # OpenAiChatModel 无人消费——显式关闭 chat 自动配置
@@ -49,6 +53,14 @@ app:
   operator:
     api:
       bearer: ${APP_OPERATOR_API_BEARER:}
+  # EX-C3a：浏览器用户会话（Spring Security 6）。单人运维授权形态——运维在配置侧
+  # 预置唯一 operator 账号（compose 以 :? 强制注入生产真值；此处默认仅本地 dev：
+  # 账号 operator / 口令 operator）。口令只存 bcrypt 哈希（htpasswd -bnBC 10 生成），
+  # 原文不落任何配置/日志。
+  auth:
+    operator:
+      username: ${AUTH_OPERATOR_USERNAME:operator}
+      password-bcrypt: ${AUTH_OPERATOR_PASSWORD_BCRYPT:$2a$10$XYv0PhQ60xu0aI8S/MlGSO//jvVykSfOAdXAXG6FwG4eHDFHoHwgO}
   # M3 模型治理配置（AM4 Java 替换 HolmesGPT 时复用；路由的模型/端点/密钥直接走环境变量
   # AGENT_MODEL / AGENT_MODEL_FALLBACK / OPENAI_COMPAT_BASE_URL(_FALLBACK) / AGENT_MODEL_API_KEY(_FALLBACK)）
   model:

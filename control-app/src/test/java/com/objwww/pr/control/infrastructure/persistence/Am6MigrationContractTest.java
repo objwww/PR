@@ -221,4 +221,71 @@ class Am6MigrationContractTest {
                 .doesNotContain("drop constraint")
                 .doesNotContain("add constraint");
     }
+
+    // ---------------- V38（EX-A3 F08/F09：调用账本 result_ref checkpoint 增列） ----------------
+
+    @Test
+    void v38AddsResultRefWithForeignKeyAndRecoveryReadIndex() throws IOException {
+        String sql = Files.readString(Path.of(
+                        "src/main/resources/db/migration/V38__exa3_tool_invocation_result_ref.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+
+        // checkpoint result_ref：uuid 指向 rca_evidence.id，FK 在 DB 约束面拒幽灵
+        // 引用（BA-60 同律：引用完整性不靠 Java 侧自觉）；(run_id, task_id) 索引
+        // 支撑 findRecoveryByTask 四阶段分诊查询
+        assertThat(sql)
+                .contains("alter table rca_tool_invocation add column result_ref uuid")
+                .contains("constraint fk_rca_tool_invocation_result_ref")
+                .contains("foreign key (result_ref) references rca_evidence (id)")
+                .contains("create index if not exists idx_rca_tool_invocation_run_task")
+                .contains("on rca_tool_invocation (run_id, task_id)");
+    }
+
+    // ---------------- V39（B-21：operator_command.state 列宽装不下自家枚举） ----------------
+
+    @Test
+    void v39WidensOperatorCommandStateForRejectedForbidden() throws IOException {
+        String sql = Files.readString(Path.of(
+                        "src/main/resources/db/migration/V39__b21_operator_command_state_widen.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+
+        // B-21（195 官方 verify 抓获）：V27 varchar(16) < REJECTED_FORBIDDEN(18 字符)，
+        // 竞态/终态拒绝路径写库 22001 崩溃。拓宽只动列类型（唯一 DDL 动作）
+        assertThat(sql)
+                .contains("alter table operator_command")
+                .contains("alter column state type varchar(32)")
+                .doesNotContain("revoke")
+                .doesNotContain("drop");
+    }
+
+    // ---------------- V40（EX-B1：change_event 真实变更源 + 写/读角色分离） ----------------
+
+    @Test
+    void v40CreatesAppendOnlyChangeEventWithSplitDeployRole() throws IOException {
+        String sql = Files.readString(Path.of(
+                        "src/main/resources/db/migration/V40__exb1_change_event.sql"))
+                .toLowerCase().replaceAll("\\s+", " ");
+
+        // append-only 变更事实：封闭值域（source/action/status）+ (source,deploy_id)
+        // 幂等锚（脚本重试/重放零重复生效事件）+ (service,effective_at) 读路径索引
+        assertThat(sql)
+                .contains("create table change_event")
+                .contains("check (source in ('config_activation', 'deployment'))")
+                .contains("check (action in ('activate', 'rollback', 'deploy'))")
+                .contains("check (status in ('succeeded', 'failed'))")
+                .contains("constraint uq_change_event_source_deploy unique (source, deploy_id)")
+                .contains("create index idx_change_event_service_window")
+                .contains("on change_event (service, effective_at)");
+
+        // 写/读角色分离（评审 B1）：control_app = 激活事实 insert + 工具读，永无
+        // update/delete；deploy_app（nologin）= 部署脚本写路径；其余角色全禁
+        assertThat(sql)
+                .contains("create role deploy_app nologin")
+                .contains("grant usage on schema public to deploy_app")
+                .contains("grant insert on change_event to deploy_app")
+                .contains("grant select, insert on change_event to control_app")
+                .contains("revoke update, delete on change_event from control_app")
+                .contains("revoke all on change_event")
+                .doesNotContainPattern("grant [a-z ,]*delete on change_event");
+    }
 }

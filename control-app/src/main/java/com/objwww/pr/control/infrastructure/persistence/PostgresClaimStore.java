@@ -136,7 +136,7 @@ public class PostgresClaimStore implements ClaimStore {
             String fingerprint, String claimHash, ClaimRow existing) {
         int updated = jdbc.sql("""
                 update rca_claim set claim_hash = :hash, status = :status,
-                    evidence_basis = :basis, reason = :reason,
+                    evidence_basis = :basis, reason = :reason, kind = :kind,
                     sources = cast(:sources as jsonb),
                     evidence_refs = cast(:refs as jsonb),
                     policy_version = :policy, updated_at = now()
@@ -146,6 +146,7 @@ public class PostgresClaimStore implements ClaimStore {
                 .param("status", verdict.status().name())
                 .param("basis", verdict.evidenceBasis().name())
                 .param("reason", verdict.reason())
+                .param("kind", verdict.kind().name())
                 .param("sources", jsonOf(verdict.sources()))
                 .param("refs", jsonOf(verdict.evidenceRefs()))
                 .param("policy", verdict.policyVersion())
@@ -230,10 +231,10 @@ public class PostgresClaimStore implements ClaimStore {
                 insert into rca_claim(id, run_id, claim_fingerprint, claim_hash, claim_key,
                     status, evidence_basis, lifecycle, reason, scope, time_range,
                     observed_generation, sources, evidence_refs, policy_version,
-                    snapshot_digest)
+                    snapshot_digest, kind)
                 values (:id, :run, :fp, :hash, :key, :status, :basis, 'ACTIVE', :reason,
                     :scope, :timeRange, :gen, cast(:sources as jsonb),
-                    cast(:refs as jsonb), :policy, :snapshot)
+                    cast(:refs as jsonb), :policy, :snapshot, :kind)
                 """)
                 .param("id", UUID.randomUUID()).param("run", runId)
                 .param("fp", fingerprint).param("hash", claimHash)
@@ -248,6 +249,7 @@ public class PostgresClaimStore implements ClaimStore {
                 .param("refs", jsonOf(verdict.evidenceRefs()))
                 .param("policy", verdict.policyVersion())
                 .param("snapshot", verdict.snapshotDigest())
+                .param("kind", verdict.kind().name())
                 .update();
     }
 

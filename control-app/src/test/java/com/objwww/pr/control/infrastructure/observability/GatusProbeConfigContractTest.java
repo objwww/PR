@@ -63,9 +63,12 @@ class GatusProbeConfigContractTest {
         assertThat(c).contains("send-on-resolved: true");
         assertThat(c).contains("failure-threshold: 3");
 
-        // 文件存储：探针状态跨重启可追（2C4G 本地卷）
+        // 存储钉 sqlite（OSS 证据清单 e-23：storage.type 仅 memory|sqlite|postgres，
+        // "file" 非法——gatus v5.17 启动即败；2026-09-10 断言过期翻转，探针状态跨重启可追
+        // 改由本地卷 sqlite 承载）
         assertThat(c).contains("storage:");
-        assertThat(c).contains("type: file");
+        assertThat(c).contains("type: sqlite");
+        assertThat(c).contains("path: /data/gatus.db");
     }
 
     @Test

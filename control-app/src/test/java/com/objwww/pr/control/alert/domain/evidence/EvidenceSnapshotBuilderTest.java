@@ -21,7 +21,7 @@ class EvidenceSnapshotBuilderTest {
     private static String digestOf(long generation, String configDigest,
             String toolRegistryDigest, List<EvidenceSnapshotBuilder.Member> members) {
         return EvidenceSnapshotBuilder.digest(new EvidenceSnapshotBuilder.SnapshotInput(
-                generation, configDigest, toolRegistryDigest, members));
+                generation, configDigest, toolRegistryDigest, members)).hex();
     }
 
     private static final String D1 = "a".repeat(64);

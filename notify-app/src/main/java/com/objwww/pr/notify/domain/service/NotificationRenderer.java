@@ -22,8 +22,11 @@ import java.util.regex.Pattern;
  *   <li>秘密值遮蔽（sk-/Bearer/token 形态值 → [REDACTED]，防摘录夹带凭据）。</li>
  * </ul>
  * 纯函数、零触网；payload 不可解析/缺 operation_id → RenderException（执行器落 DEAD）。
+ *
+ * <p>M7-14：非 final——值班消息形状（{@link DutyNotificationRenderer}）继承消毒面
+ * （sanitize/truncate/RenderException），报告白名单渲染路径字节不变。
  */
-public final class NotificationRenderer {
+public class NotificationRenderer {
 
     /** 渲染产物（title/text 均已消毒；渠道 handler 只做平台 body 包装，不再碰内容） */
     public record RenderedNotification(String title, String text, UUID operationId) {
@@ -48,8 +51,8 @@ public final class NotificationRenderer {
                     + "(?i)(api[_-]?key|secret|token|password)[\"'\\s:=:]{1,4}[A-Za-z0-9._-]{8,})");
     private static final String REDACTED = "[REDACTED]";
 
-    private final int maxFieldChars;
-    private final int maxTotalChars;
+    protected final int maxFieldChars;
+    protected final int maxTotalChars;
 
     public NotificationRenderer(int maxFieldChars, int maxTotalChars) {
         if (maxFieldChars < 1 || maxTotalChars < maxFieldChars) {
@@ -104,7 +107,7 @@ public final class NotificationRenderer {
         return truncate(sanitize(raw), maxFieldChars);
     }
 
-    private String truncate(String value, int limit) {
+    String truncate(String value, int limit) {
         return value.length() <= limit ? value : value.substring(0, limit - 1) + "…";
     }
 

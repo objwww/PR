@@ -229,6 +229,21 @@ class ControlArchitectureTest {
                 .check(classes);
     }
 
+    /**
+     * M7-12（AM7 §11 静态架构）：值班域 domain 零框架——Spring/Jackson/JDBC/HTTP/
+     * Jakarta 一律禁入（RotationMath/DutyResolver/快照模型全部纯函数，快照序列化归
+     * interfaces/infrastructure 面）。预防性收紧，沿 am5Ops 规则惯例。
+     */
+    @Test
+    void am7DutyDomainZeroFrameworkDependency() {
+        noClasses().that().resideInAPackage("..control.ops.duty.domain..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..", "com.fasterxml..",
+                        "java.net.http..", "java.sql..",
+                        "jakarta..", "org.apache.http..")
+                .check(classes);
+    }
+
     /** AFT-20（M3；§4.2）：故障分类与路由决策是封闭类型；Router/Gateway 决策 switch 无 default 兜底。 */
     @Test
     void failureAndDecisionTypesAreSealedWithNoDefaultBranch() throws Exception {

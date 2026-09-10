@@ -43,6 +43,14 @@ public class DoomLoopGuard {
         this.policy = policy;
     }
 
+    /**
+     * 无熔断语义环境（单元测试假件/兼容装配）的缺省门：阈值取上限恒不触发。
+     * 生产装配必须用带真实 Policy 的构造（EX-A1 §4）。
+     */
+    public static DoomLoopGuard permissive() {
+        return new DoomLoopGuard(new Policy(Long.MAX_VALUE, "permissive", Set.of()));
+    }
+
     /** 前置门：该签名是否允许发起调用（false = 已熔断，调用方必须零 LLM/tool 直接受理） */
     public boolean isOpen(UUID taskId, String tool, String actionDigest) {
         return !tripped.contains(new Signature(taskId, tool, actionDigest));

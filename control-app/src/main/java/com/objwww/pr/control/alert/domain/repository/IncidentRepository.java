@@ -20,8 +20,18 @@ public interface IncidentRepository {
 
     Optional<Incident> findById(UUID id);
 
-    /** 新铸 incident（incident_key 唯一；并发双铸撞唯一约束抛 DuplicateKeyException） */
-    void insert(Incident incident);
+    /**
+     * 新铸 incident（incident_key 唯一）。EX-A4b（F19）：返回 true=本事务全新插入，
+     * false=同 key 已存在（PG 面为 INSERT ON CONFLICT DO NOTHING——唯一冲突不再是
+     * 异常，同事务后续语句不再被中断）；调用方按 false 走"重读既有行合并"。
+     */
+    boolean insert(Incident incident);
+
+    /**
+     * EX-A4b（F24）：等待重驱的 incident（status=FIRING 且 waiting_reason 非空）。
+     * 是否真有活跃 run 由调用方经 findActiveByIncidentId 复核（避免跨表 SQL 面）。
+     */
+    java.util.List<Incident> findWaitingForRedrive();
 
     /** 全列覆盖更新（调用方已持行锁；updated_at 由调用方以 DB now() 语义赋值） */
     boolean update(Incident incident);

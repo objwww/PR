@@ -64,7 +64,7 @@ class NotifyOutboxClaimerTest {
     private static ClaimedNotification notification(UUID operationId) {
         return new ClaimedNotification(UUID.randomUUID(), UUID.randomUUID(),
                 UUID.randomUUID(), "dingtalk-test", "v1",
-                operationId, "{}", 0, 5, 1);
+                operationId, "{}", 0, 5, 1, java.time.Instant.now());
     }
 
     private static final class FakeStore implements NotifyOutboxStore {

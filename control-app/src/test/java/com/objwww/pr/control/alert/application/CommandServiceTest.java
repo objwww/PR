@@ -90,6 +90,44 @@ class CommandServiceTest {
     }
 
     @Test
+    void appliedCancelAdvancesRevisionAnchorSoSecondCancelIsStale() {
+        UUID runId = run(RcaRunState.RUNNING);
+
+        CommandService.Result first =
+                service.submit(runId, OperatorCommand.Type.CANCEL, "op-1", 0, Map.of(), "operator");
+        assertThat(first.state()).isEqualTo(OperatorCommand.State.APPLIED);
+        // EX-A2（F12）：CAS 胜出推进修订锚（镜像 last_event_seq +1）——同一修订号的
+        // 第二张取消单（异幂等键）不再落入"恢复面补标"，按 REJECTED_STALE 拒绝
+        assertThat(runs.currentRevision(runId)).hasValue(1);
+
+        CommandService.Result second =
+                service.submit(runId, OperatorCommand.Type.CANCEL, "op-2", 0, Map.of(), "operator-2");
+        assertThat(second.state()).isEqualTo(OperatorCommand.State.REJECTED_STALE);
+        assertThat(second.replayed()).isFalse();
+        assertThat(appender.events).as("败者零事件").hasSize(1);
+        assertThat(runs.rows.get(runId).state()).isEqualTo(RcaRunState.CANCELLED);
+    }
+
+    @Test
+    void cancelLosesToWorkerFinishedRunWithoutOverwrite() {
+        UUID runId = run(RcaRunState.RUNNING);
+        // worker finishTask 先收尾（runs.update 不推进修订号——活跃态守卫在此接管栅栏）
+        RcaRun finished = runs.rows.get(runId);
+        runs.update(new RcaRun(finished.id(), finished.incidentId(), finished.generation(),
+                finished.trigger(), RcaRunState.SUCCEEDED, finished.investigationHash(),
+                finished.createdAt(), NOW, finished.startedAt(), NOW, null));
+
+        CommandService.Result result =
+                service.submit(runId, OperatorCommand.Type.CANCEL, "op-1", 0, Map.of(), "operator");
+
+        assertThat(result.state()).isEqualTo(OperatorCommand.State.REJECTED_FORBIDDEN);
+        assertThat(runs.rows.get(runId).state())
+                .as("终态 run 不得被取消覆盖（Cancel 与报告完成竞态一致性）")
+                .isEqualTo(RcaRunState.SUCCEEDED);
+        assertThat(appender.events).isEmpty();
+    }
+
+    @Test
     void forbiddenOnTerminalRunAndReplaysRejection() {
         UUID runId = run(RcaRunState.SUCCEEDED);
 
@@ -240,6 +278,8 @@ class CommandServiceTest {
 
     static final class FakeRuns implements RcaRunRepository {
         final Map<UUID, RcaRun> rows = new LinkedHashMap<>();
+        /** EX-A2（F12）：修订镜像（仅 updateIfRevision 推进，镜像 PG last_event_seq） */
+        final Map<UUID, Long> revisions = new LinkedHashMap<>();
 
         @Override
         public void insert(RcaRun run) {
@@ -271,6 +311,19 @@ class CommandServiceTest {
             return true;
         }
 
+        /** EX-A2（F12）：修订+活跃态同判，胜出修订 +1（镜像 Postgres CAS 语义） */
+        @Override
+        public boolean updateIfRevision(RcaRun run, long expectedRevision) {
+            if (!rows.containsKey(run.id())
+                    || revisions.getOrDefault(run.id(), 0L) != expectedRevision
+                    || !rows.get(run.id()).state().isActive()) {
+                return false;
+            }
+            rows.put(run.id(), run);
+            revisions.put(run.id(), expectedRevision + 1);
+            return true;
+        }
+
         @Override
         public Optional<RcaRun> findActiveByIncidentId(UUID incidentId) {
             return rows.values().stream()
@@ -293,7 +346,9 @@ class CommandServiceTest {
 
         @Override
         public OptionalLong currentRevision(UUID id) {
-            return rows.containsKey(id) ? OptionalLong.of(0) : OptionalLong.empty();
+            return rows.containsKey(id)
+                    ? OptionalLong.of(revisions.getOrDefault(id, 0L))
+                    : OptionalLong.empty();
         }
     }
 

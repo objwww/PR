@@ -3,6 +3,7 @@ package com.objwww.pr.control.alert.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.domain.model.AlertGroupEnvelope;
+import com.objwww.pr.control.alert.domain.model.AlertGroupSummary;
 import com.objwww.pr.control.alert.domain.model.AlertInbox;
 import com.objwww.pr.control.alert.domain.model.AlertFiringStatus;
 import com.objwww.pr.control.alert.domain.model.InboxDecision;
@@ -21,6 +22,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -57,19 +59,21 @@ public class ControlAlertRouter {
 
     /**
      * @param httpStatus 仅 REJECTED 有意义（401 身份失败 / 400 白名单越界）；其余 0
+     * @param group      仅 ROUTED_ONCALL 非空——值班派发消费的组级标识摘要（M7-13）
      */
-    public record Decision(Outcome outcome, int httpStatus, String reason, UUID inboxId) {
+    public record Decision(Outcome outcome, int httpStatus, String reason, UUID inboxId,
+                    AlertGroupSummary group) {
 
         static Decision passThrough() {
-            return new Decision(Outcome.PASS_THROUGH, 0, null, null);
+            return new Decision(Outcome.PASS_THROUGH, 0, null, null, null);
         }
 
-        static Decision routedOnCall(UUID inboxId) {
-            return new Decision(Outcome.ROUTED_ONCALL, 0, null, inboxId);
+        static Decision routedOnCall(UUID inboxId, AlertGroupSummary group) {
+            return new Decision(Outcome.ROUTED_ONCALL, 0, null, inboxId, group);
         }
 
         static Decision rejected(int httpStatus, String reason) {
-            return new Decision(Outcome.REJECTED, httpStatus, reason, null);
+            return new Decision(Outcome.REJECTED, httpStatus, reason, null, null);
         }
     }
 
@@ -199,10 +203,20 @@ public class ControlAlertRouter {
                 null, null, 0, 0, 5, null, null, now, now, now));
 
         Set<String> alertnames = new LinkedHashSet<>();
+        Instant startsAt = null;
         for (JsonNode alert : root.path("alerts")) {
             JsonNode alertname = alert.path("labels").path("alertname");
             if (alertname.isTextual()) {
                 alertnames.add(alertname.asText());
+            }
+            JsonNode sa = alert.path("startsAt");
+            if (sa.isTextual()) {
+                try {
+                    Instant t = Instant.parse(sa.asText());
+                    startsAt = startsAt == null || t.isBefore(startsAt) ? t : startsAt;
+                } catch (RuntimeException ignore) {
+                    // 非 ISO 时刻按缺席处理（身份铸造用 now 兜底，不因畸形字段拒路由）
+                }
             }
         }
         Map<String, Object> fields = new LinkedHashMap<>();
@@ -214,7 +228,11 @@ public class ControlAlertRouter {
         fields.put("alert_count", envelope.alertCount());
         StructuredLog.event(log, "CONTROL_ALERT_ONCALL", fields);
 
-        return Decision.routedOnCall(id);
+        // M7-13：组级标识摘要随行（值班派发只消费标识符字段；startsAt 缺席=now 兜底）
+        return Decision.routedOnCall(id, new AlertGroupSummary(receiver, envelope.groupKey(),
+                root.path("status").asText(), textMap(root.path("commonLabels")),
+                List.copyOf(alertnames), startsAt == null ? now : startsAt,
+                envelope.alertCount()));
     }
 
     private static AlertGroupEnvelope envelopeOf(JsonNode root, byte[] body) {

@@ -1,66 +1,51 @@
 package com.objwww.pr.control.infrastructure.config;
 
+import com.objwww.pr.control.alert.application.agent.ChangeAgent;
+import com.objwww.pr.control.alert.application.agent.LogsAgent;
+import com.objwww.pr.control.alert.application.agent.MetricsAgent;
+import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * AM4 装配纪律行为化（AM4 技术方案 §2：启动期硬失败/运行期 fail-fast 惯例）：
- * fixture 缺失/空 = 启动拒绝（本机无 docker profile 容器，装配类仅测纯逻辑面）；
- * fixture 响应契约 = {@code status=success + data.result 非空序列}
- * （SingleToolEvidenceAgent 统一解析面——形状违约即 E2E 静默 NO_DATA）。
+ * AM4 装配纪律行为化（AM4 技术方案 §2）：EX-B2 后生产 registry **全真源**——
+ * prometheus.query 真查 + logs.query 真 Loki（试验资源）+ change.query 真实变更源，
+ * 零 ReplayToolExecutor 挂点（Phase 3 验收门第 1 条；fixtureBytes 已随之退役，
+ * 生产镜像零 fixture——P1-03 面收官）。
  */
 class AlertAm4ConfigTest {
 
+    /** EX-B2 全真源换绑钉：三工具执行器类型 + 生产装配零 Replay 假件 */
     @Test
-    void fixture存在时读出字节() {
-        byte[] bytes = AlertAm4Config.fixtureBytes("am4/fixtures/logs-query.json");
+    void productionRegistryBindsAllRealExecutors() {
+        org.springframework.jdbc.core.simple.JdbcClient jdbc =
+                org.springframework.jdbc.core.simple.JdbcClient.create(
+                        new org.springframework.jdbc.datasource.SimpleDriverDataSource(
+                                new org.postgresql.Driver(),
+                                "jdbc:postgresql://127.0.0.1:1/unused", "u", "p"));
 
-        assertThat(new String(bytes, StandardCharsets.UTF_8)).contains("status");
+        ToolRegistry registry = new AlertAm4Config().am4ToolRegistry(
+                "http://prometheus:9090", 4_000L, 65_536L, jdbc,
+                "http://loki:3100", "control-app,checkout", "control-app");
+
+        assertThat(registry.find(LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION).orElseThrow()
+                .executor()).isInstanceOf(
+                com.objwww.pr.control.infrastructure.tool.LogQueryExecutor.class);
+        assertThat(registry.find(ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION).orElseThrow()
+                .executor()).isInstanceOf(
+                com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor.class);
+        assertThat(registry.find(MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION).orElseThrow()
+                .executor()).isInstanceOf(
+                com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor.class);
     }
 
+    /** P1-03 面收官钉：生产镜像 main 资源零 am4 fixture 文件（logs 全删/change 迁 test） */
     @Test
-    void logsFixture响应契约dataResult非空序列() throws Exception {
-        com.fasterxml.jackson.databind.ObjectMapper mapper =
-                new com.fasterxml.jackson.databind.ObjectMapper();
-        Map<?, ?> payload = mapper.readValue(AlertAm4Config
-                .fixtureBytes("am4/fixtures/logs-query.json"), Map.class);
-
-        assertThat(payload.get("status")).isEqualTo("success");
-        assertThat(dataResult(payload)).isNotEmpty();
-    }
-
-    @Test
-    void changeFixture响应契约dataResult非空序列() throws Exception {
-        com.fasterxml.jackson.databind.ObjectMapper mapper =
-                new com.fasterxml.jackson.databind.ObjectMapper();
-        Map<?, ?> payload = mapper.readValue(AlertAm4Config
-                .fixtureBytes("am4/fixtures/change-query.json"), Map.class);
-
-        assertThat(payload.get("status")).isEqualTo("success");
-        assertThat(dataResult(payload)).isNotEmpty();
-    }
-
-    @Test
-    void fixture缺失时启动期硬失败() {
-        assertThatThrownBy(() -> AlertAm4Config.fixtureBytes("am4/fixtures/absent.json"))
-                .isInstanceOf(UncheckedIOException.class)
-                .hasMessageContaining("fixture 读取失败");
-    }
-
-    /** 与 SingleToolEvidenceAgent.dataSeries 同构的最小解析（防契约漂移） */
-    private static List<?> dataResult(Map<?, ?> payload) {
-        Object data = payload.get("data");
-        if (!(data instanceof Map)) {
-            return List.of();
-        }
-        Object result = ((Map<?, ?>) data).get("result");
-        return result instanceof List<?> series ? series : List.of();
+    void mainResourcesCarryNoAm4Fixtures() {
+        assertThat(java.nio.file.Path.of("src/main/resources/am4").toFile().exists())
+                .as("main 资源零 am4 假件目录（logs 已删、change 已迁 test 资源）").isFalse();
     }
 }

@@ -30,6 +30,16 @@ public interface RcaRunRepository {
         insert(run);
     }
 
+    /**
+     * EX-A0 铸点身份冻结：路由四列 + 调查输入三列（investigation_input_digest/
+     * window_start/window_end，V36）随行一次落库——Run 创建时冻结，执行期只读。
+     * 默认实现 = 无身份语义环境（测试 fake）回退 {@link #insertRouted(RcaRun, RcaRunRouting)}。
+     */
+    default void insertRouted(RcaRun run, RcaRunRouting routing,
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs) {
+        insertRouted(run, routing);
+    }
+
     /** 行锁（finishTask 收尾算法 "lock task → lock incident" 链路） */
     Optional<RcaRun> findByIdForUpdate(UUID id);
 
@@ -37,6 +47,20 @@ public interface RcaRunRepository {
     Optional<RcaRun> findById(UUID id);
 
     boolean update(RcaRun run);
+
+    /**
+     * EX-A2（F12/P1-04）：修订条件写（CAS）——取消/开跑类提交的线性化点。
+     * expectedRevision 锚既有 {@code rca_run.last_event_seq}（M5-14 命令版本机制，
+     * 不新造 revision 列）；WHERE 同时守活跃态（QUEUED/RUNNING/REPORTING）——
+     * finishTask 类非事件型状态推进（不经事件账本推进修订号的写）也纳入栅栏。
+     * SET 同 {@link #update}，且修订号 +1。影响行数 0 = 并发状态事实已先推进
+     * （finishTask 收尾/取消已落地/命令已推进修订）= 本次提交失去资格，调用方
+     * 按败者语义结算、零副作用。默认实现不可用（条件写必须真实现）。
+     */
+    default boolean updateIfRevision(RcaRun run, long expectedRevision) {
+        throw new UnsupportedOperationException(
+                "updateIfRevision 需原子条件写实现: " + getClass().getName());
+    }
 
     /** 当前活跃 run（QUEUED/RUNNING）；无则 empty */
     Optional<RcaRun> findActiveByIncidentId(UUID incidentId);
@@ -54,9 +78,14 @@ public interface RcaRunRepository {
      */
     Optional<RoutingView> findRoutingById(UUID id);
 
-    /** rca_run 路由四列读视图（configDigest 十六进制或 null） */
+    /**
+     * rca_run 路由四列读视图（configDigest 十六进制或 null）。EX-A0 追加调查输入
+     * 三列（V36）：investigationInputDigest/windowStart/windowEnd——存量行可空，
+     * 执行面按 §3.2 兼容语义回退。
+     */
     record RoutingView(RcaEngine engine, String configDigest, String stickinessKey,
-                       Integer bucket) {
+                       Integer bucket, String investigationInputDigest,
+                       java.time.Instant windowStart, java.time.Instant windowEnd) {
     }
 
     /**

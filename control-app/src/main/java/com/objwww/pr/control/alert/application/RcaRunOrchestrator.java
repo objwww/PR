@@ -144,8 +144,11 @@ public class RcaRunOrchestrator {
                                     RcaAttempt startedAttempt) {
         Instant now = clock.now();
 
-        // ST-A08：epoch 栅栏——旧 worker 晚到提交被拒，一行不写
-        if (!tasks.requireCurrentLease(task.id(), owner, task.leaseEpoch())) {
+        // ST-A08 + EX-A2（F11/P1-04）：提交权栅栏——条件 UPDATE 行锁持至本事务提交，
+        // 后续"attempt 终态/结果落档/task 终态/run 收尾"全部处于 owner/epoch/run 状态
+        // 保护下；empty（0 行）= 失去提交权，一行不写（晚到响应只配审计对账）。
+        if (com.objwww.pr.control.alert.domain.lease.LeaseFence
+                .acquire(tasks, task.id(), owner, task.leaseEpoch()).isEmpty()) {
             log.warn("task {} 旧租约提交被拒 owner={} epoch={}", task.id(), owner, task.leaseEpoch());
             return FinishOutcome.LEASE_REJECTED;
         }
@@ -286,7 +289,10 @@ public class RcaRunOrchestrator {
         }
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
                 RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null);
-        runs.insertRouted(run, routing);
+        // EX-A0（F14）：RERUN 铸点同冻结——调查输入身份+时间窗随行落列
+        runs.insertRouted(run, routing,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
+                        incident, now));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);
@@ -458,12 +464,20 @@ public class RcaRunOrchestrator {
         return Duration.ofMinutes(Math.min(1L << Math.max(0, task.attemptCount() - 1), 5));
     }
 
-    /** task 开跑前置：run QUEUED→RUNNING（幂等；首个领取者置位；经状态机校验，G0-06） */
-    public boolean markRunRunning(RcaRun run, Instant now) {
+    /**
+     * task 开跑前置：run QUEUED→RUNNING（幂等；首个领取者置位；经状态机校验，G0-06）。
+     * EX-A2（F12/P1-04）：修订条件写（CAS，锚 last_event_seq）——领取与开跑之间取消
+     * 已落地时 CAS 败（修订号已被取消事务推进），run 保持 CANCELLED 不复活；
+     * worker 侧晚到结果由 finishTask generation fence 收敛 STALE（已获资格尽力取消）。
+     *
+     * @param expectedRevision 领取事务内读得的 run 修订锚（{@code currentRevision}）
+     * @return false = run 已离开 QUEUED（被取消/已开跑/已终态），worker 继续路径见上
+     */
+    public boolean markRunRunning(RcaRun run, long expectedRevision, Instant now) {
         if (run.state() == RcaRunState.QUEUED) {
             RcaRunStateMachine.requireTransition(run.state(), RcaRunState.RUNNING);
-            runs.update(withRunState(run, RcaRunState.RUNNING, now, null));
-            return true;
+            return runs.updateIfRevision(withRunState(run, RcaRunState.RUNNING, now, null),
+                    expectedRevision);
         }
         return false;
     }

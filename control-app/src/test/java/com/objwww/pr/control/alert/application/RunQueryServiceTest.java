@@ -104,7 +104,7 @@ class RunQueryServiceTest {
         edges.insert(runId, edgeTo, UUID.randomUUID(), DependencyType.OPTIONAL);
         runs.routing.put(runId, new RcaRunRepository.RoutingView(
                 com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
-                "9c1e".repeat(16), "grp:1", 42));
+                "9c1e".repeat(16), "grp:1", 42, null, null, null));
 
         Map<String, Object> detail = service.detail(runId).orElseThrow();
 

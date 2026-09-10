@@ -4,9 +4,12 @@ import com.objwww.pr.control.release.application.ConfigBundleService;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
 import com.objwww.pr.shared.Digest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -24,13 +27,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * M5-09 ConfigBundleController 边界 UT（standalone MockMvc + InMemory fake，
- * AlertWebhookControllerTest 同构）：401 面零落库、发布幂等锚（同内容重发
- * replayed=true）、缺 content 400、激活/回滚/active 视图、CAS 竞争败者 409、
- * 未知 digest 404。RBAC=release bearer（O-4 用户体系前的共享凭证形态）。
+ * AlertWebhookControllerTest 同构）：发布幂等锚（同内容重发 replayed=true）、
+ * 缺 content 400、激活/回滚/active 视图、CAS 竞争败者 409、未知 digest 404。
+ * EX-C3a：401 面零落库上移 SecurityFilterChain（SecurityConfigTest 链级覆盖）；
+ * actor=测试侧铸入 SecurityContext 的认证。
  */
 class ConfigBundleControllerTest {
 
-    private static final String BEARER = "test-release-token";
 
     private InMemoryBundles repository;
     private MockMvc mvc;
@@ -39,7 +42,14 @@ class ConfigBundleControllerTest {
     void setUp() {
         repository = new InMemoryBundles();
         mvc = MockMvcBuilders.standaloneSetup(
-                new ConfigBundleController(new ConfigBundleService(repository), BEARER)).build();
+                new ConfigBundleController(new ConfigBundleService(repository))).build();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("release-operator", null, List.of()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     /** 测试内存认账面（与 ConfigBundleServiceTest 同构 + CAS 恒败开关供 409 面） */
@@ -101,7 +111,6 @@ class ConfigBundleControllerTest {
 
     private String publish(String promptVersion) throws Exception {
         String body = mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json")
                         .content(publishBody(promptVersion)))
                 .andExpect(status().isOk())
@@ -121,32 +130,13 @@ class ConfigBundleControllerTest {
 
     // ---------------------------------------------------------------- 用例面
 
-    @Test
-    @DisplayName("401 面：伪/缺 bearer 拒绝且零落库（发布/激活/回滚/active 全端点）")
-    void forgedOrMissingBearerIs401WithZeroPersistence() throws Exception {
-        mvc.perform(post("/api/config-bundles").contentType("application/json")
-                        .content(publishBody("v7")))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/config-bundles").header("Authorization", "Bearer wrong")
-                        .contentType("application/json").content(publishBody("v7")))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/config-bundles/" + Digest.sha256Of("x").hex() + "/activate")
-                        .header("Authorization", "Bearer wrong").contentType("application/json"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(post("/api/config-bundles/rollback")
-                        .header("Authorization", "Bearer wrong").contentType("application/json"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(get("/api/config-bundles/active")
-                        .header("Authorization", "Bearer wrong"))
-                .andExpect(status().isUnauthorized());
-        assertThatRowsEmpty();
-    }
+    // EX-C3a 迁出面：伪/缺 bearer → 401 全端点拒绝已上移 SecurityFilterChain
+    //（SecurityConfigTest 链级红绿）；INV 面（未验签零落库）由安全链 401 先于 controller 保证。
 
     @Test
     @DisplayName("发布：200 带 64 位 digest/revision/replayed=false；同内容重发 replayed=true 同 digest")
     void publishRespondsDigestAndIdempotentReplay() throws Exception {
         mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json")
                         .content(publishBody("v7")))
                 .andExpect(status().isOk())
@@ -155,7 +145,6 @@ class ConfigBundleControllerTest {
                 .andExpect(jsonPath("$.replayed").value(false));
 
         mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json")
                         .content(publishBody("v7")))
                 .andExpect(status().isOk())
@@ -168,15 +157,12 @@ class ConfigBundleControllerTest {
     @DisplayName("缺 content / content 非对象 → 400；密钥材料键 → 400（INV-AM5-5 出界面）")
     void malformedPublishBodyIs400() throws Exception {
         mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{\"content\":\"str\"}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/config-bundles")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json")
                         .content("{\"content\":{\"policy_version\":\"p\",\"api_key\":\"k\"}}"))
                 .andExpect(status().isBadRequest());
@@ -189,7 +175,6 @@ class ConfigBundleControllerTest {
         String d1 = publish("v7");
 
         mvc.perform(post("/api/config-bundles/" + d1 + "/activate")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bundleDigest").value(d1))
@@ -197,13 +182,11 @@ class ConfigBundleControllerTest {
                 .andExpect(jsonPath("$.replayed").value(false));
 
         mvc.perform(post("/api/config-bundles/" + d1 + "/activate")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.replayed").value(true));
 
         mvc.perform(post("/api/config-bundles/" + Digest.sha256Of("ghost").hex() + "/activate")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isNotFound());
         assertThatActivePointer(d1);
@@ -218,7 +201,6 @@ class ConfigBundleControllerTest {
         activate(d2);
 
         mvc.perform(post("/api/config-bundles/rollback")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json")
                         .content("{\"toDigest\":\"" + d1 + "\"}"))
                 .andExpect(status().isOk())
@@ -226,7 +208,6 @@ class ConfigBundleControllerTest {
                 .andExpect(jsonPath("$.replayed").value(false));
 
         mvc.perform(post("/api/config-bundles/rollback")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest());
         assertThatActivePointer(d1);
@@ -235,15 +216,13 @@ class ConfigBundleControllerTest {
     @Test
     @DisplayName("active 视图：未激活 → 404 never_activated；激活后 → digest/revision/activatedAt")
     void activeViewFaces() throws Exception {
-        mvc.perform(get("/api/config-bundles/active")
-                        .header("Authorization", "Bearer " + BEARER))
+        mvc.perform(get("/api/config-bundles/active"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("never_activated"));
 
         String d1 = publish("v7");
         activate(d1);
-        mvc.perform(get("/api/config-bundles/active")
-                        .header("Authorization", "Bearer " + BEARER))
+        mvc.perform(get("/api/config-bundles/active"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bundleDigest").value(d1))
                 .andExpect(jsonPath("$.revision").value(1))
@@ -259,7 +238,6 @@ class ConfigBundleControllerTest {
         repository.alwaysLoseCas = true;
 
         mvc.perform(post("/api/config-bundles/" + d2 + "/activate")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("activation_conflict"))
@@ -271,7 +249,6 @@ class ConfigBundleControllerTest {
 
     private void activate(String digest) throws Exception {
         mvc.perform(post("/api/config-bundles/" + digest + "/activate")
-                        .header("Authorization", "Bearer " + BEARER)
                         .contentType("application/json").content("{}"))
                 .andExpect(status().isOk());
     }
