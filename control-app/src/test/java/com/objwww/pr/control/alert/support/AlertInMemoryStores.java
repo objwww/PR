@@ -76,6 +76,118 @@ public final class AlertInMemoryStores {
     public final ToolLedger toolLedger = new ToolLedger();
     /** EX-A4a（F05）：证据快照假件（黑板=冻结成员面） */
     public final Snapshots snapshots = new Snapshots();
+    /** UX-01：分类写面假件（rule/override 两族列分离 + 生效面裁决 + 审计行） */
+    public final Categories categories = new Categories();
+
+    // ------------------------------------------------------------------ UX-01 分类面
+
+    /**
+     * 分类假件：镜像 V82 语义——rule_* 与 override_* 分离，生效面 = override ?? rule
+     * ?? UNCLASSIFIED；CAS 以 override_revision 为锚；审计行按 (incidentId, key) 幂等。
+     */
+    public static final class Categories implements com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository {
+        /** 每 incident 的分类态（未触碰 = 全 null，等价存量行） */
+        public static final class State {
+            public String ruleCategory;
+            public String ruleId;
+            public String ruleVersion;
+            public Instant classifiedAt;
+            public String overrideCategory;
+            public String overrideActor;
+            public String overrideReason;
+            public Instant overrideAt;
+            public int overrideRevision;
+
+            public String effective() {
+                if (overrideCategory != null) {
+                    return overrideCategory;
+                }
+                return ruleCategory != null ? ruleCategory : "UNCLASSIFIED";
+            }
+        }
+
+        private final Map<UUID, State> states = new HashMap<>();
+        private final List<OverrideAuditRow> audit = new ArrayList<>();
+        /** 规则重分类调用计数（单测断言"何时不重分类"用） */
+        public int applyRuleCalls;
+
+        public synchronized State state(UUID incidentId) {
+            return states.computeIfAbsent(incidentId, k -> new State());
+        }
+
+        public synchronized List<OverrideAuditRow> auditRows(UUID incidentId) {
+            return audit.stream().filter(r -> r.incidentId().equals(incidentId)).toList();
+        }
+
+        @Override
+        public synchronized void applyRuleClassification(UUID incidentId,
+                com.objwww.pr.control.alert.domain.classification.IncidentCategory category,
+                String ruleId, String ruleVersion, Instant classifiedAt) {
+            applyRuleCalls++;
+            State s = state(incidentId);
+            s.ruleCategory = category.name();
+            s.ruleId = ruleId;
+            s.ruleVersion = ruleVersion;
+            s.classifiedAt = classifiedAt;
+        }
+
+        @Override
+        public synchronized Optional<CategoryState> lockState(UUID incidentId) {
+            State s = states.get(incidentId);
+            if (s == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new CategoryState(s.ruleCategory, s.overrideCategory,
+                    s.effective(), s.overrideRevision));
+        }
+
+        @Override
+        public synchronized boolean setOverride(UUID incidentId,
+                com.objwww.pr.control.alert.domain.classification.IncidentCategory category,
+                String actor, String reason, Instant at, int expectedRevision) {
+            State s = states.get(incidentId);
+            if (s == null || s.overrideRevision != expectedRevision) {
+                return false;
+            }
+            s.overrideCategory = category.name();
+            s.overrideActor = actor;
+            s.overrideReason = reason;
+            s.overrideAt = at;
+            s.overrideRevision++;
+            return true;
+        }
+
+        @Override
+        public synchronized boolean clearOverride(UUID incidentId, int expectedRevision) {
+            State s = states.get(incidentId);
+            if (s == null || s.overrideRevision != expectedRevision) {
+                return false;
+            }
+            s.overrideCategory = null;
+            s.overrideActor = null;
+            s.overrideReason = null;
+            s.overrideAt = null;
+            s.overrideRevision++;
+            return true;
+        }
+
+        @Override
+        public synchronized void appendAudit(OverrideAuditRow row) {
+            boolean dup = audit.stream().anyMatch(r -> r.incidentId().equals(row.incidentId())
+                    && r.idempotencyKey().equals(row.idempotencyKey()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_oco_idempotency");
+            }
+            audit.add(row);
+        }
+
+        @Override
+        public synchronized Optional<OverrideAuditRow> findAuditByIdempotencyKey(
+                UUID incidentId, String idempotencyKey) {
+            return audit.stream().filter(r -> r.incidentId().equals(incidentId)
+                    && r.idempotencyKey().equals(idempotencyKey)).findFirst();
+        }
+    }
 
     // ------------------------------------------------------------------ alert_inbox
 

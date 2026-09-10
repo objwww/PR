@@ -26,6 +26,7 @@ import com.objwww.pr.control.alert.domain.model.InboxState;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresAlertEventRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentCategoryRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaTaskRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository;
@@ -260,7 +261,9 @@ class PostgresRcaTaskRepositoryIT extends PostgresITBase {
                         true, clock::now);
         IncidentProjector projector = new IncidentProjector(events, incidents, runs, tasks,
                 new AlertIdentityFactory(), new DeferredPolicy(1000), SlaPolicy.defaults(),
-                clock, nativeRouter);
+                clock, nativeRouter,
+                new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                new PostgresIncidentCategoryRepository(controlJdbc));
         UUID inboxId = insertInboxRow();
 
         projector.project(inboxId, List.of(alert(AlertFiringStatus.FIRING, "2026-09-03T09:00:00Z")));

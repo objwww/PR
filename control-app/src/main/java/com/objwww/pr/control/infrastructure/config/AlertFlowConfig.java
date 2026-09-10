@@ -120,6 +120,12 @@ public class AlertFlowConfig {
     }
 
     @Bean
+    public com.objwww.pr.control.alert.domain.classification.IncidentClassifier incidentClassifier() {
+        // UX-01：规则表冻结在代码内（Git 审查演进，首期不热更）
+        return new com.objwww.pr.control.alert.domain.classification.IncidentClassifier();
+    }
+
+    @Bean
     public IncidentProjector incidentProjector(AlertEventRepository events,
                                                IncidentRepository incidents,
                                                RcaRunRepository runs,
@@ -127,9 +133,12 @@ public class AlertFlowConfig {
                                                AlertIdentityFactory identity,
                                                DeferredPolicy deferredPolicy,
                                                SlaPolicy sla,
-                                               CanaryRouter canaryRouter) {
+                                               CanaryRouter canaryRouter,
+                                               com.objwww.pr.control.alert.domain.classification.IncidentClassifier incidentClassifier,
+                                               com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository) {
         return new IncidentProjector(events, incidents, runs, tasks,
-                identity, deferredPolicy, sla, AlertClock.system(), canaryRouter);
+                identity, deferredPolicy, sla, AlertClock.system(), canaryRouter,
+                incidentClassifier, incidentCategoryRepository);
     }
 
     @Bean

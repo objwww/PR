@@ -361,6 +361,22 @@ public class PersistenceConfig {
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
 
+    /** UX-01：分类写面端口（incident 规则列/override 列 + incident_category_override 审计表） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentCategoryRepository(jdbc);
+    }
+
+    /** UX-01：人工 override 命令服务（审计同事务；HTTP 面 = IncidentCategoryCommandController） */
+    @Bean
+    public com.objwww.pr.control.alert.application.CategoryOverrideService categoryOverrideService(
+            com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.CategoryOverrideService(
+                incidentCategoryRepository, tx, java.time.Instant::now);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader(
             JdbcClient jdbc, ObjectMapper objectMapper) {

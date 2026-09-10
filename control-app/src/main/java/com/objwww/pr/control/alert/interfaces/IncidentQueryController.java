@@ -48,11 +48,12 @@ public class IncidentQueryController {
             @RequestParam(required = false) String severity,
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "50") int limit) {
         try {
-            return ResponseEntity.ok(query.list(status, severity, service, q, cursor,
-                    Math.clamp(limit, 1, 200)));
+            return ResponseEntity.ok(query.list(status, severity, service, q, category,
+                    cursor, Math.clamp(limit, 1, 200)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

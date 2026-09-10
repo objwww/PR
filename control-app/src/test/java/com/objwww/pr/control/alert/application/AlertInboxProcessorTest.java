@@ -73,7 +73,9 @@ class AlertInboxProcessorTest {
                         new NativeEngineWiringTest.WiringDecisions(), true, clock::now);
         IncidentProjector projector = new IncidentProjector(stores.events, stores.incidents,
                 stores.runs, stores.tasks, identity, policy, SlaPolicy.defaults(), clock,
-                nativeRouter);
+                nativeRouter,
+                new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                stores.categories);
         return new AlertInboxProcessor(stores.inbox, projector,
                 TransactionOperations.withoutTransaction(), clock, "test-owner",
                 Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofSeconds(10),

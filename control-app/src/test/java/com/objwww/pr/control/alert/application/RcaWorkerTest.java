@@ -115,7 +115,9 @@ class RcaWorkerTest {
                 new NativeEngineWiringTest.WiringDecisions(), true, clock::now);
         IncidentProjector projector = new IncidentProjector(stores.events, stores.incidents,
                 stores.runs, stores.tasks, new AlertIdentityFactory(),
-                new DeferredPolicy(1000), SlaPolicy.defaults(), clock, nativeRouter);
+                new DeferredPolicy(1000), SlaPolicy.defaults(), clock, nativeRouter,
+                new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                stores.categories);
         intake = new AlertInboxProcessor(stores.inbox, projector,
                 TransactionOperations.withoutTransaction(), clock, "intake-owner",
                 Duration.ofMinutes(2), Duration.ofSeconds(30), Duration.ofSeconds(10),

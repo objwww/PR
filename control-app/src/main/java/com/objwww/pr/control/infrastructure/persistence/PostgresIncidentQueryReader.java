@@ -44,6 +44,9 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
             "select i.id, i.incident_key, i.status, i.episode_started_at, i.last_event_at,"
                     + " i.resolved_at, i.received_count, i.distinct_event_count,"
                     + " i.notification_count, i.current_rca_run_id, i.waiting_reason,"
+                    + " i.category, i.category_source,"
+                    + " i.category_rule_id, i.category_rule_version, i.category_classified_at,"
+                    + " i.override_actor, i.override_reason, i.override_at, i.override_revision,"
                     + " le.alertname, le.service, le.severity,"
                     + " r.state as run_state"
                     + " from incident i " + LATEST_EVENT_LATERAL
@@ -61,9 +64,10 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
 
     @Override
     public IncidentPage listIncidents(String status, String severity, String service,
-                                      String q, KeysetCursor cursor, int limit) {
+                                      String q, String category, KeysetCursor cursor,
+                                      int limit) {
         Map<String, Object> filterParams = new LinkedHashMap<>();
-        String where = filterWhere(status, severity, service, q, filterParams);
+        String where = filterWhere(status, severity, service, q, category, filterParams);
 
         // total = 过滤后全集（不含游标——游标只切页，不切总数）
         long total = jdbc.sql("select count(*) from incident i " + LATEST_EVENT_LATERAL + where)
@@ -95,13 +99,18 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
 
     @Override
     public Optional<IncidentDetail> detail(UUID incidentId) {
-        List<IncidentRow> rows = jdbc.sql(SELECT_ROW + " where i.id = :id")
+        // UX-01：分类详情列随 SELECT_ROW 同行取出（行映射双产物：列表行 + 分类详情）
+        record RowWithCategory(IncidentRow row, CategoryDetail categoryDetail) {
+        }
+        List<RowWithCategory> rows = jdbc.sql(SELECT_ROW + " where i.id = :id")
                 .param("id", incidentId)
-                .query(this::mapRow).list();
+                .query((rs, i) -> new RowWithCategory(mapRow(rs, i), mapCategoryDetail(rs)))
+                .list();
         if (rows.isEmpty()) {
             return Optional.empty();
         }
-        IncidentRow row = rows.get(0);
+        IncidentRow row = rows.get(0).row();
+        CategoryDetail categoryDetail = rows.get(0).categoryDetail();
 
         record LatestDocs(Map<String, Object> labels, Map<String, Object> annotations) {
         }
@@ -149,7 +158,8 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                     .list();
             run = badges.isEmpty() ? null : badges.get(0);
         }
-        return Optional.of(new IncidentDetail(row, labels, annotations, timeline, run));
+        return Optional.of(new IncidentDetail(row, labels, annotations, timeline, run,
+                categoryDetail));
     }
 
     // ------------------------------------------------------------------ facet
@@ -162,7 +172,10 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                 "le.severity", status, service, q, true);
         Map<String, Long> serviceFacet = groupCount(
                 "le.service", status, service, q, true);
-        return new Facets(statusFacet, severityFacet, serviceFacet);
+        // UX-01：生效面分桶（生成列恒非 null；计数口径 = 当前 status/service/q 过滤）
+        Map<String, Long> categoryFacet = groupCount(
+                "i.category", status, service, q, false);
+        return new Facets(statusFacet, severityFacet, serviceFacet, categoryFacet);
     }
 
     /** 单维 GROUP BY 计数（skipNulls=labels 提取值无键的行不进桶） */
@@ -295,6 +308,12 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
     /** 列表/facet 共用过滤（参数缺席即不拼条件——沿 PostgresDutyStore 惯例） */
     private static String filterWhere(String status, String severity, String service,
                                       String q, Map<String, Object> params) {
+        return filterWhere(status, severity, service, q, null, params);
+    }
+
+    /** UX-01：category 生效面等值过滤（生成列 i.category；null=不过滤） */
+    private static String filterWhere(String status, String severity, String service,
+                                      String q, String category, Map<String, Object> params) {
         List<String> clauses = new ArrayList<>();
         if (status != null && !status.isBlank()) {
             clauses.add("i.status = :status");
@@ -312,6 +331,10 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
             clauses.add("(i.incident_key ilike '%' || :q || '%'"
                     + " or le.alertname ilike '%' || :q || '%')");
             params.put("q", q);
+        }
+        if (category != null && !category.isBlank()) {
+            clauses.add("i.category = :category");
+            params.put("category", category);
         }
         return clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses);
     }
@@ -336,7 +359,21 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                 rs.getLong("notification_count"),
                 rs.getObject("current_rca_run_id", UUID.class),
                 rs.getString("run_state"),
-                rs.getString("waiting_reason"));
+                rs.getString("waiting_reason"),
+                rs.getString("category"),
+                rs.getString("category_source"));
+    }
+
+    /** UX-01 分类详情列（SELECT_ROW 已含；无 override 时四列 null 如实返回） */
+    private CategoryDetail mapCategoryDetail(ResultSet rs) throws SQLException {
+        return new CategoryDetail(
+                rs.getString("category_rule_id"),
+                rs.getString("category_rule_version"),
+                ts(rs, "category_classified_at"),
+                rs.getString("override_actor"),
+                rs.getString("override_reason"),
+                ts(rs, "override_at"),
+                rs.getObject("override_revision", Integer.class));
     }
 
     private Map<String, Object> jsonMap(ResultSet rs, String column) throws SQLException {

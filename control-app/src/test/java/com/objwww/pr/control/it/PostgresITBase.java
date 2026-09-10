@@ -87,7 +87,9 @@ public abstract class PostgresITBase {
             "change_event",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
-            "duty_override", "duty_channel", "duty_member", "duty_schedule");
+            "duty_override", "duty_channel", "duty_member", "duty_schedule",
+            // V82（UX-01 分类 override 审计）——BA-41 同律
+            "incident_category_override");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
