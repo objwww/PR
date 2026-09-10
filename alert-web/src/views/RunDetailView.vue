@@ -4,7 +4,7 @@
       <span>
         <b>首页</b><span class="sep">/</span>调查<span class="sep">/</span>
         <router-link to="/runs">调查队列</router-link><span class="sep">/</span>
-        <b>Run {{ shortId(run.id) }}</b>
+        <b>调查 {{ shortId(run.id) }}</b>
       </span>
       <span class="crumb-right">数据更新至 {{ fmtTime(loadedAt) }}</span>
     </div>
@@ -130,7 +130,7 @@
           :neighbor-focus="neighborFocus"
           @select="onSelectTask"
         />
-        <div class="note">点击节点查看任务详情；SSE 事件驱动节点实时变色</div>
+        <div class="note">点击节点查看任务详情；实时事件驱动节点变色</div>
       </div>
 
       <!-- 选中节点才开任务详情抽屉（360~420px） -->
@@ -144,10 +144,10 @@
           <div class="box">
             <StatusBadge :status="selectedTask.status" />
             <span class="mini">{{ statusStyle[selectedTask.status]?.zh }}</span><br>
-            task {{ selectedTask.name }} ｜ 优先级 {{ selectedTask.priority }}<br>
+            任务 {{ selectedTask.name }} ｜ 优先级 {{ selectedTask.priority }}<br>
             截止时间 {{ fmtTime(selectedTask.deadline) }}
-            <template v-if="selectedTask.lease"><br>Lease：{{ selectedTask.lease.worker }}（epoch {{ selectedTask.lease.epoch }}）</template>
-            <br>Attempt 次数：{{ selectedTask.attempts }}
+            <template v-if="selectedTask.lease"><br>租约：{{ selectedTask.lease.worker }}（epoch {{ selectedTask.lease.epoch }}）</template>
+            <br>尝试次数：{{ selectedTask.attempts }}
           </div>
           <div class="box">
             <b>依赖</b>：
@@ -179,7 +179,7 @@
       <div class="card panel">
         <div class="ev-toolbar">
           范围：
-          <el-button size="small" :type="eventScope === 'all' ? 'primary' : 'default'" @click="eventScope = 'all'">全部 Run</el-button>
+          <el-button size="small" :type="eventScope === 'all' ? 'primary' : 'default'" @click="eventScope = 'all'">全部事件</el-button>
           <el-button
             size="small" :type="eventScope === 'task' ? 'primary' : 'default'"
             :disabled="!selectedTask" @click="eventScope = 'task'"
@@ -220,7 +220,7 @@
                 <pre v-if="ev.payload && Object.keys(ev.payload).length">{{ JSON.stringify(ev.payload, null, 2) }}</pre>
                 <div class="mini">
                   seq={{ ev.seq }} ｜ task_id={{ ev.taskId ?? '—' }} ｜ level={{ ev.level }}<br>
-                  脱敏红线：thought / 原始 prompt / secret / 完整工具参数不进前端，关联对象仅白名单引用与 digest
+                  脱敏红线：思考过程 / 原始提示词 / 密钥 / 完整工具参数不进前端，关联对象仅白名单引用与摘要（digest）
                 </div>
               </div>
             </div>
@@ -273,7 +273,7 @@
     <!-- ============ 运行详情：预算 / lease / attempt / config digest 等技术字段 ============ -->
     <template v-else-if="viewTab === 'meta'">
       <div class="card panel">
-        <div class="lbl">Run 头</div>
+        <div class="lbl">基本信息</div>
         <KvTable :data="runHeadKv" />
       </div>
       <div class="card panel">
@@ -282,7 +282,7 @@
         <div v-else class="muted">预算账本无读面，投影未提供（不回填示意值）</div>
       </div>
       <div class="card panel">
-        <div class="lbl">任务与 Attempt（rca_task 投影）</div>
+        <div class="lbl">任务与尝试（rca_task 投影）</div>
         <el-table :data="dagTasks" size="small">
           <el-table-column label="任务" min-width="160">
             <template #default="{ row }"><b>{{ row.name }}</b></template>
@@ -294,14 +294,14 @@
           <el-table-column label="截止时间" width="170">
             <template #default="{ row }">{{ fmtTime(row.deadline) }}</template>
           </el-table-column>
-          <el-table-column label="Lease" min-width="150">
+          <el-table-column label="租约" min-width="150">
             <template #default="{ row }">
               <template v-if="row.lease">{{ row.lease.worker }} · epoch {{ row.lease.epoch }}</template>
               <span v-else class="muted">—</span>
             </template>
           </el-table-column>
-          <el-table-column prop="attempts" label="Attempt 次数" width="110" align="right" />
-          <el-table-column label="task_id" min-width="110">
+          <el-table-column prop="attempts" label="尝试次数" width="110" align="right" />
+          <el-table-column label="任务 ID" min-width="110">
             <template #default="{ row }"><code>{{ shortId(row.taskId) }}</code></template>
           </el-table-column>
         </el-table>
@@ -356,7 +356,7 @@ const viewTabs = [
   { key: 'summary', label: '摘要' },
   { key: 'dag', label: '执行过程' },
   { key: 'events', label: '事件流' },
-  { key: 'claims', label: 'Claim 与证据' },
+  { key: 'claims', label: '结论与证据' },
   { key: 'report', label: '报告' },
   { key: 'meta', label: '运行详情' },
 ]
@@ -459,8 +459,8 @@ function openStream(runId, delayMs = 800) {
 }
 
 const sseStatusText = computed(() => ({
-  connected: 'SSE 已连接', connecting: 'SSE 连接中', disconnected: 'SSE 已断开',
-}[sse.status] ?? 'SSE 已断开'))
+  connected: '实时 已连接', connecting: '实时 连接中', disconnected: '实时 已断开',
+}[sse.status] ?? '实时 已断开'))
 
 // ===== Transcript：新事件不打断滚动 =====
 const evListRef = ref(null)
@@ -528,12 +528,12 @@ function toggleClaim(id) {
 
 // ===== 运行详情 =====
 const runHeadKv = computed(() => ({
-  'Run ID': run.value?.id,
-  'Incident ID': run.value?.incident,
+  '调查 ID': run.value?.id,
+  '告警 ID': run.value?.incident,
   '状态': `${run.value?.status}（${listRow.value?.stageZh ?? '—'}）`,
   '严重度': run.value?.severity ?? '投影未提供',
   '引擎': run.value?.engine ?? '—',
-  'Config digest': run.value?.config ?? '—',
+  '配置摘要': run.value?.config ?? '—',
   '负责人': '认领面未落码',
   '事件游标（revision）': revision.value ?? '—',
 }))

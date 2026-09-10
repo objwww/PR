@@ -112,14 +112,13 @@ function isCur(it) {
 const envLabel = import.meta.env.VITE_ENV_LABEL || '未标记'
 
 const sseText = computed(() => ({
-  connected: 'SSE 已连接',
-  connecting: 'SSE 连接中',
-  disconnected: 'SSE 未连接',
+  connected: '实时 已连接',
+  connecting: '实时 连接中',
+  disconnected: '实时 未连接',
 }[sse.status]))
 
 const sseTitle = computed(() =>
   sse.lastEventAt ? `最后事件 ${sse.lastEventAt.toLocaleTimeString()}` : '尚无实时事件')
-
 async function onUserCommand(cmd) {
   if (cmd !== 'logout') return
   await session.logout()

@@ -24,7 +24,7 @@ const routes = [
   { path: '/', redirect: '/overview' },
   { path: '/overview', name: 'overview', component: OverviewView, meta: { title: '总览' } },
   { path: '/alerts', name: 'alerts', component: AlertsView, meta: { title: '告警中心' } },
-  { path: '/alerts/:incidentId', name: 'incident', component: IncidentDetailView, meta: { title: 'Incident 详情' } },
+  { path: '/alerts/:incidentId', name: 'incident', component: IncidentDetailView, meta: { title: '告警详情' } },
   { path: '/history', name: 'history', component: HistoryView, meta: { title: '历史档案' } },
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },
@@ -43,7 +43,7 @@ const routes = [
       { path: 'review', name: 'eval-review', component: EvalReviewView, meta: { title: '评审 · 评测中心' } },
     ],
   },
-  { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: 'Agent 监控' } },
+  { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: '监控' } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
@@ -59,5 +59,5 @@ router.beforeEach(to => {
   return true
 })
 
-router.afterEach(to => { document.title = (to.meta.title ? to.meta.title + ' · ' : '') + '告警 RCA Agent 操作台' })
+router.afterEach(to => { document.title = (to.meta.title ? to.meta.title + ' · ' : '') + '告警 RCA 操作台' })
 export default router

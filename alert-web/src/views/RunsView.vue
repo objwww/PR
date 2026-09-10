@@ -20,7 +20,7 @@
 
     <div class="toolbar card">
       <el-input
-        v-model="kw" class="kw" placeholder="搜索 Run ID / Incident ID" clearable
+        v-model="kw" class="kw" placeholder="搜索调查 ID / 告警 ID" clearable
         @keyup.enter="applyFilters" @clear="applyFilters"
       />
       <el-select v-model="fStage" class="w-stage" placeholder="全部阶段" clearable @change="applyFilters">
@@ -47,8 +47,8 @@
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="expand-box">
-                <div><span class="e-label">Run ID</span><code>{{ row.id }}</code></div>
-                <div><span class="e-label">Incident ID</span><code>{{ row.incident }}</code></div>
+                <div><span class="e-label">调查 ID</span><code>{{ row.id }}</code></div>
+                <div><span class="e-label">告警 ID</span><code>{{ row.incident }}</code></div>
                 <div><span class="e-label">分组 / 阶段码</span>{{ row.bucket }} / {{ row.stage }}</div>
                 <div><span class="e-label">卡点 / 错误</span>{{ row.blocker ?? '—' }}</div>
                 <div><span class="e-label">负责人</span>{{ row.owner ?? '未分配（认领面未落码）' }}</div>
@@ -62,7 +62,7 @@
                 :title="row.incident" @click.stop
               >告警 {{ shortId(row.incident) }}</router-link>
               <span v-else class="muted">—</span>
-              <div class="cell-sub">Run {{ shortId(row.id) }}</div>
+              <div class="cell-sub">调查 {{ shortId(row.id) }}</div>
             </template>
           </el-table-column>
           <el-table-column label="当前阶段" min-width="150">

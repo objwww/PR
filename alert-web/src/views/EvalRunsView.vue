@@ -14,15 +14,15 @@
     <div class="table-zone card">
       <template v-if="listState === 'ok'">
         <el-table :data="items" v-loading="loading" @row-click="openDetail" row-class-name="clickable-row">
-          <el-table-column label="实验 runId" min-width="180">
+          <el-table-column label="实验 ID" min-width="180">
             <template #default="{ row }">
               <span class="mono" :title="row.runId">{{ shortId(row.runId) }}</span>
-              <el-button size="small" text @click.stop="copyText(row.runId, 'runId 已复制')">复制</el-button>
+              <el-button size="small" text @click.stop="copyText(row.runId, '实验 ID 已复制')">复制</el-button>
             </template>
           </el-table-column>
           <el-table-column prop="datasetVersion" label="数据集版本" min-width="120" show-overflow-tooltip />
           <el-table-column prop="model" label="模型" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="promptVersion" label="Prompt 版本" min-width="110" show-overflow-tooltip />
+          <el-table-column prop="promptVersion" label="提示词版本" min-width="110" show-overflow-tooltip />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <StatusBadge :status="badgeState(row.state)" />

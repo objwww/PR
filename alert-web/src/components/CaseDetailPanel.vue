@@ -83,7 +83,7 @@
         <div v-for="cl in detail.claims" :key="cl.id" class="card-in claim-item">
           <div>
             <b>{{ cl.id }}</b> “{{ cl.text }}”
-            <el-tag size="small" :type="cl.verdict === 'TRUE' ? 'success' : 'info'" effect="plain">{{ cl.verdict }}</el-tag>
+            <el-tag size="small" :type="cl.verdict === 'TRUE' ? 'success' : 'info'" effect="plain">{{ verdictLabel(cl.verdict) }}</el-tag>
           </div>
           <div class="muted">证据引用：{{ cl.evidenceRefs.join('、') }}</div>
         </div>
@@ -168,6 +168,9 @@ const statusLabel = s => ({ OPEN: '待认领', ACKED: '处理中', RESOLVED: '�
 // 中文名统一走版本化词典；tag 类型是 UI 本地映射
 const verifyLabel = v => zh(VERIFY_STATUS_ZH, v)
 const verifyType = v => ({ FRESH_VERIFIED: 'success', VERIFIED: 'success', PENDING_REVIEW: 'warning' }[v] || 'info')
+
+// 结论判定词：TRUE=成立 / FALSE=不成立，未收录原样展示
+const verdictLabel = v => ({ TRUE: '成立', FALSE: '不成立' }[v] || v)
 
 function submitResolve() {
   emit('command', 'resolve', { reason: resolveReason.value, remark: resolveRemark.value.trim() })

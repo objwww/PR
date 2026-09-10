@@ -12,9 +12,9 @@
         <div class="banner-main">
           <div class="banner-who">
             <span class="banner-label">当前当班</span>
-            <b class="banner-name">{{ snap.onCall || '（空排班，走 fallback 通道）' }}</b>
+            <b class="banner-name">{{ snap.onCall || '（空排班，走兜底通道）' }}</b>
             <el-tag v-if="snap.viaOverride" type="warning" size="small">临时替班</el-tag>
-            <el-tag v-if="snap.viaFallback" type="danger" size="small">fallback 通道</el-tag>
+            <el-tag v-if="snap.viaFallback" type="danger" size="small">兜底通道</el-tag>
           </div>
           <div class="banner-meta">
             <div class="bm-row">
@@ -38,7 +38,7 @@
       </template>
       <el-alert
         v-else type="info" :closable="false"
-        title="尚无排班快照——首启无排班时派发只走 fallback 通道"
+        title="尚无排班快照——首启无排班时派发只走兜底通道"
       />
     </div>
 
@@ -178,7 +178,7 @@
         <!-- ============ 通知通道 ============ -->
         <el-tab-pane label="通知通道" name="channels">
           <div class="blk-head">
-            <span class="blk-title">通知通道<span class="blk-hint">每优先级一条；fallback 恰一条；URL/密钥只配在部署环境变量</span></span>
+            <span class="blk-title">通知通道<span class="blk-hint">每优先级一条；兜底通道恰一条；URL/密钥只配在部署环境变量</span></span>
             <el-button size="small" type="primary" plain @click="channelDialog = true">添加通道</el-button>
           </div>
           <el-table :data="channels" size="small">
@@ -187,9 +187,9 @@
             <el-table-column label="优先级" width="90">
               <template #default="{ row }">P{{ row.priority }}</template>
             </el-table-column>
-            <el-table-column label="fallback" width="100">
+            <el-table-column label="兜底" width="100">
               <template #default="{ row }">
-                <el-tag v-if="row.isFallback" type="warning" size="small">fallback</el-tag>
+                <el-tag v-if="row.isFallback" type="warning" size="small">兜底</el-tag>
                 <span v-else class="muted">—</span>
               </template>
             </el-table-column>
@@ -305,7 +305,7 @@
         <el-form-item label="优先级" required>
           <el-input-number v-model="channelForm.priority" :min="1" style="width: 160px" />
         </el-form-item>
-        <el-form-item label="fallback 通道">
+        <el-form-item label="兜底通道">
           <el-switch v-model="channelForm.isFallback" />
         </el-form-item>
       </el-form>
@@ -326,7 +326,7 @@
           <el-descriptions-item label="名称">{{ activeChannel.name }}</el-descriptions-item>
           <el-descriptions-item label="平台">{{ platformLabel(activeChannel.platform) }}</el-descriptions-item>
           <el-descriptions-item label="优先级">P{{ activeChannel.priority }}</el-descriptions-item>
-          <el-descriptions-item label="fallback">{{ activeChannel.isFallback ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="兜底通道">{{ activeChannel.isFallback ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="webhook 环境变量">{{ activeChannel.envKeyWebhook || '—' }}</el-descriptions-item>
           <el-descriptions-item label="加签密钥变量">{{ activeChannel.envKeySecret || '—' }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ activeChannel.enabled ? '启用' : '停用' }}</el-descriptions-item>
@@ -340,9 +340,9 @@
             <el-form-item label="级别">
               <el-select v-model="test.severity" style="width: 100%">
                 <el-option value="" label="无级别" />
-                <el-option value="critical" label="critical（P0）" />
-                <el-option value="warning" label="warning（P1）" />
-                <el-option value="info" label="info（P2）" />
+                <el-option value="critical" label="P0（critical）" />
+                <el-option value="warning" label="P1（warning）" />
+                <el-option value="info" label="P2（info）" />
               </el-select>
             </el-form-item>
             <el-button type="primary" :disabled="!test.title || !test.body" :loading="saving" @click="sendTest">发送</el-button>

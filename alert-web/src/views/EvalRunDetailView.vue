@@ -21,24 +21,24 @@
       <!-- 概览：全字段 descriptions，digest 可复制 -->
       <div v-if="tab === 'overview'" class="card panel">
         <el-descriptions :column="2" border>
-          <el-descriptions-item label="实验 runId">
+          <el-descriptions-item label="实验 ID">
             <span class="mono">{{ run.runId }}</span>
-            <el-button size="small" text @click="copyText(run.runId, 'runId 已复制')">复制</el-button>
+            <el-button size="small" text @click="copyText(run.runId, '实验 ID 已复制')">复制</el-button>
           </el-descriptions-item>
           <el-descriptions-item label="状态">
             <StatusBadge :status="badgeState(run.state)" />
           </el-descriptions-item>
           <el-descriptions-item label="数据集版本">{{ run.datasetVersion ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="模型">{{ run.model ?? '—' }}</el-descriptions-item>
-          <el-descriptions-item label="Prompt 版本">{{ run.promptVersion ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="提示词版本">{{ run.promptVersion ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="案例数">{{ run.caseCount ?? '—' }}</el-descriptions-item>
-          <el-descriptions-item label="registry digest">
+          <el-descriptions-item label="镜像摘要（registry digest）">
             <span class="mono break">{{ run.registryDigest ?? '—' }}</span>
-            <el-button v-if="run.registryDigest" size="small" text @click="copyText(run.registryDigest, 'registry digest 已复制')">复制</el-button>
+            <el-button v-if="run.registryDigest" size="small" text @click="copyText(run.registryDigest, '镜像摘要已复制')">复制</el-button>
           </el-descriptions-item>
-          <el-descriptions-item label="config digest">
+          <el-descriptions-item label="配置摘要（config digest）">
             <span class="mono break">{{ run.configDigest ?? '—' }}</span>
-            <el-button v-if="run.configDigest" size="small" text @click="copyText(run.configDigest, 'config digest 已复制')">复制</el-button>
+            <el-button v-if="run.configDigest" size="small" text @click="copyText(run.configDigest, '配置摘要已复制')">复制</el-button>
           </el-descriptions-item>
           <el-descriptions-item label="开始时间">{{ fmtTime(run.startedAt) }}</el-descriptions-item>
           <el-descriptions-item label="结束时间">{{ fmtTime(run.finishedAt) }}</el-descriptions-item>
@@ -55,7 +55,7 @@
       <div v-else-if="tab === 'cases'" class="card panel">
         <div class="case-filter">
           <el-input
-            v-model="verdict" class="w-verdict" placeholder="按 verdict 原值筛选" clearable
+            v-model="verdict" class="w-verdict" placeholder="按判定（verdict）原值筛选" clearable
             @keyup.enter="applyVerdict" @clear="applyVerdict"
           />
           <el-button :loading="casesLoading" @click="applyVerdict">查询</el-button>
@@ -71,9 +71,9 @@
                 <div v-else class="fs-none">无失败样本</div>
               </template>
             </el-table-column>
-            <el-table-column prop="scenarioId" label="场景 scenarioId" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="scenarioId" label="场景 ID（scenarioId）" min-width="160" show-overflow-tooltip />
             <el-table-column prop="roundNo" label="轮次" width="70" align="right" />
-            <el-table-column label="verdict" width="130">
+            <el-table-column label="判定" width="130">
               <template #default="{ row }">
                 <StatusBadge :status="row.verdict" />
               </template>
@@ -95,7 +95,7 @@
               <template #default="{ row }">{{ row.latencyMs == null ? '—' : `${row.latencyMs} ms` }}</template>
             </el-table-column>
             <template #empty>
-              <EmptyState kind="empty" :description="verdict ? '当前 verdict 筛选无案例' : '暂无案例'" />
+              <EmptyState kind="empty" :description="verdict ? '当前判定筛选无案例' : '暂无案例'" />
             </template>
           </el-table>
           <div class="pager">

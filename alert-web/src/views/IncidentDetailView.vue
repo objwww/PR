@@ -51,14 +51,14 @@
                 <router-link v-if="runId" :to="`/runs/${runId}`"><code>{{ runId }}</code></router-link>
                 <span v-else>未发起</span>
               </el-descriptions-item>
-              <el-descriptions-item label="Incident Key"><code>{{ d.incidentKey ?? '—' }}</code></el-descriptions-item>
+              <el-descriptions-item label="告警键（Incident Key）"><code>{{ d.incidentKey ?? '—' }}</code></el-descriptions-item>
             </el-descriptions>
           </div>
 
           <div v-if="d.run" class="card block">
             <h3>调查运行状态</h3>
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="Run ID"><code>{{ d.run.runId }}</code></el-descriptions-item>
+              <el-descriptions-item label="调查 ID"><code>{{ d.run.runId }}</code></el-descriptions-item>
               <el-descriptions-item label="状态"><StatusBadge :status="d.run.state" /></el-descriptions-item>
               <el-descriptions-item label="开始时间">{{ fmtTime(d.run.startedAt) }}</el-descriptions-item>
               <el-descriptions-item label="结束时间">{{ fmtTime(d.run.finishedAt) }}</el-descriptions-item>
@@ -72,7 +72,7 @@
           <div v-if="runId" class="card block">
             <h3>关联调查</h3>
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="Run ID"><code>{{ runId }}</code></el-descriptions-item>
+              <el-descriptions-item label="调查 ID"><code>{{ runId }}</code></el-descriptions-item>
               <el-descriptions-item label="状态">
                 <StatusBadge v-if="runState" :status="runState" />
                 <el-tag v-else type="primary" disable-transitions>调查中</el-tag>
@@ -104,9 +104,9 @@
                 v-for="ev in timeline" :key="ev.eventId" :name="ev.eventId"
                 :title="`${fmtTime(ev.startsAt)} · ${ev.status === 'firing' ? '触发' : '恢复'}${ev.severity ? ' · ' + ev.severity : ''}`"
               >
-                <h4 class="ev-sub">labels</h4>
+                <h4 class="ev-sub">标签（labels）</h4>
                 <KvTable :data="ev.labels" />
-                <h4 class="ev-sub">annotations</h4>
+                <h4 class="ev-sub">注解（annotations）</h4>
                 <KvTable :data="ev.annotations" />
               </el-collapse-item>
             </el-collapse>

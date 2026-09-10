@@ -14,7 +14,7 @@
         <div class="stat card clickable" @click="go('/runs')">
           <span class="stat-label">活跃调查</span>
           <span class="stat-num">{{ num(summary?.activeRuns) }}</span>
-          <span class="stat-sub">进行中 Run → 调查队列</span>
+          <span class="stat-sub">进行中的调查 → 调查队列</span>
         </div>
         <div class="stat card clickable" @click="go('/runs')">
           <span class="stat-label">待审查</span>
@@ -29,7 +29,7 @@
         <div class="stat card clickable" @click="go('/cases')">
           <span class="stat-label">开放处置</span>
           <span class="stat-num">{{ num(summary?.openCases) }}</span>
-          <span class="stat-sub">未闭环 Case → 处置中心</span>
+          <span class="stat-sub">未闭环处置单 → 处置中心</span>
         </div>
         <div class="stat card clickable" @click="go('/notifications')">
           <span class="stat-label">通知待投 / 24h 失败</span>

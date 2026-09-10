@@ -47,6 +47,11 @@ const STATUS_MAP = {
   FAILED_TERMINAL: { text: '已失败', type: 'danger' },
   DEAD: { text: '死信', type: 'danger' },
   STALE: { text: '已换代', type: 'info' },
+  // 无数据态与评测判定词
+  NODATA: { text: '无数据', type: 'info' },
+  NO_DATA: { text: '无数据', type: 'info' },
+  TRUE: { text: '成立', type: 'success' },
+  FALSE: { text: '不成立', type: 'info' },
 }
 
 // severity 五级：自定义色（Arco 第 6 级），plain 底不喧宾夺主
@@ -55,7 +60,7 @@ const SEVERITY_MAP = {
   P1: { text: 'P1', color: '#fff3e8', style: { color: 'var(--sev-p1)' } },
   P2: { text: 'P2', color: '#fdf6e4', style: { color: 'var(--sev-p2)' } },
   P3: { text: 'P3', color: '#e8f1ff', style: { color: 'var(--sev-p3)' } },
-  INFO: { text: 'INFO', color: '#f2f4f8', style: { color: 'var(--sev-info)' } },
+  INFO: { text: '提示', color: '#f2f4f8', style: { color: 'var(--sev-info)' } },
 }
 
 const conf = computed(() => {
