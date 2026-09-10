@@ -80,8 +80,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * NativeInvestigationExecutor UT（M6-01 落点 5，驱动模型）：worker 领取
- * NATIVE_INVESTIGATE driver task 后由本执行器驱动 Native 全链——提案读 active
- * bundle {@code native.proposal} 段（缺失 fail-closed，非法经 Supervisor
+ * NATIVE_INVESTIGATE driver task 后由本执行器驱动 Native 全链——提案读 Run 固定
+ * 路由 digest 的 bundle {@code native.proposal} 段（EN-03 准入固定：drive 期不读
+ * active，指针移动不改在跑 Run 的提案源 S11；缺失 fail-closed，非法经 Supervisor
  * PROPOSAL_REJECTED run FAILED）→ DAG 任务逐个驱动（回放未命中 = 缺源降级 DEAD
  * 续跑，AM4 语义）→ 冻结证据快照（configDigest=路由 bundle digest）→ advance 入
  * REPORTING → NativeRcaAgent → ReportAssembler → NativeReportAdapter → 复用
@@ -161,7 +162,6 @@ class NativeInvestigationExecutorTest {
     void frozenWindowIsUsedInsteadOfExecutionClock() {
         Instant mintedAt = NOW.minusSeconds(120);
         UUID runId = castNativeRunWithInputs(mintedAt);
-        bundles.publish(nativeBundle(proposal()));
         NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
 
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
@@ -232,8 +232,8 @@ class NativeInvestigationExecutorTest {
     @Test
     @DisplayName("全链：提案落图→驱动（回放 MISS 降级 DEAD）→快照→REPORTING→报告 engine=NATIVE")
     void fullChainProducesNativeReport() {
-        UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(proposal()));
+        Digest bundleDigest = bundles.publish(nativeBundle(proposal()));
+        UUID runId = castNativeRunWithDigest(bundleDigest);
         seedAnnotatedClaims(runId);
 
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
@@ -264,7 +264,7 @@ class NativeInvestigationExecutorTest {
                 .isEqualTo(RcaRunState.REPORTING);
         assertThat(snapshots.frozen).hasSize(1);
         assertThat(snapshots.frozen.get(0).configDigest())
-                .isEqualTo(Digest.sha256Of("bundle-v1").hex());
+                .isEqualTo(bundleDigest.hex());
         assertThat(claims.appended).hasSize(1);
 
         // 收尾复用 finishTask：报告 + 发布 + outbox 同链落库（FUT-49 共用出口）
@@ -279,9 +279,10 @@ class NativeInvestigationExecutorTest {
     }
 
     @Test
-    @DisplayName("提案缺失 fail-closed：无 active bundle → PROPOSAL_MISSING 终态，run 不被驱动")
+    @DisplayName("提案缺失 fail-closed：路由 digest 无 bundle 行 → PROPOSAL_MISSING（active 在场也不代用——EN-03 身份锚）")
     void proposalMissingFailsClosed() {
-        UUID runId = castNativeRun();
+        bundles.publish(nativeBundle(proposal()));   // active 在场且提案合法
+        UUID runId = castNativeRunWithDigest(Digest.sha256Of("ghost-bundle"));
 
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
@@ -304,9 +305,8 @@ class NativeInvestigationExecutorTest {
     @Test
     @DisplayName("提案非法 fail-closed：PROPOSAL_REJECTED → Supervisor 置 run FAILED，执行器终态")
     void proposalRejectedFailsClosed() {
-        UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(Map.of("schema_version", "bogus", "tasks", List.of(),
-                "edges", List.of())));
+        UUID runId = castNativeRunWithBundle(nativeBundle(Map.of("schema_version", "bogus",
+                "tasks", List.of(), "edges", List.of())));
 
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
@@ -343,7 +343,6 @@ class NativeInvestigationExecutorTest {
     @DisplayName("EX-A3 b4 阶段④：任务与结果已提交 → 重驱零动作（重放读取既有结论）")
     void stage4_committedTasksAreSkipped() {
         UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(proposal()));
         NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
@@ -367,7 +366,6 @@ class NativeInvestigationExecutorTest {
     @DisplayName("EX-A3 b3 阶段③：结果已落库任务未完成 → result_ref 幂等收尾，零触网零新行")
     void stage3_resultRefIdempotentCompletionWithoutNetwork() {
         UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(proposal()));
         NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
@@ -400,7 +398,6 @@ class NativeInvestigationExecutorTest {
     @DisplayName("EX-A3 b2 阶段②：请求已发出结果未知 → 旧行 UNKNOWN 预算占用保留 + 新物理请求成对（不免费重发）")
     void stage2_pendingOrphanMarkedUnknownAndRedrivenAsNewBudgetedCall() {
         UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(proposal()));
         com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger budgetLedger =
                 new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger();
         NativeInvestigationExecutor driving =
@@ -462,7 +459,6 @@ class NativeInvestigationExecutorTest {
     @DisplayName("EX-A3 b1 阶段①：任务开始未取得发送资格（无账本行）→ 常规重驱；FAILED 回执孤儿 → DEAD 不重复调用")
     void stage1_noReceiptOrphansAndFailedReceipts() {
         UUID runId = castNativeRun();
-        bundles.publish(nativeBundle(proposal()));
         NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
         RcaTask driver = stores.tasks.findByRunId(runId).get(0);
         driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
@@ -520,15 +516,48 @@ class NativeInvestigationExecutorTest {
                 .filter(t -> t.state() == RcaTaskState.RUNNING)).as("无永久 RUNNING").isEmpty();
     }
 
+    @Test
+    @DisplayName("EN-03 S11 调用固定：指针铸后移到 v2 → 旧 Run 仍按 v1 提案驱动（drive 期不读 active）")
+    void pointerMoveDoesNotReshapeRunningRun() {
+        Digest v1 = bundles.publish(nativeBundle(proposal()));
+        UUID runId = castNativeRunWithDigest(v1);
+        Digest v2 = bundles.publish(nativeBundle(proposalV2SingleTask()));
+        assertThat(v2).isNotEqualTo(v1);
+
+        NativeInvestigationExecutor driving = executorWithEvidenceProducingTools();
+        RcaTask driver = stores.tasks.findByRunId(runId).get(0);
+        driving.execute(driver, stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        // 提案源 = 铸时 v1（三任务 DAG 落图）；读 active 会落 v2 单任务形状（S11 违约）
+        assertThat(stores.tasks.findByRunId(runId))
+                .filteredOn(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                .hasSize(3);
+        // 快照身份面 = 铸时 v1 digest（不随指针漂移）
+        assertThat(snapshots.frozen).hasSize(1);
+        assertThat(snapshots.frozen.get(0).configDigest()).isEqualTo(v1.hex());
+    }
+
     // ------------------------------------------------------------------ 夹具
 
-    /** 铸 NATIVE run + driver task（模拟投影铸造点产物；路由四列随行） */
+    /** 铸 NATIVE run + driver task（生产同型：准入读指针 → run 固定该 bundle digest） */
     private UUID castNativeRun() {
+        return castNativeRunWithBundle(nativeBundle(proposal()));
+    }
+
+    /** 先发布指定内容（指针落下）再铸造——路由 digest = 该 bundle digest（准入固定面） */
+    private UUID castNativeRunWithBundle(Map<String, Object> content) {
+        return castNativeRunWithDigest(bundles.publish(content));
+    }
+
+    /** 以指定 digest 铸造（EN-03 身份锚用例：可铸无行 ghost digest 验 fail-closed） */
+    private UUID castNativeRunWithDigest(Digest routingDigest) {
         UUID runId = UUID.randomUUID();
         RcaRun run = new RcaRun(runId, incidentId, GENERATION, RunTrigger.INITIAL,
                 RcaRunState.QUEUED, Digest.sha256Of("material"), NOW, NOW, null, null, null);
         stores.runs.insertRouted(run, new RcaRunRouting(RcaEngine.NATIVE,
-                Digest.sha256Of("bundle-v1"), "g:checkout", 42, "BUCKETED_NATIVE"));
+                routingDigest, "g:checkout", 42, "BUCKETED_NATIVE"));
         insertDriverTask(runId);
         markDriverLeased(runId);
         return runId;
@@ -536,11 +565,12 @@ class NativeInvestigationExecutorTest {
 
     /** EX-A0 铸点：路由四列 + 调查输入三列（输入 digest/冻结窗口）随行落库 */
     private UUID castNativeRunWithInputs(Instant mintedAt) {
+        Digest routingDigest = bundles.publish(nativeBundle(proposal()));
         UUID runId = UUID.randomUUID();
         RcaRun run = new RcaRun(runId, incidentId, GENERATION, RunTrigger.INITIAL,
                 RcaRunState.QUEUED, Digest.sha256Of("material"), NOW, NOW, null, null, null);
         stores.runs.insertRouted(run, new RcaRunRouting(RcaEngine.NATIVE,
-                        Digest.sha256Of("bundle-v1"), "g:checkout", 42, "BUCKETED_NATIVE"),
+                        routingDigest, "g:checkout", 42, "BUCKETED_NATIVE"),
                 com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
                         stores.incidents.findById(incidentId).orElseThrow(), mintedAt));
         insertDriverTask(runId);
@@ -598,6 +628,15 @@ class NativeInvestigationExecutorTest {
                 "tasks", tasks, "edges", List.of());
     }
 
+    /** v2 提案：单任务（EN-03 S11 用——与 v1 三任务形状可区分） */
+    private static Map<String, Object> proposalV2SingleTask() {
+        return Map.of("schema_version",
+                com.objwww.pr.control.alert.domain.dag.PlanProposal.SCHEMA_VERSION,
+                "tasks", List.of(Map.of("key", "investigate-metrics", "type", "metrics@1",
+                        "inputs", List.of())),
+                "edges", List.of());
+    }
+
     private static Map<String, Object> nativeBundle(Map<String, Object> proposal) {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("policy_version", "policy-2026-09");
@@ -646,10 +685,11 @@ class NativeInvestigationExecutorTest {
         final List<ConfigBundle> rows = new ArrayList<>();
         Digest active;
 
-        void publish(Map<String, Object> content) {
+        Digest publish(Map<String, Object> content) {
             ConfigBundle bundle = ConfigBundle.of(content, "op", NOW);
             rows.add(bundle);
             active = bundle.bundleDigest();
+            return bundle.bundleDigest();
         }
 
         @Override

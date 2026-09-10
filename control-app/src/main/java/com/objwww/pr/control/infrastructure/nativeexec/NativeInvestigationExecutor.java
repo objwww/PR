@@ -52,7 +52,8 @@ import java.util.UUID;
 /**
  * Native 调查执行器（M6-01 落点 5，驱动模型）：worker 领取
  * {@code NATIVE_INVESTIGATE} driver task 后由本类驱动 Native 全链——
- * 提案（active bundle {@code native.proposal} 段；缺失/非法 fail-closed，模型无
+ * 提案（Run 固定路由 digest 的 bundle {@code native.proposal} 段；EN-03 准入固定：
+ * drive 期不读 active，指针移动不改在跑 Run 的提案源；缺失/非法 fail-closed，模型无
  * 调度权 INV-AM4-2 顺延）→ {@link DeterministicSupervisor#startRun} 落图 →
  * DAG 调查任务逐个驱动（复用 AM4 三 Agent 与只读工具面；单任务失败 = 缺源降级
  * DEAD 续跑；EX-A3 F08/F09 四阶段恢复：READY 正常驱动，LEASED/RUNNING 崩溃孤儿
@@ -168,10 +169,12 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
 
         // EX-A1 F15：run 开局限额一次落账（幂等；消费点=agent 的 TOOL_CALL 硬闸）
         budgetGate.openRun(run.id(), budgetLimits);
-        Optional<Map<String, Object>> proposal = proposalOf();
+        Optional<Map<String, Object>> proposal = proposalOf(configDigest);
         if (proposal.isEmpty()) {
             return ExecutionResult.terminal("PROPOSAL_MISSING",
-                    "active bundle 缺 native.proposal 段（fail-closed，模型无调度权）");
+                    "路由 bundle 缺 native.proposal 段（fail-closed，模型无调度权，"
+                            + "EN-03 按 Run 固定 digest 读、不读 active）: "
+                            + configDigest.hex());
         }
 
         // ② 启动（幂等）：提案非法 → Supervisor 已置 run FAILED，本侧终态诚实记账
@@ -233,18 +236,21 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
 
     // ------------------------------------------------------------------ 内部
 
-    /** active bundle 的 native.proposal 段（无 bundle/无段/形状非法 = empty，fail-closed） */
-    private Optional<Map<String, Object>> proposalOf() {
-        return bundles.activeDigest().flatMap(active ->
-                bundles.findByDigest(active).flatMap(bundle -> {
-                    if (!(bundle.content().get(NATIVE_SECTION) instanceof Map<?, ?> section)) {
-                        return Optional.<Map<String, Object>>empty();
-                    }
-                    if (!(section.get(PROPOSAL_KEY) instanceof Map<?, ?> raw)) {
-                        return Optional.<Map<String, Object>>empty();
-                    }
-                    return Optional.of(asStringKeyMap(raw));
-                }));
+    /**
+     * Run 固定 digest 的 bundle 的 native.proposal 段（EN-03 准入固定：drive 期一律
+     * 按铸造时路由 digest 读，禁读 active——指针移动不改在跑 Run 的提案源，
+     * S11/P09/R07；无 bundle/无段/形状非法 = empty，fail-closed）。
+     */
+    private Optional<Map<String, Object>> proposalOf(ConfigDigest configDigest) {
+        return bundles.findByDigest(new Digest(configDigest.hex())).flatMap(bundle -> {
+            if (!(bundle.content().get(NATIVE_SECTION) instanceof Map<?, ?> section)) {
+                return Optional.<Map<String, Object>>empty();
+            }
+            if (!(section.get(PROPOSAL_KEY) instanceof Map<?, ?> raw)) {
+                return Optional.<Map<String, Object>>empty();
+            }
+            return Optional.of(asStringKeyMap(raw));
+        });
     }
 
     private static Map<String, Object> asStringKeyMap(Map<?, ?> raw) {
