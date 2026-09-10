@@ -62,6 +62,8 @@ public abstract class PostgresITBase {
             "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
             "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox",
             "eval_case_result", "eval_run",
+            // V80（EV-03 阶段事件）——BA-41 同律
+            "eval_phase_event",
             // V20~V29（AM5）：rca_event 为 V28 分区父表，TRUNCATE 级联全部分区
             "dataset_version", "case_version", "case_family_partition",
             "golden_candidate", "golden_review_event",

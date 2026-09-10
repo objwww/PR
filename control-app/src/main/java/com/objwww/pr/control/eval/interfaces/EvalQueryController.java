@@ -14,16 +14,19 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * UI-5 评测只读查询投影 API（/api/eval/**；全 GET 零写面，ROLE_OPERATOR 归
+ * UI-5/EV-03 评测只读查询投影 API（/api/eval/**；全 GET 零写面，ROLE_OPERATOR 归
  * SecurityFilterChain 矩阵，与 /api/v1/** 同式）。DTO 为 record（EvalQueryService 内）；
  * 400/404 应答沿用 {"error": ...} 惯例。
  *
  * <ul>
  *   <li>GET /api/eval/runs——eval_run 列表（state 过滤 + 键集游标，limit 默认 50
- *       上限 200，排序 started_at DESC）；</li>
- *   <li>GET /api/eval/runs/{runId}——单对象 + caseCount；未知 id → 404；</li>
+ *       上限 200，排序 started_at DESC）；EV-03 起携带 displayName/mode/caseCount/
+ *       totalScenarios/quality（比率三件套）/facets（状态分面）/asOf；</li>
+ *   <li>GET /api/eval/runs/{runId}——单对象 + caseCount + 同上分面与 asOf；
+ *       未知 id → 404；</li>
  *   <li>GET /api/eval/runs/{runId}/cases——逐案例评分（verdict 过滤 + 键集游标，
- *       排序 scenario_id/round_no ASC）；未知 run → 404；</li>
+ *       排序 scenario_id/round_no ASC）；EV-03 起携带 caseExecutionId（= 案例行
+ *       稳定 uuid）与 rcaRunId/scoredReportId 关联链；未知 run → 404；</li>
  *   <li>GET /api/eval/datasets——数据集版本清单（case_version 计数 + 族聚合；
  *       RLS 面下只含 control_app 可见的非 HOLDOUT 行）。</li>
  * </ul>
