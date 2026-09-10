@@ -137,6 +137,28 @@ PagerDuty/incident.io/Rootly/ilert 只作功能对标，不接入。表内星数
 
 本次只修改方案与测试规格。增强编码前提统一为EX13/13收口且C门通过；此外RAG需要A、Skill需要B与独立评测、MCP需要数据源与只读spike。各条件是交集，不是绕过总门的并行开工许可。用户所述“已修复”在实施时以实际验收工件确认，不由本文代签。原R8/R9/R14工期在新增契约分解后重估，测试工作列入卡内，不另造无依据压缩承诺。
 
+### 6.1 与 R7 并行：依赖自检与即时开工规约（2026-09-11 用户裁定）
+
+**总原则：前置一满足就立即动工，不等 R7 整线收口；每卡动工前必须先完成自检并留证。**
+
+| 卡 | 开工自检条件（全部满足才动工，检测锚可机器验证） | 备注 |
+|---|---|---|
+| EN-01/02/03、EN-09 契约部分 | EX 13/13 + C 门（**已满足**，自检只需引用 EX 交接包锚点） | 立即开工 |
+| EN-04 热更新 | R7 的 X1（持久角色绑定/round）与 X4（状态机 PRIMARY_READY/WAITING_CHILDREN）编码完成——检测锚：①`rca_task` 存在 `round_id` 列（`\d rca_task`）；②`docs/告警-R7执行日志-*.md` 对应卡块记录完成且测试绿；③`mvn -pl control-app test` 全绿 | **编码**自检通过即动工；**测试执行排在 R7 round 之后**（用户裁定：热更新要在 R7 之后测），H01～16 例在 R7 round 可用前标 NOT_RUN，禁止用 stub 冒充 |
+| EN-05 真实工具 | R7 卡 7（R7a-2 ActionGuard 组装）完成——检测锚：ActionGuard 类存在于执行链 + R7 日志卡 7 块 + 测试绿 | 自检通过即动工 |
+| EN-06/07/08/10 | 各自 §十二表内前置 + 上两行同款自检（锚+日志+测试绿） | 同款规则，不一等二 |
+
+**并行执行边界（违反即停手）：**
+1. **工作区隔离（分支规约，照抄执行）**：
+   - **R7 线**：在主工作区 `E:\kimiCode` 直接作业，分支 `main`（单执行者沿用 EX 线先例）。
+   - **EN 线**：禁止进 `E:\kimiCode` 写代码。开工第一步建独立 worktree：
+     `git worktree add E:\kimiCode-en -b en/enhance-line main`（分支名固定 `en/enhance-line`，工作目录固定 `E:\kimiCode-en`），EN 全程只在该目录读写；195 部署同步也从该目录打包。
+   - **合并回交**：EN 每卡完成后在 `en/enhance-line` 上自测绿 → 推 origin（网络恢复后）→ 主会话核验（跑测试、查越界、对自检留证）→ 主会话执行 `git merge --no-ff en/enhance-line` 回 main。**EN 执行者自己不 merge 回 main、不直接在 main 上提交。**
+   - **变基纪律**：R7 每有提交进 main，EN 开工下一卡前先 `git rebase main`（或合并 main），冲突文件若涉及 R7 在改的面（NativeInvestigationExecutor.drive/PlanCompiler/DeterministicSupervisor/CommandService），停手报主会话裁决，不自作主张改语义。
+2. **Flyway 号段（三线定死，2026-09-11 用户裁定）**：R7=V46 起；EN=V60 起；EV/DR（评测与故障演练线）=V80 起。三线互不抢号，用前仍先 `ls` 确认。
+3. **195 验收窗串行（三线）**：真 PG/真模型/部署窗口 R7/EN/EV-DR 三线排队，不并发部署 control-app；演练注入执行期间，R7/EN 的真机验证一律排队等窗。
+4. **自检留证**：每次动工前把自检命令输出（检测锚实测结果）写进 EN 执行日志对应卡块——"我以为满足了"不算数。
+
 ## 七、明确不做（v1.1 增补）
 
 不引入 Redis/MQ（已裁定）；不引入独立 MCP gateway 进程（Unla/MCPJungle/ContextForge 只抄机制）；不抄 IDE 系"改配置重启会话"热更新模型（调研 §3.6 已证普遍不可靠）；不接 SaaS 值班 MCP；不做 HOLDOUT 入库；不做绕过盲评门的晋升通道；不做第二条工具调用路。
