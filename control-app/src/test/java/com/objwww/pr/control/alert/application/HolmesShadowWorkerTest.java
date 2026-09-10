@@ -155,7 +155,8 @@ class HolmesShadowWorkerTest {
         }
 
         @Override
-        public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at) {
+        public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+                String by, Instant at) {
             return true;
         }
     }

@@ -39,7 +39,15 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
         repo = new PostgresConfigBundleRepository(controlDataSource());
         service = new ConfigBundleService(repo,
                 new com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository(
+                        controlDataSource()),
+                new com.objwww.pr.control.infrastructure.persistence.PostgresReleaseQualificationRepository(
                         controlDataSource()));
+    }
+
+    /** EN-02：为候选授予 PASS 资格（激活门的测试前置） */
+    private void grantPass(Digest candidate) {
+        service.grantQualification(candidate, null, "ef".repeat(32), "runner-it",
+                "grader-it", "PASS", "MATCHED", "scope:it", "it-grader");
     }
 
     private static Map<String, Object> content(String promptVersion) {
@@ -56,9 +64,11 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
         assertThat(first.revision()).isEqualTo(1L);
         assertThat(second.revision()).isEqualTo(2L);
 
-        // 激活 d1 → d2 → 回滚 d1：pointer 全程 CAS
-        assertThat(service.activate(first.bundleDigest(), "op-1").moved()).isTrue();
-        assertThat(service.activate(second.bundleDigest(), "op-1").moved()).isTrue();
+        // 激活 d1 → d2 → 回滚 d1：pointer 全程资格化 CAS（EN-02：先授 PASS 资格）
+        grantPass(first.bundleDigest());
+        grantPass(second.bundleDigest());
+        assertThat(service.activate(first.bundleDigest(), 0L, "op-1").moved()).isTrue();
+        assertThat(service.activate(second.bundleDigest(), 1L, "op-1").moved()).isTrue();
 
         // 回滚前快照两行历史全貌（admin 视角 to_jsonb；BA-41：SimplePropertyRowMapper
         // 不支持 Map.class，单列 jsonb 取文本——jsonb 输出确定性，字符串全等更强）
@@ -68,7 +78,7 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
 
         Instant rollbackAt = Instant.now();
         ConfigBundleService.ActivationResult rollback =
-                service.rollback(first.bundleDigest(), "op-2");
+                service.rollback(first.bundleDigest(), 2L, "op-2");
 
         assertThat(rollback.moved()).isTrue();
         assertThat(repo.activeDigest()).contains(first.bundleDigest());
@@ -112,12 +122,20 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
     void activationIsCasAndRacersLoseWithoutSideEffects() {
         ConfigBundleService.PublishResult published = service.publish(content("v7"), "op-1");
 
-        // 未激活态首激活：expectedCurrent=null 语义（IS NOT DISTINCT FROM NULL）
-        assertThat(repo.activate(published.bundleDigest(), null, "op-1", Instant.now())).isTrue();
+        // EN-02 资格化 CAS：未激活态 expectedRevision=0；语句级 EXISTS 复验资格
+        assertThat(repo.activateQualified(published.bundleDigest(), 0L, "op-1",
+                Instant.now()))
+                .as("无 PASS 证明必须拒绝（V61 门，语句级 EXISTS 复验）")
+                .isFalse();
+        grantPass(published.bundleDigest());
+        assertThat(repo.activateQualified(published.bundleDigest(), 0L, "op-1",
+                Instant.now())).isTrue();
 
-        // 旁路/竞败：期望 stale null 但实际已激活 → 0 行，指针不动
+        // 旁路/竞败：期望 stale 0 但实际已激活（rev 1）→ 0 行，指针不动；ghost 无资格同拒
         Digest ghost = Digest.sha256Of("ghost");
-        assertThat(repo.activate(ghost, null, "racer", Instant.now())).isFalse();
+        assertThat(repo.activateQualified(ghost, 0L, "racer", Instant.now())).isFalse();
+        assertThat(repo.activateQualified(published.bundleDigest(), 0L, "racer",
+                Instant.now())).isFalse();
         assertThat(repo.activeDigest()).contains(published.bundleDigest());
 
         // 竞败零副作用：ghost 从未成行
@@ -127,7 +145,8 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
     @Test
     void v24GrantsFreezeImmutableHistoryAndPointer() {
         ConfigBundleService.PublishResult published = service.publish(content("v7"), "op-1");
-        service.activate(published.bundleDigest(), "op-1");
+        grantPass(published.bundleDigest());
+        service.activate(published.bundleDigest(), 0L, "op-1");
 
         // bundle 历史：control_app 有 select+insert，UPDATE/DELETE 授权面为 0
         assertThatExceptionOfType(DataAccessException.class)

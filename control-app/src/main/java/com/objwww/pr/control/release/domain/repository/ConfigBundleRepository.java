@@ -30,23 +30,28 @@ public interface ConfigBundleRepository {
     Optional<ActivePointer> findActivePointer();
 
     /**
-     * 单事务原子激活（无半激活态）：pointer 行 CAS——仅当当前值恰为 {@code expectedCurrent}
-     * （null = 未激活态）时落位。false = 并发竞争败者（调用方 409）。
+     * 单事务原子激活（EN-02 资格化，无半激活态）：expectedActiveRevision = 客户端
+     * 预期的当前激活 revision（0 = 未激活态约定）——服务端不替调用方推算预期，
+     * 0 行 = 预期陈旧（并发竞争败者，调用方 409）。false = 竞争败者或预期不匹配。
      */
-    boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at);
+    boolean activateQualified(Digest toDigest, long expectedActiveRevision, String by,
+            Instant at);
 
     /**
      * 激活/回滚事实（EX-B1）：与 pointer CAS 同事务落 change_event——配置生效与变更
      * 证据同生死（评审 B1：控制器事后写事件失败 = 生效但证据缺失）。CAS 败者事务内
      * 零插入；幂等重放在服务层早退，不触本方法。rollbackOf 仅 ROLLBACK 行携带
      * （回滚前生效 digest），ACTIVATE 为 null。
+     *
+     * <p>EN-02：实现必须在<b>同一事务</b>内重验目标资格未撤销（与撤销行锁串行化，
+     * P07"事务内重验拒绝陈旧资格"）——无有效 PASS 资格即零移动零事实。
      */
     record ActivationFact(String action, String service, String environment, Digest rollbackOf) {
     }
 
-    /** 带 ChangeFact 记档的激活；未升级实现退化为纯 CAS（4 参），事实面不强制 */
-    default boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at,
-            ActivationFact fact) {
-        return activate(toDigest, expectedCurrent, by, at);
+    /** 带 ChangeFact 记档的资格化激活；事实面不强制 */
+    default boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+            String by, Instant at, ActivationFact fact) {
+        return activateQualified(toDigest, expectedActiveRevision, by, at);
     }
 }

@@ -83,8 +83,9 @@ public abstract class PostgresITBase {
             "run_budget_state", "run_budget_entry",
             // V40（EX-B1 变更事实）——BA-41 同律（config_bundle 两表仍由组件测试自管）
             "change_event",
-            // V60（EN-01 发布资产）——BA-41 同律：release_asset 无种子行，入清单统一清场
-            "release_asset",
+            // V60（EN-01 发布资产）+ V61（EN-02 发布资格）——BA-41 同律：
+            // 两表无种子行，入清单统一清场（qualification 的 FK 由单语句 CASCADE 消化）
+            "release_asset", "release_qualification",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
             "duty_override", "duty_channel", "duty_member", "duty_schedule");
@@ -208,6 +209,23 @@ public abstract class PostgresITBase {
     /** admin 计数（断言 DB 全貌用，绕开角色视角） */
     protected long count(String table) {
         return adminJdbc.sql("SELECT count(*) FROM " + table).query(Long.class).single();
+    }
+
+    /** EN-02 资格门 fixture：为目标 digest 直插一条未撤销 PASS 证明（admin 面，
+     *  绕过服务门——仓储级激活种子专用；门语义见 V61 头注） */
+    protected static void grantPassQualification(Digest candidate) {
+        adminJdbc.sql("""
+                INSERT INTO release_qualification (
+                    id, candidate_digest, dataset_manifest_digest,
+                    runner_version, grader_version, quality_verdict, usage_status,
+                    granted_scope, granted_by, granted_at)
+                VALUES (:id, :c, :ds, 'runner-it', 'grader-it', 'PASS', 'UNKNOWN',
+                        'it-scope', 'it', now())
+                """)
+                .param("id", UUID.randomUUID())
+                .param("c", candidate.hex())
+                .param("ds", "e".repeat(64))
+                .update();
     }
 
     // ------------------------------------------------------------------ M2 修复链路种子助手（CT-22/25/27/28/29 共用）

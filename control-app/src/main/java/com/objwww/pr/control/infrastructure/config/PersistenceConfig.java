@@ -274,12 +274,21 @@ public class PersistenceConfig {
                 dataSource);
     }
 
+    /** EN-02（V61）：发布资格仓储——activate/rollback 资格门的数据面 */
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.ReleaseQualificationRepository releaseQualificationRepository(
+            DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresReleaseQualificationRepository(
+                dataSource);
+    }
+
     @Bean
     public com.objwww.pr.control.release.application.ConfigBundleService configBundleService(
             com.objwww.pr.control.release.domain.repository.ConfigBundleRepository repository,
-            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository releaseAssetRepository) {
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository releaseAssetRepository,
+            com.objwww.pr.control.release.domain.repository.ReleaseQualificationRepository releaseQualificationRepository) {
         return new com.objwww.pr.control.release.application.ConfigBundleService(repository,
-                releaseAssetRepository);
+                releaseAssetRepository, releaseQualificationRepository);
     }
 
     // M5-10 Canary 决策审计追加面（V25；BA-45：195 真启动实证装配缺口——canaryRouter

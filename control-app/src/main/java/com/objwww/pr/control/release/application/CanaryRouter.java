@@ -219,7 +219,8 @@ public class CanaryRouter {
         }
 
         @Override
-        public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at) {
+        public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+                                         String by, Instant at) {
             throw new UnsupportedOperationException("holmesOnly 路由器不触仓储");
         }
     }

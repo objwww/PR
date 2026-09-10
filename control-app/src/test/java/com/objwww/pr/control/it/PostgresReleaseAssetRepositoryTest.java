@@ -2,6 +2,7 @@ package com.objwww.pr.control.it;
 
 import com.objwww.pr.control.infrastructure.persistence.PostgresConfigBundleRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresReleaseQualificationRepository;
 import com.objwww.pr.control.release.application.ConfigBundleService;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.control.release.domain.model.ReleaseAsset;
@@ -44,7 +45,8 @@ class PostgresReleaseAssetRepositoryTest extends PostgresITBase {
 
         assets = new PostgresReleaseAssetRepository(controlDataSource());
         service = new ConfigBundleService(
-                new PostgresConfigBundleRepository(controlDataSource()), assets);
+                new PostgresConfigBundleRepository(controlDataSource()), assets,
+                new PostgresReleaseQualificationRepository(controlDataSource()));
     }
 
     private static Map<String, Object> promptAssetContent() {
@@ -152,8 +154,11 @@ class PostgresReleaseAssetRepositoryTest extends PostgresITBase {
         ConfigBundleService.PublishResult published = service.publish(content, "op-1");
         assertThat(published.replayed()).isFalse();
 
+        // EN-02 资格门：激活前需未撤销 PASS 证明（服务面授予，0 = 从未激活）
+        service.grantQualification(published.bundleDigest(), null, "e".repeat(64),
+                "runner-it", "grader-it", "PASS", "UNKNOWN", "release", "op-1");
         ConfigBundleRepository.ActivePointer pointer =
-                service.activate(published.bundleDigest(), "op-1").moved()
+                service.activate(published.bundleDigest(), 0L, "op-1").moved()
                         ? service.activePointer().orElseThrow()
                         : null;
         assertThat(pointer).isNotNull();
