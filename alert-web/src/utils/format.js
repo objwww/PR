@@ -53,3 +53,14 @@ export function fmtPct(v) {
   const pct = Math.abs(n) <= 1 ? n * 100 : n
   return `${(Math.round(pct * 10) / 10)}%`
 }
+
+// EV-01 计数三态：null/undefined → '未统计'；真实 0 → '0'
+export function fmtCount(v) {
+  return v == null ? '未统计' : String(v)
+}
+
+// EV-01 比率三态：null/非法 → '未统计'；真实 0 → '0%'（与 fmtPct 的 '—' 口径分离，评测页专用）
+export function fmtPctStat(v) {
+  if (v == null || Number.isNaN(Number(v))) return '未统计'
+  return fmtPct(v)
+}

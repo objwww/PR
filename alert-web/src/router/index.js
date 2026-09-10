@@ -15,6 +15,8 @@ import EvalRunsView from '../views/EvalRunsView.vue'
 import EvalRunDetailView from '../views/EvalRunDetailView.vue'
 import EvalDatasetsView from '../views/EvalDatasetsView.vue'
 import EvalReviewView from '../views/EvalReviewView.vue'
+import EvalNewView from '../views/EvalNewView.vue'
+import EvalCompareView from '../views/EvalCompareView.vue'
 import MonitorView from '../views/MonitorView.vue'
 
 import { useSessionStore } from '../stores/session.js'
@@ -39,6 +41,8 @@ const routes = [
       { path: '', redirect: '/eval/runs' },
       { path: 'runs', name: 'eval-runs', component: EvalRunsView, meta: { title: '实验 · 评测中心' } },
       { path: 'runs/:runId', name: 'eval-run', component: EvalRunDetailView, meta: { title: '实验详情 · 评测中心' } },
+      { path: 'new', name: 'eval-new', component: EvalNewView, meta: { title: '新建实验 · 评测中心' } },
+      { path: 'compare', name: 'eval-compare', component: EvalCompareView, meta: { title: '对比工作台 · 评测中心' } },
       { path: 'datasets', name: 'eval-datasets', component: EvalDatasetsView, meta: { title: '数据集 · 评测中心' } },
       { path: 'review', name: 'eval-review', component: EvalReviewView, meta: { title: '评审 · 评测中心' } },
     ],

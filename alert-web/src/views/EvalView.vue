@@ -1,20 +1,18 @@
 <template>
   <div class="eval-page">
-    <PageHeader title="评测中心" subtitle="实验批次、评测数据集与人工评审">
-      <template #actions>
-        <el-button type="primary" @click="onLaunch">发起评测</el-button>
-      </template>
-    </PageHeader>
-
-    <!-- 一级子路由页签：实验 / 数据集 / 评审，选中态进 URL -->
+    <!-- 顶层四入口：实验 / 数据集 / 人工评审 / 能力版本（EV-09 未交付，禁用） -->
     <div class="card tabs">
-      <router-link
-        v-for="t in tabs"
-        :key="t.to"
-        :to="t.to"
-        class="tab"
-        :class="{ cur: isCur(t) }"
-      >{{ t.label }}</router-link>
+      <template v-for="t in tabs" :key="t.label">
+        <span v-if="t.disabled" class="tab tab-disabled" :title="t.disabledTip">
+          {{ t.label }}<span class="tab-note">{{ t.disabledNote }}</span>
+        </span>
+        <router-link
+          v-else
+          :to="t.to"
+          class="tab"
+          :class="{ cur: isCur(t) }"
+        >{{ t.label }}</router-link>
+      </template>
     </div>
 
     <router-view />
@@ -22,25 +20,24 @@
 </template>
 
 <script setup>
-// UI-6 评测中心壳（/eval）：页头 + 发起评测主按钮 + 三个路由化页签 + router-view
+// 评测中心壳（/eval）：四个一级入口；默认进实验列表（router redirect）
 import { useRoute } from 'vue-router'
-import PageHeader from '../components/common/PageHeader.vue'
 
 const route = useRoute()
 
 const tabs = [
   { label: '实验', to: '/eval/runs', match: '/eval/runs' },
   { label: '数据集', to: '/eval/datasets', match: '/eval/datasets' },
-  { label: '评审', to: '/eval/review', match: '/eval/review' },
+  { label: '人工评审', to: '/eval/review', match: '/eval/review' },
+  {
+    label: '能力版本', disabled: true,
+    disabledNote: '（依赖 EV-09，暂未开放）',
+    disabledTip: '能力版本中心依赖后端 EV-09 资产清单与发布接口，本批未交付',
+  },
 ]
 
 function isCur(t) {
   return route.path === t.match || route.path.startsWith(t.match + '/')
-}
-
-// 页面发起无后端支撑：诚实提示走命令行，不做假向导
-function onLaunch() {
-  ElMessage.info('发起评测请走命令行 eval-runner，页面发起功能建设中')
 }
 </script>
 
@@ -54,4 +51,7 @@ function onLaunch() {
 }
 .tab:hover { background: var(--bg); }
 .tab.cur { color: var(--brand); font-weight: 700; border-bottom-color: var(--brand); }
+.tab-disabled { cursor: not-allowed; color: var(--line-strong); }
+.tab-disabled:hover { background: none; }
+.tab-note { font-size: 12px; font-weight: 400; }
 </style>
