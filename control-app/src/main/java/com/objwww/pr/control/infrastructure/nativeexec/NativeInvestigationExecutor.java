@@ -4,11 +4,15 @@ import com.objwww.pr.control.alert.application.AlertClock;
 import com.objwww.pr.control.alert.application.DeterministicSupervisor;
 import com.objwww.pr.control.alert.application.NativeReportAdapter;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
-import com.objwww.pr.control.alert.application.agent.ChangeAgent;
-import com.objwww.pr.control.alert.application.agent.LogsAgent;
-import com.objwww.pr.control.alert.application.agent.MetricsAgent;
+import com.objwww.pr.control.alert.application.agent.AgentRegistry;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
+import com.objwww.pr.control.alert.application.agent.PrimaryFinalClaimProjector;
+import com.objwww.pr.control.alert.application.agent.RoleRunner;
+import com.objwww.pr.control.alert.application.agent.RunnerDirectory;
 import com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent;
+import com.objwww.pr.control.alert.domain.agent.AgentProfile;
+import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
+import com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind;
 import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
 import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.claim.ClaimVerdict;
@@ -24,6 +28,7 @@ import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.TaskExecutionBinding;
 import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.identity.ConfigDigest;
 import com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest;
@@ -31,6 +36,8 @@ import com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest;
 import com.objwww.pr.control.alert.domain.identity.InvestigationInputs;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository;
+import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository;
 import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
@@ -83,6 +90,11 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private static final String NATIVE_SECTION = "native";
     private static final String PROPOSAL_KEY = "proposal";
     private static final String MODEL = "native-deterministic-v1";
+    /**
+     * 不动点 sweep 收敛上限（R7-X6 防御面）：旧兼容路由一轮收敛；主模式最多
+     * 委派批数 2 轮 + 最终轮。8 = 大裕度，超出即诚实终态失败，不自旋。
+     */
+    private static final int MAX_DRIVE_SWEEPS = 8;
 
     private final ConfigBundleRepository bundles;
     private final DeterministicSupervisor supervisor;
@@ -90,47 +102,44 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private final RcaRunRepository runs;
     private final EvidenceRepository evidence;
     private final EvidenceSnapshotRepository snapshots;
-    private final MetricsAgent metricsAgent;
-    private final LogsAgent logsAgent;
-    private final ChangeAgent changeAgent;
     private final NativeRcaAgent nativeRcaAgent;
     private final ClaimStore claims;
     private final EvidencePackageValidator validator;
     private final AlertMetrics metrics;
-    private final String metricsExpr;
     private final String toolRegistryDigest;
     private final AlertClock clock;
     private final com.objwww.pr.control.alert.application.RunBudgetGate budgetGate;
     private final Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> budgetLimits;
     private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
+    private final TaskExecutionBindingRepository bindings;
+    private final AgentRegistry agents;
+    private final RunnerDirectory runners;
+    private final PrimaryCheckpointRepository checkpoints;
+    /** R7-X6：主模式 Profile（null = 主模式关闭，旧兼容路由行为零变化） */
+    private final AgentProfile primaryProfile;
 
     public NativeInvestigationExecutor(ConfigBundleRepository bundles,
             DeterministicSupervisor supervisor, RcaTaskRepository tasks,
             RcaRunRepository runs, EvidenceRepository evidence,
-            EvidenceSnapshotRepository snapshots, MetricsAgent metricsAgent,
-            LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
+            EvidenceSnapshotRepository snapshots, NativeRcaAgent nativeRcaAgent,
             ClaimStore claims, EvidencePackageValidator validator,
-            String metricsExpr, String toolRegistryDigest, AlertClock clock,
+            String toolRegistryDigest, AlertClock clock,
             AlertMetrics metrics,
             com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
             Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> budgetLimits,
-            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger) {
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+            TaskExecutionBindingRepository bindings, AgentRegistry agents,
+            RunnerDirectory runners, PrimaryCheckpointRepository checkpoints,
+            AgentProfile primaryProfile) {
         this.bundles = Objects.requireNonNull(bundles, "bundles");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.runs = Objects.requireNonNull(runs, "runs");
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.snapshots = Objects.requireNonNull(snapshots, "snapshots");
-        this.metricsAgent = Objects.requireNonNull(metricsAgent, "metricsAgent");
-        this.logsAgent = Objects.requireNonNull(logsAgent, "logsAgent");
-        this.changeAgent = Objects.requireNonNull(changeAgent, "changeAgent");
         this.nativeRcaAgent = Objects.requireNonNull(nativeRcaAgent, "nativeRcaAgent");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.validator = Objects.requireNonNull(validator, "validator");
-        if (metricsExpr == null || metricsExpr.isBlank()) {
-            throw new IllegalArgumentException("metricsExpr 不得为空（F1 症状指标数据源）");
-        }
-        this.metricsExpr = metricsExpr;
         if (toolRegistryDigest == null || toolRegistryDigest.isBlank()) {
             throw new IllegalArgumentException("toolRegistryDigest 不得为空（快照身份面）");
         }
@@ -142,6 +151,13 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         this.budgetLimits = Objects.requireNonNull(budgetLimits, "budgetLimits");
         // EX-A3（F08/F09）：恢复分诊的 checkpoint 读面（账本=P1-03 持久事实源）
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
+        // R7-X2：分派面 = 持久绑定.roleId + Profile.runtime_kind（运行器目录注入）
+        this.bindings = Objects.requireNonNull(bindings, "bindings");
+        this.agents = Objects.requireNonNull(agents, "agents");
+        this.runners = Objects.requireNonNull(runners, "runners");
+        // R7-X6：主模式 FINAL 提案的报告相位消费面（检查点读回）
+        this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
+        this.primaryProfile = primaryProfile;
     }
 
     @Override
@@ -168,23 +184,28 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
 
         // EX-A1 F15：run 开局限额一次落账（幂等；消费点=agent 的 TOOL_CALL 硬闸）
         budgetGate.openRun(run.id(), budgetLimits);
-        Optional<Map<String, Object>> proposal = proposalOf();
-        if (proposal.isEmpty()) {
-            return ExecutionResult.terminal("PROPOSAL_MISSING",
-                    "active bundle 缺 native.proposal 段（fail-closed，模型无调度权）");
+        // ② 启动（幂等）：R7-X6 主模式（primaryProfile 在场）只编译主节点——提案段
+        // 非主模式编译源；旧兼容路由 = active bundle native.proposal 段三角色 DAG
+        DeterministicSupervisor.StartResult started;
+        if (primaryProfile != null) {
+            started = supervisor.startPrimary(run.id(), primaryProfile, Set.of());
+        } else {
+            Optional<Map<String, Object>> proposal = proposalOf();
+            if (proposal.isEmpty()) {
+                return ExecutionResult.terminal("PROPOSAL_MISSING",
+                        "active bundle 缺 native.proposal 段（fail-closed，模型无调度权）");
+            }
+            started = supervisor.startRun(run.id(), proposal.get(), Set.of());
         }
-
-        // ② 启动（幂等）：提案非法 → Supervisor 已置 run FAILED，本侧终态诚实记账
-        DeterministicSupervisor.StartResult started = supervisor.startRun(run.id(),
-                proposal.get(), Set.of());
         if (started.outcome() == DeterministicSupervisor.StartOutcome.PROPOSAL_REJECTED) {
             return ExecutionResult.terminal("PROPOSAL_REJECTED", started.rejectReason());
         }
         heartbeat.run();
 
-        // ③④ DAG 驱动（冻结时间窗）+ 冻结证据快照（configDigest 只进快照身份面）
+        // ③④ DAG 驱动（不动点 sweep：主模式委派批会中途生长子任务）+ 冻结证据快照
         long generation = run.generation();
-        investigate(run.id(), attempt.id(), generation, inputDigest, routing, heartbeat);
+        String timeRange = investigate(run.id(), attempt.id(), generation, inputDigest,
+                routing, heartbeat);
         EvidenceSnapshotDigest snapshotDigest =
                 freezeSnapshot(run.id(), generation, configDigest.hex());
 
@@ -199,8 +220,23 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
 
         // ⑥ 断言推导 + 装配 + 适配（确认根因/诚实 unknown 三态，FUT-12 语义分歧不回退）
         // EX-A0：输入比对输入、Claim 绑定输出快照——两身份分型，混用编译期拒绝
-        NativeRcaAgent.NativeResult nativeResult = nativeRcaAgent.investigate(run.id(),
-                inputDigest, snapshotDigest, generation);
+        // R7-X6 主模式：FINAL 提案已过 PrimaryClaimAdmission 代码准入、落检查点——
+        // 报告相位只做检查点→ClaimStore 确定性投影（不走证据推导的 Reducer 面）
+        int projected;
+        if (primaryProfile != null) {
+            RcaTask primaryTask = primaryTaskOf(run.id()).orElseThrow(
+                    () -> new IllegalStateException("主模式 run 缺主任务行: " + run.id()));
+            PrimaryCheckpoint checkpoint = checkpoints.findByTask(primaryTask.id())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "主任务检查点缺失: " + primaryTask.id()));
+            projected = new PrimaryFinalClaimProjector(claims, evidence).project(run.id(),
+                    checkpoint, snapshotDigest.hex(), generation, timeRange);
+        } else {
+            projected = -1;
+        }
+        NativeRcaAgent.NativeResult nativeResult = primaryProfile == null
+                ? nativeRcaAgent.investigate(run.id(), inputDigest, snapshotDigest, generation)
+                : null;
         List<ClaimVerdict> activeClaims = claims.findByRunId(run.id()).stream()
                 .filter(row -> row.lifecycle() == ClaimLifecycle.ACTIVE)
                 .map(NativeInvestigationExecutor::toVerdict)
@@ -215,9 +251,10 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         // M6-02 观察面成账：NATIVE 侧 attempt 指标与 HOLMES 同名同维（engine 分桶）
         metrics.attemptFinished(validated.status().name(), "NATIVE");
         metrics.attemptLatency((System.nanoTime() - beginNanos) / 1_000_000L, "NATIVE");
-        log.info("native 全链完成 run={} reportOutcome={} claims={} validation={} 快照={}",
-                run.id(), assembled.outcome(), nativeResult.verdicts().size(),
-                validated.status(), snapshotDigest);
+        log.info("native 全链完成 run={} reportOutcome={} claims={} validation={} 快照={} 主模式={}",
+                run.id(), assembled.outcome(),
+                primaryProfile == null ? nativeResult.verdicts().size() : projected,
+                validated.status(), snapshotDigest, primaryProfile != null);
         AttemptArtifact artifact = new AttemptArtifact(
                 validated.schemaVersion() > 0
                         ? validated.schemaVersion() : EvidencePackageV2.SCHEMA_VERSION,
@@ -263,7 +300,15 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
      * 一记录锚）——账本行引用真实持久 attempt，零随机 UUID 幽灵引用。
      * EX-A3（F08）：call_seq 跨 attempt 单调——本轮从既有 checkpoint 最大值续起。
      */
-    private void investigate(UUID runId, UUID attemptId, long generation,
+    /**
+     * DAG 任务驱动到不动点（R7-X6）：单遍扫描改为 sweep 循环——主模式委派批在驱动
+     * 途中原子生长 READY 子任务，扫描清单必须每轮重读；一轮无任何任务状态迁移即
+     * 收敛（委派批生长子任务行即进展；等待重驱的 STILL_WAITING 虽计一次进展，子
+     * 任务当轮/次轮即结清，收敛面不变，sweep 上限兜底防无限等待）。旧兼容路由
+     * 单轮即收敛（三任务互不依赖），行为与单遍等价。返回冻结时间窗串（报告相位
+     * 投影复用）。
+     */
+    private String investigate(UUID runId, UUID attemptId, long generation,
             InvestigationInputDigest inputDigest, RcaRunRepository.RoutingView routing,
             Runnable heartbeat) {
         Instant end = routing.windowEnd() != null ? routing.windowEnd() : clock.now();
@@ -276,25 +321,47 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         String endEpoch = Long.toString(end.getEpochSecond());
         String startEpoch = Long.toString(start.getEpochSecond());
         String timeRange = startEpoch + "/" + endEpoch;
-        List<RcaTask> dagTasks = tasks.findByRunId(runId).stream()
-                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE)).toList();
-        long callSeq = dagTasks.stream()
+        long callSeq = tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
                 .flatMap(t -> toolLedger.findRecoveryByTask(runId, t.id()).stream())
                 .mapToLong(com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger
                         .InvocationRecovery::callSeq)
                 .max().orElse(0);
-        for (RcaTask dagTask : dagTasks) {
-            if (dagTask.state() == RcaTaskState.DONE
-                    || dagTask.state() == RcaTaskState.DEAD) {
-                continue;   // 阶段④：已提交任务不占 call_seq（计号=物理请求，非任务槽位）
+        boolean progress = true;
+        int sweeps = 0;
+        while (progress) {
+            if (++sweeps > MAX_DRIVE_SWEEPS) {
+                log.warn("run {} 驱动 sweep 上限（{}）到达，停止（不动点未收敛，诚实终态失败）",
+                        runId, MAX_DRIVE_SWEEPS);
+                break;
             }
-            callSeq++;
-            SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
-                    runId, dagTask.id(), attemptId, callSeq, generation,
-                    inputDigest, timeRange);
-            drive(dagTask, ctx, startEpoch, endEpoch);
-            heartbeat.run();
+            progress = false;
+            for (RcaTask dagTask : drivableTasks(runId)) {
+                callSeq++;
+                SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
+                        runId, dagTask.id(), attemptId, callSeq, generation,
+                        inputDigest, timeRange);
+                progress |= drive(dagTask, ctx, startEpoch, endEpoch);
+                heartbeat.run();
+            }
         }
+        return timeRange;
+    }
+
+    /** 可驱动任务清单（每 sweep 重读：委派批子任务中途生长；终态任务不占位） */
+    private List<RcaTask> drivableTasks(UUID runId) {
+        return tasks.findByRunId(runId).stream()
+                .filter(t -> !t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                .filter(t -> t.state() != RcaTaskState.DONE
+                        && t.state() != RcaTaskState.DEAD)
+                .toList();
+    }
+
+    /** 主任务行定位（主模式报告相位投影面） */
+    private java.util.Optional<RcaTask> primaryTaskOf(UUID runId) {
+        return tasks.findByRunId(runId).stream()
+                .filter(t -> t.taskKey().equals(RcaTask.PRIMARY_INVESTIGATE))
+                .findFirst();
     }
 
     /**
@@ -312,11 +379,13 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
      *       已知失败 → DEAD（缺源降级），不重复调用。</li>
      * </ul>
      * 不变量：恢复一遍后无永久 RUNNING；恢复不重复调用（账本行可证）。
+     *
+     * @return 本任务是否发生了任务行状态迁移（sweep 收敛判定：无迁移 = 一轮无进展）
      */
-    private void drive(RcaTask dagTask, SingleToolEvidenceAgent.CallContext ctx,
+    private boolean drive(RcaTask dagTask, SingleToolEvidenceAgent.CallContext ctx,
             String startEpoch, String endEpoch) {
         if (dagTask.state() == RcaTaskState.DONE || dagTask.state() == RcaTaskState.DEAD) {
-            return;   // 阶段④：任务与结果已提交（DEAD=缺源降级终态同不吃回）
+            return false;   // 阶段④：任务与结果已提交（DEAD=缺源降级终态同不吃回）
         }
         var prior = toolLedger.findRecoveryByTask(ctx.runId(), dagTask.id()).stream()
                 .toList();
@@ -328,11 +397,13 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                                 && evidence.findById(r.resultRef()).isPresent())
                 .findFirst();
         if (recovered.isPresent()) {
-            if (tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE)) {
+            boolean settled = tasks.transitionState(dagTask.id(),
+                    RcaTaskState.RUNNING, RcaTaskState.DONE);
+            if (settled) {
                 log.info("DAG 任务 {} 阶段③恢复：result_ref 幂等收尾（零触网）key={}",
                         dagTask.id(), dagTask.taskKey());
             }
-            return;
+            return settled;
         }
 
         // 领养准入：READY 走正常迁移；LEASED/RUNNING 孤儿接管（driver 独占保证单驱动）
@@ -348,7 +419,7 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         if (!adopted) {
             log.warn("DAG 任务 {} 状态迁移失败（非 READY/LEASED/RUNNING），跳过 key={}",
                     dagTask.id(), dagTask.taskKey());
-            return;
+            return false;
         }
 
         // 阶段②：PENDING 悬挂 → UNKNOWN 归档（发送后结果未知；预算占用不动），
@@ -365,32 +436,120 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
             log.warn("DAG 任务 {} FAILED 回执孤儿 → DEAD（不重复调用）key={}",
                     dagTask.id(), dagTask.taskKey());
-            return;
+            return true;
         }
 
-        SingleToolEvidenceAgent.AgentResult result;
+        // R7-X2：分派面 = 持久绑定.roleId + Profile.runtime_kind（业务 taskKey 不再
+        // 承担角色身份）；绑定缺席/角色漂移/运行器未部署 → 显式拒绝降级 DEAD，
+        // 不猜 latest、不选"最接近"的 Agent 顶替（CAPABILITY_UNAVAILABLE 同码）
+        TaskExecutionBinding binding = bindings.findByTask(dagTask.id()).orElse(null);
+        if (binding == null) {
+            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            log.warn("DAG 任务 {} 绑定缺席（不猜角色）→ DEAD key={}",
+                    dagTask.id(), dagTask.taskKey());
+            return true;
+        }
+        AgentProfile profile;
+        RoleRunner runner;
         try {
-            result = switch (dagTask.taskKey()) {
-                case TASK_METRICS -> metricsAgent.investigate(ctx,
-                        new MetricsAgent.MetricsQuery(metricsExpr, startEpoch, endEpoch,
-                                InvestigationInputs.STEP));
-                case TASK_LOGS -> logsAgent.investigate(ctx,
-                        new LogsAgent.LogsQuery(startEpoch, endEpoch));
-                case TASK_CHANGE -> changeAgent.investigate(ctx,
-                        new ChangeAgent.ChangeQuery(startEpoch, endEpoch));
-                default -> null;   // 提案引用未注册调查任务：降级 DEAD，不阻断报告
-            };
+            profile = agents.requireExact(binding.roleId(), binding.roleVersion(),
+                    binding.roleDigest());
+            runner = runners.requireFor(profile);
+        } catch (IllegalArgumentException
+                | RunnerDirectory.CapabilityUnavailableException e) {
+            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            log.warn("DAG 任务 {} 角色/运行器解析拒绝 → DEAD key={} 原因: {}",
+                    dagTask.id(), dagTask.taskKey(), e.getMessage());
+            return true;
+        }
+
+        RoleRunner.RoleDriveRequest request = new RoleRunner.RoleDriveRequest(dagTask,
+                binding, profile, ctx, startEpoch, endEpoch);
+        // R7-X6：主 Runner 面走不动点循环（一步一决策，直到委派等待/FINAL/耗尽）；
+        // 兼容单工具面保持单驱语义（一次物理查询，结局即终态）
+        if (RoleRuntimeKind.BOUNDED_LLM.equals(profile.runtimeKind())) {
+            return drivePrimary(dagTask, runner, request);
+        }
+        RoleRunner.RoleDriveResult result;
+        try {
+            result = runner.drive(request);
         } catch (ToolControlPlaneException denied) {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
             log.warn("DAG 任务 {} 工具控制面拒绝（{}），降级 DEAD", dagTask.taskKey(),
                     denied.reason());
-            return;
+            return true;
         }
-        if (result == null || result.outcome() == SingleToolEvidenceAgent.AgentOutcome.FAILED) {
+        if (result.outcome() == RoleRunner.RoleDriveOutcome.FAILED) {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
-            return;
+            return true;
         }
-        tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE);
+        return tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE);
+    }
+
+    /**
+     * 主 Runner 不动点循环（R7-X6）：{@link BoundedLlmRoleRunner} 一步一互斥决策——
+     * TOOL_CALL 取证/计步重驱类失败继续循环（每类都已在运行器内计步，步数耗尽由
+     * 运行器兜底确定性 FINAL）；委派批获批 → WAITING_CHILDREN 返回 true（子任务行
+     * 已生长=行迁移进展；任务行保持 RUNNING，等待态在检查点相位，恢复领养面已覆盖），
+     * sweep 转驱子任务后由下一轮唤醒续走；FINAL_READY → DONE（报告相位消费检查点
+     * 提案）。DELEGATE 全拒不消耗步数（X4 裁定"全拒状态不动"），防御性迭代上限兜住
+     * 模型空转（超出 = DEAD，不静默无限烧模型）。
+     */
+    private boolean drivePrimary(RcaTask dagTask, RoleRunner runner,
+            RoleRunner.RoleDriveRequest request) {
+        int maxIterations = request.profile().maxSteps() * 2
+                + DeterministicSupervisor.MAX_DELEGATION_BATCHES + 4;
+        for (int i = 0; i < maxIterations; i++) {
+            RoleRunner.RoleDriveResult result;
+            try {
+                result = runner.drive(request);
+            } catch (ToolControlPlaneException denied) {
+                tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+                log.warn("主任务 {} 工具控制面拒绝（{}）→ DEAD", dagTask.id(), denied.reason());
+                return true;
+            }
+            switch (result.outcome()) {
+                case FINAL_READY -> {
+                    tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING,
+                            RcaTaskState.DONE);
+                    log.info("主任务 FINAL 提案就绪 → DONE task={} reason={}",
+                            dagTask.id(), result.reason());
+                    return true;
+                }
+                case WAITING_CHILDREN -> {
+                    // 委派批已原子生长 READY 子任务行 = 行迁移进展（真 true）；后续
+                    // STILL_WAITING 重驱虽计进展，但子任务同/次 sweep 即结清，不动点
+                    // 收敛不受影响——sweep 上限兜底防无限等待（诚实终态失败）
+                    log.info("主任务转委派等待（sweep 转驱子任务，结清后唤醒）task={} reason={}",
+                            dagTask.id(), result.reason());
+                    return true;
+                }
+                case FAILED -> {
+                    if (!isPrimaryRetryable(result.reason())) {
+                        tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING,
+                                RcaTaskState.DEAD);
+                        log.warn("主任务 {} 不可重试失败（{}）→ DEAD", dagTask.id(),
+                                result.reason());
+                        return true;
+                    }
+                    break;   // 计步重驱类：DECISION_UNPARSEABLE/TOOL_NOT_ALLOWED/TOOL_RETRYABLE:*
+                }
+                default -> {
+                    // EVIDENCE_PRODUCED / DELEGATE_REJECTED / NO_DATA——有界继续
+                }
+            }
+        }
+        tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+        log.warn("主任务 {} 驱动迭代上限（{}，DELEGATE 空转防御）→ DEAD", dagTask.id(),
+                maxIterations);
+        return true;
+    }
+
+    /** 主 Runner 可重试失败封闭集（每一类都已在运行器内计步，步数耗尽兜底保终止） */
+    private static boolean isPrimaryRetryable(String reason) {
+        return reason != null && (reason.equals("DECISION_UNPARSEABLE")
+                || reason.equals("TOOL_NOT_ALLOWED")
+                || reason.startsWith("TOOL_RETRYABLE"));
     }
 
     private void ledgerMarkUnknown(

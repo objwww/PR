@@ -1,0 +1,270 @@
+package com.objwww.pr.control.alert.application.agent;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.application.DeterministicSupervisor;
+import com.objwww.pr.control.alert.domain.agent.AgentProfile;
+import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
+import com.objwww.pr.control.alert.domain.agent.PrimaryDecision;
+import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
+import com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * 受控有界 LLM 运行器（R7-X2，v2.1 §十一.1 首个受控运行器；§三 有界 AgentLoop）：
+ * <b>无状态单步驱动</b>——全部推进状态在主任务检查点（V47 rca_primary_checkpoint），
+ * 本类不持有任何跨步可变态，任意一步崩溃后重驱动从检查点续走（RD09 数据基础）。
+ *
+ * <p>一步 = 读检查点 → WAITING_CHILDREN 先复判唤醒 → 步数耗尽走确定性兜底 FINAL
+ * （§四 终止兜底：不再花一次模型调用）→ 否则经 {@link RcaActionGuard} 模型路径
+ * （§六固定顺序）取得一个互斥 Decision：
+ * <ul>
+ *   <li>TOOL_CALL：allowlist 校验（越权=结构化拒绝留痕）→ 受控工具口取证 →
+ *       steps+1 仍 PRIMARY_READY；</li>
+ *   <li>DELEGATE：Supervisor 确定性裁决（唯一建子任务路径）；获批 → WAITING_CHILDREN，
+ *       全拒 → 有界继续；</li>
+ *   <li>FINAL：{@link PrimaryClaimAdmission} 代码准入（RD05/RX20）→ 提案落检查点
+ *       （phase 就地固化，报告相位消费）。</li>
+ * </ul>
+ * 决策不可解析同样 steps+1（重驱可试错；耗尽即兜底），不静默重放同一步。
+ */
+public class BoundedLlmRoleRunner implements RoleRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(BoundedLlmRoleRunner.class);
+
+    /** 单步模型调用保守 token 估值（预算预留面；usage 实扣以服务端回执为准） */
+    static final long TOKEN_ESTIMATE_PER_STEP = 1_500L;
+    /** 单步 max_tokens（有界输出；Decision 是小对象，不允许长文） */
+    static final int MAX_TOKENS_PER_STEP = 1_000;
+
+    /** 主 Agent 受限直接取证口（§六 工具路径归既有受控面，X6 装配 ToolGateway 实现） */
+    @FunctionalInterface
+    public interface PrimaryToolPort {
+
+        /** 一次只读取证 → 证据行 id（控制面拒绝/失败原样上抛，由运行器计步） */
+        UUID invoke(SingleToolEvidenceAgent.CallContext ctx, String toolId,
+                Map<String, Object> args);
+    }
+
+    private final RcaActionGuard guard;
+    private final DeterministicSupervisor supervisor;
+    private final PrimaryCheckpointRepository checkpoints;
+    private final EvidenceRepository evidence;
+    private final PrimaryToolPort toolPort;
+    private final ObjectMapper mapper;
+    private final Clock clock;
+
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            PrimaryToolPort toolPort, ObjectMapper mapper, Clock clock) {
+        this.guard = Objects.requireNonNull(guard, "guard");
+        this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
+        this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
+        this.evidence = Objects.requireNonNull(evidence, "evidence");
+        this.toolPort = Objects.requireNonNull(toolPort, "toolPort");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.clock = Objects.requireNonNull(clock, "clock");
+    }
+
+    @Override
+    public String runtimeKind() {
+        return com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind.BOUNDED_LLM;
+    }
+
+    @Override
+    public RoleRunner.RoleDriveResult drive(RoleRunner.RoleDriveRequest request) {
+        PrimaryCheckpoint checkpoint = checkpoints.findByTask(request.task().id())
+                .orElseThrow(() -> new IllegalStateException(
+                        "主任务检查点缺失: " + request.task().id()));
+
+        // WAITING_CHILDREN：不持锁等待，复判唤醒（批次结清条件驱动）
+        if (checkpoint.phase() == PrimaryCheckpoint.Phase.WAITING_CHILDREN) {
+            DeterministicSupervisor.WakeOutcome wake = supervisor.wakePrimary(
+                    request.task().runId(), request.task().id());
+            if (wake == DeterministicSupervisor.WakeOutcome.STILL_WAITING) {
+                return new RoleRunner.RoleDriveResult(
+                        RoleRunner.RoleDriveOutcome.WAITING_CHILDREN, List.of(),
+                        "CHILDREN_UNSETTLED");
+            }
+            checkpoint = checkpoints.findByTask(request.task().id()).orElseThrow();
+        }
+
+        // 步数耗尽 → 确定性兜底 FINAL（零模型调用；§四 "流程终止≠根因确认"）
+        if (checkpoint.stepsUsed() >= request.profile().maxSteps()) {
+            return deterministicFinal(request, checkpoint);
+        }
+
+        RcaModelOutcome outcome = guard.guardedModelCall(
+                actionOf(request, checkpoint), promptOf(request, checkpoint),
+                MAX_TOKENS_PER_STEP, TOKEN_ESTIMATE_PER_STEP);
+
+        PrimaryDecision decision;
+        try {
+            decision = PrimaryDecision.parse(
+                    mapper.readValue(outcome.content(),
+                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
+        } catch (Exception e) {
+            advanceStep(request, checkpoint, null);
+            log.warn("主决策不可解析（{}），计步重驱 task={}",
+                    e.getClass().getSimpleName(), request.task().id());
+            return RoleRunner.RoleDriveResult.failed("DECISION_UNPARSEABLE");
+        }
+        return switch (decision.branch()) {
+            case TOOL_CALL -> driveToolCall(request, checkpoint, decision);
+            case DELEGATE -> driveDelegate(request, checkpoint, decision);
+            case FINAL -> driveFinal(request, checkpoint, decision);
+        };
+    }
+
+    // ------------------------------------------------------------------ 分支
+
+    private RoleRunner.RoleDriveResult driveToolCall(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+        PrimaryDecision.ToolCall tool = decision.toolCall();
+        if (!request.profile().toolAllowlist().contains(tool.toolId())) {
+            advanceStep(request, checkpoint, null);
+            log.warn("TOOL_CALL 越权拒绝（不在 allowlist），计步重驱 task={} tool={}",
+                    request.task().id(), tool.toolId());
+            return RoleRunner.RoleDriveResult.failed("TOOL_NOT_ALLOWED");
+        }
+        UUID evidenceId;
+        try {
+            evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
+        } catch (com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException e) {
+            // 模型可见族（超时/限流/远端故障/零数据）：计步重驱，步数耗尽兜底保终止
+            advanceStep(request, checkpoint, null);
+            log.warn("TOOL_CALL 模型可见失败（{}），计步重驱 task={} tool={}",
+                    e.reason(), request.task().id(), tool.toolId());
+            return RoleRunner.RoleDriveResult.failed(
+                    "TOOL_RETRYABLE:" + e.reason().name());
+        }
+        advanceStep(request, checkpoint, null);
+        return new RoleRunner.RoleDriveResult(
+                RoleRunner.RoleDriveOutcome.EVIDENCE_PRODUCED, List.of(evidenceId), null);
+    }
+
+    private RoleRunner.RoleDriveResult driveDelegate(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+        DeterministicSupervisor.Adjudication adjudication =
+                supervisor.adjudicateDelegation(request.task().runId(),
+                        request.task().id(), decision);
+        if (adjudication.batchAccepted()) {
+            return new RoleRunner.RoleDriveResult(
+                    RoleRunner.RoleDriveOutcome.WAITING_CHILDREN, List.of(), null);
+        }
+        String codes = adjudication.decisions().stream()
+                .filter(d -> d.status() == com.objwww.pr.control.alert.domain.agent
+                        .DelegationDecision.Status.REJECTED)
+                .map(d -> d.rejectReason() == null ? "REJECTED" : d.rejectReason())
+                .distinct()
+                .reduce((a, b) -> a + "," + b)
+                .orElse("REJECTED");
+        // 全拒不消耗步数（X4"状态不动"），但决策已出——决策序必须推进（动作身份单调）
+        checkpoints.upsert(checkpoint.withDecisionAdvanced(clock.instant()));
+        return new RoleRunner.RoleDriveResult(
+                RoleRunner.RoleDriveOutcome.DELEGATE_REJECTED, List.of(), codes);
+    }
+
+    private RoleRunner.RoleDriveResult driveFinal(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+        PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
+                decision.finalAnswer().claims(), validRefsOf(request));
+        List<Map<String, Object>> claimRows = new ArrayList<>();
+        for (PrimaryClaimAdmission.AdmittedClaim claim : admission.claims()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("claim_key", claim.claimKey());
+            row.put("kind", claim.kind());
+            row.put("statement", claim.statement());
+            row.put("evidence_refs", claim.evidenceRefs());
+            row.put("admission_note", claim.admissionNote());
+            claimRows.add(row);
+        }
+        checkpoints.upsert(checkpoint.withFinal(claimRows,
+                decision.finalAnswer().missingInformation(), clock.instant()));
+        log.info("主 FINAL 提案落检查点 task={} claims={} downgraded={} stripped={}",
+                request.task().id(), claimRows.size(), admission.downgraded(),
+                admission.strippedRefs());
+        return RoleRunner.RoleDriveResult.of(RoleRunner.RoleDriveOutcome.FINAL_READY);
+    }
+
+    // ------------------------------------------------------------------ 内部
+
+    /** 步数耗尽的确定性兜底：空提案 + 缺口说明（已有事实由报告相位从工件面补集） */
+    private RoleRunner.RoleDriveResult deterministicFinal(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint) {
+        PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
+                List.of(), validRefsOf(request));
+        checkpoints.upsert(checkpoint.withFinal(List.of(),
+                List.of("STEPS_EXHAUSTED: max_steps=" + request.profile().maxSteps()
+                        + " 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束"), clock.instant()));
+        log.warn("主任务步数耗尽 → 确定性未决 FINAL（零模型调用）task={} steps={}",
+                request.task().id(), checkpoint.stepsUsed());
+        return new RoleRunner.RoleDriveResult(RoleRunner.RoleDriveOutcome.FINAL_READY,
+                List.of(), "STEPS_EXHAUSTED");
+    }
+
+    private void advanceStep(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, String snapshotDigest) {
+        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest, clock.instant()));
+    }
+
+    /** §六 模型动作身份：绑定三元组 + 检查点计数（decision_seq 为账本动作序） */
+    private RcaActionGuard.ModelAction actionOf(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint) {
+        var task = request.task();
+        var binding = request.binding();
+        return new RcaActionGuard.ModelAction(task.runId(), task.id(),
+                request.callContext().attemptId(), checkpoint.decisionSeq(),
+                checkpoint.roundId(), binding.roleId(), binding.roleVersion(),
+                binding.roleDigest(), request.callContext().observedGeneration(),
+                task.leaseEpoch(), task.leaseUntil() != null ? task.leaseUntil()
+                        : task.deadlineAt(),
+                binding.configEpoch(), binding.releaseDigest(),
+                checkpoint.inputSnapshotDigest(), () -> true);
+    }
+
+    /** 有界任务信封（§十一.3）：固定版本上下文+窗口+剩余步数+合法引用，不广播历史 */
+    private String promptOf(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint) {
+        try {
+            Map<String, Object> envelope = new LinkedHashMap<>();
+            envelope.put("role", request.profile().name() + "@" + request.profile().version());
+            envelope.put("run_id", request.task().runId().toString());
+            envelope.put("task_id", request.task().id().toString());
+            envelope.put("round_id", checkpoint.roundId());
+            envelope.put("steps_remaining",
+                    Math.max(0, request.profile().maxSteps() - checkpoint.stepsUsed()));
+            envelope.put("delegation_batches_remaining",
+                    Math.max(0, DeterministicSupervisor.MAX_DELEGATION_BATCHES
+                            - checkpoint.batchesUsed()));
+            envelope.put("time_window", request.startEpoch() + "/" + request.endEpoch());
+            envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
+                    .sorted().toList());
+            envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted()
+                    .toList());
+            return request.profile().prompt() + "\n"
+                    + mapper.writeValueAsString(envelope);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("任务信封序列化失败", e);
+        }
+    }
+
+    /** 本 run 合法引用全集（X5 准入面）：已准入证据行 id + 绑定编译期 artifact 键 */
+    private Set<String> validRefsOf(RoleRunner.RoleDriveRequest request) {
+        Set<String> refs = new LinkedHashSet<>(request.binding().inputRefs());
+        evidence.findByRunId(request.task().runId())
+                .forEach(e -> refs.add(e.evidenceId().toString()));
+        return refs;
+    }
+}

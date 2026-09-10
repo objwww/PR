@@ -33,9 +33,11 @@ import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.persistence.PostgresClaimStore;
+import com.objwww.pr.control.infrastructure.persistence.PostgresDelegationDecisionRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresInvestigationResultRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresPrimaryCheckpointRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaEventAppender;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaReportRepository;
@@ -47,6 +49,7 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresReportPublicatio
 import com.objwww.pr.control.infrastructure.persistence.PostgresRunBudgetLedger;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresTaskEdgeRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresTaskExecutionBindingRepository;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -278,9 +281,14 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
     private DeterministicSupervisor supervisor() {
         return new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), tasks,
-                        new PostgresTaskEdgeRepository(controlJdbc), controlTx),
+                        new PostgresTaskEdgeRepository(controlJdbc), new
+                        PostgresTaskExecutionBindingRepository(controlJdbc, MAPPER), controlTx),
                 new DagExecutionService(new PostgresTaskEdgeRepository(controlJdbc), tasks),
-                runs, tasks, controlTx, AlertClock.system());
+                runs, tasks,
+                new PostgresTaskExecutionBindingRepository(controlJdbc, MAPPER),
+                new PostgresPrimaryCheckpointRepository(controlJdbc, MAPPER),
+                new PostgresDelegationDecisionRepository(controlJdbc),
+                agentRegistry(), controlTx, AlertClock.system());
     }
 
     private RcaRunOrchestrator orchestrator() {

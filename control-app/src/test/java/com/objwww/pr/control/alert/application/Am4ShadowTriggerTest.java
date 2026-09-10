@@ -238,9 +238,10 @@ class Am4ShadowTriggerTest {
 
     private Am4ShadowTrigger trigger(ToolInvoker gateway) {
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
-                new PlanCompiler(planAgents(), stores.tasks, edges, inPlaceTx()),
+                new PlanCompiler(planAgents(), stores.tasks, edges, stores.bindings, inPlaceTx()),
                 new DagExecutionService(edges, stores.tasks),
-                stores.runs, stores.tasks, inPlaceTx(), () -> NOW);
+                stores.runs, stores.tasks, stores.bindings, stores.checkpoints,
+                stores.delegationDecisions, planAgents(), inPlaceTx(), () -> NOW);
         ToolRegistry tools = new ToolRegistry(List.of(
                 new ToolRegistry.Registration(
                         MetricsAgent.toolDefinition(4_000L, 65_536L),

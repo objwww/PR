@@ -353,9 +353,10 @@ class Am4ShadowFullChainG2Test {
 
     private DeterministicSupervisor supervisor() {
         return new DeterministicSupervisor(
-                new PlanCompiler(agents(), stores.tasks, edges, inPlaceTx()),
+                new PlanCompiler(agents(), stores.tasks, edges, stores.bindings, inPlaceTx()),
                 new DagExecutionService(edges, stores.tasks),
-                stores.runs, stores.tasks, inPlaceTx(), () -> NOW);
+                stores.runs, stores.tasks, stores.bindings, stores.checkpoints,
+                stores.delegationDecisions, agents(), inPlaceTx(), () -> NOW);
     }
 
     private static AgentRegistry agents() {

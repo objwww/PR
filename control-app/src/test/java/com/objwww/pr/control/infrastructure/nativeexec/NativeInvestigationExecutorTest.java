@@ -128,17 +128,19 @@ class NativeInvestigationExecutorTest {
 
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), stores.tasks, new EdgeStore(),
-                        withoutTransaction()),
+                        stores.bindings, withoutTransaction()),
                 new com.objwww.pr.control.alert.application.DagExecutionService(new EdgeStore(),
                         stores.tasks),
-                stores.runs, stores.tasks, withoutTransaction(), clock);
+                stores.runs, stores.tasks, stores.bindings, stores.checkpoints,
+                stores.delegationDecisions, agentRegistry(), withoutTransaction(), clock);
         executor = new NativeInvestigationExecutor(bundles, supervisor, stores.tasks,
-                stores.runs, evidence, snapshots, metrics, logs, change, nativeRcaAgent,
+                stores.runs, evidence, snapshots, nativeRcaAgent,
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
-                "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
+                TOOL_REGISTRY_DIGEST, clock,
+                com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                 new RunBudgetGate(new InMemoryRunBudgetLedger()), generousLimits(),
-                stores.toolLedger);
+                stores.toolLedger, stores.bindings, agentRegistry(),
+                compatRunners(metrics, logs, change), stores.checkpoints, null);
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls,
@@ -210,17 +212,39 @@ class NativeInvestigationExecutorTest {
         return new NativeInvestigationExecutor(bundles,
                 new DeterministicSupervisor(
                         new PlanCompiler(agentRegistry(), stores.tasks, new EdgeStore(),
-                                withoutTransaction()),
+                                stores.bindings, withoutTransaction()),
                         new com.objwww.pr.control.alert.application.DagExecutionService(
                                 new EdgeStore(), stores.tasks),
-                        stores.runs, stores.tasks, withoutTransaction(), clock),
-                stores.tasks, stores.runs, evidence, snapshots, metrics, logs, change,
+                        stores.runs, stores.tasks, stores.bindings, stores.checkpoints,
+                        stores.delegationDecisions, agentRegistry(), withoutTransaction(),
+                        clock),
+                stores.tasks, stores.runs, evidence, snapshots,
                 new NativeRcaAgent(evidence, snapshots, claims,
                         new ClaimReducer(Set.of(), POLICY_VERSION)),
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
-                "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
-                clock, com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
-                gate, generousLimits(), stores.toolLedger);
+                TOOL_REGISTRY_DIGEST, clock,
+                com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
+                gate, generousLimits(), stores.toolLedger,
+                stores.bindings, agentRegistry(), compatRunners(metrics, logs, change),
+                stores.checkpoints, null);
+    }
+
+    /** R7-X2：兼容适配运行器目录（role→Agent 映射，与生产装配 AlertFlowConfig 同形） */
+    private static com.objwww.pr.control.alert.application.agent.RunnerDirectory compatRunners(
+            MetricsAgent metrics, LogsAgent logs, ChangeAgent change) {
+        Map<String, com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner.RoleQueryHandler>
+                handlers = new LinkedHashMap<>();
+        handlers.put("metrics", (ctx, start, end) -> metrics.investigate(ctx,
+                new MetricsAgent.MetricsQuery(
+                        "oa_duplicate_orders_current{job=\"order-arena\"}", start, end,
+                        com.objwww.pr.control.alert.domain.identity.InvestigationInputs.STEP)));
+        handlers.put("logs", (ctx, start, end) -> logs.investigate(ctx,
+                new LogsAgent.LogsQuery(start, end)));
+        handlers.put("change", (ctx, start, end) -> change.investigate(ctx,
+                new ChangeAgent.ChangeQuery(start, end)));
+        return new com.objwww.pr.control.alert.application.agent.RunnerDirectory(List.of(
+                new com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner(
+                        handlers)));
     }
 
     /** EX-A1：本件焦点非预算面，宽限额只保证 openRun/TOOL_CALL 硬闸不误伤全链用例 */

@@ -57,8 +57,9 @@ public class PersistenceConfig {
     /** T00 清障漏网回流(G0-10 发现):ModelGateway 保留但本 bean 生产者被误删,docker profile 起不来 */
     @Bean
     public com.objwww.pr.control.domain.service.ExecutionLedger executionLedger(
-            ExecutionEventRepository repository) {
-        return new com.objwww.pr.control.domain.service.ExecutionLedger(repository);
+            @org.springframework.beans.factory.annotation.Qualifier("executionEventRepository")
+            ExecutionEventRepository executionEventRepository) {
+        return new com.objwww.pr.control.domain.service.ExecutionLedger(executionEventRepository);
     }
 
     // ---------------- AM1 告警域仓储（V7 九表，T03 装配） ----------------
@@ -114,6 +115,47 @@ public class PersistenceConfig {
     @Bean
     public com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresTaskEdgeRepository(jdbc);
+    }
+
+    /** R7-X1：任务→角色冻结绑定（V46；只增不改，恢复只读） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository
+    taskExecutionBindingRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresTaskExecutionBindingRepository(
+                jdbc, objectMapper);
+    }
+
+    /** R7-X4：主任务检查点（V47；task_id 幂等锚 upsert + 相位 CAS） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository
+    primaryCheckpointRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresPrimaryCheckpointRepository(
+                jdbc, objectMapper);
+    }
+
+    /** R7-X4/X11：委派裁决台账（V47；只增不改，uq(run,gap) 去重面） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository
+    delegationDecisionRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresDelegationDecisionRepository(
+                jdbc);
+    }
+
+    /** R7a-1：RCA 模型调用账本（V48；PENDING 先行=发送资格，终态 CAS） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelCallLedger(
+                jdbc, objectMapper);
+    }
+
+    /** R7a-1：RCA 侧网关事件汇（MODEL_* 决策事件 → rca_event，绕开 pr_revision FK 面） */
+    @Bean
+    public com.objwww.pr.control.domain.service.ExecutionEventRepository rcaModelEventSink(
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.RcaModelEventSink(
+                rcaEventAppender, objectMapper);
     }
 
     @Bean

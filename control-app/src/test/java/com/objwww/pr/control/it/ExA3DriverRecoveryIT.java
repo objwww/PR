@@ -137,25 +137,58 @@ class ExA3DriverRecoveryIT extends PostgresITBase {
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), tasks,
                         new com.objwww.pr.control.infrastructure.persistence
-                                .PostgresTaskEdgeRepository(jdbc), controlTx),
+                                .PostgresTaskEdgeRepository(jdbc),
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresTaskExecutionBindingRepository(jdbc, MAPPER),
+                        controlTx),
                 new DagExecutionService(new com.objwww.pr.control.infrastructure.persistence
                         .PostgresTaskEdgeRepository(jdbc), tasks),
-                runs, tasks, controlTx, AlertClock.system());
+                runs, tasks,
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresTaskExecutionBindingRepository(jdbc, MAPPER),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresPrimaryCheckpointRepository(jdbc, MAPPER),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresDelegationDecisionRepository(jdbc),
+                agentRegistry(), controlTx, AlertClock.system());
         executor = new NativeInvestigationExecutor(bundles, supervisor, tasks, runs,
                 evidence, new PostgresEvidenceSnapshotRepository(jdbc, controlTx),
-                metrics, logs, change,
                 new NativeRcaAgent(evidence,
                         new PostgresEvidenceSnapshotRepository(jdbc, controlTx), claims,
                         new ClaimReducer(Set.of(), POLICY_VERSION)),
                 claims, new com.objwww.pr.control.alert.domain.service.EvidencePackageValidator(
                         65_536, 32, 4_096),
-                "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
+                TOOL_REGISTRY_DIGEST,
                 AlertClock.system(), AlertMetrics.NOOP,
                 new RunBudgetGate(new com.objwww.pr.control.alert.infrastructure
                         .InMemoryRunBudgetLedger()),
                 Map.of(BudgetKind.STEP, 256L, BudgetKind.TOOL_CALL, 256L,
                         BudgetKind.EVIDENCE, 256L, BudgetKind.SUBTASK, 64L),
-                ledger);
+                ledger,
+                // R7-X2：分派面 = 持久绑定 + 兼容适配运行器目录
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresTaskExecutionBindingRepository(jdbc, MAPPER),
+                agentRegistry(), compatRunners(metrics, logs, change),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresPrimaryCheckpointRepository(jdbc, MAPPER), null);
+    }
+
+    /** R7-X2：兼容适配运行器目录（role→Agent 映射，与生产装配 AlertFlowConfig 同形） */
+    private static com.objwww.pr.control.alert.application.agent.RunnerDirectory compatRunners(
+            MetricsAgent metrics, LogsAgent logs, ChangeAgent change) {
+        Map<String, com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner.RoleQueryHandler>
+                handlers = new java.util.LinkedHashMap<>();
+        handlers.put("metrics", (ctx, start, end) -> metrics.investigate(ctx,
+                new MetricsAgent.MetricsQuery(
+                        "oa_duplicate_orders_current{job=\"order-arena\"}", start, end,
+                        com.objwww.pr.control.alert.domain.identity.InvestigationInputs.STEP)));
+        handlers.put("logs", (ctx, start, end) -> logs.investigate(ctx,
+                new LogsAgent.LogsQuery(start, end)));
+        handlers.put("change", (ctx, start, end) -> change.investigate(ctx,
+                new ChangeAgent.ChangeQuery(start, end)));
+        return new com.objwww.pr.control.alert.application.agent.RunnerDirectory(List.of(
+                new com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner(
+                        handlers)));
     }
 
     // --------------------------------------------- V38 schema 面

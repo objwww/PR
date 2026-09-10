@@ -76,6 +76,14 @@ public final class AlertInMemoryStores {
     public final ToolLedger toolLedger = new ToolLedger();
     /** EX-A4a（F05）：证据快照假件（黑板=冻结成员面） */
     public final Snapshots snapshots = new Snapshots();
+    /** R7-X1：任务→角色冻结绑定假件（uq(run,round,task_key) 只增不改） */
+    public final Bindings bindings = new Bindings();
+    /** R7-X4：主任务检查点假件（task_id 幂等锚 + 相位 CAS） */
+    public final Checkpoints checkpoints = new Checkpoints();
+    /** R7-X4/X11：委派裁决台账假件（uq(run,gap) 冲突显式抛） */
+    public final DelegationDecisions delegationDecisions = new DelegationDecisions();
+    /** R7a-1：RCA 模型调用账本假件（PENDING 先行 + 终态 CAS） */
+    public final ModelCalls modelCalls = new ModelCalls();
 
     // ------------------------------------------------------------------ alert_inbox
 
@@ -420,9 +428,10 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized void insert(RcaTask task) {
             boolean dup = rows.values().stream().anyMatch(t ->
-                    t.runId().equals(task.runId()) && t.taskKey().equals(task.taskKey()));
+                    t.runId().equals(task.runId()) && t.roundId() == task.roundId()
+                            && t.taskKey().equals(task.taskKey()));
             if (dup) {
-                throw new DuplicateKeyException("uq_rca_task_key 模拟");
+                throw new DuplicateKeyException("uq_rca_task_key 模拟 (run,round,task_key)");
             }
             rows.put(task.id(), task);
         }
@@ -443,7 +452,7 @@ public final class AlertInMemoryStores {
             RcaTask claimed = new RcaTask(t.id(), t.runId(), t.taskKey(), RcaTaskState.LEASED,
                     t.priority(), t.availableAt(), t.readySince(), t.deadlineAt(),
                     owner, now.plus(lease), t.leaseEpoch() + 1,
-                    t.attemptCount() + 1, t.maxAttempts(), t.createdAt(), now);
+                    t.attemptCount() + 1, t.maxAttempts(), t.createdAt(), now, t.roundId());
             rows.put(t.id(), claimed);
             return Optional.of(claimed);
         }
@@ -472,7 +481,7 @@ public final class AlertInMemoryStores {
                 rows.put(id, new RcaTask(t.id(), t.runId(), t.taskKey(), t.state(),
                         t.priority(), t.availableAt(), t.readySince(), t.deadlineAt(),
                         t.leaseOwner(), now.plus(extend), t.leaseEpoch(),
-                        t.attemptCount(), t.maxAttempts(), t.createdAt(), now));
+                        t.attemptCount(), t.maxAttempts(), t.createdAt(), now, t.roundId()));
             }
         }
 
@@ -497,7 +506,7 @@ public final class AlertInMemoryStores {
             rows.put(id, new RcaTask(t.id(), t.runId(), t.taskKey(), target,
                     t.priority(), readyAt, readyAt, t.deadlineAt(),
                     null, null, t.leaseEpoch(),
-                    t.attemptCount(), t.maxAttempts(), t.createdAt(), now));
+                    t.attemptCount(), t.maxAttempts(), t.createdAt(), now, t.roundId()));
             return true;
         }
 
@@ -523,7 +532,7 @@ public final class AlertInMemoryStores {
             rows.put(id, new RcaTask(t.id(), t.runId(), t.taskKey(), to,
                     t.priority(), t.availableAt(), t.readySince(), t.deadlineAt(),
                     t.leaseOwner(), t.leaseUntil(), t.leaseEpoch(),
-                    t.attemptCount(), t.maxAttempts(), t.createdAt(), t.updatedAt()));
+                    t.attemptCount(), t.maxAttempts(), t.createdAt(), t.updatedAt(), t.roundId()));
             return true;
         }
 
@@ -1287,6 +1296,195 @@ public final class AlertInMemoryStores {
                 }
             }
             return swept;
+        }
+    }
+
+    // --------------------------------- 任务→角色冻结绑定假件（R7-X1）
+
+    /** V46 同构假件：只增不改，uq(run, round, task_key) 冲突显式抛 */
+    public static final class Bindings implements
+            com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.model.TaskExecutionBinding> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insert(
+                com.objwww.pr.control.alert.domain.model.TaskExecutionBinding binding) {
+            boolean dup = rows.values().stream().anyMatch(b ->
+                    b.runId().equals(binding.runId()) && b.roundId() == binding.roundId()
+                            && b.taskKey().equals(binding.taskKey()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_rca_task_binding_key 模拟");
+            }
+            rows.put(binding.taskId(), binding);
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.model.TaskExecutionBinding> findByTask(
+                UUID taskId) {
+            return java.util.Optional.ofNullable(rows.get(taskId));
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.model.TaskExecutionBinding> findByRun(
+                UUID runId) {
+            return rows.values().stream()
+                    .filter(b -> b.runId().equals(runId))
+                    .sorted(java.util.Comparator.comparing(
+                            com.objwww.pr.control.alert.domain.model.TaskExecutionBinding::taskId))
+                    .toList();
+        }
+    }
+
+    // --------------------------------- 主任务检查点假件（R7-X4）
+
+    /** V47 同构假件：task_id 幂等锚 upsert + 相位 CAS（末写胜出 = 单写者纪律下的 PG 语义） */
+    public static final class Checkpoints implements
+            com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized void upsert(
+                com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint checkpoint) {
+            rows.put(checkpoint.taskId(), checkpoint);
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint> findByTask(
+                UUID taskId) {
+            return java.util.Optional.ofNullable(rows.get(taskId));
+        }
+
+        @Override
+        public synchronized boolean transitionPhase(UUID taskId,
+                com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint.Phase from,
+                com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint.Phase to) {
+            com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint current = rows.get(taskId);
+            if (current == null || current.phase() != from) {
+                return false;
+            }
+            rows.put(taskId, current.withPhase(to, current.updatedAt()));
+            return true;
+        }
+    }
+
+    // --------------------------------- 委派裁决台账假件（R7-X4/X11）
+
+    /** V47 同构假件：uq(run, gap) 冲突显式抛（调用方幂等短路依据） */
+    public static final class DelegationDecisions implements
+            com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository {
+        private final Map<UUID, com.objwww.pr.control.alert.domain.agent.DelegationDecision> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insert(
+                com.objwww.pr.control.alert.domain.agent.DelegationDecision decision) {
+            boolean dup = rows.values().stream().anyMatch(d ->
+                    d.runId().equals(decision.runId()) && d.gapId().equals(decision.gapId()));
+            if (dup) {
+                throw new DuplicateKeyException("uq_r7_delegation_gap 模拟");
+            }
+            rows.put(decision.id(), decision);
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.DelegationDecision> findByRunAndGap(
+                UUID runId, String gapId) {
+            return rows.values().stream()
+                    .filter(d -> d.runId().equals(runId) && d.gapId().equals(gapId))
+                    .findFirst();
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.agent.DelegationDecision> findByRunAndPrimaryTask(
+                UUID runId, UUID primaryTaskId) {
+            return rows.values().stream()
+                    .filter(d -> d.runId().equals(runId)
+                            && d.primaryTaskId().equals(primaryTaskId))
+                    .sorted(java.util.Comparator.comparing(
+                            com.objwww.pr.control.alert.domain.agent.DelegationDecision::roundId)
+                            .thenComparing(
+                                    com.objwww.pr.control.alert.domain.agent.DelegationDecision::seq))
+                    .toList();
+        }
+    }
+
+    // --------------------------------- RCA 模型调用账本假件（R7a-1）
+
+    /** V48 同构假件：uq(run,task,attempt,action,physical) 冲突显式抛 + 终态 CAS */
+    public static final class ModelCalls implements
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger {
+
+        /** 行投影（open 载荷 + 终态） */
+        public record CallRow(OpenRow open, String state, UsageOutcome usage,
+                String errorCode) {
+        }
+
+        private final Map<UUID, CallRow> rows = new LinkedHashMap<>();
+
+        public synchronized List<CallRow> all() {
+            return List.copyOf(rows.values());
+        }
+
+        public synchronized CallRow byId(UUID id) {
+            return rows.get(id);
+        }
+
+        @Override
+        public synchronized void open(OpenRow row) {
+            boolean dup = rows.values().stream().anyMatch(r ->
+                    r.open().runId().equals(row.runId())
+                            && r.open().taskId().equals(row.taskId())
+                            && r.open().attemptId().equals(row.attemptId())
+                            && r.open().actionSeq() == row.actionSeq()
+                            && r.open().physicalSeq() == row.physicalSeq());
+            if (dup) {
+                throw new DuplicateKeyException("uq_rca_model_call_action 模拟");
+            }
+            rows.put(row.id(), new CallRow(row, "PENDING", null, null));
+        }
+
+        @Override
+        public synchronized boolean succeed(UUID id, UsageOutcome usage) {
+            CallRow current = rows.get(id);
+            if (current == null || !"PENDING".equals(current.state())) {
+                return false;
+            }
+            rows.put(id, new CallRow(current.open(), "SUCCESS", usage, null));
+            return true;
+        }
+
+        @Override
+        public synchronized boolean fail(UUID id, String errorCode) {
+            CallRow current = rows.get(id);
+            if (current == null || !"PENDING".equals(current.state())) {
+                return false;
+            }
+            rows.put(id, new CallRow(current.open(), "FAILED", null, errorCode));
+            return true;
+        }
+
+        @Override
+        public synchronized boolean markUnknown(UUID id) {
+            CallRow current = rows.get(id);
+            if (current == null || !"PENDING".equals(current.state())) {
+                return false;
+            }
+            rows.put(id, new CallRow(current.open(), "UNKNOWN", null, "TRANSPORT_UNKNOWN"));
+            return true;
+        }
+
+        @Override
+        public synchronized List<UnsettledRow> findUnsettledByRun(UUID runId) {
+            return rows.values().stream()
+                    .filter(r -> r.open().runId().equals(runId))
+                    .filter(r -> "PENDING".equals(r.state()) || "UNKNOWN".equals(r.state()))
+                    .sorted(java.util.Comparator.comparing(r -> r.open().actionSeq()))
+                    .map(r -> new UnsettledRow(r.open().id(), r.open().taskId(),
+                            r.open().actionSeq(), r.open().physicalSeq(), r.state(),
+                            r.errorCode()))
+                    .toList();
         }
     }
 }

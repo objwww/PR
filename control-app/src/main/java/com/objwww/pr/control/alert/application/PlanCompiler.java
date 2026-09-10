@@ -1,13 +1,16 @@
 package com.objwww.pr.control.alert.application;
 
 import com.objwww.pr.control.alert.application.agent.AgentRegistry;
+import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.dag.DagCycleDetector;
 import com.objwww.pr.control.alert.domain.dag.PlanProposal;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.TaskExecutionBinding;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
+import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Instant;
@@ -23,14 +26,24 @@ import java.util.UUID;
  * PlanCompiler（AM4 M4-25，双设防第二设防）：LLM Planner 输出经 {@link PlanProposal}
  * 结构严格解析后，再做语义校验——注册表任务类型（name@version 全钉，未注册拒绝）、
  * ≤8 任务、深度 ≤3、无环（全图复判）、活跃 VERIFY ≤1、task inputs ⊆ 本 run 已知
- * artifact 集——全部通过后<b>单事务落 tasks+edges</b>。模型无调度权（INV-AM4-2）：
- * 本类是提案到 DAG 的唯一落库路径；相同提案 → 相同任务图（proposalDigest 稳定）。
+ * artifact 集——全部通过后<b>单事务落 tasks+edges+bindings</b>。模型无调度权
+ * （INV-AM4-2）：本类是提案到 DAG 的唯一落库路径；相同提案 → 相同任务图
+ * （proposalDigest 稳定）。
  *
  * <p>边直接经 TaskEdgeRepository 落库：无环已在写前对提案全图判定（比逐边复判强），
  * DB 面 V8+V18 组合约束兜底存在性/同 run 域。
  *
  * <p>任务出生默认：BLOCKED（推进器负责 READY）/priority 5/maxAttempts 2/
  * deadlineAt=Instant.MAX（PG infinity，SLA 策略面归 M4-26 Supervisor 演进）。
+ *
+ * <p>R7-X1（v2.1 §十一.2/§十三）：任务的角色身份经 {@link TaskExecutionBinding}
+ * 在<b>同一编译事务</b>内冻结落库（role 版本/digest、round、input refs、输出 schema
+ * 冻结件）；幂等键 = (run, round, taskKey)——同轮重复提交撞唯一键显式失败，
+ * 重入由 Supervisor 启动短路兜底（已落图不重编译）。
+ *
+ * <p>R7-X11（v2.1 §三/§十三）：{@link #compilePrimary} 为主模式 run 的唯一入口——
+ * 初始只建主节点（PRIMARY_INVESTIGATE，round0），不预建任何调查专家；专家仅经
+ * Supervisor 委派裁决按需出现。
  */
 public class PlanCompiler {
 
@@ -45,13 +58,16 @@ public class PlanCompiler {
     private final AgentRegistry agents;
     private final RcaTaskRepository tasks;
     private final TaskEdgeRepository edges;
+    private final TaskExecutionBindingRepository bindings;
     private final TransactionOperations tx;
 
     public PlanCompiler(AgentRegistry agents, RcaTaskRepository tasks,
-            TaskEdgeRepository edges, TransactionOperations tx) {
+            TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+            TransactionOperations tx) {
         this.agents = Objects.requireNonNull(agents);
         this.tasks = Objects.requireNonNull(tasks);
         this.edges = Objects.requireNonNull(edges);
+        this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.tx = Objects.requireNonNull(tx);
     }
 
@@ -112,6 +128,8 @@ public class PlanCompiler {
                 tasks.insert(new RcaTask(id, runId, task.key(), RcaTaskState.BLOCKED,
                         DEFAULT_PRIORITY, now, now, Instant.MAX, null, null, 0,
                         0, DEFAULT_MAX_ATTEMPTS, now, now));
+                bindings.insert(bindingOf(runId, id, task.key(), task.type(),
+                        task.inputs(), now));
             }
             for (PlanProposal.PlanEdge edge : proposal.edges()) {
                 edges.insert(runId, taskIds.get(edge.from()), taskIds.get(edge.to()),
@@ -120,6 +138,50 @@ public class PlanCompiler {
             return null;
         });
         return new PlanCompilation(runId, Map.copyOf(taskIds), digest);
+    }
+
+    /**
+     * R7-X11：主模式编译——初始只建主节点（v2.1 §三 "默认只创建主任务，不预建两个
+     * 调查根"）。主任务同样走冻结绑定（PRIMARY phase Profile），恢复不猜角色。
+     */
+    public PlanCompilation compilePrimary(UUID runId, AgentProfile primaryProfile,
+            Set<String> knownArtifacts) {
+        Objects.requireNonNull(runId, "runId");
+        Objects.requireNonNull(primaryProfile, "primaryProfile");
+        Objects.requireNonNull(knownArtifacts, "knownArtifacts");
+        if (primaryProfile.phase() != com.objwww.pr.control.alert.domain.agent.AgentPhase.PRIMARY) {
+            throw new IllegalArgumentException(
+                    "主模式编译只接受 PRIMARY 阶段 Profile，实际: " + primaryProfile.name()
+                            + " phase=" + primaryProfile.phase());
+        }
+        Instant now = Instant.now();
+        UUID primaryTaskId = UUID.randomUUID();
+        String type = primaryProfile.name() + "@" + primaryProfile.version();
+        tx.execute(status -> {
+            tasks.insert(new RcaTask(primaryTaskId, runId, RcaTask.PRIMARY_INVESTIGATE,
+                    RcaTaskState.BLOCKED, DEFAULT_PRIORITY, now, now, Instant.MAX,
+                    null, null, 0, 0, DEFAULT_MAX_ATTEMPTS, now, now, 0));
+            bindings.insert(bindingOf(runId, primaryTaskId, RcaTask.PRIMARY_INVESTIGATE,
+                    type, List.of(), now));
+            return null;
+        });
+        return new PlanCompilation(runId, Map.of(RcaTask.PRIMARY_INVESTIGATE, primaryTaskId),
+                new PlanProposal(PlanProposal.SCHEMA_VERSION,
+                        List.of(new PlanProposal.PlanTask(RcaTask.PRIMARY_INVESTIGATE, type,
+                                List.of())),
+                        List.of()).digest());
+    }
+
+    /** 冻结绑定铸造（编译事务内；role 身份三 元组来自注册表 require 的 Profile） */
+    private TaskExecutionBinding bindingOf(UUID runId, UUID taskId, String taskKey,
+            String type, List<String> inputRefs, Instant now) {
+        int at = type.indexOf('@');
+        AgentProfile profile = agents.require(type.substring(0, at), type.substring(at + 1));
+        return new TaskExecutionBinding(taskId, runId, 0, taskKey,
+                profile.name(), profile.version(), profile.digest(),
+                agents.releaseDigest().orElse(null), null,
+                inputRefs, profile.outputSchema(), null, true,
+                TaskExecutionBinding.FailurePolicy.DEAD_ON_FAILURE, now);
     }
 
     /** 最长路径边数（边松弛到不动点；解析面已拒环+全图复判，必终止） */
