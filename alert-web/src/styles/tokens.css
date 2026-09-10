@@ -17,6 +17,17 @@
   --warn: #9a6a00; --warn-bg: #fdf6e4;
   --orange: var(--sev-p1); --orange-bg: #fff3e8;
 
+  /* UX-01 告警分类色阶（文字/底）：七业务类 + 平台（品红，控制面独立出口）+ 未分类灰 */
+  --cat-business: #165DFF;   --cat-business-bg: #e8f1ff;
+  --cat-application: #1a9e3e; --cat-application-bg: #e9f8ee;
+  --cat-dependency: #722ED1; --cat-dependency-bg: #f5e8ff;
+  --cat-infra: var(--sev-p1); --cat-infra-bg: var(--orange-bg);
+  --cat-network: #0f8b8d;    --cat-network-bg: #e0f5f5;
+  --cat-data: var(--warn);   --cat-data-bg: var(--warn-bg);
+  --cat-security: var(--sev-p0); --cat-security-bg: var(--bad-bg);
+  --cat-platform: #d6218f;   --cat-platform-bg: #fff0f6;
+  --cat-unclassified: var(--sev-info); --cat-unclassified-bg: #f2f4f8;
+
   /* ---- 尺寸阶梯 ---- */
   --fs-page-title: 24px; --fs-section: 16px; --fs-body: 14px; --fs-aux: 12px;
   --page-pad: 24px; --section-gap: 24px; --card-pad: 20px;

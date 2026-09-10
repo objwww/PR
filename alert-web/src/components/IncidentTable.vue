@@ -1,6 +1,6 @@
 <template>
   <!-- incident 列表通用表格（UI-1：告警中心 / 历史档案同列口径）：
-       行首 4px severity 色条 + 严重度徽章、告警/服务、状态、持续时间、接收/事件、调查状态、操作槽 -->
+       行首 4px severity 色条 + 严重度徽章、分类徽章（UX-01）、告警/服务、状态、持续时间、接收/事件、调查状态、操作槽 -->
   <el-table
     :data="rows"
     v-loading="loading"
@@ -12,6 +12,12 @@
       <template #default="{ row }">
         <StatusBadge v-if="mapSeverity(row.severity).key" :severity="mapSeverity(row.severity).key" />
         <el-tag v-else type="info" disable-transitions>未分级</el-tag>
+      </template>
+    </el-table-column>
+    <!-- UX-01 分类列：category 缺席（旧契约后端）→ '—'，不报错不伪造 -->
+    <el-table-column label="分类" width="120">
+      <template #default="{ row }">
+        <CategoryBadge :category="row.category" :source="row.categorySource" />
       </template>
     </el-table-column>
     <el-table-column label="告警 / 服务" min-width="220">
@@ -58,6 +64,7 @@
 
 <script setup>
 import StatusBadge from './common/StatusBadge.vue'
+import CategoryBadge from './common/CategoryBadge.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtAgo, fmtTime } from '../utils/format'
 
