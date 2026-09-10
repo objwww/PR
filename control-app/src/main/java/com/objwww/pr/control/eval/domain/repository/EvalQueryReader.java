@@ -83,4 +83,84 @@ public interface EvalQueryReader {
 
     /** 数据集版本全量（created_at DESC；数据集版本数为导入次数量级，不分页） */
     List<DatasetRow> listDatasets();
+
+    // ------------------------------------------------------------------ EV-05 案例与证据
+
+    /**
+     * 案例详情行（EV-05 §3.4）：eval_case_result 全列 + 关联链直读（rca_run 状态/
+     * incident/起止时刻、scored 报告结构验证面与 package_json 原文）。关联链任一环节
+     * 缺席（verdict 形态决定 / 外键可空）如实 null；package_json 为 jsonb 原文
+     * （::text 上抛），claims 解析与证据引用解析归应用服务。
+     */
+    record EvalCaseDetailRow(UUID caseExecutionId, UUID runId, String scenarioId, int roundNo,
+                             String datasetVersion,
+                             String selectionPolicyVersion, String verdict, boolean rootCauseHit,
+                             String expectedRootCauseJson, String actualRootCauseJson,
+                             String expectedSymptomCodesJson, String actualSymptomCodesJson,
+                             Integer tp, Integer fp, Integer fn, Long latencyMs,
+                             boolean silencePenalty, String failureSampleJson, Instant createdAt,
+                             UUID rcaRunId, UUID scoredAttemptId, UUID scoredReportId,
+                             String rcaRunState, UUID incidentId,
+                             Instant rcaStartedAt, Instant rcaFinishedAt,
+                             Integer reportSchemaVersion, String reportValidationStatus,
+                             String reportModel, Instant reportCreatedAt, String packageJson) {
+    }
+
+    /**
+     * 场景身份解析行（EV-05 §3.4）：case_version 精确键匹配
+     * （dataset_version.version = run.dataset_version 且 case_key = scenario_id——
+     * 声明式键匹配，不按时间猜归属；无匹配/HOLDOUT 行 RLS 不可见 → empty 如实）。
+     * 只投影身份/摘要/分区字段，payload（GT 原始 artifact）不出读面。
+     */
+    record CaseIdentityRow(String caseKey, String scenarioFamilyId, String contentDigest,
+                           Instant validFrom, Instant validTo, String partitionClass,
+                           String datasetName, String datasetVersion, String sourceClass) {
+    }
+
+    /**
+     * Run 证据汇总扁平行（EV-05）：每行 = 一个案例的一条 claim 的一条 evidence_ref
+     * （SQL 侧只抽取小字段，不上抛 package 大文本；claims 缺/非数组面由 SQL CASE
+     * 护住）。ref 可解析为案例所属 rca_run 范围内的 rca_evidence 行 → evidenceId/
+     * evidenceType 直读（跨 run 引用不解析，bucket 归 UNRESOLVED 由服务层判）；
+     * 无报告/无 claim/无 ref 的案例出一行全空哨兵（claimStatus=null），
+     * 服务层据此区分"无报告"与"报告无引用"。
+     */
+    record CaseEvidenceRefRow(UUID caseExecutionId, String scenarioId, int roundNo,
+                              String verdict, UUID rcaRunId, UUID scoredReportId,
+                              String claimStatus, String claimType, String ref,
+                              UUID evidenceId, String evidenceType) {
+    }
+
+    /**
+     * 受限日志比较证据行（EV-05 §3.4/§5.3 末行）：案例关联 rca_run 的 logs.query
+     * 冻结证据（payload 为 EX-B2 统一形状原文；时间窗/服务从证据行本身取——
+     * 端点不接受自由查询参数，不发新 Loki 查询）。
+     */
+    record CaseLogEvidenceRow(UUID caseExecutionId, String scenarioId, int roundNo,
+                              UUID rcaRunId, UUID evidenceId, String source, String scopeJson,
+                              Instant timeStart, Instant timeEnd, String payloadJson,
+                              String payloadDigest, Instant evidenceCreatedAt) {
+    }
+
+    /** rca_evidence 元数据行（详情面证据引用解析；payload 大文本不上抛，只带 digest） */
+    record EvidenceMetaRow(UUID evidenceId, UUID runId, String evidenceType, String source,
+                           String scopeJson, Instant timeStart, Instant timeEnd,
+                           String payloadDigest, Instant createdAt) {
+    }
+
+    /** 案例详情（runId + caseExecutionId 双键定位，防跨 run 直读）；未知 → empty */
+    Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId);
+
+    /** 场景身份精确键解析（见 CaseIdentityRow 注释）；无匹配 → empty */
+    Optional<CaseIdentityRow> findCaseIdentity(String datasetVersion, String scenarioId);
+
+    /** run 全案例的证据引用扁平行（单查询，不 N+1）；run 无案例 → 空表 */
+    List<CaseEvidenceRefRow> listCaseEvidenceRefs(UUID runId);
+
+    /** 案例所属 rca_run 范围内的证据元数据批量读（id 白名单 + rca_run 双约束，
+     *  跨 run id 不返回——§3.4 禁止凭任意 evidenceId 跨对象读取） */
+    List<EvidenceMetaRow> listEvidenceMeta(UUID rcaRunId, List<UUID> evidenceIds);
+
+    /** 指定 run + scenario 的案例关联 logs.query 冻结证据（created_at, evidenceId 序） */
+    List<CaseLogEvidenceRow> listCaseLogEvidence(UUID runId, String scenarioId);
 }

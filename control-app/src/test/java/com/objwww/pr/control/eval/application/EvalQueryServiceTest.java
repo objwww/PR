@@ -2,16 +2,23 @@ package com.objwww.pr.control.eval.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseEvidenceRefRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseIdentityRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseLogEvidenceRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.DatasetRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCaseDetailRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCasePage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCaseRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunPage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvidenceMetaRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.KeysetCursor;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -390,6 +397,363 @@ class EvalQueryServiceTest {
                 null, null, null, null);
     }
 
+    // ------------------------------------------------------------------ EV-05 案例详情
+
+    private static EvalCaseDetailRow detailRow(UUID runId, UUID caseId, UUID rcaRunId,
+                                               UUID reportId, String verdict,
+                                               String packageJson) {
+        return new EvalCaseDetailRow(caseId, runId, "infra/redis-oom", 1, "rca100-v1.1",
+                "m3-16-v1", verdict, true,
+                "{\"component\":\"redis\",\"fault_type\":\"OOM\",\"reason_code\":\"eviction\"}",
+                "{\"component\":\"redis\",\"fault_type\":\"OOM\",\"reason_code\":\"eviction\"}",
+                "[\"alert:redis_down\"]", "[\"alert:redis_down\"]",
+                1, 0, 0, 4200L, false, null, NOW,
+                rcaRunId, UUID.randomUUID(), reportId,
+                rcaRunId == null ? null : "SUCCEEDED",
+                rcaRunId == null ? null : UUID.randomUUID(),
+                rcaRunId == null ? null : NOW.minusSeconds(300),
+                rcaRunId == null ? null : NOW.minusSeconds(60),
+                reportId == null ? null : 2,
+                reportId == null ? null : "STRUCTURE_VALIDATED",
+                reportId == null ? null : "holmes-1.0",
+                reportId == null ? null : NOW.minusSeconds(50),
+                packageJson);
+    }
+
+    /** v2 报告包（claims 形态合法；refs 参数逐 claim 一组） */
+    private static String packageJson(String claims) {
+        return "{\"schema_version\":2,\"summary\":\"s\",\"impact\":\"i\",\"remediation\":\"r\","
+                + "\"root_cause\":{\"component\":\"redis\",\"fault_type\":\"OOM\","
+                + "\"reason_code\":\"eviction\"},\"evidence\":[\"e\"],\"references\":[],"
+                + "\"claims\":[" + claims + "]}";
+    }
+
+    private static String claim(String type, String status, String... refs) {
+        StringBuilder refJson = new StringBuilder();
+        for (String ref : refs) {
+            if (refJson.length() > 0) {
+                refJson.append(',');
+            }
+            refJson.append('"').append(ref).append('"');
+        }
+        return "{\"claim_type\":\"" + type + "\",\"status\":\"" + status + "\","
+                + "\"component\":\"redis\",\"fault_type\":\"OOM\","
+                + "\"symptom_codes\":[],\"evidence_refs\":[" + refJson + "]}";
+    }
+
+    @Test
+    void caseDetailAssemblesIdentityLinkageAndEvidenceBuckets() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        UUID rcaRunId = UUID.randomUUID();
+        UUID reportId = UUID.randomUUID();
+        UUID evTrue = UUID.randomUUID();
+        UUID evFalse = UUID.randomUUID();
+        UUID evMissing = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, rcaRunId, reportId, "DECIDABLE",
+                packageJson(claim("causal", "TRUE", evTrue.toString(), "loki:query:x")
+                        + "," + claim("counter", "FALSE", evFalse.toString(), evMissing.toString())
+                        + "," + claim("unclear", "UNKNOWN")));
+        reader.caseIdentity = new CaseIdentityRow("infra/redis-oom", "redis-oom",
+                "c".repeat(64), NOW.minusSeconds(3600), null, "VALIDATION",
+                "rca100", "rca100-v1.1", "PUBLIC_BENCHMARK");
+        reader.evidenceMeta = List.of(
+                new EvidenceMetaRow(evTrue, rcaRunId, "logs.query", "logs", null,
+                        NOW.minusSeconds(120), NOW, "d".repeat(64), NOW),
+                new EvidenceMetaRow(evFalse, rcaRunId, "metrics.query_range", "metrics", null,
+                        null, null, "e".repeat(64), NOW));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(reader.lastDetailRunId).isEqualTo(runId);
+        assertThat(reader.lastDetailCaseId).isEqualTo(caseId);
+        assertThat(out.caseExecutionId()).isEqualTo(caseId);
+        assertThat(out.verdict()).isEqualTo("DECIDABLE");
+        assertThat(out.expectedRootCause()).isEqualTo("redis/OOM/eviction");
+        assertThat(out.expectedSymptomCodes()).containsExactly("alert:redis_down");
+        // 场景身份：精确键命中
+        assertThat(out.scenarioIdentity().resolved()).isTrue();
+        assertThat(out.scenarioIdentity().caseKey()).isEqualTo("infra/redis-oom");
+        assertThat(out.scenarioIdentity().partitionClass()).isEqualTo("VALIDATION");
+        assertThat(reader.lastIdentityDataset).isEqualTo("rca100-v1.1");
+        assertThat(reader.lastIdentityScenario).isEqualTo("infra/redis-oom");
+        // 关联链
+        assertThat(out.linkage().rcaRunId()).isEqualTo(rcaRunId);
+        assertThat(out.linkage().rcaRunState()).isEqualTo("SUCCEEDED");
+        assertThat(out.linkage().reportValidationStatus()).isEqualTo("STRUCTURE_VALIDATED");
+        assertThat(out.report().summary()).isEqualTo("s");
+        // 证据：支持/反对/未决三态分列表
+        assertThat(out.evidence().status()).isEqualTo("OK");
+        assertThat(out.evidence().supporting()).hasSize(1);
+        assertThat(out.evidence().refuting()).hasSize(1);
+        assertThat(out.evidence().undetermined()).hasSize(1);
+        List<EvalQueryService.ResolvedEvidenceRef> supportingRefs =
+                out.evidence().supporting().get(0).refs();
+        // UUID 且本 run 内 → 解析出元数据；非 UUID 形态 → resolved=false 元数据全 null
+        assertThat(supportingRefs.get(0).resolved()).isTrue();
+        assertThat(supportingRefs.get(0).evidenceType()).isEqualTo("logs.query");
+        assertThat(supportingRefs.get(0).payloadDigest()).isEqualTo("d".repeat(64));
+        assertThat(supportingRefs.get(1).resolved()).isFalse();
+        assertThat(supportingRefs.get(1).evidenceId()).isNull();
+        // UUID 形态但不在本 rca_run 范围（reader 不返回）→ resolved=false（跨对象不读）
+        assertThat(out.evidence().refuting().get(0).refs().get(0).resolved()).isTrue();
+        assertThat(out.evidence().refuting().get(0).refs().get(1).resolved()).isFalse();
+        assertThat(reader.lastMetaRcaRunId).isEqualTo(rcaRunId);
+        assertThat(reader.lastMetaIds).containsExactlyInAnyOrder(evTrue, evFalse, evMissing);
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void caseDetailWithoutReportIsHonestNoReport() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        // TIMEOUT_OR_ABSENT：关联链全断（V10 verdict 形态约束）→ 全 null 如实
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        reader.caseIdentity = null;
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.evidence().status()).isEqualTo("NO_REPORT");
+        assertThat(out.evidence().supporting()).isEmpty();
+        assertThat(out.report()).isNull();
+        assertThat(out.linkage().rcaRunId()).isNull();
+        assertThat(out.linkage().reportModel()).isNull();
+        assertThat(out.scenarioIdentity().resolved()).isFalse();
+        assertThat(out.scenarioIdentity().caseKey()).isNull();
+        assertThat(out.scenarioIdentity().datasetVersion()).isEqualTo("rca100-v1.1");
+    }
+
+    @Test
+    void caseDetailMarksUnparseableOrUnsupportedPackageExplicitly() {
+        UUID runId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), "DECIDABLE", "{not-json");
+        EvalQueryService.EvalCaseDetailResponse broken =
+                service.caseDetail(runId, reader.caseDetail.caseExecutionId()).orElseThrow();
+        assertThat(broken.evidence().status()).isEqualTo("PACKAGE_UNPARSEABLE");
+        assertThat(broken.report()).isNull();
+
+        // 非 v2 包（v1 六段式无 claims）→ 不猜结构
+        EvalCaseDetailRow v1 = new EvalCaseDetailRow(
+                reader.caseDetail.caseExecutionId(), runId, "s1", 1, "ds", "p",
+                "DECIDABLE", true, null, null, null, null, null, null, null, null,
+                false, null, NOW, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                "SUCCEEDED", UUID.randomUUID(), NOW, NOW, 1, "STRUCTURE_VALIDATED",
+                "holmes-0.9", NOW, "{\"schema_version\":1}");
+        reader.caseDetail = v1;
+        EvalQueryService.EvalCaseDetailResponse legacy =
+                service.caseDetail(runId, v1.caseExecutionId()).orElseThrow();
+        assertThat(legacy.evidence().status()).isEqualTo("UNSUPPORTED_SCHEMA_VERSION");
+    }
+
+    @Test
+    void caseDetailOfUnknownCaseIsEmpty() {
+        reader.caseDetail = null;
+        assertThat(service.caseDetail(UUID.randomUUID(), UUID.randomUUID())).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ EV-05 Run 证据汇总
+
+    @Test
+    void evidenceSummaryBucketsRefsPerCaseAndAggregates() {
+        UUID runId = UUID.randomUUID();
+        UUID case1 = UUID.randomUUID();
+        UUID case2 = UUID.randomUUID();
+        UUID case3 = UUID.randomUUID();
+        UUID reportId = UUID.randomUUID();
+        UUID rcaRunId = UUID.randomUUID();
+        UUID evId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.evidenceRefRows = List.of(
+                // case1：两条 resolved（logs+metrics）+ 一条跨 run 未解析；TRUE/FALSE/UNKNOWN 各一
+                new CaseEvidenceRefRow(case1, "s1", 1, "DECIDABLE", rcaRunId, reportId,
+                        "TRUE", "causal", evId.toString(), evId, "logs.query"),
+                new CaseEvidenceRefRow(case1, "s1", 1, "DECIDABLE", rcaRunId, reportId,
+                        "FALSE", "counter", UUID.randomUUID().toString(),
+                        UUID.randomUUID(), "metrics.query_range"),
+                new CaseEvidenceRefRow(case1, "s1", 1, "DECIDABLE", rcaRunId, reportId,
+                        "UNKNOWN", "unclear", "loki:query:x", null, null),
+                // case2：有报告但零引用（哨兵行）→ NO_REFS
+                new CaseEvidenceRefRow(case2, "s2", 1, "UNRESOLVED", rcaRunId, reportId,
+                        null, null, null, null, null),
+                // case3：无报告 → NO_REPORT
+                new CaseEvidenceRefRow(case3, "s3", 1, "TIMEOUT_OR_ABSENT", null, null,
+                        null, null, null, null, null));
+
+        EvalQueryService.RunEvidenceSummaryResponse out =
+                service.evidenceSummary(runId).orElseThrow();
+
+        assertThat(out.runId()).isEqualTo(runId);
+        assertThat(out.caseCount()).isEqualTo(3);
+        assertThat(out.casesWithReport()).isEqualTo(2);
+        assertThat(out.totalRefs()).isEqualTo(3);
+        assertThat(out.byType()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "logs.query", 1L, "metrics.query_range", 1L));
+        EvalQueryService.CaseEvidenceSummary first = out.cases().get(0);
+        assertThat(first.caseExecutionId()).isEqualTo(case1);
+        assertThat(first.status()).isEqualTo("OK");
+        assertThat(first.totalRefs()).isEqualTo(3);
+        assertThat(first.resolvedRefs()).isEqualTo(2);
+        assertThat(first.unresolvedRefs()).isEqualTo(1);
+        assertThat(first.supportingRefs()).isEqualTo(1);
+        assertThat(first.refutingRefs()).isEqualTo(1);
+        assertThat(first.undeterminedRefs()).isEqualTo(1);
+        assertThat(first.byType()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "logs.query", 1L, "metrics.query_range", 1L));
+        assertThat(out.cases().get(1).status()).isEqualTo("NO_REFS");
+        assertThat(out.cases().get(2).status()).isEqualTo("NO_REPORT");
+        assertThat(out.cases().get(2).totalRefs()).isZero();
+    }
+
+    @Test
+    void evidenceSummaryOfUnknownRunIsEmpty() {
+        reader.run = null;
+        assertThat(service.evidenceSummary(UUID.randomUUID())).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ EV-05 受限日志比较
+
+    private static CaseLogEvidenceRow logRow(UUID caseId, String scenarioId, int round,
+                                             UUID rcaRunId, String scope, String payload) {
+        return new CaseLogEvidenceRow(caseId, scenarioId, round, rcaRunId, UUID.randomUUID(),
+                "logs", scope, null, null, payload, "f".repeat(64), NOW);
+    }
+
+    private static String logPayload(boolean truncated, String... lines) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) {
+                result.append(',');
+            }
+            result.append("{\"ts\":\"2026-09-09T10:00:0").append(i).append("Z\",")
+                    .append("\"service\":\"checkout\",\"line\":\"").append(lines[i])
+                    .append("\"}");
+        }
+        return "{\"status\":\"success\",\"data\":{\"result\":[" + result
+                + "],\"truncated\":" + truncated + "}}";
+    }
+
+    @Test
+    void logCompareDiffsErrorSignaturesPerRound() {
+        UUID baseline = UUID.randomUUID();
+        UUID candidate = UUID.randomUUID();
+        UUID baseCase = UUID.randomUUID();
+        UUID candCase = UUID.randomUUID();
+        reader.run = runRow(baseline, NOW, "SUCCEEDED");
+        // findRun 对两 run 均需命中——FakeReader.findRun 返回同一 run 桩即可（存在性门）
+        reader.logEvidenceByRun.put(baseline, List.of(logRow(baseCase, "s1", 1,
+                UUID.randomUUID(), "{\"time_range\":\"w1\"}",
+                logPayload(false, "2026-09-09 10:00:01 ERROR redis OOM eviction 12345",
+                        "INFO warmup done",
+                        "2026-09-09 10:00:02 ERROR redis OOM eviction 67890"))));
+        reader.logEvidenceByRun.put(candidate, List.of(logRow(candCase, "s1", 1,
+                UUID.randomUUID(), "{\"time_range\":\"w2\"}",
+                logPayload(true, "2026-09-09 10:00:03 ERROR db deadlock txn 111",
+                        "2026-09-09 10:00:04 ERROR redis OOM eviction 99999"))));
+
+        EvalQueryService.EvalLogCompareResponse out =
+                service.logCompare(baseline, candidate, "s1").orElseThrow();
+
+        assertThat(out.compareStatus()).isEqualTo("OK");
+        assertThat(out.rounds()).hasSize(1);
+        EvalQueryService.RoundLogDiff round = out.rounds().get(0);
+        assertThat(round.baseline().caseExecutionId()).isEqualTo(baseCase);
+        assertThat(round.baseline().totalLines()).isEqualTo(3);
+        assertThat(round.baseline().errorLines()).isEqualTo(2);
+        assertThat(round.baseline().services()).containsExactly("checkout");
+        assertThat(round.baseline().scopeTimeRange()).isEqualTo("w1");
+        assertThat(round.baseline().windowStart())
+                .isEqualTo(Instant.parse("2026-09-09T10:00:00Z"));
+        assertThat(round.candidate().truncated()).isTrue();
+        EvalLogCompare.Diff diff = round.diff();
+        assertThat(diff).isNotNull();
+        // 数字归一化后 "ERROR redis OOM eviction <n>" 两侧同签名：2 vs 1 → decreased
+        assertThat(diff.decreased()).hasSize(1);
+        assertThat(diff.decreased().get(0).signature()).contains("redis OOM eviction <n>");
+        assertThat(diff.decreased().get(0).baselineCount()).isEqualTo(2);
+        assertThat(diff.decreased().get(0).candidateCount()).isEqualTo(1);
+        assertThat(diff.onlyInCandidate()).hasSize(1);
+        assertThat(diff.onlyInCandidate().get(0).signature()).contains("db deadlock txn");
+        assertThat(diff.onlyInBaseline()).isEmpty();
+    }
+
+    @Test
+    void logCompareHonestWhenSideOrEvidenceMissing() {
+        UUID baseline = UUID.randomUUID();
+        UUID candidate = UUID.randomUUID();
+        reader.run = runRow(baseline, NOW, "SUCCEEDED");
+        UUID baseCase = UUID.randomUUID();
+        reader.logEvidenceByRun.put(baseline, List.of(
+                logRow(baseCase, "s1", 1, UUID.randomUUID(), null,
+                        logPayload(false, "ERROR redis down 1")),
+                logRow(UUID.randomUUID(), "s1", 2, UUID.randomUUID(), null,
+                        logPayload(false, "ERROR redis down 2"))));
+        // candidate 仅 round 1 有证据 → round 2 diff 为 null（任一侧缺席不可比）
+        reader.logEvidenceByRun.put(candidate, List.of(
+                logRow(UUID.randomUUID(), "s1", 1, UUID.randomUUID(), null,
+                        logPayload(false, "ERROR redis down 3"))));
+
+        EvalQueryService.EvalLogCompareResponse out =
+                service.logCompare(baseline, candidate, "s1").orElseThrow();
+
+        assertThat(out.rounds()).hasSize(2);
+        assertThat(out.rounds().get(0).diff()).isNotNull();
+        assertThat(out.rounds().get(1).diff()).isNull();
+        assertThat(out.rounds().get(1).baseline()).isNotNull();
+        assertThat(out.rounds().get(1).candidate()).isNull();
+    }
+
+    @Test
+    void logCompareNoEvidenceBothSidesIsExplicitStatus() {
+        UUID baseline = UUID.randomUUID();
+        UUID candidate = UUID.randomUUID();
+        reader.run = runRow(baseline, NOW, "SUCCEEDED");
+
+        EvalQueryService.EvalLogCompareResponse out =
+                service.logCompare(baseline, candidate, "s-no-logs").orElseThrow();
+
+        assertThat(out.compareStatus()).isEqualTo("NO_LOG_EVIDENCE");
+        assertThat(out.rounds()).isEmpty();
+    }
+
+    @Test
+    void logCompareValidatesRestrictedParams() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        assertThatThrownBy(() -> service.logCompare(runId, runId, "s1"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.logCompare(UUID.randomUUID(), UUID.randomUUID(), " "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.logCompare(UUID.randomUUID(), UUID.randomUUID(),
+                "x".repeat(EvalQueryService.MAX_SCENARIO_ID_CHARS + 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        // 任一 run 未知 → empty（404 面）；FakeReader.run=null 即全未知
+        reader.run = null;
+        assertThat(service.logCompare(UUID.randomUUID(), UUID.randomUUID(), "s1")).isEmpty();
+    }
+
+    @Test
+    void logCompareMarksUnparseableEvidenceExplicitly() {
+        UUID baseline = UUID.randomUUID();
+        UUID candidate = UUID.randomUUID();
+        reader.run = runRow(baseline, NOW, "SUCCEEDED");
+        UUID baseCase = UUID.randomUUID();
+        reader.logEvidenceByRun.put(baseline, List.of(
+                logRow(baseCase, "s1", 1, UUID.randomUUID(), null, "{broken")));
+        reader.logEvidenceByRun.put(candidate, List.of(
+                logRow(UUID.randomUUID(), "s1", 1, UUID.randomUUID(), null,
+                        logPayload(false, "ERROR redis down 1"))));
+
+        EvalQueryService.EvalLogCompareResponse out =
+                service.logCompare(baseline, candidate, "s1").orElseThrow();
+
+        assertThat(out.rounds().get(0).baseline().unparseableEvidence()).isEqualTo(1);
+        assertThat(out.rounds().get(0).baseline().errorLines()).isZero();
+        assertThat(out.rounds().get(0).diff()).isNotNull();
+    }
+
     private static final class FakeReader implements EvalQueryReader {
         EvalRunPage runPage = new EvalRunPage(List.of(), false);
         EvalRunRow run;
@@ -401,6 +765,20 @@ class EvalQueryServiceTest {
         String lastVerdict;
         String lastAfterScenario;
         Integer lastAfterRound;
+        EvalCaseDetailRow caseDetail;
+        CaseIdentityRow caseIdentity;
+        List<CaseEvidenceRefRow> evidenceRefRows = List.of();
+        List<EvidenceMetaRow> evidenceMeta = List.of();
+        Map<UUID, List<CaseLogEvidenceRow>> logEvidenceByRun = new LinkedHashMap<>();
+        UUID lastDetailRunId;
+        UUID lastDetailCaseId;
+        String lastIdentityDataset;
+        String lastIdentityScenario;
+        UUID lastEvidenceRunId;
+        UUID lastMetaRcaRunId;
+        List<UUID> lastMetaIds;
+        UUID lastLogRunId;
+        String lastLogScenario;
 
         @Override
         public EvalRunPage listRuns(String state, KeysetCursor cursor, int limit) {
@@ -427,6 +805,41 @@ class EvalQueryServiceTest {
         @Override
         public List<DatasetRow> listDatasets() {
             return datasets;
+        }
+
+        @Override
+        public Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId) {
+            this.lastDetailRunId = runId;
+            this.lastDetailCaseId = caseExecutionId;
+            return Optional.ofNullable(caseDetail);
+        }
+
+        @Override
+        public Optional<CaseIdentityRow> findCaseIdentity(String datasetVersion,
+                                                          String scenarioId) {
+            this.lastIdentityDataset = datasetVersion;
+            this.lastIdentityScenario = scenarioId;
+            return Optional.ofNullable(caseIdentity);
+        }
+
+        @Override
+        public List<CaseEvidenceRefRow> listCaseEvidenceRefs(UUID runId) {
+            this.lastEvidenceRunId = runId;
+            return evidenceRefRows;
+        }
+
+        @Override
+        public List<EvidenceMetaRow> listEvidenceMeta(UUID rcaRunId, List<UUID> evidenceIds) {
+            this.lastMetaRcaRunId = rcaRunId;
+            this.lastMetaIds = evidenceIds;
+            return evidenceMeta;
+        }
+
+        @Override
+        public List<CaseLogEvidenceRow> listCaseLogEvidence(UUID runId, String scenarioId) {
+            this.lastLogRunId = runId;
+            this.lastLogScenario = scenarioId;
+            return logEvidenceByRun.getOrDefault(runId, List.of());
         }
     }
 }

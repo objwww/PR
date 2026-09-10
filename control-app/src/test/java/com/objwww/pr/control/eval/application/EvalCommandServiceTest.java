@@ -118,6 +118,32 @@ class EvalCommandServiceTest {
         public List<DatasetRow> listDatasets() {
             return List.of();
         }
+
+        @Override
+        public Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<CaseIdentityRow> findCaseIdentity(String datasetVersion,
+                                                          String scenarioId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<CaseEvidenceRefRow> listCaseEvidenceRefs(UUID runId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<EvidenceMetaRow> listEvidenceMeta(UUID rcaRunId, List<UUID> evidenceIds) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<CaseLogEvidenceRow> listCaseLogEvidence(UUID runId, String scenarioId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private InMemoryCommands commands;
