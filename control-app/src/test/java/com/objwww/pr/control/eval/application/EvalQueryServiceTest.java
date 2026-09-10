@@ -129,7 +129,8 @@ class EvalQueryServiceTest {
         // 状态分面：executionState = state 同义别名；未接线面 UNKNOWN；同步直读 LIVE
         assertThat(out.facets().executionState()).isEqualTo("SUCCEEDED");
         assertThat(out.facets().qualityVerdict()).isEqualTo("UNKNOWN");
-        assertThat(out.facets().recoveryState()).isEqualTo("UNKNOWN");
+        // EV-04 起 recoveryState 有真值语义：旧 CLI 行（mode=null）无恢复义务 → NOT_APPLICABLE
+        assertThat(out.facets().recoveryState()).isEqualTo("NOT_APPLICABLE");
         assertThat(out.facets().usageStatus()).isEqualTo("UNKNOWN");
         assertThat(out.facets().costStatus()).isEqualTo("UNKNOWN");
         assertThat(out.facets().freshness()).isEqualTo("LIVE");
@@ -170,7 +171,9 @@ class EvalQueryServiceTest {
                 row.tp(), row.fp(), row.fn(), row.displayName(), row.mode(),
                 row.totalScenarios(), row.decidableCount(), row.hitCount(),
                 row.unresolvedCount(), row.caseCount(), row.lastProgressAt(),
-                "AWAITING_RCA", NOW.plusSeconds(30));
+                "AWAITING_RCA", NOW.plusSeconds(30),
+                row.recoveryState(), row.terminalReason(), row.cancelRequestedAt(),
+                row.launchPlanJson());
         reader.runPage = new EvalRunPage(List.of(withPhase), false);
 
         EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
@@ -280,6 +283,81 @@ class EvalQueryServiceTest {
         assertThat(out.items().get(0).families()).containsExactly("redis-oom", "db-lock");
     }
 
+    // ------------------------------------------------------------------ EV-04 生命周期分面
+
+    /** 复制行并替换 EV-04 四列（recoveryState/terminalReason/cancelRequestedAt/launchPlan） */
+    private static EvalRunRow withLifecycle(EvalRunRow row, String mode, String recoveryState,
+                                            String terminalReason, Instant cancelRequestedAt,
+                                            String launchPlanJson) {
+        return new EvalRunRow(row.runId(), row.datasetVersion(), row.registryDigest(),
+                row.model(), row.promptVersion(), row.configDigest(), row.state(),
+                row.startedAt(), row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
+                row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
+                row.displayName(), mode, row.totalScenarios(), row.decidableCount(),
+                row.hitCount(), row.unresolvedCount(), row.caseCount(), row.lastProgressAt(),
+                row.phase(), row.phaseEnteredAt(),
+                recoveryState, terminalReason, cancelRequestedAt, launchPlanJson);
+    }
+
+    @Test
+    void recoveryFacetPassesRealValueThrough() {
+        UUID id = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLifecycle(
+                runRow(id, NOW, "RUNNING"), "L", "RECOVERING", null, null, null)), false);
+
+        EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(out.facets().recoveryState()).isEqualTo("RECOVERING");
+    }
+
+    @Test
+    void liveModeWithoutRecoveryReportIsUnknownNotApplicableNeverFaked() {
+        UUID id = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(
+                withLifecycle(runRow(id, NOW, "RUNNING"), "L", null, null, null, null),
+                withLifecycle(runRow(UUID.randomUUID(), NOW, "RUNNING"), "E",
+                        null, null, null, null),
+                withLifecycle(runRow(UUID.randomUUID(), NOW, "RUNNING"), null,
+                        null, null, null, null)), false);
+
+        List<EvalQueryService.EvalRunListItem> items = service.listRuns(null, null, 50).items();
+
+        assertThat(items.get(0).facets().recoveryState()).isEqualTo("UNKNOWN");
+        assertThat(items.get(1).facets().recoveryState()).isEqualTo("NOT_APPLICABLE");
+        assertThat(items.get(2).facets().recoveryState()).isEqualTo("NOT_APPLICABLE");
+    }
+
+    @Test
+    void detailCarriesTerminalReasonCancelRequestedAtAndLaunchPlan() {
+        UUID id = UUID.randomUUID();
+        Instant cancelAt = NOW.plusSeconds(120);
+        reader.run = withLifecycle(runRow(id, NOW, "FAILED"), "L", "VERIFIED",
+                "cancelled_by_operator;recovery=VERIFIED", cancelAt,
+                "{\"displayName\":\"实验甲\",\"mode\":\"L\",\"budgetMaxTokens\":10000}");
+
+        EvalQueryService.EvalRunDetailResponse out = service.detail(id).orElseThrow();
+
+        assertThat(out.terminalReason())
+                .isEqualTo("cancelled_by_operator;recovery=VERIFIED");
+        assertThat(out.facets().recoveryState()).isEqualTo("VERIFIED");
+        assertThat(out.facets().cancelRequestedAt()).isEqualTo(cancelAt);
+        assertThat(out.launchPlan().get("displayName").asText()).isEqualTo("实验甲");
+        assertThat(out.launchPlan().get("budgetMaxTokens").asLong()).isEqualTo(10000L);
+    }
+
+    @Test
+    void detailWithoutLifecycleDataIsHonestNull() {
+        UUID id = UUID.randomUUID();
+        reader.run = runRow(id, NOW, "SUCCEEDED");
+
+        EvalQueryService.EvalRunDetailResponse out = service.detail(id).orElseThrow();
+
+        assertThat(out.terminalReason()).isNull();
+        assertThat(out.launchPlan()).isNull();
+        assertThat(out.facets().cancelRequestedAt()).isNull();
+        assertThat(out.facets().recoveryState()).isEqualTo("NOT_APPLICABLE");
+    }
+
     // ------------------------------------------------------------------ fakes
 
     /**
@@ -297,7 +375,8 @@ class EvalQueryServiceTest {
                 terminal ? 10 : null, terminal ? 9 : null, terminal ? 8 : null,
                 terminal ? 1 : null, terminal ? 10 : 0,
                 terminal ? startedAt.plusSeconds(590) : null,
-                null, null);
+                null, null,
+                null, null, null, null);
     }
 
     private static EvalRunRow runRowWithCounts(UUID id, Instant startedAt, int total,
@@ -307,7 +386,8 @@ class EvalQueryServiceTest {
                 0.0, 0.0, 0.0, 1.0, 0, 0, 0,
                 null, null,
                 total, decidable, hit, unresolved, total, startedAt.plusSeconds(590),
-                null, null);
+                null, null,
+                null, null, null, null);
     }
 
     private static final class FakeReader implements EvalQueryReader {

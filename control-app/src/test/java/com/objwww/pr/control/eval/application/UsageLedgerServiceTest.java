@@ -139,6 +139,17 @@ class UsageLedgerServiceTest {
             }
 
             @Override
+            public boolean applyLaunchIdentity(UUID runId, String displayName, String mode,
+                                               String launchPlanJson) {
+                return false;
+            }
+
+            @Override
+            public boolean updateRecoveryState(UUID runId, String recoveryState) {
+                return false;
+            }
+
+            @Override
             public boolean insertCaseResult(EvalCaseResult result) {
                 return false;
             }

@@ -45,6 +45,10 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                     + " r.tp_count, r.fp_count, r.fn_count,"
                     + " r.display_name, r.mode,"
                     + " r.total_scenarios, r.decidable_count, r.hit_count, r.unresolved_count,"
+                    + " r.recovery_state, r.terminal_reason, r.launch_plan::text as launch_plan_json,"
+                    + " (select min(c.created_at) from eval_run_command c"
+                    + "   where c.eval_run_id = r.id and c.command_type = 'CANCEL'"
+                    + "   and c.state in ('PENDING','CLAIMED','DONE')) as cancel_requested_at,"
                     + " (select count(*) from eval_case_result c where c.eval_run_id = r.id)"
                     + "   as case_count,"
                     + " (select max(c.created_at) from eval_case_result c where c.eval_run_id = r.id)"
@@ -201,7 +205,11 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 rs.getLong("case_count"),
                 ts(rs, "last_progress_at"),
                 rs.getString("phase"),
-                ts(rs, "phase_entered_at"));
+                ts(rs, "phase_entered_at"),
+                rs.getString("recovery_state"),
+                rs.getString("terminal_reason"),
+                ts(rs, "cancel_requested_at"),
+                rs.getString("launch_plan_json"));
     }
 
     private static String appendAnd(String where, String clause) {

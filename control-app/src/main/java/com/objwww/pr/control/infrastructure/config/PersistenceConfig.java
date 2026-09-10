@@ -394,6 +394,25 @@ public class PersistenceConfig {
                 evalQueryReader, objectMapper);
     }
 
+    // ---------------- EV-04 评测发起/取消命令面（POST /api/eval/**；V81 授权面——control_app 对 eval_run_command 只增不查改，eval_run 仍零写） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
+            evalRunCommandRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalRunCommandRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalCommandService evalCommandService(
+            com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
+                    evalRunCommandRepository,
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalCommandService(
+                evalRunCommandRepository, evalQueryReader, objectMapper);
+    }
+
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------
 
     @Bean

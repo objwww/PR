@@ -23,6 +23,16 @@ public interface EvalRunRepository {
     /** 终态 CAS：仅 RUNNING 行可迁移；0 行 = 已终结/不存在，返回 false */
     boolean finalizeOnce(EvalRun terminal);
 
+    /**
+     * EV-04 发起身份回填（V81 列级授权面：display_name/mode/launch_plan 三列）：
+     * worker 领取 LAUNCH 命令后一次性落计划快照；0 行 = run 不存在返回 false。
+     */
+    boolean applyLaunchIdentity(UUID runId, String displayName, String mode,
+                                String launchPlanJson);
+
+    /** EV-04 恢复分面推进（V81 recovery_state 列）；0 行 = run 不存在返回 false */
+    boolean updateRecoveryState(UUID runId, String recoveryState);
+
     /** 逐案例评分插入；同 (run, scenario, round) 已存在 = false（不覆盖） */
     boolean insertCaseResult(EvalCaseResult result);
 

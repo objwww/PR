@@ -38,7 +38,9 @@ import java.util.Map;
  * 隔离；DB 身份为 eval_app（V10/V11 授权面），与生产 control_app 零交集。
  *
  * <p>运行形态：{@code --spring.profiles.active=eval} + eval_app 数据源 env 注入 +
- * {@link EvalRunnerMain} 跑批退出。CHAOS_ADMIN_TOKEN 仅 env 注入（INV-AM3-3），
+ * {@link EvalRunnerMain} 入口。EV-04 起默认 worker 形态（常驻轮询 eval_run_command，
+ * 页面发起经持久化命令进入执行面）；{@code app.alert.eval.worker.mode=once} 保留
+ * M3 一次性跑批退出旧形态。CHAOS_ADMIN_TOKEN 仅 env 注入（INV-AM3-3），
  * 未配置时 ArenaChaosScenarioDriver fail-closed 拒绝注入。
  */
 @Configuration
@@ -217,6 +219,60 @@ public class EvalRunnerConfig {
                 2, systemClock());
     }
 
+    // ---------------- EV-04 持久化命令 + worker（eval_run_command 写面 = eval_app 列级授权） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
+            evalRunCommandRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalRunCommandRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalPhaseEventSink evalPhaseEventSink(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalPhaseEventSink(jdbc);
+    }
+
+    @Bean
+    public EvalLaunchExecutor evalLaunchExecutor(
+            GoldenScenarioRegistry registry,
+            FlagdScenarioDriver flagd,
+            ArenaChaosScenarioDriver arena,
+            InfrastructureScenarioDriver infra,
+            AlertProbe alertProbe,
+            IncidentResolutionProbe incidentProbe,
+            RcaRunResolver resolver,
+            SingleCaseScorer scorer,
+            EvalRunRepository evalRuns,
+            BaselineReportGenerator generator,
+            com.objwww.pr.control.eval.domain.repository.EvalPhaseEventSink phaseSink,
+            com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository commands,
+            EvalRunMetadata metadata,
+            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId) {
+        return new EvalLaunchExecutor(registry, Map.of(
+                        "FlagdScenarioDriver", flagd,
+                        "ArenaChaosScenarioDriver", arena,
+                        "InfrastructureScenarioDriver", infra),
+                alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
+                phaseSink, commands, metadata, 2, systemClock(), workerId);
+    }
+
+    @Bean
+    public EvalRunWorker evalRunWorker(
+            com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository commands,
+            EvalRunRepository evalRuns,
+            EvalLaunchExecutor executor,
+            UsageLedgerService ledger,
+            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
+            @Value("${app.alert.eval.worker.poll-seconds:5}") long pollSeconds,
+            @Value("${app.alert.eval.worker.stale-claim-seconds:900}")
+            long staleClaimSeconds) {
+        return new EvalRunWorker(commands, evalRuns, executor, ledger, systemClock(),
+                workerId, pollSeconds, staleClaimSeconds);
+    }
+
     // ---------------- usage 对账（M3-25；未配置 litellm 时诚实降级 UNMATCHED/BEST_EFFORT） ----------------
 
     /**
@@ -262,14 +318,18 @@ public class EvalRunnerConfig {
     }
 
     /**
-     * 批量入口：跑批 → 日志出报告摘要 → 进程退出（eval-runner 是批作业，非常驻）。
-     * ApplicationContextRunner 场景测试不会触发 ApplicationRunner（生产 SpringApplication 才会）。
+     * 入口（EV-04）：worker 形态（默认）= 常驻轮询持久化命令；once = M3 一次性跑批
+     * 退出（ApplicationContextRunner 场景测试不会触发 ApplicationRunner——两种形态
+     * 都不会在装配测试里执行）。
      */
     @Bean
     public EvalRunnerMain evalRunnerMain(EvalBatchRunner runner,
                                          UsageLedgerService ledger,
-                                         ConfigurableApplicationContext context) {
-        return new EvalRunnerMain(runner, ledger, context);
+                                         ConfigurableApplicationContext context,
+                                         EvalRunWorker worker,
+                                         @Value("${app.alert.eval.worker.mode:worker}")
+                                         String workerMode) {
+        return new EvalRunnerMain(runner, ledger, context, worker, workerMode);
     }
 
     /** 元数据来源（十项可复现元数据；M3-24/25 的对账输入在 provider 侧另行回填） */

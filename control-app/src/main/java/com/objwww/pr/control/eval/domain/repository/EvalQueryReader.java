@@ -33,7 +33,9 @@ public interface EvalQueryReader {
     record KeysetCursor(Instant at, UUID id) {
     }
 
-    /** eval_run 投影行（指标/计数列可空 = 未终态化回填；名称/模式/阶段可空 = 无真实数据源） */
+    /** eval_run 投影行（指标/计数列可空 = 未终态化回填；名称/模式/阶段可空 = 无真实数据源；
+     *  EV-04：recoveryState/terminalReason/cancelRequestedAt/launchPlanJson 直读 V81 列与
+     *  eval_run_command 受理面——无数据源如实 null） */
     record EvalRunRow(UUID runId, String datasetVersion, String registryDigest, String model,
                       String promptVersion, String configDigest, String state,
                       Instant startedAt, Instant finishedAt,
@@ -42,7 +44,9 @@ public interface EvalQueryReader {
                       String displayName, String mode,
                       Integer totalScenarios, Integer decidableCount, Integer hitCount,
                       Integer unresolvedCount, long caseCount, Instant lastProgressAt,
-                      String phase, Instant phaseEnteredAt) {
+                      String phase, Instant phaseEnteredAt,
+                      String recoveryState, String terminalReason,
+                      Instant cancelRequestedAt, String launchPlanJson) {
     }
 
     /** 一页 runs；hasMore = 取到 limit+1 行（调用方据此发 nextCursor） */

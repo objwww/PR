@@ -38,10 +38,11 @@ import java.util.UUID;
  *       eval_phase_event（V80）最新事件，无事件如实 null；stageEnteredAt、
  *       lastProgressAt（= 最新案例落档时刻）、leaseHeartbeatAt 是三个不同时间戳——
  *       租约心跳无数据源（EV-04 前）如实 null；</li>
- *   <li><b>未接线分面不编造</b>：qualityVerdict（无质量门持久化）、recoveryState
- *       （L 模式恢复归 EV-04/DR）、usageStatus/costStatus（RV08 红线：
- *       PR 域模型调用账本的 review_run_id 指向 PR review_run，严禁用它汇总 eval/RCA
- *       用量——等 R7 RCA 调用账本显式接线，EV-06）本期常量 UNKNOWN；</li>
+ *   <li><b>未接线分面不编造</b>：qualityVerdict（无质量门持久化，EV-05+）、
+ *       usageStatus/costStatus（RV08 红线：PR 域模型调用账本的 review_run_id 指向
+ *       PR review_run，严禁用它汇总 eval/RCA 用量——等 R7 RCA 调用账本显式接线，
+ *       EV-06）常量 UNKNOWN；recoveryState/cancelRequestedAt 自 EV-04 起有真值
+ *       （V81 列 + eval_run_command 受理面，见 facets 装配注释）；</li>
  *   <li><b>asOf</b>：投影同步直读主表，asOf = 请求处理时刻，freshness=LIVE；
  *       列表与详情同口径；</li>
  *   <li><b>案例执行身份（§5.1/RV02）</b>：caseExecutionId = eval_case_result.id
@@ -91,12 +92,14 @@ public class EvalQueryService {
 
     /**
      * 状态分面（§5.1）：各面分开表达，互不顶替。leaseHeartbeatAt 无租约数据源 → null；
-     * qualityVerdict/recoveryState/usageStatus/costStatus 未接线 → UNKNOWN（见类注释）。
+     * qualityVerdict 未接线（EV-05+）/usageStatus/costStatus 未接线（EV-06，RV08 红线）
+     * → UNKNOWN；EV-04 起 recoveryState/cancelRequestedAt 有真值（见 facets 装配）。
      */
     public record RunFacets(String executionState, String phase, Instant stageEnteredAt,
                             Instant lastProgressAt, Instant leaseHeartbeatAt,
                             String qualityVerdict, String recoveryState,
-                            String usageStatus, String costStatus, String freshness) {
+                            String usageStatus, String costStatus, String freshness,
+                            Instant cancelRequestedAt) {
     }
 
     public record EvalRunListItem(UUID runId, String datasetVersion, String registryDigest,
@@ -121,7 +124,8 @@ public class EvalQueryService {
                                         Double endToEndHitRate, Double unresolvedRate,
                                         Integer tp, Integer fp, Integer fn, long caseCount,
                                         String displayName, String mode, Integer totalScenarios,
-                                        QualityFacet quality, RunFacets facets, Instant asOf) {
+                                        QualityFacet quality, RunFacets facets, Instant asOf,
+                                        String terminalReason, JsonNode launchPlan) {
     }
 
     public record EvalCaseItem(UUID caseExecutionId, String scenarioId, int roundNo,
@@ -161,7 +165,8 @@ public class EvalQueryService {
                 row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
-                qualityFacet(row), facets(row), Instant.now()));
+                qualityFacet(row), facets(row), Instant.now(),
+                row.terminalReason(), parseLaunchPlan(row.launchPlanJson())));
     }
 
     // ------------------------------------------------------------------ cases
@@ -243,13 +248,40 @@ public class EvalQueryService {
     /**
      * 状态分面：executionState = 旧 state 同义别名；phase/stageEnteredAt 直透端口投影
      * （无 eval_phase_event 事件 → null）；leaseHeartbeatAt 无租约数据源 → null；
-     * 未接线分面常量 UNKNOWN（RV08：用量/费用等 R7 RCA 调用账本，不读 PR 账本冒充）。
+     * qualityVerdict/usage/cost 未接线常量 UNKNOWN（RV08：用量/费用等 R7 RCA 调用账本，
+     * 不读 PR 账本冒充）。EV-04 真值面：
+     * <ul>
+     *   <li>recoveryState：V81 列有值直透（PENDING/RECOVERING/VERIFIED/FAILED）；
+     *       null + mode=L → UNKNOWN（worker 未上报）；null + 其他模式/旧 CLI 行 →
+     *       NOT_APPLICABLE（无现场恢复义务）——不编造；</li>
+     *   <li>cancelRequestedAt = eval_run_command 最早受理 CANCEL 提交时刻（受理 =
+     *       "取消中"，终态以 state 为准）；无 → null。</li>
+     * </ul>
      */
     private static RunFacets facets(EvalRunRow row) {
+        String recoveryFacet;
+        if (row.recoveryState() != null) {
+            recoveryFacet = row.recoveryState();
+        } else {
+            recoveryFacet = "L".equals(row.mode()) ? STATUS_UNKNOWN : STATUS_NOT_APPLICABLE;
+        }
         return new RunFacets(row.state(), row.phase(), row.phaseEnteredAt(),
                 row.lastProgressAt(), null,
-                STATUS_UNKNOWN, STATUS_UNKNOWN, STATUS_UNKNOWN, STATUS_UNKNOWN,
-                FRESHNESS_LIVE);
+                STATUS_UNKNOWN, recoveryFacet, STATUS_UNKNOWN, STATUS_UNKNOWN,
+                FRESHNESS_LIVE, row.cancelRequestedAt());
+    }
+
+    /** launch_plan jsonb → 结构化快照（配置回看 §3.2）；无快照/解析失败如实 null */
+    private JsonNode parseLaunchPlan(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            JsonNode node = mapper.readTree(json);
+            return node.isObject() ? node : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static RatioStat ratio(Long numerator, Long denominator) {
