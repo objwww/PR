@@ -37,13 +37,13 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 model, prompt_version, prompt_digest, tool_registry_digest,
                 temperature, top_p, max_tokens, requested_seed, effective_seed,
                 provider_fingerprint, alert_rule_digest, scenario_driver_version,
-                config_digest, state, started_at
+                grader_version, config_digest, state, started_at
             ) VALUES (
                 :id, :schemaVersion, :datasetVersion, :registryDigest, :lexiconVersion,
                 :model, :promptVersion, :promptDigest, :toolRegistryDigest,
                 :temperature, :topP, :maxTokens, :requestedSeed, :effectiveSeed,
                 :providerFingerprint, :alertRuleDigest, :scenarioDriverVersion,
-                :configDigest, 'RUNNING', :startedAt
+                :graderVersion, :configDigest, 'RUNNING', :startedAt
             )
             """;
 
@@ -121,6 +121,7 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                     .param("providerFingerprint", m.providerFingerprint())
                     .param("alertRuleDigest", m.alertRuleDigest().value())
                     .param("scenarioDriverVersion", m.scenarioDriverVersion())
+                    .param("graderVersion", m.graderVersion())
                     .param("configDigest", m.configDigest().value())
                     .param("startedAt", ts(running.startedAt()))
                     .update();
@@ -248,7 +249,8 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                         (Long) rs.getObject("effective_seed"),
                         rs.getString("provider_fingerprint"),
                         digest(rs.getString("alert_rule_digest")),
-                        rs.getString("scenario_driver_version")),
+                        rs.getString("scenario_driver_version"),
+                        rs.getString("grader_version")),
                 EvalRun.EvalRunState.valueOf(rs.getString("state")),
                 rs.getTimestamp("started_at").toInstant(),
                 finishedAt == null ? null : finishedAt.toInstant(),

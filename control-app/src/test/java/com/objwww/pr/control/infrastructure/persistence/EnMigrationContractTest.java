@@ -23,6 +23,9 @@ class EnMigrationContractTest {
     private static final Path V61 = Path.of(
             "src/main/resources/db/migration/V61__en02_release_qualification.sql");
 
+    private static final Path V62 = Path.of(
+            "src/main/resources/db/migration/V62__en09_eval_grader_version.sql");
+
     private static String normalized(Path migration) throws IOException {
         return Files.readString(migration).toLowerCase().replaceAll("\\s+", " ");
     }
@@ -62,5 +65,15 @@ class EnMigrationContractTest {
                 .contains("grant select, insert, update on release_qualification to control_app")
                 .contains("revoke delete on release_qualification from control_app")
                 .contains("revoke all on release_qualification");
+    }
+
+    @Test
+    void v62AddsGraderVersionToEvalRunIdentity() throws IOException {
+        String sql = normalized(V62);
+
+        assertThat(sql)
+                .contains("alter table eval_run add column grader_version text")
+                // 历史批次留空 = EN-09 前评分器版本未入账（E11 归属面：null 可区分）
+                .contains("comment on column eval_run.grader_version");
     }
 }
