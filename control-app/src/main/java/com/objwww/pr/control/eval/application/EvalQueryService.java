@@ -50,10 +50,11 @@ import java.util.UUID;
  *       eval_phase_event（V80）最新事件，无事件如实 null；stageEnteredAt、
  *       lastProgressAt（= 最新案例落档时刻）、leaseHeartbeatAt 是三个不同时间戳——
  *       租约心跳无数据源（EV-04 前）如实 null；</li>
- *   <li><b>未接线分面不编造</b>：qualityVerdict（无质量门持久化，EV-05+）、
- *       usageStatus/costStatus（RV08 红线：PR 域模型调用账本的 review_run_id 指向
- *       PR review_run，严禁用它汇总 eval/RCA 用量——等 R7 RCA 调用账本显式接线，
- *       EV-06）常量 UNKNOWN；recoveryState/cancelRequestedAt 自 EV-04 起有真值
+ *   <li><b>未接线分面不编造</b>：usageStatus/costStatus（RV08 红线：PR 域模型调用账本的
+ *       review_run_id 指向 PR review_run，严禁用它汇总 eval/RCA 用量——等 R7 RCA
+ *       调用账本显式接线，EV-06）常量 UNKNOWN；qualityVerdict 自 EV-07 起接真值
+ *       （本 run 作为候选的最新 eval_comparison 落档门结论，见 facets 装配注释）；
+ *       recoveryState/cancelRequestedAt 自 EV-04 起有真值
  *       （V81 列 + eval_run_command 受理面，见 facets 装配注释）；</li>
  *   <li><b>asOf</b>：投影同步直读主表，asOf = 请求处理时刻，freshness=LIVE；
  *       列表与详情同口径；</li>
@@ -72,8 +73,10 @@ public class EvalQueryService {
     private static final Set<String> VERDICTS = Set.of("DECIDABLE", "UNRESOLVED",
             "STRUCTURE_REJECTED", "TIMEOUT_OR_ABSENT");
 
-    /** 分面状态词表：OK=有真实数据；NOT_APPLICABLE=分母 0；UNKNOWN=未回填/未接线 */
+    /** 分面状态词表：OK=有真实数据；VIOLATED=质量门未过（EV-07 起）；
+     *  NOT_APPLICABLE=分母 0；UNKNOWN=未回填/未接线 */
     private static final String STATUS_OK = "OK";
+    private static final String STATUS_VIOLATED = "VIOLATED";
     private static final String STATUS_NOT_APPLICABLE = "NOT_APPLICABLE";
     private static final String STATUS_UNKNOWN = "UNKNOWN";
 
@@ -312,8 +315,8 @@ public class EvalQueryService {
         List<EvalCaseItem> items = new ArrayList<>(page.items().size());
         for (EvalCaseRow row : page.items()) {
             items.add(new EvalCaseItem(row.caseExecutionId(), row.scenarioId(), row.roundNo(),
-                    row.verdict(), row.rootCauseHit(), summarizeRootCause(row.expectedRootCauseJson()),
-                    summarizeRootCause(row.actualRootCauseJson()), row.latencyMs(),
+                    row.verdict(), row.rootCauseHit(), summarizeRootCause(mapper, row.expectedRootCauseJson()),
+                    summarizeRootCause(mapper, row.actualRootCauseJson()), row.latencyMs(),
                     failureSample(row.failureSampleJson()), row.rcaRunId(), row.scoredReportId()));
         }
         if (page.hasMore() && !page.items().isEmpty()) {
@@ -341,8 +344,8 @@ public class EvalQueryService {
             return new EvalCaseDetailResponse(
                     row.caseExecutionId(), row.runId(), row.scenarioId(), row.roundNo(),
                     row.selectionPolicyVersion(), row.verdict(), row.rootCauseHit(),
-                    summarizeRootCause(row.expectedRootCauseJson()),
-                    summarizeRootCause(row.actualRootCauseJson()),
+                    summarizeRootCause(mapper, row.expectedRootCauseJson()),
+                    summarizeRootCause(mapper, row.actualRootCauseJson()),
                     parseStringArray(row.expectedSymptomCodesJson()),
                     parseStringArray(row.actualSymptomCodesJson()),
                     row.tp(), row.fp(), row.fn(), row.latencyMs(), row.silencePenalty(),
@@ -682,7 +685,7 @@ public class EvalQueryService {
     /**
      * 状态分面：executionState = 旧 state 同义别名；phase/stageEnteredAt 直透端口投影
      * （无 eval_phase_event 事件 → null）；leaseHeartbeatAt 无租约数据源 → null；
-     * qualityVerdict/usage/cost 未接线常量 UNKNOWN（RV08：用量/费用等 R7 RCA 调用账本，
+     * usage/cost 未接线常量 UNKNOWN（RV08：用量/费用等 R7 RCA 调用账本，
      * 不读 PR 账本冒充）。EV-04 真值面：
      * <ul>
      *   <li>recoveryState：V81 列有值直透（PENDING/RECOVERING/VERIFIED/FAILED）；
@@ -691,6 +694,9 @@ public class EvalQueryService {
      *   <li>cancelRequestedAt = eval_run_command 最早受理 CANCEL 提交时刻（受理 =
      *       "取消中"，终态以 state 为准）；无 → null。</li>
      * </ul>
+     * EV-07 起 qualityVerdict 接真值：本 run 作为候选的最新 eval_comparison 落档门
+     * 结论 PASS → OK、FAIL → VIOLATED、INCONCLUSIVE/NOT_EVALUABLE/无落档 → UNKNOWN
+     * （对比资格结论，非单 run 绝对质量——词表语义见 EV-07 文档）。
      */
     private static RunFacets facets(EvalRunRow row) {
         String recoveryFacet;
@@ -701,8 +707,20 @@ public class EvalQueryService {
         }
         return new RunFacets(row.state(), row.phase(), row.phaseEnteredAt(),
                 row.lastProgressAt(), null,
-                STATUS_UNKNOWN, recoveryFacet, STATUS_UNKNOWN, STATUS_UNKNOWN,
+                qualityVerdict(row), recoveryFacet, STATUS_UNKNOWN, STATUS_UNKNOWN,
                 FRESHNESS_LIVE, row.cancelRequestedAt());
+    }
+
+    /** EV-07 qualityVerdict 真值映射（落档门结论 → 分面词表；无落档/无法判定 → UNKNOWN） */
+    private static String qualityVerdict(EvalRunRow row) {
+        if (row.comparisonGateOutcome() == null) {
+            return STATUS_UNKNOWN;
+        }
+        return switch (row.comparisonGateOutcome()) {
+            case "PASS" -> STATUS_OK;
+            case "FAIL" -> STATUS_VIOLATED;
+            default -> STATUS_UNKNOWN;
+        };
     }
 
     /** launch_plan jsonb → 结构化快照（配置回看 §3.2）；无快照/解析失败如实 null */
@@ -741,8 +759,9 @@ public class EvalQueryService {
     /**
      * root cause jsonb（{"component","fault_type","reason_code"} 三元组快照）→
      * "component/fault_type/reason_code" 摘要串；null 或解析失败如实 null（不冒充）。
+     * static 供 EV-07 对比面复用（同口径不漂移）。
      */
-    String summarizeRootCause(String json) {
+    static String summarizeRootCause(ObjectMapper mapper, String json) {
         if (json == null) {
             return null;
         }

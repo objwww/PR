@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.model.EvalLaunchPlan;
 import com.objwww.pr.control.eval.domain.model.EvalRunCommand;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareCaseRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareRunMeta;
 import com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -105,7 +107,7 @@ class EvalCommandServiceTest {
                     "c".repeat(64), state, NOW, null,
                     null, null, null, null, null, null, null, null, null,
                     null, null, null, null, 0, null, null, null,
-                    null, null, null, null));
+                    null, null, null, null, null));
         }
 
         @Override
@@ -142,6 +144,16 @@ class EvalCommandServiceTest {
 
         @Override
         public List<CaseLogEvidenceRow> listCaseLogEvidence(UUID runId, String scenarioId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<CompareRunMeta> findCompareMeta(UUID runId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
             throw new UnsupportedOperationException();
         }
     }

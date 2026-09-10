@@ -429,6 +429,25 @@ public class PersistenceConfig {
                 evalRunCommandRepository, evalQueryReader, objectMapper);
     }
 
+    // ---------------- EV-07 配对工作台（GET /api/eval/compare 读面 + POST /api/eval/comparisons 落档；V85 授权面——control_app 对 eval_comparison 只增读） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+            evalComparisonRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalComparisonRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalCompareService evalCompareService(
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+                    evalComparisonRepository,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalCompareService(
+                evalQueryReader, evalComparisonRepository, objectMapper);
+    }
+
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------
 
     @Bean

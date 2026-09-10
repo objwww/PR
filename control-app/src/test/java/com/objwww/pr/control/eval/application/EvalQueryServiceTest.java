@@ -5,6 +5,8 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseEvidenceRefRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseIdentityRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseLogEvidenceRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareCaseRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareRunMeta;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.DatasetRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCaseDetailRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCasePage;
@@ -180,13 +182,53 @@ class EvalQueryServiceTest {
                 row.unresolvedCount(), row.caseCount(), row.lastProgressAt(),
                 "AWAITING_RCA", NOW.plusSeconds(30),
                 row.recoveryState(), row.terminalReason(), row.cancelRequestedAt(),
-                row.launchPlanJson());
+                row.launchPlanJson(), row.comparisonGateOutcome());
         reader.runPage = new EvalRunPage(List.of(withPhase), false);
 
         EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
 
         assertThat(out.facets().phase()).isEqualTo("AWAITING_RCA");
         assertThat(out.facets().stageEnteredAt()).isEqualTo(NOW.plusSeconds(30));
+    }
+
+    // ------------------------------------------------------------------ EV-07 qualityVerdict 分面
+
+    /** 复制行并替换 comparisonGateOutcome（EV-07 落档门结论列） */
+    private static EvalRunRow withGateOutcome(EvalRunRow row, String gateOutcome) {
+        return new EvalRunRow(row.runId(), row.datasetVersion(), row.registryDigest(),
+                row.model(), row.promptVersion(), row.configDigest(), row.state(),
+                row.startedAt(), row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
+                row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
+                row.displayName(), row.mode(), row.totalScenarios(), row.decidableCount(),
+                row.hitCount(), row.unresolvedCount(), row.caseCount(), row.lastProgressAt(),
+                row.phase(), row.phaseEnteredAt(), row.recoveryState(), row.terminalReason(),
+                row.cancelRequestedAt(), row.launchPlanJson(), gateOutcome);
+    }
+
+    @Test
+    void qualityVerdictFacetMapsLatestComparisonGateOutcome() {
+        UUID id = UUID.randomUUID();
+        // 无落档 → UNKNOWN（不编造）
+        reader.runPage = new EvalRunPage(List.of(runRow(id, NOW, "SUCCEEDED")), false);
+        assertThat(service.listRuns(null, null, 50).items().get(0).facets().qualityVerdict())
+                .isEqualTo("UNKNOWN");
+        // PASS → OK；FAIL → VIOLATED；INCONCLUSIVE/NOT_EVALUABLE → UNKNOWN（无法判定）
+        reader.runPage = new EvalRunPage(
+                List.of(withGateOutcome(runRow(id, NOW, "SUCCEEDED"), "PASS")), false);
+        assertThat(service.listRuns(null, null, 50).items().get(0).facets().qualityVerdict())
+                .isEqualTo("OK");
+        reader.runPage = new EvalRunPage(
+                List.of(withGateOutcome(runRow(id, NOW, "SUCCEEDED"), "FAIL")), false);
+        assertThat(service.listRuns(null, null, 50).items().get(0).facets().qualityVerdict())
+                .isEqualTo("VIOLATED");
+        reader.runPage = new EvalRunPage(
+                List.of(withGateOutcome(runRow(id, NOW, "SUCCEEDED"), "INCONCLUSIVE")), false);
+        assertThat(service.listRuns(null, null, 50).items().get(0).facets().qualityVerdict())
+                .isEqualTo("UNKNOWN");
+        reader.runPage = new EvalRunPage(
+                List.of(withGateOutcome(runRow(id, NOW, "SUCCEEDED"), "NOT_EVALUABLE")), false);
+        assertThat(service.listRuns(null, null, 50).items().get(0).facets().qualityVerdict())
+                .isEqualTo("UNKNOWN");
     }
 
     // ------------------------------------------------------------------ detail
@@ -303,7 +345,8 @@ class EvalQueryServiceTest {
                 row.displayName(), mode, row.totalScenarios(), row.decidableCount(),
                 row.hitCount(), row.unresolvedCount(), row.caseCount(), row.lastProgressAt(),
                 row.phase(), row.phaseEnteredAt(),
-                recoveryState, terminalReason, cancelRequestedAt, launchPlanJson);
+                recoveryState, terminalReason, cancelRequestedAt, launchPlanJson,
+                row.comparisonGateOutcome());
     }
 
     @Test
@@ -383,7 +426,7 @@ class EvalQueryServiceTest {
                 terminal ? 1 : null, terminal ? 10 : 0,
                 terminal ? startedAt.plusSeconds(590) : null,
                 null, null,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     private static EvalRunRow runRowWithCounts(UUID id, Instant startedAt, int total,
@@ -394,7 +437,7 @@ class EvalQueryServiceTest {
                 null, null,
                 total, decidable, hit, unresolved, total, startedAt.plusSeconds(590),
                 null, null,
-                null, null, null, null);
+                null, null, null, null, null);
     }
 
     // ------------------------------------------------------------------ EV-05 案例详情
@@ -840,6 +883,16 @@ class EvalQueryServiceTest {
             this.lastLogRunId = runId;
             this.lastLogScenario = scenarioId;
             return logEvidenceByRun.getOrDefault(runId, List.of());
+        }
+
+        @Override
+        public Optional<CompareRunMeta> findCompareMeta(UUID runId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
+            throw new UnsupportedOperationException();
         }
     }
 }

@@ -91,7 +91,9 @@ public abstract class PostgresITBase {
             // V82（UX-01 分类 override 审计）——BA-41 同律
             "incident_category_override",
             // V83（UX-02 仿真机器人两表）——BA-41 同律
-            "chat_message", "chat_session");
+            "chat_message", "chat_session",
+            // V85（EV-07 对比结论落档）——BA-41 同律
+            "eval_comparison");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

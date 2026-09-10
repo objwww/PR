@@ -61,6 +61,10 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                     + " (select min(c.created_at) from eval_run_command c"
                     + "   where c.eval_run_id = r.id and c.command_type = 'CANCEL'"
                     + "   and c.state in ('PENDING','CLAIMED','DONE')) as cancel_requested_at,"
+                    + " (select ec.gate_outcome from eval_comparison ec"
+                    + "   where ec.candidate_run_id = r.id"
+                    + "   order by ec.created_at desc, ec.id desc limit 1)"
+                    + "   as comparison_gate_outcome,"
                     + " (select count(*) from eval_case_result c where c.eval_run_id = r.id)"
                     + "   as case_count,"
                     + " (select max(c.created_at) from eval_case_result c where c.eval_run_id = r.id)"
@@ -378,6 +382,64 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    // ------------------------------------------------------------------ EV-07 配对工作台
+
+    @Override
+    public Optional<CompareRunMeta> findCompareMeta(UUID runId) {
+        return jdbc.sql("""
+                        select id, dataset_version, registry_digest, alert_rule_digest,
+                               lexicon_version, scenario_driver_version, model, prompt_version,
+                               config_digest, state
+                        from eval_run where id = :id
+                        """)
+                .param("id", runId)
+                .query((rs, i) -> new CompareRunMeta(
+                        rs.getObject("id", UUID.class),
+                        rs.getString("dataset_version"), rs.getString("registry_digest"),
+                        rs.getString("alert_rule_digest"),
+                        rs.getObject("lexicon_version", Integer.class),
+                        rs.getString("scenario_driver_version"), rs.getString("model"),
+                        rs.getString("prompt_version"), rs.getString("config_digest"),
+                        rs.getString("state")))
+                .optional();
+    }
+
+    @Override
+    public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
+        // 身份列精确键横向解析（dv.version = run.dataset_version 且 case_key = scenario_id；
+        // 多命中=歧义/零命中=无匹配或 HOLDOUT RLS 不可见 → null，与 EV-05 同律不取"最新"）
+        return jdbc.sql("""
+                        select c.id as case_execution_id, c.scenario_id, c.round_no, c.verdict,
+                               c.root_cause_hit, c.expected_root_cause::text as expected_json,
+                               c.selection_policy_version,
+                               idn.content_digest, idn.scenario_family_id
+                        from eval_case_result c
+                        join eval_run er on er.id = c.eval_run_id
+                        left join lateral (
+                            select case when count(*) = 1 then min(cv.content_digest) end
+                                       as content_digest,
+                                   case when count(*) = 1 then min(cv.scenario_family_id) end
+                                       as scenario_family_id
+                            from case_version cv
+                            join dataset_version dv on dv.id = cv.dataset_version_id
+                            where dv.version = er.dataset_version
+                              and cv.case_key = c.scenario_id
+                        ) idn on true
+                        where c.eval_run_id = :runId
+                        order by c.scenario_id asc, c.round_no asc
+                        limit :lim
+                        """)
+                .param("runId", runId)
+                .param("lim", limit)
+                .query((rs, i) -> new CompareCaseRow(
+                        rs.getObject("case_execution_id", UUID.class),
+                        rs.getString("scenario_id"), rs.getInt("round_no"),
+                        rs.getString("verdict"), rs.getBoolean("root_cause_hit"),
+                        rs.getString("expected_json"), rs.getString("selection_policy_version"),
+                        rs.getString("content_digest"), rs.getString("scenario_family_id")))
+                .list();
+    }
+
     // ------------------------------------------------------------------ 内部
 
     private EvalRunRow mapRun(ResultSet rs, int rowNum) throws SQLException {
@@ -411,7 +473,8 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 rs.getString("recovery_state"),
                 rs.getString("terminal_reason"),
                 ts(rs, "cancel_requested_at"),
-                rs.getString("launch_plan_json"));
+                rs.getString("launch_plan_json"),
+                rs.getString("comparison_gate_outcome"));
     }
 
     private static String appendAnd(String where, String clause) {

@@ -35,7 +35,9 @@ public interface EvalQueryReader {
 
     /** eval_run 投影行（指标/计数列可空 = 未终态化回填；名称/模式/阶段可空 = 无真实数据源；
      *  EV-04：recoveryState/terminalReason/cancelRequestedAt/launchPlanJson 直读 V81 列与
-     *  eval_run_command 受理面——无数据源如实 null） */
+     *  eval_run_command 受理面——无数据源如实 null；EV-07：comparisonGateOutcome =
+     *  本 run 作为候选的最新 eval_comparison 落档门结论（无落档如实 null，
+     *  OK/VIOLATED/UNKNOWN 映射归应用服务）） */
     record EvalRunRow(UUID runId, String datasetVersion, String registryDigest, String model,
                       String promptVersion, String configDigest, String state,
                       Instant startedAt, Instant finishedAt,
@@ -46,7 +48,8 @@ public interface EvalQueryReader {
                       Integer unresolvedCount, long caseCount, Instant lastProgressAt,
                       String phase, Instant phaseEnteredAt,
                       String recoveryState, String terminalReason,
-                      Instant cancelRequestedAt, String launchPlanJson) {
+                      Instant cancelRequestedAt, String launchPlanJson,
+                      String comparisonGateOutcome) {
     }
 
     /** 一页 runs；hasMore = 取到 limit+1 行（调用方据此发 nextCursor） */
@@ -163,4 +166,40 @@ public interface EvalQueryReader {
 
     /** 指定 run + scenario 的案例关联 logs.query 冻结证据（created_at, evidenceId 序） */
     List<CaseLogEvidenceRow> listCaseLogEvidence(UUID runId, String scenarioId);
+
+    // ------------------------------------------------------------------ EV-07 配对工作台
+
+    /**
+     * 对比用 run 元数据行（EV-07 §3.5 可比性检查输入）：eval_run 十项可复现元数据中
+     * 参与严格一致判定的维度直读（数据集版本/输入快照 registry_digest/规则版本
+     * alert_rule_digest/同义词典/场景驱动）+ 信息面维度（model/prompt_version——
+     * 模型差异正是对比动机，不参与严格判定）。无 grader 版本列（偏差如实：
+     * 评分器语义锚 = 逐案例 selection_policy_version，见 CompareCaseRow）。
+     */
+    record CompareRunMeta(UUID runId, String datasetVersion, String registryDigest,
+                          String alertRuleDigest, Integer lexiconVersion,
+                          String scenarioDriverVersion, String model, String promptVersion,
+                          String configDigest, String state) {
+    }
+
+    /**
+     * 对比用案例投影行（EV-07 配对输入）：eval_case_result 逐案例判定面 +
+     * case_version 身份列（content_digest/scenario_family_id）经精确键横向解析
+     * （dv.version = run.dataset_version 且 case_key = scenario_id；无匹配/歧义/
+     * HOLDOUT RLS 不可见 → 身份列 null，与 EV-05 findCaseIdentity 同律不猜）。
+     */
+    record CompareCaseRow(UUID caseExecutionId, String scenarioId, int roundNo,
+                          String verdict, boolean rootCauseHit,
+                          String expectedRootCauseJson, String selectionPolicyVersion,
+                          String contentDigest, String scenarioFamilyId) {
+    }
+
+    /** 对比 run 元数据；未知 id → empty（controller 404 面） */
+    Optional<CompareRunMeta> findCompareMeta(UUID runId);
+
+    /**
+     * run 全量对比案例行（scenario_id ASC, round_no ASC 稳定序；limit 为硬扫描闸——
+     * 调用方传上限+1 判 truncated，超出行不得进入统计）。run 无案例 → 空表。
+     */
+    List<CompareCaseRow> listCasesForCompare(UUID runId, int limit);
 }
