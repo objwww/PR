@@ -127,6 +127,18 @@ services:
       APP_RELEASE_API_BEARER: ${APP_RELEASE_API_BEARER:?}
       # AM5 M5-12：Operator Case API 鉴权（operator 角色共享凭证，同 O-4 形态）
       APP_OPERATOR_API_BEARER: ${APP_OPERATOR_API_BEARER:?}
+      # AM7 M7-17：127 duty-adapter 台账回写线（只铸 POST /api/duty/notifications
+      # 一面；快照拉取复用上面的 operator 线）。:? 必填——与 127 .env 的
+      # DUTY_WRITEBACK_BEARER 同值
+      APP_DUTY_ADAPTER_BEARER: ${APP_DUTY_ADAPTER_BEARER:?}
+      # EX-C2a：通知出箱渠道名与 notify-app 两侧对齐（test=测试机器人；oncall=固定应急通道）
+      APP_ALERT_NOTIFY_CHANNELS: "test,oncall"
+      # EX-C3a：浏览器用户会话（单人运维授权形态；:? 必填防静默回退 dev 默认
+      # operator/operator——口令原文不落任何配置/日志，只传 bcrypt 哈希）。
+      # B-37：.env 值内的 $ 须写作 $$（compose 对 .env 值做插值，裸 $2a$10$…
+      # 会被当变量引用吃掉 → 登录恒 401；compose warning "variable is not set" 为直接证据）
+      AUTH_OPERATOR_USERNAME: ${AUTH_OPERATOR_USERNAME:?}
+      AUTH_OPERATOR_PASSWORD_BCRYPT: ${AUTH_OPERATOR_PASSWORD_BCRYPT:?}
       # AM5 M5-04：采样指纹 provider 身份（部署特定=模型由谁服务，INV-AM5-3 fail-closed：
       # :? 必填——缺省即启动期失败，优于运行期每次调查崩在 requireText）
       APP_ALERT_EVAL_PROVIDER_FINGERPRINT: ${APP_ALERT_EVAL_PROVIDER_FINGERPRINT:?}
@@ -167,6 +179,36 @@ services:
           cpus: "1.0"
     logging: *logging
 
+  # EX-C1：alert-web 部署面（nginx 托管 vite dist + /api 反代 control-app；
+  # SPA 深链回退与 SSE 透传见 alert-web/nginx.conf）。仅绑 loopback（INV-AM0-1）——
+  # 运维经 SSH 隧道访问；与 control-app 同 internal 网（反代解析服务名）。
+  # 非特权全周期：nginx 用户（uid 101）+ listen 8080 + 零 capability——
+  # root master 的 temp 目录 chown 在 cap_drop ALL 下必败（真机实证），非 root 形态
+  # 需要 tmpfs 带 uid/gid（root 属主的 tmpfs 里 uid 101 建不了 client_temp）。
+  web:
+    build:
+      context: ../alert-web
+    image: pr-agent/alert-web:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    user: nginx
+    depends_on:
+      - control-app
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8090}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx:uid=101,gid=101,mode=0700
+      - /var/run:uid=101,gid=101,mode=0755
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    networks:
+      - internal
+    logging: *logging
+
   # AM3（M3-20~23）通知出口：notify_app 身份（V9 授权面：只碰投递面，不得改报告与
   # 调查记录——BA-10②/E2E-M3-07）；单 worker 领取 notify_outbox → 三档渠道投递。
   notify-app:
@@ -184,11 +226,22 @@ services:
       NOTIFY_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pr_agent}
       NOTIFY_DB_PASSWORD: ${NOTIFY_DB_PASSWORD:?}   # 与 migrate V9 placeholder 同值（INV-AM3-3）
       # 渠道名 test 与 control 侧 app.alert.notify.channels:test 出箱行对齐；
-      # webhook=echo-receiver(WireMock)——TEST_CHANNEL 真实到达测试机器人（D01）
-      NOTIFY_CHANNELS: "test"
+      # webhook=echo-receiver(WireMock)——TEST_CHANNEL 真实到达测试机器人（D01）。
+      # EX-C2a：oncall=固定应急通道（LIVE 档值班 webhook，1 个；扩到 2 个=加名+加键）；
+      # 真机器人 URL 属运维注入面（.env :? 强制在场），回执语义=机器人接收≠值班员阅读
+      NOTIFY_CHANNELS: "test,oncall"
       APP_NOTIFY_CHANNELS_TEST_TIER: "TEST_CHANNEL"
       NOTIFY_CHANNEL_TEST_WEBHOOK: ${NOTIFY_CHANNEL_TEST_WEBHOOK:?}
       NOTIFY_CHANNEL_TEST_SECRET: ${NOTIFY_CHANNEL_TEST_SECRET:-}
+      APP_NOTIFY_CHANNELS_ONCALL_TIER: "LIVE"
+      NOTIFY_CHANNEL_ONCALL_WEBHOOK: ${NOTIFY_CHANNEL_ONCALL_WEBHOOK:?}
+      NOTIFY_CHANNEL_ONCALL_SECRET: ${NOTIFY_CHANNEL_ONCALL_SECRET:-}
+      # AM7 M7-13/14：duty 渠道 env 键名制——duty_channel 行只存键名，值在此注入。
+      # 演练值：K_DUTY_TEST_WEBHOOK 复用 echo-receiver（L2 SENT 钉）；
+      # K_DUTY_DEAD_WEBHOOK 指向必拒地址（降级演练：P1 持续失败→DEAD→watcher 补投 P2）
+      K_DUTY_TEST_WEBHOOK: ${NOTIFY_CHANNEL_TEST_WEBHOOK:?}
+      K_DUTY_DEAD_WEBHOOK: ${DUTY_K_DEAD_WEBHOOK:-http://127.0.0.1:9/dead}
+      # M7-17：duty-adapter 台账回写线 bearer 只进 control-app；notify-app 不需要
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50.0
     read_only: true
     tmpfs:
@@ -218,6 +271,8 @@ services:
     command: ["--config=/etc/otelcol/otelcol-config.yml"]
     volumes:
       - ./otelcol-control/otelcol-config.yml:/etc/otelcol/otelcol-config.yml:ro
+      # B-35：EX-B2 曾计划挂 docker.sock 供 docker_logs receiver——该 receiver 在
+      # otelcol-contrib 全版本不存在（components 实测），socket 挂载随之摘除
     environment:
       OTEL_UPSTREAM_ENDPOINT: ${OTEL_UPSTREAM_ENDPOINT:?}
       OTEL_UPSTREAM_TOKEN: ${OTEL_UPSTREAM_TOKEN:?}
@@ -247,9 +302,42 @@ services:
           cpus: "0.5"
     logging: *logging
 
+  # EX-B2：logs 真实源试验资源（docs/告警-EXB2-logs真实源.md §3——试验上限与准入条件
+  # 而非容量承诺）：mem_limit 384m ≤ 512MiB 准入线；retention 72h；OTLP 入口
+  # /otlp/v1/logs 双路接入（B-35 裁定）：otelcol-control（control 平面 OTLP logs）
+  # + demo collector otlphttp/loki（业务服务自带 OTLP logs）。
+  # 查询面 3100 仅 internal 网（control-app LogQueryExecutor）；零宿主端口 INV-AM0-1。
+  loki:
+    image: grafana/loki:3.4.2
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    mem_limit: 384m
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+      # EX-B2/B-35：demo collector（otelcol-config-extras.yml otlphttp/loki）经 demo
+      # 外部网推送业务服务 OTLP logs；loki 仍零宿主端口（INV-AM0-1）
+      - otel-demo-upstream
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+    logging: *logging
+
 volumes:
   pg-data:
   cas-data:
+  loki-data:
 
 networks:
   internal:

@@ -20,6 +20,11 @@ receivers:
         endpoint: "0.0.0.0:4317"
       http:
         endpoint: "0.0.0.0:4318"
+  # EX-B2/B-35：容器 stdout 发现面不可行——otelcol-contrib 根本没有 docker_logs
+  # receiver（0.104.0/0.103.0/0.100.0 三版 components 实测均无，filelog 容器解析器
+  # 只能从 k8s pod 路径提名字）；日志源走 control-app 自带 OTLP（resource.service.name
+  # 由应用侧声明，零路径解析零名字映射）。logs 管道经 otlphttp/loki 落 Loki，
+  # label service_name = OTLP 默认映射，executor 选择器 {service_name="<svc>"}。
 
 processors:
   # 资源上限（落码方案原文）：内存超限先降级再拒收，collector 自身不拖垮 2C4G 宿主
@@ -63,6 +68,10 @@ exporters:
     endpoint: "0.0.0.0:9465"
     resource_to_telemetry_conversion:
       enabled: true
+  # EX-B2：logs 真实源试验资源——Loki 原生 OTLP 入口（官方推荐 otlphttp 路线，
+  # 不用旧 loki exporter）；Loki 不可达只丢日志面（INV-AM5-8 同律）
+  otlphttp/loki:
+    endpoint: "http://loki:3100/otlp"
 
 extensions:
   health_check:
@@ -83,6 +92,7 @@ service:
       processors: [memory_limiter, batch]
       exporters: [prometheus/control]
     logs:
+      # EX-B2：control-app OTLP logs 双出口（上游遥测 + Loki 真实日志源，B-35 裁定）
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/upstream]
+      exporters: [otlp/upstream, otlphttp/loki]

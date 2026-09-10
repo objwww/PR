@@ -1,0 +1,48 @@
+# ============================================================================
+# EX-B2：Loki 生产配置（deploy/docker-compose.yml loki 服务；docs/告警-EXB2-logs真实源.md
+# §3 试验资源准入面）。
+# 资源帽纪律：容器 384m（compose mem_limit）+ retention 72h——试验上限而非容量承诺；
+# 不达标（内存超帽/查询不可用）→ 摘本服务，executor 显式降级 SOURCE_UNAVAILABLE（契约 §3）。
+# 单一标签契约：OTLP 默认映射 service.name → label service_name（此处零定制）；
+# 日志源 = control-app 自带 OTLP（B-35：otelcol-contrib 无 docker_logs receiver，
+# 容器 stdout 发现面不可行）；executor 选择器 {service_name="<svc>"}。
+# ============================================================================
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  allow_structured_metadata: true
+  retention_period: 72h
+
+ingester:
+  wal:
+    enabled: false
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /tmp/rules
+  rule_path: /tmp/scratchpad

@@ -1,0 +1,65 @@
+# AM7 M7-17 duty-adapter compose 单元（127 = 117.72.208.68 独立故障域——不进 195 compose）
+#
+# 部署段（M7-18）：jar 在构建面产出后
+#   cp .env.example .env && 填真值 && docker compose -f compose.duty-adapter.yml up -d --build
+#
+# 独立故障域红线（同 compose.gatus.yml）：无 depends_on——195 全挂不牵连本服务
+# （快照用磁盘副本照发，回写落 spool 事后补）。
+#
+# 端口只绑隧道地址 10.250.250.2（127 的 WG 接口）：Gatus 容器经 host 隧道 IP 打入，
+# 公网零暴露；bearer 验签为第二道面。若隧道接口暂未就绪导致 bind 失败，
+# restart=unless-stopped 会随接口恢复自愈。
+#
+# 健康面：无容器 healthcheck（temurin 镜像无 curl/wget）——外部监护= Gatus 探
+# http://10.250.250.2:8090/health（自指监控残余风险 AM7 §8 已登记：adapter 挂时
+# 无人报 adapter 挂，靠 restart + 独立 fallback 通道缓解）。
+
+services:
+  duty-adapter:
+    build:
+      # 构建上下文 = 模块目录（jar 需先 package；见 README）
+      context: ../../duty-adapter
+    image: pr-agent/duty-adapter:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    environment:
+      # Gatus custom provider 回头打的验签 token（与 gatus .env 的 DUTY_ADAPTER_TOKEN 同值）
+      DUTY_ADAPTER_TOKEN: ${DUTY_ADAPTER_TOKEN:?}
+      # 195 侧两条机器线凭证（与 195 deploy/.env 同值：op 线拉快照 / duty-adapter 线回写）
+      DUTY_SNAPSHOT_BEARER: ${DUTY_SNAPSHOT_BEARER:?}
+      DUTY_WRITEBACK_BEARER: ${DUTY_WRITEBACK_BEARER:?}
+      # 窄反代（195 宿主 nginx，WG 隧道 10.250.250.1:8090，只放行两条 duty 路径）
+      DUTY_SNAPSHOT_URL: ${DUTY_SNAPSHOT_URL:-http://10.250.250.1:8090/api/duty/schedule/snapshot}
+      DUTY_WRITEBACK_URL: ${DUTY_WRITEBACK_URL:-http://10.250.250.1:8090/api/duty/notifications}
+      DUTY_DATA_DIR: /data
+      # 通道 webhook env 直通（值=真实机器人 URL 属运维注入面；缺省空=env_missing
+      # 诚实失败。键名与 195 duty_channel.env_key_webhook 对齐——EX-C4 演练键：
+      # RL=业务码 45009 沉淀端（E-21 判败钉）、TEST=echo 沉淀端（D01 测试机器人替身）
+      K_DUTY_RL_WEBHOOK: ${K_DUTY_RL_WEBHOOK:-}
+      K_DUTY_TEST_WEBHOOK: ${K_DUTY_TEST_WEBHOOK:-}
+      K_DUTY_DEAD_WEBHOOK: ${K_DUTY_DEAD_WEBHOOK:-}
+    volumes:
+      # 快照磁盘副本 + 回写 spool（195 长挂期间台账不丢的最后防线）
+      - duty-adapter-data:/data
+    ports:
+      - "10.250.250.2:8090:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          # AM7 §3 预算 128~192MiB；JVM -XX:MaxRAMPercentage=70（Dockerfile）
+          memory: 192M
+          cpus: "0.3"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  duty-adapter-data:

@@ -12,7 +12,13 @@
 # 提案分级标注：[文档已定] = 技术方案/落码方案明示；[P5 提案] = 本文件新定，待主会话确认。
 # =====================================================================================
 
-registry_version: 1
+# 版本史：v1 = P5 初版；v2（2026-09-09）= S1/S2 max_resolved_wait_seconds 600→2100——
+#   full-0910 批（run=fd72d103-10a4-4989-9c81-3fe88e965aa3）实测 checkout page 规则为
+#   双分支（5m+1h 档 与 30m+6h 档），复位后 30m 窗稀释需 ~30min，600s 预算必超时
+#   （S1R1 恢复判败 alerts_still_firing → 门关闭 → 9 Case gate_blocked，批 14 分钟空转）；
+#   证据 docs/测试证据/eval/full-0910/。S3~S5 不动：靶场 Gauge 面秒级 resolved
+#   （S3 烟测两轮实测 off→resolved ≤30s），600s 留 20x 余量。
+registry_version: 2
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
 lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 1)"
@@ -90,7 +96,10 @@ scenarios:
                                            # 14.4x；50% 失败档 1h 窗收敛实测需 ~17.3min（0.5·t/3600≥0.144），
                                            # 600s 实测必超时（E2E-M3-02b S1 两轮全 TIMEOUT 取证）。
                                            # 25min 预算留余量；G4 演练 3m17s 为高负载/暖窗条件，不可照搬
-      max_resolved_wait_seconds: 600       # 复位后 5m 窗稀释 ≤5m + 余量
+      max_resolved_wait_seconds: 2100      # [v2 校准 2026-09-09] 600→2100：checkout page 双分支
+                                           # 含 30m+6h 窗（>6x 档），复位后 30m 窗稀释需 ~30min
+                                           # （full-0910 批实测 600s 必超时，见文件头版本史）；
+                                           # 2100 = 30min 稀释 + AM resolved 链延迟（~3min）+ 余量
       cleanup_timeout_seconds: 120
 
   # ---------------------------------------------------------------------------------
@@ -136,7 +145,8 @@ scenarios:
       hold_seconds: 600
       max_firing_wait_seconds: 1500        # [M3-30 校准 2026-09-05] 同 S1：100% 失败档 1h 窗收敛 ~8.7min
                                            # 理论可入 600s，但双窗评估粒度 + 抖动下按 S1 同档 25min 留余量
-      max_resolved_wait_seconds: 600
+      max_resolved_wait_seconds: 2100      # [v2 校准 2026-09-09] 同 S1：checkout page 30m+6h 窗稀释
+                                           # 需 ~30min（复位判据与 S1 同一告警面），600s 必超时
       cleanup_timeout_seconds: 120
 
   # ---------------------------------------------------------------------------------

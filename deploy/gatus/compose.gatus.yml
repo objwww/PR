@@ -8,11 +8,24 @@
 
 services:
   gatus:
-    image: twinproduction/gatus:v5.17.0
+    # digest 实测 pin：127（117.72.208.68）docker pull twinproduction/gatus:v5.17.0 实拉记录
+    # （pull 输出与 digest 证据：docs/测试证据/HOST2-127/gatus-v5170-契约修正/pull.log）
+    image: twinproduction/gatus@sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512
     restart: unless-stopped
     # 探针目标与值班通道 env 注入（值在 2C4G .env；:? 必填防静默空探针）
     environment:
+      # 镜像自带示例配置 /config/config.yaml（front-end/back-end 等 7 个示例 endpoint，v5.17.0
+      # Dockerfile 第 16 行烤入）——Gatus 加载顺序 env → config/config.yaml → config/config.yml，
+      # 不显式指路会加载镜像示例而弃用本配置（v5.17.0 main.go/config.go 实证），必须钉死：
+      GATUS_CONFIG_PATH: /config/config.yml
       GATUS_ONCALL_WEBHOOK_URL: ${GATUS_ONCALL_WEBHOOK_URL:?}
+      # M7-17：duty-adapter 验签（gatus-config.yml headers 经 os.ExpandEnv 注入）
+      DUTY_ADAPTER_TOKEN: ${DUTY_ADAPTER_TOKEN:?}
+      # EX-C4：M7 值班链黑盒（快照端点 op 线 bearer；与 127 adapter DUTY_SNAPSHOT_BEARER 同值）
+      DUTY_CHAIN_SNAPSHOT_URL: ${DUTY_CHAIN_SNAPSHOT_URL:?}
+      DUTY_SNAPSHOT_BEARER: ${DUTY_SNAPSHOT_BEARER:?}
+      # EX-C4：adapter 自身 /health（§8.4；自指死锁承诺边界已登记）
+      DUTY_ADAPTER_HEALTH_URL: ${DUTY_ADAPTER_HEALTH_URL:?}
       CONTROL_HEALTH_URL: ${CONTROL_HEALTH_URL:?}
       ALERTMANAGER_HEALTH_URL: ${ALERTMANAGER_HEALTH_URL:?}
       ARENA_HEALTH_URL: ${ARENA_HEALTH_URL:?}
