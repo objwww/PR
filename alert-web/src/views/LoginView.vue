@@ -1,47 +1,75 @@
 <template>
   <div class="login-page">
-    <div class="login-card card">
+    <el-card class="login-card">
       <div class="login-title">告警 RCA 控制台</div>
-      <form @submit.prevent="onLogin">
-        <label class="field">
-          <span class="field-lbl">账号</span>
-          <input v-model.trim="username" type="text" autocomplete="username" placeholder="请输入账号">
-        </label>
-        <label class="field">
-          <span class="field-lbl">密码</span>
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码">
-        </label>
-        <div class="login-btn-row">
-          <button class="btn primary login-btn" type="submit" :disabled="!canSubmit">登 录</button>
-        </div>
-      </form>
-      <div class="login-hint">失败 N 次锁定 ｜ 会话 8h 过期</div>
-      <div class="login-note">
-        FUT-34：浏览器禁止复用 Alertmanager 机器 Bearer；必须用户会话或 stream ticket。
-        第一期不做注册/找回密码/SSO，账号由运维在配置侧预置。
+      <el-form @submit.prevent="onLogin">
+        <el-form-item>
+          <el-input
+            v-model.trim="username" size="large" placeholder="请输入账号"
+            autocomplete="username" :prefix-icon="User"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-input
+            v-model="password" size="large" type="password" show-password
+            placeholder="请输入密码" autocomplete="current-password" :prefix-icon="Lock"
+            @keyup.enter="onLogin"
+          />
+        </el-form-item>
+        <el-button
+          class="login-btn" type="primary" size="large"
+          native-type="submit" :loading="busy" :disabled="!canSubmit"
+        >登 录</el-button>
+      </el-form>
+      <div v-if="failed" class="login-err">用户名或密码错误</div>
+      <div class="login-foot">
+        <span class="env-badge">{{ envLabel }}</span>
+        <span class="acct-hint">账号由运维预置，如需开通请联系管理员</span>
       </div>
-    </div>
+    </el-card>
   </div>
 </template>
 
 <script setup>
+// 登录（/login）：GET /api/auth/csrf 引导落 XSRF-TOKEN cookie，
+// axios 默认 xsrfCookieName/xsrfHeaderName 与后端 CookieCsrfTokenRepository 配对，
+// POST /api/auth/login 自动回带 X-XSRF-TOKEN；formLogin 读表单参数（URLSearchParams
+// → application/x-www-form-urlencoded），成功即服务端 JSESSIONID 会话（HttpOnly）
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Lock, User } from '@element-plus/icons-vue'
+import { http } from '../api/client'
+import { useSessionStore } from '../stores/session.js'
 
-// P0 登录页（线框图 v1.6 #p0）：应用壳外全屏居中卡片；登录成功默认落地 P1 总览
-// 本轮为 mock：任意非空账号密码 → 写 sessionStorage 会话标记 → 跳转；正式登录端点由后端用户体系落地后接入
 const router = useRouter()
 const route = useRoute()
+const session = useSessionStore()
 const username = ref('')
 const password = ref('')
+const failed = ref(false)
+const busy = ref(false)
 
-const canSubmit = computed(() => username.value !== '' && password.value !== '')
+// 环境徽章与顶栏同来源：构建期注入的 VITE_ENV_LABEL，读不到如实显示「未标记」
+const envLabel = import.meta.env.VITE_ENV_LABEL || '未标记'
 
-function onLogin() {
+const canSubmit = computed(() => username.value !== '' && password.value !== '' && !busy.value)
+
+async function onLogin() {
   if (!canSubmit.value) return
-  sessionStorage.setItem('am7.session', '1')
-  const target = typeof route.query.redirect === 'string' ? route.query.redirect : '/overview'
-  router.replace(target)
+  busy.value = true
+  failed.value = false
+  try {
+    await http.get('/auth/csrf')
+    const form = new URLSearchParams({ username: username.value, password: password.value })
+    await http.post('/auth/login', form)
+    session.markLogin(username.value)
+    const target = typeof route.query.redirect === 'string' ? route.query.redirect : '/overview'
+    router.replace(target)
+  } catch {
+    failed.value = true
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 
@@ -50,26 +78,22 @@ function onLogin() {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background: var(--bg); padding: 24px;
 }
-.login-card { width: 320px; padding: 22px 24px 18px; }
+.login-card { width: 400px; max-width: 100%; }
 .login-title {
-  text-align: center; font-weight: 700; color: var(--head); font-size: 16px;
-  border: 1px solid var(--line); border-radius: 8px; background: #f7f9fc;
-  padding: 8px 10px; margin-bottom: 14px;
+  text-align: center; font-weight: 600; color: var(--head);
+  font-size: var(--fs-page-title); margin-bottom: 20px;
 }
-.field { display: block; margin-bottom: 10px; }
-.field-lbl { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 4px; }
-.field input {
-  width: 100%; border: 1px solid var(--line-strong); border-radius: 6px;
-  padding: 7px 10px; font-size: 13px; background: #fff; color: var(--ink);
+.login-btn { width: 100%; }
+.login-err {
+  text-align: center; font-size: var(--fs-aux); color: var(--bad); margin-top: 12px;
+  background: var(--bad-bg); border-radius: var(--radius-ctl); padding: 6px 8px;
 }
-.field input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
-.login-btn-row { text-align: center; margin-top: 14px; }
-.login-btn { width: 100%; padding: 6px 0; font-size: 13px; }
-.login-btn:disabled { opacity: .55; cursor: not-allowed; }
-.login-hint { text-align: center; font-size: 11.5px; color: #888; margin-top: 12px; }
-.login-note {
-  margin-top: 12px; font-size: 11.5px; line-height: 1.7; color: var(--ink-2);
-  background: var(--warn-bg); border: 1px solid #ecd9a0; border-left: 4px solid #e6b93f;
-  border-radius: 8px; padding: 8px 12px;
+.login-foot {
+  margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 6px;
 }
+.env-badge {
+  font-size: var(--fs-aux); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 12px;
+}
+.acct-hint { font-size: var(--fs-aux); color: var(--ink-2); }
 </style>

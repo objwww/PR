@@ -7,12 +7,17 @@ import HistoryView from '../views/HistoryView.vue'
 import RunsView from '../views/RunsView.vue'
 import RunDetailView from '../views/RunDetailView.vue'
 import CasesView from '../views/CasesView.vue'
+import DutyView from '../views/DutyView.vue'
+import DutyChatView from '../views/DutyChatView.vue'
+import NotificationsView from '../views/NotificationsView.vue'
 import EvalView from '../views/EvalView.vue'
+import EvalRunsView from '../views/EvalRunsView.vue'
+import EvalRunDetailView from '../views/EvalRunDetailView.vue'
+import EvalDatasetsView from '../views/EvalDatasetsView.vue'
+import EvalReviewView from '../views/EvalReviewView.vue'
 import MonitorView from '../views/MonitorView.vue'
 
-// 会话标记：mock 登录写入；正式用户会话（FUT-34 HttpOnly Cookie）落地后由此处统一替换
-const SESSION_KEY = 'am7.session'
-const hasSession = () => sessionStorage.getItem(SESSION_KEY) === '1'
+import { useSessionStore } from '../stores/session.js'
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -24,19 +29,33 @@ const routes = [
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },
   { path: '/cases', name: 'cases', component: CasesView, meta: { title: '处置中心' } },
-  { path: '/eval', name: 'eval', component: EvalView, meta: { title: '评测中心' } },
+  { path: '/duty', name: 'duty', component: DutyView, meta: { title: '值班管理' } },
+  { path: '/duty/chat', name: 'duty-chat', component: DutyChatView, meta: { title: '通知预览' } },
+  { path: '/notifications', name: 'notifications', component: NotificationsView, meta: { title: '值班通知' } },
+  // UI-6 评测中心路由化：/eval → /eval/runs；实验 / 数据集 / 评审 三个一级子路由 + 实验详情
+  {
+    path: '/eval', component: EvalView, meta: { title: '评测中心' },
+    children: [
+      { path: '', redirect: '/eval/runs' },
+      { path: 'runs', name: 'eval-runs', component: EvalRunsView, meta: { title: '实验 · 评测中心' } },
+      { path: 'runs/:runId', name: 'eval-run', component: EvalRunDetailView, meta: { title: '实验详情 · 评测中心' } },
+      { path: 'datasets', name: 'eval-datasets', component: EvalDatasetsView, meta: { title: '数据集 · 评测中心' } },
+      { path: 'review', name: 'eval-review', component: EvalReviewView, meta: { title: '评审 · 评测中心' } },
+    ],
+  },
   { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: 'Agent 监控' } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
 
-// 登录守卫：壳内路由要求会话；未登录重定向 /login 并带回跳地址
+// 登录守卫：壳内路由要求会话；未登录重定向 /login 并带回跳地址（会话判断统一走 session store）
 router.beforeEach(to => {
+  const session = useSessionStore()
   if (to.meta.bare) {
-    if (to.name === 'login' && hasSession()) return { path: '/overview', replace: true }
+    if (to.name === 'login' && session.loggedIn) return { path: '/overview', replace: true }
     return true
   }
-  if (!hasSession()) return { path: '/login', query: { redirect: to.fullPath } }
+  if (!session.loggedIn) return { path: '/login', query: { redirect: to.fullPath } }
   return true
 })
 

@@ -20,7 +20,7 @@
 
 <script setup>
 // P3 调查详情专用：任务 DAG（annot「DAG 图」选型：Vue Flow + dagre 自动布局，E-18 v1.1）
-// 节点=任务，边=依赖（rca_task + rca_task_edge 只读投影）；SSE 事件驱动节点实时变色（mock 为静态快照）
+// 节点=任务，边=依赖（rca_task + rca_task_edge 只读投影）；SSE 事件驱动节点实时变色
 import { computed, watch, nextTick } from 'vue'
 import { VueFlow, useVueFlow, MarkerType } from '@vue-flow/core'
 import dagre from '@dagrejs/dagre'

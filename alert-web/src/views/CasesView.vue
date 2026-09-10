@@ -1,132 +1,92 @@
 <template>
   <div class="cases-page">
-    <!-- 面包屑条（全局壳已含顶栏；此处只留页内 crumb + 数据新鲜度） -->
-    <div class="crumb card">
-      <span><b>首页</b><span class="sep">/</span>处置中心</span>
-      <span class="env">生产环境 ｜ 数据更新至 {{ summary?.updatedAt || '--:--:--' }}</span>
-    </div>
+    <PageHeader title="处置中心" :subtitle="`认领、处理并闭环告警处置 ｜ 数据更新至 ${summary?.updatedAt || '—'}`" />
 
     <div class="card frame">
-      <!-- 页签：待办视图 + 通知（计数来自 summary 投影） -->
-      <div class="tabs">
-        <span
-          v-for="t in tabs"
-          :key="t.key"
-          :class="{ cur: tab === t.key }"
-          @click="switchTab(t.key)"
-        >{{ t.label }} {{ t.count }}</span>
+      <!-- 待办视图切换 + 筛选 + 批量认领 -->
+      <div class="toolbar">
+        <el-radio-group v-model="tab">
+          <el-radio-button v-for="t in tabs" :key="t.key" :value="t.key">{{ t.label }}（{{ t.count }}）</el-radio-button>
+        </el-radio-group>
+        <el-select v-model="fStatus" placeholder="全部状态" clearable class="w-ctl">
+          <el-option value="OPEN" label="待认领" />
+          <el-option value="ACKED" label="处理中" />
+          <el-option value="RESOLVED" label="已解决" />
+        </el-select>
+        <el-select v-model="fPriority" placeholder="全部优先级" clearable class="w-ctl">
+          <el-option value="P0" label="P0" />
+          <el-option value="P1" label="P1" />
+          <el-option value="P2" label="P2" />
+        </el-select>
+        <el-select v-model="fReason" placeholder="全部原因" clearable class="w-ctl">
+          <el-option v-for="r in reasonOptions" :key="r" :value="r" :label="r" />
+        </el-select>
+        <span class="flex-spacer" />
+        <el-button :disabled="!filteredCases.some(c => !c.owner)" @click="batchClaim">批量认领</el-button>
       </div>
 
-      <template v-if="tab !== 'notify'">
-        <!-- 筛选工具条：状态/优先级/原因 + 批量认领 -->
-        <div class="toolbar">
-          状态
-          <select v-model="fStatus" class="field">
-            <option value="">OPEN/ACKED</option>
-            <option value="OPEN">OPEN</option>
-            <option value="ACKED">ACKED</option>
-            <option value="RESOLVED">RESOLVED</option>
-          </select>
-          优先级
-          <select v-model="fPriority" class="field">
-            <option value="">P0–P2</option>
-            <option>P0</option><option>P1</option><option>P2</option>
-          </select>
-          原因
-          <select v-model="fReason" class="field">
-            <option value="">全部</option>
-            <option v-for="r in reasonOptions" :key="r" :value="r">{{ r }}</option>
-          </select>
-          <button class="btn" @click="batchClaim">批量认领</button>
-          <span v-if="conflictMsg" class="conflict">{{ conflictMsg }}</span>
-        </div>
-
-        <div class="row">
-          <!-- 左：OperatorCase 队列（按 SLA 风险排序；行首 4px severity 色条 + 状态 badge 分离） -->
-          <div class="col queue">
-            <div class="lbl"> OperatorCase 队列（按 SLA 风险排序）</div>
-            <div v-if="loading" class="empty">加载中…</div>
-            <div v-else-if="!filteredCases.length" class="empty">
-              筛选无结果 <button class="btn" @click="clearFilters">清除筛选</button>
-            </div>
+      <div class="row">
+        <!-- 左：待办列表（固定 340px；仅展示主题/优先级/负责人/期限） -->
+        <div class="col queue">
+          <div v-if="loading" v-loading="true" class="loading-box" />
+          <template v-else-if="filteredCases.length">
             <div
               v-for="c in filteredCases"
               :key="c.id"
-              class="list-item case-item"
-              :class="[sevClass(c.priority), { cur: selectedId === c.id }]"
+              class="case-item"
+              :class="[mapSeverity(priorityRaw(c.priority)).rowClass, { cur: selectedId === c.id }]"
               @click="selectCase(c.id)"
             >
-              <span class="tag" :class="slaTag(c)">{{ c.priority }} {{ c.slaLabel }}</span>
-              <span class="tag" :class="statusTag(c.status)">{{ c.status }}</span>
-              <b>case#{{ c.id }} {{ c.subject }}</b><br>
-              <small>
-                <router-link :to="`/runs/${c.runId}`" @click.stop>run#{{ c.runId }}</router-link><template v-if="c.incidentType"> / {{ c.incidentType }}</template>
-                ｜ {{ c.owner ? `owner=${c.owner}` : '未分配' }}
-                <template v-if="c.ackOverdue"> ｜ {{ c.ackOverdue }}</template>
-                <template v-else-if="c.status !== 'OPEN'"> ｜ resolve_due {{ c.resolveDue }}</template>
-                <template v-if="c.id === 'c62'"> ｜ evidence {{ c.evidenceCount }} 条</template>
-              </small>
-              <span class="item-ops" @click.stop>
-                <button v-if="!c.owner" class="btn" @click="claimCase(c)">认领</button>
-                <router-link class="btn" :to="`/runs/${c.runId}`">查看 Run →</router-link>
-                <button v-if="c.owner" class="btn" @click="selectCase(c.id)">打开 →</button>
-              </span>
+              <div class="ci-top">
+                <b class="ci-subject">{{ c.subject }}</b>
+                <StatusBadge :severity="c.priority" />
+              </div>
+              <div class="ci-meta">
+                <span>{{ c.owner ? `负责人 ${c.owner}` : '未分配' }}</span>
+                <span v-if="c.ackOverdue" class="due overdue">{{ c.ackOverdue }}</span>
+                <span v-else-if="c.status !== 'OPEN'" class="due">解决期限 {{ c.resolveDue }}</span>
+                <el-tag size="small" :type="statusType(c.status)" effect="plain">{{ statusLabel(c.status) }}</el-tag>
+              </div>
+              <div class="ci-ops" @click.stop>
+                <router-link class="run-link" :to="`/runs/${c.runId}`">关联调查 →</router-link>
+                <el-button v-if="!c.owner" size="small" type="primary" plain @click="claimCase(c)">认领</el-button>
+              </div>
             </div>
-          </div>
-
-          <!-- 右：Case 详情 -->
-          <div class="col detail">
-            <div class="lbl"> Case 详情：case#{{ selectedId || '—' }}</div>
-            <CaseDetailPanel v-if="detail" :detail="detail" @command="onCommand" />
-            <div v-else class="empty">请选择左侧 Case</div>
-          </div>
+          </template>
+          <EmptyState v-else kind="empty" description="筛选无结果">
+            <el-button size="small" @click="clearFilters">清除筛选</el-button>
+          </EmptyState>
         </div>
-      </template>
 
-      <!-- 通知标签：投递与已读状态；卡片带对象深链 -->
-      <template v-else>
-        <div class="notify-list">
-          <div v-if="!notifications.length" class="empty">暂无通知</div>
-          <div v-for="n in notifications" :key="n.id" class="card notify-card" :class="{ unread: !n.read }">
-            <div class="n-head">
-              <i v-if="!n.read" class="unread-dot"></i>
-              <span class="tag" :class="notifyTag(n.type)">{{ notifyLabel(n.type) }}</span>
-              <b>{{ n.title }}</b>
-              <span class="n-time">{{ n.time }}</span>
-            </div>
-            <div class="n-body">{{ n.body }}</div>
-            <div class="n-ops">
-              <button v-if="!n.read" class="btn" @click="readNotify(n.id)">标已读</button>
-              <router-link v-if="n.runId" class="btn" :to="`/runs/${n.runId}`">查看 Run →</router-link>
-              <button v-if="n.caseId" class="btn" @click="openCase(n.caseId)">查看 Case →</button>
-            </div>
-          </div>
+        <!-- 右：选中处置详情（冲突提示贴近操作区，不整页堆警告） -->
+        <div class="col detail">
+          <el-alert
+            v-if="conflictMsg" type="warning" :closable="true" class="conflict-alert"
+            :title="conflictMsg" @close="conflictMsg = ''"
+          />
+          <CaseDetailPanel v-if="detail" :detail="detail" @command="onCommand" />
+          <EmptyState v-else kind="empty" description="请选择左侧待办查看详情" />
         </div>
-      </template>
-
-      <div class="banner">
-        “通知”标签示意：报告就绪 / Case 分配 / 系统异常；通知可标已读并跳转对象，但不会因此关闭 OperatorCase。
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-// P4 处置中心（/cases，线框图 v1.6 #p4）：OperatorCase 管理（认领/SLA/闭环）+ 同页通知标签
-// 数据经 api(path, { mock })：后端 OperatorCase/通知 API 落码后切换联调，组件代码不变
+// UI-4 处置中心（/cases）：稳定主从布局——左 340px 待办列表（主题/优先级/负责人/期限），
+// 右侧选中详情（下一步操作 + 处置记录 + 调查证据）。命令四件套（claim/ack/resolve/assign）
+// 走真端点，带 expectedRevision + idempotencyKey；409/422 为业务结局就地解析。
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api/client.js'
-import { NOTIFY_TYPE_ZH, zh } from '../dict/displayNameZh.js'
+import PageHeader from '../components/common/PageHeader.vue'
+import EmptyState from '../components/common/EmptyState.vue'
+import StatusBadge from '../components/common/StatusBadge.vue'
 import CaseDetailPanel from '../components/CaseDetailPanel.vue'
-import {
-  fetchCaseSummary, fetchCases, fetchCaseDetail, fetchNotifications,
-  caseCommand, markNotificationRead,
-} from '../mocks/cases.js'
+import { mapSeverity } from '../utils/severity'
 
 const summary = ref(null)
 const cases = ref([])
 const detail = ref(null)
-const notifications = ref([])
 const loading = ref(true)
 const tab = ref('mine')
 const selectedId = ref(null)
@@ -144,7 +104,6 @@ const tabs = computed(() => {
     { key: 'all', label: '全部待办', count: t.all ?? 0 },
     { key: 'unassigned', label: '未分配', count: t.unassigned ?? 0 },
     { key: 'overdue', label: '已逾期', count: t.overdue ?? 0 },
-    { key: 'notify', label: '通知', count: t.notifyUnread ?? 0 },
   ]
 })
 
@@ -162,36 +121,35 @@ const filteredCases = computed(() => {
   return list
 })
 
-const sevClass = p => ({ P0: 'sev-p0', P1: 'sev-p1', P2: 'sev-p2' }[p] || '')
-const slaTag = c => (c.overdue || c.priority !== 'P2' ? 't-red' : 't-gray')
-const statusTag = s => ({ OPEN: 't-orange', ACKED: 't-blue', RESOLVED: 't-green' }[s] || 't-gray')
-
-// 中文名统一走 M7-09 版本化词典 src/dict/displayNameZh.js；tag 配色是 UI 本地映射，非词典内容
-const NOTIFY_TAG = { REPORT_READY: 't-blue', CASE_ASSIGNED: 't-orange', SYSTEM_ERROR: 't-red' }
-const notifyLabel = t => zh(NOTIFY_TYPE_ZH, t)
-const notifyTag = t => NOTIFY_TAG[t] || 't-gray'
+// priority 已是 P0/P1/P2 展示级，mapSeverity 只借它的行色条 class
+const priorityRaw = p => ({ P0: 'critical', P1: 'warning', P2: 'info' }[p] || '')
+const statusType = s => ({ OPEN: 'warning', ACKED: 'primary', RESOLVED: 'success' }[s] || 'info')
+const statusLabel = s => ({ OPEN: '待认领', ACKED: '处理中', RESOLVED: '已解决' }[s] || s)
 
 onMounted(async () => {
-  const [s, cs, ns] = await Promise.all([
-    api('/cases/summary', { mock: fetchCaseSummary }),
-    api('/cases', { mock: fetchCases }),
-    api('/notifications', { mock: fetchNotifications }),
-  ])
-  summary.value = s
-  cases.value = cs
-  notifications.value = ns
-  loading.value = false
-  selectCase(cs[0]?.id)
+  try {
+    const [s, cs] = await Promise.all([
+      api('/cases/summary'),
+      api('/cases'),
+    ])
+    summary.value = s
+    cases.value = cs
+    selectCase(cs[0]?.id)
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || '加载失败，请刷新重试')
+  } finally {
+    loading.value = false
+  }
 })
 
 async function selectCase(id) {
   if (!id) return
   selectedId.value = id
-  detail.value = await api(`/cases/${id}`, { mock: () => fetchCaseDetail(id) })
-}
-
-function switchTab(key) {
-  tab.value = key
+  try {
+    detail.value = await api(`/cases/${id}`)
+  } catch {
+    ElMessage.error('加载处置详情失败，请重试')
+  }
 }
 
 function clearFilters() {
@@ -200,25 +158,46 @@ function clearFilters() {
 
 const idemKey = () => `ui-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 
-// 命令统一走 expected_revision + idempotency_key；旧 revision 冲突时刷新服务端新状态
+// 409（revision 冲突）/422（非法迁移）是业务结局不是异常：后端仍回
+// {ok,conflict,error,case} 结构体（含最新投影），就地解析
+async function postCommand(caseId, action, payload) {
+  try {
+    return await api(`/cases/${caseId}/${action}`, { method: 'POST', body: payload })
+  } catch (e) {
+    if (e?.response && (e.response.status === 409 || e.response.status === 422)) {
+      return e.response.data
+    }
+    throw e
+  }
+}
+
+// 命令统一走 expectedRevision + idempotencyKey；旧版本冲突时刷新服务端新状态
 async function runCommand(caseId, action, payload = {}) {
   conflictMsg.value = ''
   const base = cases.value.find(c => c.id === caseId)
-  const res = await caseCommand(caseId, action, {
-    expectedRevision: payload.expectedRevision ?? base?.revision,
-    idempotencyKey: idemKey(),
-    ...payload,
-  })
+  let res
+  try {
+    res = await postCommand(caseId, action, {
+      expectedRevision: payload.expectedRevision ?? base?.revision,
+      idempotencyKey: idemKey(),
+      ...payload,
+    })
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || '操作失败，请重试')
+    return
+  }
   if (!res.ok && res.conflict) {
-    conflictMsg.value = '命令冲突：服务端 revision 已更新，已刷新最新状态后可重试。'
+    conflictMsg.value = '操作冲突：该处置已被他人更新，已刷新为最新状态，确认后可重试。'
     applyCase(res.case)
     return
   }
-  if (res.ok) {
-    applyCase(res.case)
-    if (selectedId.value === caseId) await selectCase(caseId)
-    await refreshSummary()
+  if (!res.ok) {
+    ElMessage.error(res.error || '操作被拒绝')
+    return
   }
+  applyCase(res.case)
+  if (selectedId.value === caseId) await selectCase(caseId)
+  await refreshSummary()
 }
 
 function applyCase(updated) {
@@ -242,91 +221,49 @@ async function batchClaim() {
   }
 }
 
-async function readNotify(id) {
-  const res = await markNotificationRead(id)
-  if (res.ok) {
-    const n = notifications.value.find(x => x.id === id)
-    if (n) n.read = true
-    await refreshSummary()
-  }
-}
-
-// 通知卡片 → Case 深链：切到全部待办并选中该 Case（已读不改变 Case 状态）
-function openCase(caseId) {
-  tab.value = 'all'
-  selectCase(caseId)
-}
-
 async function refreshSummary() {
-  summary.value = await api('/cases/summary', { mock: fetchCaseSummary })
+  try { summary.value = await api('/cases/summary') } catch { /* 保留旧统计 */ }
 }
 </script>
 
 <style scoped>
-.crumb {
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
-  gap: 4px 12px; padding: 7px 14px; font-size: 12px; color: var(--ink-2); margin-bottom: 10px;
-}
-.crumb b { color: var(--head); font-weight: 600; }
-.crumb .sep { color: #9aa5b1; margin: 0 4px; }
-.crumb .env { font-size: 11.5px; }
+.cases-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
-.frame { padding-bottom: 10px; }
-
-.tabs { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 12px 0; border-bottom: 1px solid var(--line); background: #f6f8fb; border-radius: var(--radius) var(--radius) 0 0; }
-.tabs span {
-  border: 1px solid var(--line-strong); border-bottom: none; border-radius: 8px 8px 0 0;
-  padding: 5px 12px; font-size: 11.5px; background: #fff; color: var(--ink-2); cursor: pointer;
-}
-.tabs span.cur { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
-
+.frame { padding-bottom: 4px; }
 .toolbar {
-  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-  padding: 8px 12px; border-bottom: 1px solid var(--line); background: #fafbfd; font-size: 11.5px;
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  padding: 12px var(--card-pad); border-bottom: 1px solid var(--line);
 }
-.field {
-  display: inline-block; border: 1px solid var(--line-strong); border-radius: 6px;
-  background: #fff; padding: 3px 8px; min-width: 88px; color: var(--ink-2); font-size: 11.5px;
+.w-ctl { width: 130px; }
+.flex-spacer { flex: 1; }
+
+/* 主从布局：左 340px 待办列表 + 右详情；窄屏先列表后详情 */
+.row { display: flex; gap: var(--section-gap); padding: 16px var(--card-pad); align-items: flex-start; }
+.col.queue { flex: none; width: 340px; max-height: calc(100vh - 220px); overflow-y: auto; }
+.col.detail { flex: 1; min-width: 0; }
+.conflict-alert { margin-bottom: 12px; }
+.loading-box { height: 240px; }
+
+/* 待办条目：行首 4px severity 色条 + 状态分离表达 */
+.case-item {
+  border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 10px; cursor: pointer; background: #fff;
+  display: flex; flex-direction: column; gap: 6px;
 }
-.conflict { color: var(--bad); font-size: 11.5px; }
-
-.row { display: flex; gap: 14px; padding: 10px 12px; align-items: flex-start; }
-.col.queue { flex: 3; min-width: 0; }
-.col.detail { flex: 2; min-width: 320px; }
-.lbl { font-size: 12px; font-weight: 700; color: var(--head); margin-bottom: 4px; }
-
-.list-item { border-bottom: 1px solid #edf0f4; padding: 7px 4px; font-size: 12px; }
-.list-item:last-child { border-bottom: none; }
-
-/* 行首 4px severity 色条（色条=priority，badge=状态，分离表达，E-19 §4） */
-.case-item { border-left: 4px solid transparent; padding-left: 8px; cursor: pointer; border-radius: 4px; }
+.case-item:hover { box-shadow: 0 0 0 2px var(--brand-soft); }
+.case-item.cur { box-shadow: 0 0 0 2px var(--brand); }
 .case-item.sev-p0 { border-left-color: var(--sev-p0); }
 .case-item.sev-p1 { border-left-color: var(--sev-p1); }
 .case-item.sev-p2 { border-left-color: var(--sev-p2); }
-.case-item:hover { background: #f6f9fe; }
-.case-item.cur { background: var(--brand-soft); }
-.case-item .tag { margin-right: 4px; }
-.item-ops { margin-left: 8px; display: inline-flex; gap: 4px; }
-.item-ops .btn { padding: 1px 8px; }
-
-.empty { padding: 24px; text-align: center; color: var(--ink-2); font-size: 12px; }
-
-.notify-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-.notify-card { padding: 10px 12px; border-left: 4px solid var(--line-strong); }
-.notify-card.unread { border-left-color: var(--brand); }
-.n-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; flex-wrap: wrap; }
-.unread-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); flex: none; }
-.n-time { margin-left: auto; color: var(--ink-2); font-size: 11px; }
-.n-body { font-size: 12px; color: var(--ink-2); margin: 6px 0; }
-.n-ops { display: flex; gap: 6px; }
-
-.banner {
-  margin: 10px 12px 0; padding: 7px 10px; border: 1px solid #ecd9a0;
-  border-left: 4px solid #e6b93f; border-radius: 8px; background: var(--warn-bg); font-size: 11.5px;
-}
+.ci-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.ci-subject { font-size: var(--fs-body); color: var(--head); line-height: 1.5; }
+.ci-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-aux); color: var(--ink-2); }
+.due.overdue { color: var(--bad); font-weight: 600; }
+.ci-ops { display: flex; align-items: center; justify-content: space-between; }
+.run-link { font-size: var(--fs-aux); }
 
 @media (max-width: 1100px) {
-  .row { flex-wrap: wrap; }
-  .col.detail { min-width: 0; flex-basis: 100%; }
+  .row { flex-direction: column; }
+  .col.queue { width: 100%; max-height: none; overflow-y: visible; }
 }
 </style>

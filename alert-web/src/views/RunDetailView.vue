@@ -2,30 +2,31 @@
   <div class="run-page" v-if="run">
     <div class="crumb">
       <span>
-        <b>首页</b><span class="sep">/</span>审查台<span class="sep">/</span>
+        <b>首页</b><span class="sep">/</span>调查<span class="sep">/</span>
         <router-link to="/runs">调查队列</router-link><span class="sep">/</span>
-        <b>{{ run.id }}</b>（Incident {{ run.incident }}）
+        <b>Run {{ shortId(run.id) }}</b>
       </span>
-      <span class="crumb-right">生产环境 ｜ engine {{ run.engine }} ｜ config {{ run.config }}</span>
+      <span class="crumb-right">数据更新至 {{ fmtTime(loadedAt) }}</span>
     </div>
 
-    <!-- 头部摘要条（E-19 §0-2/§4-2）：状态 badge + 严重度 + 任务进度 + 预算微条；主操作按钮组右置 -->
+    <!-- 顶部摘要：告警 / 状态 chip / 耗时 / 已用费用（token×单价无则只显 token）+ 次级操作 -->
     <div class="card runhead">
-      <span class="tag t-blue">{{ run.status }}</span>
-      <span class="tag" :class="run.severity === 'P2' ? 't-gray' : 't-red'">{{ run.severity }}</span>
-      <b>{{ run.id }}</b>
-      <span class="mini">任务进度 {{ run.progress.done }}/{{ run.progress.total }}（完成 {{ run.progress.done }} / 运行 {{ run.progress.running }} / 阻塞 {{ run.progress.blocked }}）</span>
-      <span class="mini budget">
-        预算 <span class="bar"><i :style="{ width: run.budget.pct + '%' }"></i></span>
-        step {{ run.budget.step.used }}/{{ run.budget.step.total }} ｜ token {{ run.budget.token.used }}/{{ run.budget.token.total }} ｜ tool {{ run.budget.tool.used }}/{{ run.budget.tool.total }}
-      </span>
+      <router-link v-if="run.incident" class="inc-link" :to="`/alerts/${run.incident}`" :title="run.incident">
+        告警 {{ shortId(run.incident) }}
+      </router-link>
+      <StatusBadge :status="run.status" />
+      <span class="mini">耗时 {{ listRow?.duration ?? '—' }}</span>
+      <span class="mini">预算 token：{{ run.budget?.token?.used ?? '—' }}</span>
+      <span class="mini">任务 {{ run.progress.done }}/{{ run.progress.total }}</span>
+      <span v-if="listRow?.blocker" class="mini blocker" :title="listRow.blocker">卡点：{{ listRow.blocker }}</span>
       <span class="ops">
-        <button class="btn danger" @click="cmd('取消 Run')">取消 Run</button>
-        <button class="btn" @click="cmd('提交 Hint')">提交 Hint（标 UNTRUSTED）</button>
-        <button class="btn" @click="cmd('报告 Feedback')">报告 Feedback</button>
+        <template v-if="runActive">
+          <el-button size="small" :disabled="cmdPending" @click="submitHint">补充线索</el-button>
+          <el-button size="small" :disabled="cmdPending" @click="submitFeedback">报告反馈</el-button>
+          <el-button size="small" type="danger" plain :disabled="cmdPending" @click="submitCancel">取消调查</el-button>
+        </template>
       </span>
     </div>
-    <div v-if="notice" class="notice">{{ notice }}</div>
 
     <div class="card tabs">
       <button
@@ -33,39 +34,75 @@
         :key="t.key"
         class="tab"
         :class="{ cur: viewTab === t.key }"
-        @click="viewTab = t.key"
+        @click="switchTab(t.key)"
       >{{ t.label }}</button>
     </div>
 
-    <!-- ============ DAG 图 tab ============ -->
-    <template v-if="viewTab === 'dag'">
-      <div class="card toolbar">
-        <router-link class="btn" to="/runs">← 返回调查队列</router-link>
-        <span class="tsep">｜</span>
-        <button class="btn" @click="dagRef?.fit()">适应画布</button>
-        <button class="btn" :class="{ primary: abnormalOnly }" @click="abnormalOnly = !abnormalOnly">仅看异常</button>
-        <button class="btn" :class="{ primary: neighborFocus }" @click="neighborFocus = !neighborFocus">上游/下游</button>
-        <span class="tsep">｜</span>
-        <span class="tinfo">任务：{{ run.progress.total }}（完成 {{ run.progress.done }} / 运行 {{ run.progress.running }} / 阻塞 {{ run.progress.blocked }}）｜ 实时 <i class="live-dot"></i></span>
+    <!-- ============ 摘要（默认）：当前结论与待补证 ============ -->
+    <template v-if="viewTab === 'summary'">
+      <div class="card panel">
+        <div class="lbl">当前结论</div>
+        <template v-if="currentConclusion">
+          <div class="conclusion">
+            <b>{{ currentConclusion.text }}</b>
+            <span class="mini">（{{ currentConclusion.code }} ｜ {{ currentConclusion.verdict }}）</span>
+          </div>
+        </template>
+        <template v-else>
+          <div class="conclusion-pending">
+            <el-tag type="warning" effect="dark" disable-transitions>原因待确认</el-tag>
+            <span v-if="runActive" class="mini"><el-icon class="is-loading"><Loading /></el-icon> 调查进行中，等待事件与结论</span>
+            <span v-else class="mini">本次调查未产生有效结论</span>
+          </div>
+        </template>
       </div>
 
-      <div class="dag-row">
-        <div class="card dag-col">
-          <div class="lbl">
-            任务 DAG（节点=任务，边=依赖；颜色+边框+图标+节点内原始状态标签四重编码；同一数据多视图切换，E-19 §0-3）
+      <div class="card panel">
+        <div class="lbl">待补证</div>
+        <template v-if="pendingHypotheses.length">
+          <div v-for="c in pendingHypotheses" :key="c.id" class="line-item">
+            {{ c.text }} <span class="mini">（{{ c.code }} ｜ {{ c.verdict }}）</span>
           </div>
-          <RunDag
-            ref="dagRef"
-            :tasks="tasks"
-            :edges="edges"
-            :selected-id="selectedTaskId"
-            :abnormal-only="abnormalOnly"
-            :neighbor-focus="neighborFocus"
-            @select="onSelectTask"
-          />
-          <div class="note">点击节点 → 事件流切「仅当前任务」；SSE 事件驱动节点实时变色（mock 为静态快照）</div>
+        </template>
+        <div v-else class="muted">暂无待补证项</div>
+      </div>
 
-          <!-- 11 态图例映射表（线框原表，annot：取消/跳过/过期/确定性失败不得混同） -->
+      <div class="card panel">
+        <div class="lbl">调查进展</div>
+        <div class="progress-line">
+          共 {{ run.progress.total }} 个任务：完成 {{ run.progress.done }} ｜ 运行 {{ run.progress.running }} ｜ 阻塞 {{ run.progress.blocked }}
+          <template v-if="run.engine">｜ 引擎 {{ run.engine }}</template>
+        </div>
+        <div v-if="listRow?.blocker" class="blocker-box">卡点：{{ listRow.blocker }}</div>
+      </div>
+
+      <div class="card panel">
+        <div class="lbl">最近事件</div>
+        <template v-if="recentEvents.length">
+          <div v-for="e in recentEvents" :key="e.seq" class="line-item">
+            <span class="seq">seq{{ e.seq }}</span>
+            <b>{{ eventZh(e.type) }}</b>
+            <span class="mini">{{ e.summary }}</span>
+          </div>
+          <el-button text type="primary" @click="switchTab('events')">查看全部事件 →</el-button>
+        </template>
+        <div v-else class="muted">
+          <template v-if="runActive"><el-icon class="is-loading"><Loading /></el-icon> 等待事件</template>
+          <template v-else>暂无事件</template>
+        </div>
+      </div>
+    </template>
+
+    <!-- ============ 执行过程：Vue Flow DAG，画布为主 ============ -->
+    <template v-else-if="viewTab === 'dag'">
+      <div class="card toolbar">
+        <el-button size="small" @click="dagRef?.fit()">适应画布</el-button>
+        <el-button size="small" :type="abnormalOnly ? 'primary' : 'default'" @click="abnormalOnly = !abnormalOnly">仅看异常</el-button>
+        <el-button size="small" :type="neighborFocus ? 'primary' : 'default'" :disabled="!selectedTask" @click="neighborFocus = !neighborFocus">上游/下游</el-button>
+        <el-popover placement="bottom-start" trigger="click" width="520">
+          <template #reference>
+            <el-button size="small" text>状态图例</el-button>
+          </template>
           <table class="legend">
             <thead>
               <tr><th>状态（节点内原文）</th><th>图形约定</th><th>含义</th></tr>
@@ -78,189 +115,250 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </el-popover>
+        <span class="flex-spacer" />
+        <span class="tinfo">任务 {{ run.progress.total }}（完成 {{ run.progress.done }} / 运行 {{ run.progress.running }} / 阻塞 {{ run.progress.blocked }}）</span>
+      </div>
 
-        <!-- 任务诊断抽屉：rca_task + rca_attempt 投影；只收白名单摘要/引用/digest -->
-        <div class="card drawer" v-if="selectedTask">
-          <div class="drawer-head">
-            <span class="lbl">任务诊断抽屉：{{ selectedTask.name }}</span>
-            <button class="x" title="关闭" @click="selectedTaskId = null">×</button>
-          </div>
+      <div class="card dag-card">
+        <RunDag
+          ref="dagRef"
+          :tasks="dagTasks"
+          :edges="edges"
+          :selected-id="selectedTaskId"
+          :abnormal-only="abnormalOnly"
+          :neighbor-focus="neighborFocus"
+          @select="onSelectTask"
+        />
+        <div class="note">点击节点查看任务详情；SSE 事件驱动节点实时变色</div>
+      </div>
+
+      <!-- 选中节点才开任务详情抽屉（360~420px） -->
+      <DetailDrawer
+        :model-value="!!selectedTask"
+        :title="`任务详情：${selectedTask?.name ?? ''}`"
+        :size="400"
+        @update:model-value="v => { if (!v) selectedTaskId = null }"
+      >
+        <template v-if="selectedTask">
           <div class="box">
-            <b>{{ selectedTask.status }} {{ statusStyle[selectedTask.status]?.zh }}</b>
-            ｜ task#{{ selectedTask.id }} ｜ priority={{ selectedTask.priority }}<br>
-            持续 {{ selectedTask.duration }} ｜ deadline {{ selectedTask.deadline }}
-            <template v-if="selectedTask.lease">｜ lease {{ selectedTask.lease.worker }} / epoch {{ selectedTask.lease.epoch }}</template>
+            <StatusBadge :status="selectedTask.status" />
+            <span class="mini">{{ statusStyle[selectedTask.status]?.zh }}</span><br>
+            task {{ selectedTask.name }} ｜ 优先级 {{ selectedTask.priority }}<br>
+            截止时间 {{ fmtTime(selectedTask.deadline) }}
+            <template v-if="selectedTask.lease"><br>Lease：{{ selectedTask.lease.worker }}（epoch {{ selectedTask.lease.epoch }}）</template>
+            <br>Attempt 次数：{{ selectedTask.attempts }}
           </div>
           <div class="box">
             <b>依赖</b>：
             <template v-if="selectedTask.deps.length">
               <span v-for="(d, i) in selectedTask.deps" :key="d.name">
-                <template v-if="i">｜ </template>{{ d.name }} {{ statusStyle[d.status]?.icon }} {{ d.req }}
+                <template v-if="i">｜ </template>{{ d.name }}（{{ statusStyle[d.status]?.zh ?? d.status }}）
               </span>
             </template>
-            <template v-else>（无上游）</template>
+            <template v-else>无上游</template>
             <br>
             <b>下游</b>：
             <template v-if="selectedTask.downstream.length">
               <span v-for="(d, i) in selectedTask.downstream" :key="d.name">
-                <template v-if="i">｜ </template>{{ d.name }} {{ d.status }}
+                <template v-if="i">｜ </template>{{ d.name }}（{{ statusStyle[d.status]?.zh ?? d.status }}）
               </span>
             </template>
-            <template v-else>（无下游）</template>
+            <template v-else>无下游</template>
           </div>
-          <div class="lbl sub">Attempt 时间轴</div>
-          <div v-for="a in selectedTask.attempts" :key="a.n" class="attempt">
-            #{{ a.n }} {{ a.status }} ｜ {{ a.worker }} ｜ {{ a.span }}
-            <small v-if="a.error"><br>{{ a.error }} ｜ {{ a.backoff }}</small>
+          <div class="drawer-ops">
+            <el-button size="small" @click="copyTaskLink">复制任务链接</el-button>
+            <el-button size="small" type="primary" @click="viewTaskEvents">仅看此任务事件</el-button>
           </div>
-          <div v-if="!selectedTask.attempts.length" class="attempt">尚无 Attempt（未领取）</div>
-          <div class="box">
-            <b>安全输出</b>：input digest={{ selectedTask.safety.inputDigest }}
-            ｜ output refs={{ selectedTask.safety.outputRefs.join(',') || '—' }}<br>
-            <button class="btn" @click="copyTaskLink">复制任务链接</button>
-            <button class="btn" @click="viewTaskEvents">仅看此任务事件</button>
-          </div>
-        </div>
-      </div>
+        </template>
+      </DetailDrawer>
     </template>
 
-    <!-- ============ 事件流 tab ============ -->
+    <!-- ============ 事件流：Transcript 卡片流 ============ -->
     <template v-else-if="viewTab === 'events'">
-      <div class="card events-card">
-        <div class="lbl">实时事件流（SSE，after_seq 续传）</div>
+      <div class="card panel">
         <div class="ev-toolbar">
           范围：
-          <button class="btn" :class="{ primary: eventScope === 'all' }" @click="eventScope = 'all'">全部 Run</button>
-          <button
-            class="btn"
-            :class="{ primary: eventScope === 'task' }"
-            :disabled="!selectedTask"
-            @click="eventScope = 'task'"
-          >当前任务：{{ selectedTask?.name ?? '—' }}<template v-if="eventScope === 'task'"> ✓</template></button>
-          <span class="tsep">｜</span>
-          <button class="btn" :class="{ primary: errorsOnly }" @click="errorsOnly = !errorsOnly">仅错误</button>
-          <select v-model="typeFilter">
-            <option value="all">事件类型 ▾</option>
-            <option v-for="t in eventTypes" :key="t" :value="t">{{ t }}</option>
-          </select>
-          <input v-model="search" class="ev-search" type="text" placeholder="搜索码/seq">
-          <span class="tsep">｜</span>
-          <button class="btn" @click="paused = !paused">{{ paused ? '恢复滚动' : '暂停滚动' }}</button>
-          <button class="btn" @click="downloadEvents">下载白名单事件</button>
+          <el-button size="small" :type="eventScope === 'all' ? 'primary' : 'default'" @click="eventScope = 'all'">全部 Run</el-button>
+          <el-button
+            size="small" :type="eventScope === 'task' ? 'primary' : 'default'"
+            :disabled="!selectedTask" @click="eventScope = 'task'"
+          >当前任务：{{ selectedTask?.name ?? '—' }}</el-button>
+          <el-button size="small" :type="errorsOnly ? 'primary' : 'default'" @click="errorsOnly = !errorsOnly">仅错误</el-button>
+          <el-select v-model="typeFilter" size="small" class="w-type" placeholder="全部类型" clearable>
+            <el-option v-for="t in eventTypes" :key="t" :value="t" :label="eventZh(t)" />
+          </el-select>
+          <el-input v-model="search" size="small" class="w-search" placeholder="搜索事件码 / seq" clearable />
+          <span class="flex-spacer" />
+          <el-button size="small" @click="downloadEvents">下载白名单事件</el-button>
         </div>
 
-        <div
-          v-for="ev in filteredEvents"
-          :key="ev.seq"
-          class="ev-item"
-          :class="{ err: ev.level === 'error', open: expandedSeq === ev.seq }"
-          @click="expandedSeq = expandedSeq === ev.seq ? null : ev.seq"
-        >
-          <span class="seq">seq{{ ev.seq }}</span>
-          <b>{{ eventZh(ev.type) }}</b>
-          <code>{{ ev.type }}</code>
-          ｜ {{ ev.summary }}
-          <span v-if="ev.taskName">｜ task={{ ev.taskName }}</span>
-          <div v-if="expandedSeq === ev.seq" class="ev-detail">
-            白名单 payload：type={{ ev.type }} ｜ seq={{ ev.seq }} ｜ task_id={{ ev.taskId ?? '—' }} ｜ level={{ ev.level }}<br>
-            <small>脱敏红线（§17.9.3）：thought/原始 prompt/secret/完整工具参数永不进前端；关联对象仅白名单引用/digest</small>
+        <div class="ev-scroll-wrap">
+          <transition name="fade">
+            <div v-if="newCount > 0" class="new-bar" @click="scrollEvToBottom">有 {{ newCount }} 条新事件，点击查看</div>
+          </transition>
+
+          <div ref="evListRef" class="ev-list" @scroll.passive="onEvScroll">
+            <div
+              v-for="ev in filteredEvents"
+              :key="ev.seq"
+              class="ev-card"
+              :class="['lv-' + (ev.level ?? 'info'), { open: expandedSeq === ev.seq }]"
+              @click="expandedSeq = expandedSeq === ev.seq ? null : ev.seq"
+            >
+              <div class="ev-line">
+                <i class="lv-dot" />
+                <b class="ev-name">{{ eventZh(ev.type) }}</b>
+                <code>{{ ev.type }}</code>
+                <span class="ev-summary">{{ ev.summary }}</span>
+                <el-tag v-if="ev.taskName ?? taskNameOf(ev)" size="small" type="info" disable-transitions>
+                  {{ ev.taskName ?? taskNameOf(ev) }}
+                </el-tag>
+                <span class="ev-meta">seq{{ ev.seq }} ｜ {{ fmtTime(ev.createdAt) }}</span>
+              </div>
+              <div v-if="expandedSeq === ev.seq" class="ev-detail">
+                <pre v-if="ev.payload && Object.keys(ev.payload).length">{{ JSON.stringify(ev.payload, null, 2) }}</pre>
+                <div class="mini">
+                  seq={{ ev.seq }} ｜ task_id={{ ev.taskId ?? '—' }} ｜ level={{ ev.level }}<br>
+                  脱敏红线：thought / 原始 prompt / secret / 完整工具参数不进前端，关联对象仅白名单引用与 digest
+                </div>
+              </div>
+            </div>
+            <div v-if="filteredEvents.length === 0" class="ev-empty">
+              <template v-if="runActive && !allEvents.length">
+                <el-icon class="is-loading"><Loading /></el-icon> 调查进行中，等待事件
+              </template>
+              <template v-else>当前筛选无事件</template>
+            </div>
           </div>
         </div>
-        <div v-if="filteredEvents.length === 0" class="ev-empty">当前筛选无事件</div>
 
         <div class="ev-status">
-          ● 连接中（Last-Event-ID={{ lastSeq }}）｜ 延迟 0.8s ｜ 断线自动回放；检测到 seq 缺口或超窗时停止增量并提示「重新同步」 ｜ 点击事件展开白名单 payload/关联对象
+          {{ sseStatusText }}（游标 seq={{ lastSeq }}）｜ 已加载 {{ allEvents.length }} 条 ｜ 断线自动重连续传；检测到 seq 缺口时全量重同步
         </div>
       </div>
     </template>
 
-    <!-- ============ Claim与证据 tab ============ -->
+    <!-- ============ Claim 与证据：证据 / 假设 / 结论三层分级 ============ -->
     <template v-else-if="viewTab === 'claims'">
-      <div class="card events-card">
-        <div class="lbl">Claim 与证据（结论可逐条追溯）</div>
-        <div v-for="c in claims" :key="c.id" class="box">
-          <b>{{ c.kind }}</b>：{{ c.text }} <small>({{ c.code }})</small>
-          ｜ {{ c.verdict }} ｜ {{ c.agree }} ｜ {{ c.current ? '当前有效' : '已被取代' }}
-          <button class="btn" @click="evOpen = !evOpen">证据 {{ c.evidences.length }} 条 →</button>
-          <div v-if="evOpen" class="ev-refs">
-            <div v-for="e in c.evidences" :key="e.id">
-              {{ e.id }} {{ e.desc }} {{ e.digest }}<template v-if="e.window"> [{{ e.window }}]</template>
+      <div v-for="g in claimGroups" :key="g.key" class="card panel">
+        <div class="lbl">{{ g.title }}</div>
+        <template v-if="g.items.length">
+          <div v-for="c in g.items" :key="c.id" class="box">
+            <b>{{ c.text }}</b> <span class="mini">（{{ c.code }}）</span>
+            ｜ {{ c.verdict }} ｜ {{ c.agree }} ｜ {{ c.current ? '当前有效' : '已被取代' }}
+            <el-button size="small" text type="primary" @click="toggleClaim(c.id)">
+              证据 {{ c.evidences?.length ?? 0 }} 条 {{ openClaims.has(c.id) ? '▲' : '▼' }}
+            </el-button>
+            <div v-if="openClaims.has(c.id)" class="ev-refs">
+              <div v-for="e in c.evidences" :key="e.id" class="line-item">
+                {{ e.id }} {{ e.desc }} <code>{{ e.digest }}</code><template v-if="e.window"> [{{ e.window }}]</template>
+              </div>
+              <div class="mini">来源 / 时间窗 / 采集状态可展开（校验 observed_generation / schema_version / payload_digest）</div>
             </div>
-            <small>来源/时间窗/采集状态可展开（证据详情校验 observed_generation / schema_version / payload_digest）</small>
           </div>
-        </div>
+        </template>
+        <div v-else class="muted">{{ g.emptyText }}</div>
       </div>
     </template>
 
-    <!-- ============ 报告 tab ============ -->
+    <!-- ============ 报告 ============ -->
     <template v-else-if="viewTab === 'report'">
-      <div class="card events-card">
+      <div class="card panel">
         <div class="lbl">报告与发布状态</div>
-        <div class="box">未生成——{{ reportState?.note }}</div>
+        <div class="muted">未生成——{{ reportState?.note ?? '调查完成并经人工复核后在此发布' }}</div>
       </div>
     </template>
 
-    <!-- ============ 历史Attempt tab（内容同 DAG 抽屉的 Attempt 时间轴，此处跨任务汇总） ============ -->
-    <template v-else-if="viewTab === 'attempts'">
-      <div class="card events-card">
-        <div class="lbl">历史 Attempt（rca_attempt 投影：worker/lease、错误码、retry/backoff、deadline）</div>
-        <table class="atable">
-          <thead>
-            <tr><th>任务</th><th>Attempt</th><th>状态</th><th>worker</th><th>时间</th><th>错误 / 退避</th></tr>
-          </thead>
-          <tbody>
-            <template v-for="t in tasks" :key="t.id">
-              <tr v-for="a in t.attempts" :key="t.id + '#' + a.n">
-                <td>{{ t.name }}</td><td>#{{ a.n }}</td>
-                <td><code>{{ a.status }}</code></td><td>{{ a.worker }}</td><td>{{ a.span }}</td>
-                <td>{{ a.error ? a.error + ' ｜ ' + a.backoff : '—' }}</td>
-              </tr>
+    <!-- ============ 运行详情：预算 / lease / attempt / config digest 等技术字段 ============ -->
+    <template v-else-if="viewTab === 'meta'">
+      <div class="card panel">
+        <div class="lbl">Run 头</div>
+        <KvTable :data="runHeadKv" />
+      </div>
+      <div class="card panel">
+        <div class="lbl">预算分项</div>
+        <KvTable v-if="run.budget" :data="run.budget" />
+        <div v-else class="muted">预算账本无读面，投影未提供（不回填示意值）</div>
+      </div>
+      <div class="card panel">
+        <div class="lbl">任务与 Attempt（rca_task 投影）</div>
+        <el-table :data="dagTasks" size="small">
+          <el-table-column label="任务" min-width="160">
+            <template #default="{ row }"><b>{{ row.name }}</b></template>
+          </el-table-column>
+          <el-table-column label="状态" width="120">
+            <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+          </el-table-column>
+          <el-table-column prop="priority" label="优先级" width="80" align="right" />
+          <el-table-column label="截止时间" width="170">
+            <template #default="{ row }">{{ fmtTime(row.deadline) }}</template>
+          </el-table-column>
+          <el-table-column label="Lease" min-width="150">
+            <template #default="{ row }">
+              <template v-if="row.lease">{{ row.lease.worker }} · epoch {{ row.lease.epoch }}</template>
+              <span v-else class="muted">—</span>
             </template>
-            <tr v-if="!tasks.some(t => t.attempts.length)"><td colspan="6" class="empty">暂无 Attempt 记录</td></tr>
-          </tbody>
-        </table>
+          </el-table-column>
+          <el-table-column prop="attempts" label="Attempt 次数" width="110" align="right" />
+          <el-table-column label="task_id" min-width="110">
+            <template #default="{ row }"><code>{{ shortId(row.taskId) }}</code></template>
+          </el-table-column>
+        </el-table>
       </div>
     </template>
   </div>
 
-  <div v-else class="loading card">加载中…</div>
+  <div v-else-if="loadError" class="card"><EmptyState kind="error" :description="loadError" @retry="loadDetail" /></div>
+  <div v-else class="loading card" v-loading="true" />
 </template>
 
 <script setup>
-// P3-B 调查详情（/runs/:runId）：线框 v1.6 #p3 P3-B
+// UI-3 调查详情（/runs/:runId）：摘要默认 + 执行过程(DAG) + 事件流(Transcript) +
+// Claim 与证据(三层) + 报告 + 运行详情。
 //
-// ===== 事件流真实接入点（后端落码后替换下方静态 mock + 定时器模拟）=====
-//  1) POST /rca-runs/{id}/stream-ticket 换取 stream ticket（TTL 30s、单次、绑 run+主体；
-//     annot「实时鉴权」：禁止 URL 带长效 token）
-//  2) new EventSource(`/api/rca-runs/${id}/events?ticket=...`)；初次读取用 ?after_seq= 游标
-//  3) SSE 每条消息写 `id: seq`，浏览器断线重连自动带 Last-Event-ID，
-//     服务端统一转换为同一 after_seq 游标（annot「事件流」）
-//  4) 检测到 seq 缺口或超窗 → 先停止增量追加，再提示「重新同步」做全量刷新
-//  5) FUT-33：断线不得改变 Run 状态；重连带 after_seq 续传
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+// ===== 事件流真接入（EX-C1 起真流，保留接线）=====
+//  1) POST /api/rca-runs/{id}/events/stream-ticket 换 stream ticket（TTL 30s、单次、绑 run+主体）
+//  2) new EventSource(.../stream?ticket=...)；初次读取用 REST ?after_seq= 游标做全量种子
+//  3) SSE 每条消息写 id: seq，断线重连自动带 Last-Event-ID（服务端归一为 after_seq 游标）
+//  4) resync 命名事件 → 停止增量，REST 全量重同步后重开流
+//  5) FUT-33：断线不得改变 Run 状态；票单次有效——ES onerror 统一关流重新换票
+//
+// ===== 命令真接线（POST /api/rca-runs/{id}/commands）=====
+//  命令体 {type: CANCEL|HINT|FEEDBACK, idempotencyKey, expectedRevision, payload}；
+//  expectedRevision 锚 rca_run.last_event_seq——详情投影不暴露该字段，但事件端点
+//  返回 latestSeq（同一计数器），以此作为修订号；SSE 每事件推进 revision。
+//  409=修订过期（零副作用）→ 提示并刷新；403=终态越权。按钮仅在 Run 活动态显示。
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { api } from '../api/client.js'
-import { fetchRunDetail } from '../mocks/runs.js'
+import { Loading } from '@element-plus/icons-vue'
+import { api } from '../api/client'
 import RunDag from '../components/RunDag.vue'
+import DetailDrawer from '../components/common/DetailDrawer.vue'
+import StatusBadge from '../components/common/StatusBadge.vue'
+import EmptyState from '../components/common/EmptyState.vue'
+import KvTable from '../components/common/KvTable.vue'
 import { STATUS_STYLE, STATUS_ORDER } from '../components/RunDagStatus.js'
 import { EVENT_TYPE_ZH, zh } from '../dict/displayNameZh.js'
+import { useSseStore } from '../stores/sseStatus.js'
+import { fmtTime } from '../utils/format'
 
-// 事件类型中文名：M7-09 已统一抽至 src/dict/displayNameZh.js（版本化词典 display_name_zh，
-// 机器码英文为稳定契约不变）
-
+const sse = useSseStore()
 const route = useRoute()
 
 const detail = ref(null)
-const notice = ref('')
+const listRow = ref(null) // 队列投影行（耗时/卡点；详情投影无 startedAt 字段）
+const loadError = ref('')
+const loadedAt = ref(null)
 
-const viewTab = ref('dag')
+const viewTab = ref('summary')
 const viewTabs = [
-  { key: 'dag', label: 'DAG 图' },
+  { key: 'summary', label: '摘要' },
+  { key: 'dag', label: '执行过程' },
   { key: 'events', label: '事件流' },
-  { key: 'claims', label: 'Claim与证据' },
+  { key: 'claims', label: 'Claim 与证据' },
   { key: 'report', label: '报告' },
-  { key: 'attempts', label: '历史Attempt' },
+  { key: 'meta', label: '运行详情' },
 ]
 
 const dagRef = ref(null)
@@ -271,66 +369,268 @@ const selectedTaskId = ref(null)
 // 事件流筛选状态
 const eventScope = ref('all') // all=全部 Run ｜ task=仅当前任务
 const errorsOnly = ref(false)
-const typeFilter = ref('all')
+const typeFilter = ref(null)
 const search = ref('')
-const paused = ref(false)
 const expandedSeq = ref(null)
-const evOpen = ref(true)
+const openClaims = reactive(new Set())
 
 const run = computed(() => detail.value?.run)
 const tasks = computed(() => detail.value?.tasks ?? [])
 const edges = computed(() => detail.value?.edges ?? [])
 const claims = computed(() => detail.value?.claims ?? [])
 const reportState = computed(() => detail.value?.reportState)
-const selectedTask = computed(() => tasks.value.find(t => t.id === selectedTaskId.value) ?? null)
+const runActive = computed(() => ['QUEUED', 'RUNNING', 'REPORTING'].includes(run.value?.status))
+
+// 任务规范化：真投影 {id:taskKey, taskId, status, priority, deadline, lease, attempts:次数}；
+// name 供 DAG 节点显示，deps/downstream 由 edges 推导
+const dagTasks = computed(() => tasks.value.map(t => ({
+  ...t,
+  name: t.name ?? t.id,
+  deps: edges.value.filter(e => e.target === t.id).map(e => taskOf(e.source)).filter(Boolean),
+  downstream: edges.value.filter(e => e.source === t.id).map(e => taskOf(e.target)).filter(Boolean),
+})))
+const selectedTask = computed(() => dagTasks.value.find(t => t.id === selectedTaskId.value) ?? null)
+
+function taskOf(id) {
+  const t = tasks.value.find(x => x.id === id)
+  return t ? { ...t, name: t.name ?? t.id } : null
+}
 
 const statusStyle = STATUS_STYLE
 const statusOrder = STATUS_ORDER
 
-// ===== SSE 模拟：静态 mock 事件数组 + 定时器逐条追加（真实接入点见文件头注释） =====
+// ===== SSE：REST 游标种子 + ticket 换票开流 =====
 const liveEvents = ref([])
-const livePool = ref([])
-let liveTimer = null
+const revision = ref(null) // rca_run.last_event_seq 锚（命令 expectedRevision）
+let es = null
+let esRetryTimer = null
 
 const allEvents = computed(() => [...(detail.value?.events ?? []), ...liveEvents.value])
 const lastSeq = computed(() => allEvents.value.reduce((m, e) => Math.max(m, e.seq), 0))
 const eventTypes = computed(() => [...new Set(allEvents.value.map(e => e.type))])
+const recentEvents = computed(() => [...allEvents.value].sort((a, b) => b.seq - a.seq).slice(0, 5))
+
+function appendLive(row) {
+  if (typeof row?.seq !== 'number') return
+  if (allEvents.value.some(e => e.seq === row.seq)) return
+  liveEvents.value.push(row)
+  liveEvents.value.sort((a, b) => a.seq - b.seq)
+  revision.value = Math.max(revision.value ?? 0, row.seq)
+}
+
+async function seedEvents(runId) {
+  const page = await api(`/rca-runs/${runId}/events`, { params: { after_seq: 0, limit: 200 } })
+  detail.value.events = page.events ?? []
+  if (typeof page.latestSeq === 'number') revision.value = page.latestSeq
+}
+
+function closeStream() {
+  clearTimeout(esRetryTimer)
+  esRetryTimer = null
+  if (es) { es.close(); es = null }
+  sse.setDisconnected()
+}
+
+function openStream(runId, delayMs = 800) {
+  closeStream()
+  sse.setConnecting()
+  esRetryTimer = setTimeout(async () => {
+    try {
+      const { ticket } = await api(`/rca-runs/${runId}/events/stream-ticket`, { method: 'POST' })
+      es = new EventSource(`/api/rca-runs/${runId}/events/stream?ticket=${encodeURIComponent(ticket)}`)
+      es.onopen = () => sse.setConnected()
+      es.onmessage = ev => {
+        try {
+          appendLive(JSON.parse(ev.data))
+          sse.markEvent()
+        } catch { /* 心跳/非 JSON 帧忽略 */ }
+      }
+      // 服务端判定客户端游标过旧：停增量、全量重同步后重新开流
+      es.addEventListener('resync', async () => {
+        closeStream()
+        try { await seedEvents(runId) } finally { openStream(runId) }
+      })
+      // 票 TTL 30s 单次：浏览器自动重连带旧票必败——统一关流、重新换票开流
+      es.onerror = () => { sse.setDisconnected(); openStream(runId) }
+    } catch {
+      openStream(runId, 3000)
+    }
+  }, delayMs)
+}
+
+const sseStatusText = computed(() => ({
+  connected: 'SSE 已连接', connecting: 'SSE 连接中', disconnected: 'SSE 已断开',
+}[sse.status] ?? 'SSE 已断开'))
+
+// ===== Transcript：新事件不打断滚动 =====
+const evListRef = ref(null)
+const newCount = ref(0)
+let nearBottom = true
+
+function onEvScroll() {
+  const el = evListRef.value
+  if (!el) return
+  nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  if (nearBottom) newCount.value = 0
+}
+
+function scrollEvToBottom() {
+  const el = evListRef.value
+  if (el) el.scrollTop = el.scrollHeight
+  newCount.value = 0
+  nearBottom = true
+}
+
+watch(() => liveEvents.value.length, () => {
+  if (viewTab.value !== 'events') return
+  if (nearBottom) nextTick(scrollEvToBottom)
+  else newCount.value++
+})
 
 const filteredEvents = computed(() => allEvents.value.filter(e => {
-  // annot「事件流」：任务事件带 task_id，Run 级事件只在「全部 Run」范围出现
-  if (eventScope.value === 'task' && e.taskId !== selectedTaskId.value) return false
+  if (eventScope.value === 'task' && e.taskId !== selectedTask.value?.taskId) return false
   if (errorsOnly.value && e.level !== 'error') return false
-  if (typeFilter.value !== 'all' && e.type !== typeFilter.value) return false
+  if (typeFilter.value && e.type !== typeFilter.value) return false
   const q = search.value.trim().toLowerCase()
   if (q && !e.type.toLowerCase().includes(q) && !String(e.seq).includes(q)) return false
   return true
 }))
 
 function eventZh(type) { return zh(EVENT_TYPE_ZH, type) }
+function taskNameOf(ev) {
+  if (!ev.taskId) return null
+  return tasks.value.find(t => t.taskId === ev.taskId)?.id ?? null
+}
 
-// 点击 DAG 节点 → 事件流切「仅当前任务」（线框 DAG tab 下方注释框）
+// ===== Claim 三层分级：证据 / 假设 / 结论 =====
+const claimGroups = computed(() => {
+  const groups = { conclusion: [], hypothesis: [], evidence: [] }
+  for (const c of claims.value) {
+    const kind = String(c.kind ?? '')
+    if (/evidence|证据/i.test(kind)) groups.evidence.push(c)
+    else if (/hypoth|假设/i.test(kind)) groups.hypothesis.push(c)
+    else groups.conclusion.push(c)
+  }
+  return [
+    { key: 'conclusion', title: '结论', items: groups.conclusion, emptyText: '暂无结论——原因待确认' },
+    { key: 'hypothesis', title: '假设', items: groups.hypothesis, emptyText: '暂无假设' },
+    { key: 'evidence', title: '证据', items: groups.evidence, emptyText: '暂无证据' },
+  ]
+})
+const currentConclusion = computed(() =>
+  claims.value.find(c => c.current && !/evidence|证据|hypoth|假设/i.test(String(c.kind ?? ''))) ?? null)
+const pendingHypotheses = computed(() =>
+  claims.value.filter(c => /hypoth|假设/i.test(String(c.kind ?? '')) && !/validated|confirmed/i.test(String(c.verdict ?? ''))))
+
+function toggleClaim(id) {
+  openClaims.has(id) ? openClaims.delete(id) : openClaims.add(id)
+}
+
+// ===== 运行详情 =====
+const runHeadKv = computed(() => ({
+  'Run ID': run.value?.id,
+  'Incident ID': run.value?.incident,
+  '状态': `${run.value?.status}（${listRow.value?.stageZh ?? '—'}）`,
+  '严重度': run.value?.severity ?? '投影未提供',
+  '引擎': run.value?.engine ?? '—',
+  'Config digest': run.value?.config ?? '—',
+  '负责人': '认领面未落码',
+  '事件游标（revision）': revision.value ?? '—',
+}))
+
+// ===== 干预命令（真端点：幂等键 + expectedRevision=事件游标） =====
+const cmdPending = ref(false)
+
+async function submitCommand(type, payload = {}) {
+  if (revision.value == null) {
+    ElMessage.warning('事件游标尚未就绪，请稍后重试')
+    return
+  }
+  cmdPending.value = true
+  try {
+    const res = await api(`/rca-runs/${route.params.runId}/commands`, {
+      method: 'POST',
+      body: {
+        type,
+        idempotencyKey: crypto.randomUUID(),
+        expectedRevision: revision.value,
+        payload,
+      },
+    })
+    ElMessage.success(res.state === 'APPLIED' ? '命令已生效' : '命令已受理')
+    await reload()
+  } catch (e) {
+    const st = e?.response?.status
+    if (st === 409) {
+      ElMessage.warning('调查状态已变化（修订号过期），已为你刷新')
+      await reload()
+    } else if (st === 403) {
+      ElMessage.error('终态调查不接受该命令')
+    } else {
+      ElMessage.error('命令提交失败：' + (e?.response?.data?.error ?? '网络异常'))
+    }
+  } finally {
+    cmdPending.value = false
+  }
+}
+
+async function submitCancel() {
+  try {
+    await ElMessageBox.confirm('取消后进行中的任务将被终止，该操作会留痕审计。', '取消调查', {
+      type: 'warning', confirmButtonText: '取消调查', cancelButtonText: '保留',
+    })
+  } catch { return }
+  submitCommand('CANCEL')
+}
+
+async function submitHint() {
+  let text
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '线索将以 UNTRUSTED（不可信输入）身份进入调查上下文，仅作参考，不会被当作事实。',
+      '补充线索',
+      { inputPlaceholder: '例如：昨晚 22:00 有发布变更', confirmButtonText: '提交', cancelButtonText: '取消' },
+    )
+    text = value?.trim()
+  } catch { return }
+  if (text) submitCommand('HINT', { text })
+}
+
+async function submitFeedback() {
+  let text
+  try {
+    const { value } = await ElMessageBox.prompt('对该调查的报告质量反馈（留痕审计）。', '报告反馈', {
+      inputPlaceholder: '例如：结论与证据一致，可以发布', confirmButtonText: '提交', cancelButtonText: '取消',
+    })
+    text = value?.trim()
+  } catch { return }
+  if (text) submitCommand('FEEDBACK', { text })
+}
+
+// ===== 交互 =====
+function switchTab(key) {
+  viewTab.value = key
+  if (key === 'events') nextTick(scrollEvToBottom)
+}
+
 function onSelectTask(id) {
   selectedTaskId.value = id
   if (id) eventScope.value = 'task'
 }
 
-// 干预命令：annot「干预」——取消/Hint/Feedback 依赖 AM5 M5-14 命令 API（未落码；
-// 幂等键 + expected_revision 旧版本拒绝），此处仅示意
-function cmd(name) {
-  notice.value = `「${name}」命令依赖 AM5 M5-14 命令 API（幂等键 + expected_revision），后端落码前为示意操作，不产生真实效果。`
-}
+function shortId(id) { return id ? String(id).slice(0, 8) : '—' }
 
 function copyTaskLink() {
   const url = `${location.origin}/runs/${route.params.runId}?task=${selectedTaskId.value}`
   navigator.clipboard?.writeText(url).then(
-    () => { notice.value = `任务链接已复制：${url}` },
-    () => { notice.value = `任务链接：${url}` },
+    () => ElMessage.success('任务链接已复制'),
+    () => ElMessage.info(`任务链接：${url}`),
   )
 }
 
 function viewTaskEvents() {
   eventScope.value = 'task'
-  viewTab.value = 'events'
+  switchTab('events')
 }
 
 function downloadEvents() {
@@ -342,148 +642,151 @@ function downloadEvents() {
   URL.revokeObjectURL(a.href)
 }
 
+async function loadDetail() {
+  loadError.value = ''
+  try {
+    detail.value = await api(`/rca-runs/${route.params.runId}`)
+    loadedAt.value = new Date().toISOString()
+  } catch (e) {
+    loadError.value = e?.response?.data?.error
+      ? `调查加载失败：${e.response.data.error}`
+      : '调查加载失败（后端不可达或参数非法）'
+    return
+  }
+  // 耗时/卡点：详情投影无时间字段，从队列投影行取（失败不阻塞）
+  api('/rca-runs').then(d => {
+    listRow.value = (d.rows ?? []).find(r => r.id === route.params.runId) ?? null
+  }).catch(() => { listRow.value = null })
+}
+
+async function reload() {
+  await loadDetail()
+  if (detail.value) {
+    try { await seedEvents(route.params.runId) } catch { /* SSE resync 兜底 */ }
+  }
+}
+
 onMounted(async () => {
-  detail.value = await api(`/rca-runs/${route.params.runId}`, {
-    mock: () => fetchRunDetail(route.params.runId),
-  })
-  // 默认选中运行中任务（线框抽屉示例为根因 Agent）
+  await loadDetail()
+  if (!detail.value) return
+  // 默认选中运行中任务
   selectedTaskId.value =
-    tasks.value.find(t => t.status === 'RUNNING')?.id ?? tasks.value[0]?.id ?? null
-  eventScope.value = 'task'
-  // SSE 增量模拟：每 5s 追加一条 liveEvents（paused 时停止追加）
-  livePool.value = [...(detail.value.liveEvents ?? [])]
-  liveTimer = setInterval(() => {
-    if (paused.value || !livePool.value.length) return
-    liveEvents.value.push(livePool.value.shift())
-  }, 5000)
+    dagTasks.value.find(t => t.status === 'RUNNING')?.id ?? dagTasks.value[0]?.id ?? null
+  try { await seedEvents(route.params.runId) } catch { /* 种子失败不阻塞，SSE resync 兜底 */ }
+  openStream(route.params.runId)
 })
 
-onBeforeUnmount(() => clearInterval(liveTimer))
+onBeforeUnmount(() => closeStream())
 </script>
 
 <style scoped>
+.run-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 .crumb {
   display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px;
-  font-size: 12.5px; color: var(--ink-2); margin-bottom: 10px;
+  font-size: var(--fs-aux); color: var(--ink-2);
 }
 .crumb .sep { color: var(--line-strong); margin: 0 6px; }
 
 .runhead {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 14px; margin-bottom: 8px; font-size: 13px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px var(--card-pad); font-size: var(--fs-body);
 }
-.mini { font-size: 12px; color: var(--ink-2); }
-.budget { display: inline-flex; align-items: center; gap: 6px; }
-.bar {
-  display: inline-block; width: 72px; height: 8px; border-radius: 4px;
-  background: #e6eaf1; overflow: hidden; vertical-align: middle;
-}
-.bar i { display: block; height: 100%; background: var(--brand); }
+.inc-link { font-weight: 600; font-size: var(--fs-section); }
+.mini { font-size: var(--fs-aux); color: var(--ink-2); }
+.blocker { color: var(--warn); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ops { margin-left: auto; display: inline-flex; gap: 8px; flex-wrap: wrap; }
 
-.notice {
-  font-size: 12.5px; color: var(--warn); background: var(--warn-bg);
-  border: 1px solid #ecd9a0; border-radius: 6px; padding: 7px 12px; margin-bottom: 8px;
-}
-
-.tabs { display: flex; gap: 2px; padding: 4px 10px 0; margin-bottom: 10px; }
+.tabs { display: flex; gap: 2px; padding: 4px 10px 0; }
 .tab {
   border: none; background: none; cursor: pointer;
-  padding: 8px 14px; font-size: 13px; color: var(--ink-2);
+  padding: 8px 14px; font-size: var(--fs-body); color: var(--ink-2);
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .tab:hover { color: var(--brand); }
 .tab.cur { color: var(--brand); font-weight: 700; border-bottom-color: var(--brand); }
 
+.panel { padding: 14px var(--card-pad); }
+.lbl { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 8px; }
+.muted { color: var(--ink-2); font-size: var(--fs-body); }
+.flex-spacer { flex: 1; }
+.line-item { font-size: var(--fs-body); line-height: 1.9; }
+.seq { color: var(--ink-2); font-size: var(--fs-aux); margin-right: 6px; }
+.conclusion { font-size: var(--fs-body); }
+.conclusion-pending { display: flex; align-items: center; gap: 10px; }
+.progress-line { font-size: var(--fs-body); }
+.blocker-box {
+  margin-top: 8px; font-size: var(--fs-aux); color: var(--warn);
+  background: var(--warn-bg); border: 1px solid #ecd9a0; border-radius: var(--radius-ctl); padding: 6px 10px;
+}
+
 .toolbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 8px 12px; margin-bottom: 10px; font-size: 12.5px; color: var(--ink-2);
+  padding: 8px 12px; font-size: var(--fs-aux); color: var(--ink-2);
 }
-.tsep { color: var(--line-strong); }
-.tinfo { color: var(--ink-2); }
-.live-dot {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--ok); vertical-align: middle;
-}
-
-.dag-row { display: flex; gap: 10px; align-items: flex-start; }
-.dag-col { flex: 3; min-width: 0; padding: 12px; }
-.lbl { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
-.lbl.sub { margin-top: 10px; }
-.note {
-  margin-top: 8px; font-size: 11.5px; color: var(--ink-2);
-  background: #f4f6fa; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
-}
-
-.legend { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 10px; }
+.tinfo { color: var(--ink-2); font-size: var(--fs-aux); }
+.legend { width: 100%; border-collapse: collapse; font-size: var(--fs-aux); }
 .legend th, .legend td { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
 .legend th { background: #f0f2f5; color: var(--ink-2); }
 
-.drawer { flex: 2; min-width: 260px; padding: 12px; }
-.drawer-head { display: flex; justify-content: space-between; align-items: center; }
-.x {
-  border: none; background: none; font-size: 16px; color: var(--ink-2);
-  cursor: pointer; line-height: 1; padding: 2px 6px;
-}
-.x:hover { color: var(--bad); }
-.box {
-  border: 1px solid var(--line); border-radius: 6px; background: #fafbfd;
-  padding: 7px 10px; font-size: 12px; margin-bottom: 8px; line-height: 1.7;
-}
-.box .btn { margin-top: 4px; margin-right: 6px; }
-.attempt {
-  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
-  font-size: 12px; margin-bottom: 6px; background: #fff;
-}
-.attempt small { color: var(--ink-2); }
+.dag-card { padding: 12px; }
+.dag-card :deep(.dag-canvas) { height: 560px; }
+.note { margin-top: 8px; font-size: var(--fs-aux); color: var(--ink-2); }
 
-.events-card { padding: 12px; }
+.box {
+  border: 1px solid var(--line); border-radius: var(--radius); background: #fafbfd;
+  padding: 8px 12px; font-size: var(--fs-body); margin-bottom: 10px; line-height: 1.8;
+}
+.drawer-ops { display: flex; gap: 8px; }
+
+/* ===== 事件流 Transcript ===== */
 .ev-toolbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  font-size: 12.5px; color: var(--ink-2);
-  border: 1px solid var(--line); border-radius: 6px; background: #f4f6fa;
-  padding: 7px 10px; margin-bottom: 8px;
+  font-size: var(--fs-aux); color: var(--ink-2);
+  border: 1px solid var(--line); border-radius: var(--radius); background: #f4f6fa;
+  padding: 8px 10px; margin-bottom: 10px;
 }
-.ev-toolbar select {
-  border: 1px solid var(--line-strong); border-radius: 6px;
-  padding: 2px 8px; font-size: 12px; background: #fff; color: var(--ink);
-}
-.ev-search {
-  border: 1px solid var(--line-strong); border-radius: 6px;
-  padding: 3px 10px; font-size: 12px; width: 140px;
-}
+.ev-toolbar .w-type { width: 170px; }
+.ev-toolbar .w-search { width: 170px; }
 
-.ev-item {
-  border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
-  font-size: 12.5px; margin-bottom: 6px; background: #fff; cursor: pointer;
+.ev-scroll-wrap { position: relative; }
+.new-bar {
+  position: sticky; top: 0; z-index: 2;
+  text-align: center; font-size: var(--fs-aux); color: var(--brand);
+  background: var(--brand-soft); border: 1px solid #b3d8ff; border-radius: var(--radius-ctl);
+  padding: 5px 10px; margin-bottom: 6px; cursor: pointer;
 }
-.ev-item:hover { border-color: var(--brand); }
-.ev-item.err { border-left: 3px solid var(--bad); }
-.ev-item .seq { color: var(--ink-2); font-size: 11.5px; margin-right: 6px; }
-.ev-item code { margin: 0 4px; }
+.new-bar:hover { background: #d9ecff; }
+.fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.ev-list { max-height: 560px; overflow-y: auto; }
+.ev-card {
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px;
+  margin-bottom: 6px; background: #fff; cursor: pointer;
+}
+.ev-card:hover { border-color: var(--brand); }
+.ev-card.lv-error { border-left: 3px solid var(--bad); }
+.ev-card.lv-warn { border-left: 3px solid var(--sev-p2); }
+.ev-card.lv-info { border-left: 3px solid var(--line-strong); }
+.ev-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-body); }
+.lv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.lv-error .lv-dot { background: var(--bad); }
+.lv-warn .lv-dot { background: var(--sev-p2); }
+.lv-info .lv-dot { background: var(--ok); }
+.ev-name { flex: none; }
+.ev-summary { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+.ev-meta { margin-left: auto; font-size: var(--fs-aux); color: var(--ink-2); flex: none; }
 .ev-detail {
-  margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line);
-  font-size: 11.5px; color: var(--ink-2);
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line);
 }
-.ev-empty { text-align: center; color: var(--ink-2); font-size: 12.5px; padding: 18px 0; }
-.ev-status {
-  font-size: 11.5px; color: var(--ink-2);
-  background: #f4f6fa; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px;
+.ev-detail pre {
+  background: #f4f6fa; border: 1px solid var(--line); border-radius: var(--radius-ctl);
+  padding: 8px 10px; font-size: var(--fs-aux); overflow-x: auto; margin-bottom: 6px;
 }
+.ev-empty { text-align: center; color: var(--ink-2); font-size: var(--fs-body); padding: 24px 0; }
+.ev-status { margin-top: 10px; font-size: var(--fs-aux); color: var(--ink-2); }
 
-.ev-refs {
-  margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line);
-  font-size: 12px; line-height: 1.8;
-}
-.ev-refs small { color: var(--ink-2); }
+.ev-refs { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); line-height: 1.8; }
 
-.atable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.atable th {
-  text-align: left; font-size: 12px; color: var(--ink-2);
-  background: #f4f6fa; border-bottom: 1px solid var(--line); padding: 6px 10px;
-}
-.atable td { padding: 6px 10px; border-bottom: 1px solid var(--line); }
-.empty { text-align: center; color: var(--ink-2); }
-
-.loading { padding: 32px; text-align: center; color: var(--ink-2); }
+.loading { height: 320px; }
 </style>

@@ -1,234 +1,270 @@
 <template>
   <div class="monitor-page">
-    <!-- 面包屑 + 环境摘要条（线框 #p6 crumb） -->
-    <div class="crumb card">
-      <span class="crumb-path"><b>首页</b><span class="sep">/</span>Agent 监控</span>
-      <span class="crumb-env">
-        {{ data.env }} ｜ 近 {{ data.window }} ▾ ｜ 数据延迟 {{ data.dataDelaySeconds }}s ｜
-        搜索 Run / worker / operation <input class="crumb-search" type="text" disabled> ｜ {{ data.operator }} ▾
-      </span>
+    <PageHeader title="监控" subtitle="先看系统可用性与最需要处理的异常，每 30 秒自动刷新">
+      <template #actions>
+        <span class="updated-at">数据更新于 {{ fmtTime(summary?.generatedAt) }}</span>
+        <el-tag v-if="dataStale" type="warning" size="small">数据陈旧</el-tag>
+        <el-button :loading="refreshing" @click="loadAll">刷新</el-button>
+      </template>
+    </PageHeader>
+
+    <!-- 第一行：stat 卡（全部真字段，null → '—'；可点击深链对应工作页） -->
+    <template v-if="summaryState === 'ok'">
+      <div class="stat-row">
+        <div class="stat card clickable" @click="go('/runs')">
+          <span class="stat-label">活跃调查</span>
+          <span class="stat-num">{{ num(summary?.activeRuns) }}</span>
+          <span class="stat-sub">进行中 Run → 调查队列</span>
+        </div>
+        <div class="stat card clickable" @click="go('/runs')">
+          <span class="stat-label">待审查</span>
+          <span class="stat-num">{{ num(summary?.awaitingReviewRuns) }}</span>
+          <span class="stat-sub">等待人工审查 → 调查队列</span>
+        </div>
+        <div class="stat card clickable" @click="go('/runs')">
+          <span class="stat-label">就绪任务积压</span>
+          <span class="stat-num">{{ num(summary?.readyTasks) }}</span>
+          <span class="stat-sub">最老等待 {{ fmtWait(summary?.oldestReadyWaitSeconds) }}</span>
+        </div>
+        <div class="stat card clickable" @click="go('/cases')">
+          <span class="stat-label">开放处置</span>
+          <span class="stat-num">{{ num(summary?.openCases) }}</span>
+          <span class="stat-sub">未闭环 Case → 处置中心</span>
+        </div>
+        <div class="stat card clickable" @click="go('/notifications')">
+          <span class="stat-label">通知待投 / 24h 失败</span>
+          <span class="stat-num">
+            {{ num(summary?.notifyOutboxPending) }}
+            <span class="slash">/</span>
+            <span :style="summary?.notifyOutboxFailed24h > 0 ? 'color: var(--sev-p0)' : ''">{{ num(summary?.notifyOutboxFailed24h) }}</span>
+          </span>
+          <span class="stat-sub">待投 / 24h 失败 → 值班通知</span>
+        </div>
+      </div>
+    </template>
+    <EmptyState v-else-if="summaryState === 'forbidden'" kind="forbidden" />
+    <EmptyState v-else-if="summaryState === 'error'" kind="error" description="监控摘要加载失败，请重试" @retry="loadSummary" />
+    <div v-else v-loading="true" class="loading-box" />
+
+    <!-- 第二行通栏：近 24h 告警接收/恢复趋势（复用 /v1/overview/summary 的 alertTrend24h） -->
+    <div class="card panel">
+      <div class="panel-head">
+        <span class="panel-title">近 24h 告警接收 / 恢复趋势</span>
+        <span class="panel-meta">
+          窗口：近 24 小时 ｜ 单位：条/小时 ｜ 最新数据点 {{ fmtTime(lastBucketStart) }}
+        </span>
+      </div>
+      <template v-if="trendState === 'ok'">
+        <VChart v-if="trend.length" :option="trendOption" autoresize class="trend-chart" />
+        <EmptyState v-else kind="empty" description="近 24 小时无告警数据" />
+      </template>
+      <EmptyState v-else-if="trendState === 'forbidden'" kind="forbidden" />
+      <EmptyState v-else-if="trendState === 'error'" kind="error" description="告警趋势加载失败，请重试" @retry="loadTrend" />
+      <div v-else v-loading="true" class="loading-box" />
     </div>
 
-    <!-- 队列/执行/投递/调和健康指标卡（可点击深链，annot：指标卡深链到带筛选条件的视图） -->
-    <div class="metric-grid">
-      <div class="card metric" :class="{ danger: m.oldestReady.breached }" @click="go('/runs', { status: 'READY' })">
-        <b>最老 READY</b>
-        <div class="metric-val">
-          <span class="num">{{ fmtDur(m.oldestReady.ageSeconds) }}</span>
-          <span v-if="m.oldestReady.breached" class="tag t-red">SLO {{ fmtDur(m.oldestReady.sloSeconds) }}</span>
+    <!-- 第三行双列：模型调用 + 工具调用 TopN（同属 agent-ops/summary，错误态共用上方空态） -->
+    <div v-if="summaryState === 'ok'" class="cols">
+      <div class="card panel">
+        <div class="panel-head">
+          <span class="panel-title">模型调用（近 24h）</span>
+          <span class="panel-meta">单位：次 / token</span>
         </div>
-        <small>{{ m.oldestReady.runRef }} → {{ m.oldestReady.target }}</small>
-      </div>
-      <div class="card metric">
-        <b>Worker 槽位</b>
-        <div class="metric-val">
-          <span class="num">{{ m.workerSlots.used }}/{{ m.workerSlots.total }}</span>
-          <span class="pct">{{ fmtPct(m.workerSlots.utilization) }}</span>
+        <div class="llm-nums">
+          <div class="llm-item">
+            <span class="llm-num">{{ num(summary?.llmCalls24h) }}</span>
+            <span class="llm-label">调用次数</span>
+          </div>
+          <div class="llm-item">
+            <span class="llm-num">{{ fmtTokens(summary?.tokens24h) }}</span>
+            <span class="llm-label">Token 消耗</span>
+          </div>
         </div>
-        <small>{{ m.workerSlots.hotspot.worker }} backlog {{ m.workerSlots.hotspot.backlog }}</small>
       </div>
-      <div class="card metric" :class="{ danger: m.outboxLag.status === 'DEGRADED' }">
-        <b>Outbox 延迟</b>
-        <div class="metric-val">
-          <span class="num">{{ fmtDur(m.outboxLag.lagSeconds) }}</span>
-          <span v-if="m.outboxLag.status === 'DEGRADED'" class="tag t-red">DEGRADED</span>
+      <div class="card panel">
+        <div class="panel-head">
+          <span class="panel-title">工具调用 TopN（近 24h）</span>
+          <span class="panel-meta">单位：次</span>
         </div>
-        <small>失败投递 {{ m.outboxLag.failedDeliveries }} → {{ m.outboxLag.target }}</small>
-      </div>
-      <div class="card metric">
-        <b>调和积压</b>
-        <div class="metric-val"><span class="num">{{ m.reconciliationBacklog.count }}</span></div>
-        <small>最老 {{ fmtDur(m.reconciliationBacklog.oldestSeconds) }}</small>
-      </div>
-      <div class="card metric" @click="go('/cases', { overdue: 'true' })">
-        <b>开放 Case</b>
-        <div class="metric-val"><span class="num">{{ m.openCases.count }}</span></div>
-        <small>逾期 {{ m.openCases.overdue }} → {{ m.openCases.target }}</small>
-      </div>
-      <div class="card metric" @click="go('/eval')">
-        <b>评测队列</b>
-        <div class="metric-val"><span class="num">{{ m.evalQueue.total }}</span></div>
-        <small>运行 {{ m.evalQueue.running }} / 排队 {{ m.evalQueue.queued }}</small>
+        <VChart v-if="topTools.length" :option="toolsOption" autoresize class="tools-chart" />
+        <EmptyState v-else kind="empty" description="近 24 小时无工具调用记录" />
       </div>
     </div>
 
-    <div class="cols">
-      <!-- 左列：活跃 Run 预算风险 + doom-loop 熔断记录 -->
-      <div class="col-main">
-        <div class="card panel">
-          <div class="lbl">活跃 Run 与预算风险（点击下钻）</div>
-          <div
-            v-for="r in data.activeRuns"
-            :key="r.runId"
-            class="run-item"
-            @click="go('/runs/' + r.runId.replace('run#', ''))"
-          >
-            <span class="run-id">{{ r.runId }}</span>
-            <span class="tag t-blue">{{ r.status }}</span>
-            <span class="budget">
-              step
-              <span class="bar"><i :style="{ width: r.stepUsedPct + '%' }"></i></span>
-              token
-              <span class="bar"><i :class="{ hot: r.tokenRisk }" :style="{ width: r.tokenUsedPct + '%' }"></i></span>
-            </span>
-            <span v-if="r.tokenRisk" class="tag t-red">{{ r.tokenUsedPct }}%</span>
-          </div>
-        </div>
-        <div class="card panel">
-          <div class="lbl">doom-loop 熔断记录</div>
-          <div v-for="b in data.doomLoopBreaks" :key="b.runId" class="box-line">
-            {{ b.runId }} ｜ {{ b.tool }} 同签名连续 {{ b.signatureStallCount }} 次无进展 → {{ b.action }} ｜ {{ b.at }}
-          </div>
-        </div>
-      </div>
-
-      <!-- 右列：工具调用 / 模型成本 / 控制面健康 -->
-      <div class="col-side">
-        <div class="card panel">
-          <div class="lbl">工具调用（近 24h）</div>
-          <div class="box-line">
-            <template v-for="(t, i) in data.toolCalls24h.tools" :key="t.name">
-              <template v-if="i > 0"> ｜ </template>{{ t.name }} {{ t.count }} 次 ✓{{ fmtPct(t.successRate) }}
-            </template>
-          </div>
-          <div class="box-line">
-            失败原因码分布：<template v-for="(f, i) in data.toolCalls24h.failuresByReason" :key="f.reasonCode">
-              <template v-if="i > 0"> ｜ </template>{{ f.reasonCode }} {{ f.count }}
-            </template>
-          </div>
-        </div>
-        <div class="card panel">
-          <div class="lbl">模型调用成本</div>
-          <div v-for="c in data.modelCosts" :key="c.model" class="box-line">
-            {{ c.model }}：{{ c.invocations }} 次 ｜ {{ fmtTokens(c.tokens) }} token ｜ ¥{{ c.costCny.toFixed(2) }}（{{ c.source }}）
-          </div>
-        </div>
-        <div class="card panel">
-          <div class="lbl">控制面健康与数据新鲜度</div>
-          <div class="box-line">
-            <template v-for="(c, i) in data.controlHealth.components" :key="c.name">
-              <template v-if="i > 0"> ｜ </template>
-              {{ c.name }}
-              <span v-if="c.status === 'OK'" class="ok">✓</span>
-              <span v-else class="tag t-red">{{ c.status }}</span>
-            </template>
-            <br>
-            metrics last_seen={{ data.controlHealth.freshness.metricsLastSeenSeconds }}s ｜
-            outbox projector lag={{ fmtDur(data.controlHealth.freshness.outboxProjectorLagSeconds) }}
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- 未接入维度：主机/探针等指标未采集，显式说明，不造假面板 -->
+    <el-alert type="info" :closable="false" show-icon
+      title="未接入维度：主机、外部探针、来源异常等指标尚未接入采集，本页不展示对应面板；未采集显示未知，不以模拟数据填充。"
+    />
   </div>
 </template>
 
 <script setup>
-// P6 Agent 监控（/monitor，线框 #p6）：队列、执行、投递与调和链路只读运行健康大盘
-// annot 契约：只读大盘、指标卡深链；手动熔断复位本期不做；阈值显示单位和窗口
-import { reactive, computed, onMounted } from 'vue'
+// UI-5 监控大盘（/monitor）：全部真端点
+// 数据：/agent-ops/summary（stat 卡 + 模型调用 + 工具 TopN）、/v1/overview/summary 的 alertTrend24h（趋势图）
+// 轮询 30s，页面隐藏（visibilitychange）时停止；generatedAt 超过 90s 未更新标记「数据陈旧」
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
-import { getMonitorSummary } from '../mocks/monitor'
+import PageHeader from '../components/common/PageHeader.vue'
+import EmptyState from '../components/common/EmptyState.vue'
+import { fmtTime } from '../utils/format'
 
 const router = useRouter()
 
-const data = reactive({
-  env: '', window: '', dataDelaySeconds: 0, operator: '',
-  metrics: null,
-  activeRuns: [], doomLoopBreaks: [],
-  toolCalls24h: { tools: [], failuresByReason: [] },
-  modelCosts: [],
-  controlHealth: { components: [], freshness: { metricsLastSeenSeconds: 0, outboxProjectorLagSeconds: 0 } },
+const summary = ref(null)
+const summaryState = ref('loading') // loading | ok | error | forbidden
+const trend = ref([])
+const trendState = ref('loading')
+const refreshing = ref(false)
+const now = ref(Date.now())
+let timer = null
+
+const topTools = computed(() => summary.value?.topTools24h ?? [])
+const lastBucketStart = computed(() => trend.value.length ? trend.value[trend.value.length - 1].bucketStart : null)
+
+// 数据新鲜度：generatedAt 距今超过 90s（≈3 个轮询周期）视为陈旧
+const dataStale = computed(() => {
+  const t = new Date(summary.value?.generatedAt ?? '').getTime()
+  if (Number.isNaN(t)) return false
+  return now.value - t > 90_000
 })
 
-const m = computed(() => data.metrics || {
-  oldestReady: { ageSeconds: 0, sloSeconds: 0, breached: false, runRef: '', target: '' },
-  workerSlots: { used: 0, total: 0, utilization: 0, hotspot: { worker: '', backlog: 0 } },
-  outboxLag: { lagSeconds: 0, status: 'OK', failedDeliveries: 0, target: '' },
-  reconciliationBacklog: { count: 0, oldestSeconds: 0 },
-  openCases: { count: 0, overdue: 0, target: '' },
-  evalQueue: { total: 0, running: 0, queued: 0 },
-})
-
-onMounted(async () => {
-  const res = await api('/agent-ops/summary', { mock: getMonitorSummary })
-  Object.assign(data, res)
-})
-
-function go(path, query) {
-  router.push({ path, query })
+async function loadSummary() {
+  try {
+    summary.value = await api('/agent-ops/summary')
+    summaryState.value = 'ok'
+  } catch (e) {
+    // 已有旧数据时保留展示（配合「数据陈旧」标记），仅首屏失败进错误态
+    if (!summary.value) {
+      summaryState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
+    }
+  }
 }
 
-function fmtDur(sec) {
-  if (sec < 60) return sec + 's'
-  if (sec < 3600) return Math.round(sec / 60) + 'm'
-  return Math.round(sec / 3600) + 'h'
+async function loadTrend() {
+  try {
+    const d = await api('/v1/overview/summary')
+    trend.value = d.alertTrend24h ?? []
+    trendState.value = 'ok'
+  } catch (e) {
+    if (!trend.value.length) {
+      trendState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
+    }
+  }
 }
 
-function fmtPct(ratio) {
-  return Math.round(ratio * 100) + '%'
+async function loadAll() {
+  refreshing.value = true
+  try { await Promise.all([loadSummary(), loadTrend()]) } finally {
+    refreshing.value = false
+    now.value = Date.now()
+  }
+}
+
+function go(path) { router.push({ path }) }
+
+function num(v) { return v == null ? '—' : v }
+
+// 等待时长：null → '—'；不足 1 分钟按 1 分钟；超 1 小时显示小时
+function fmtWait(sec) {
+  if (sec == null || Number.isNaN(Number(sec))) return '—'
+  const s = Number(sec)
+  if (s < 60) return '不足 1 分钟'
+  if (s < 3600) return `${Math.round(s / 60)} 分钟`
+  return `${(s / 3600).toFixed(1)} 小时`
 }
 
 function fmtTokens(n) {
-  return n >= 1000 ? Math.round(n / 1000) + 'k' : String(n)
+  if (n == null || Number.isNaN(Number(n))) return '—'
+  const v = Number(n)
+  return v >= 10000 ? `${(v / 10000).toFixed(1)} 万` : String(v)
 }
+
+function fmtBucket(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+const trendOption = computed(() => ({
+  grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+  tooltip: { trigger: 'axis' },
+  legend: { data: ['接收', '恢复'], top: 0, right: 0 },
+  xAxis: { type: 'category', boundaryGap: false, data: trend.value.map(b => fmtBucket(b.bucketStart)) },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    { name: '接收', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.15 }, data: trend.value.map(b => b.received ?? 0) },
+    { name: '恢复', type: 'line', smooth: true, showSymbol: false, areaStyle: { opacity: 0.15 }, data: trend.value.map(b => b.resolved ?? 0) },
+  ],
+}))
+
+const toolsOption = computed(() => ({
+  grid: { left: 8, right: 32, top: 8, bottom: 8, containLabel: true },
+  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  xAxis: { type: 'value', minInterval: 1 },
+  yAxis: { type: 'category', data: topTools.value.map(t => t.tool).reverse() },
+  series: [{
+    type: 'bar', barMaxWidth: 16,
+    itemStyle: { color: '#409EFF', borderRadius: [0, 3, 3, 0] },
+    label: { show: true, position: 'right', color: '#5b6572' },
+    data: topTools.value.map(t => t.calls ?? 0).reverse(),
+  }],
+}))
+
+function startTimer() {
+  stopTimer()
+  timer = setInterval(loadAll, 30000)
+}
+function stopTimer() {
+  if (timer) { clearInterval(timer); timer = null }
+}
+// 页面隐藏时停止轮询，回到前台立即补一次刷新
+function onVisibility() {
+  if (document.hidden) stopTimer()
+  else { loadAll(); startTimer() }
+}
+
+onMounted(() => {
+  loadAll()
+  startTimer()
+  document.addEventListener('visibilitychange', onVisibility)
+})
+onBeforeUnmount(() => {
+  stopTimer()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 </script>
 
 <style scoped>
-.monitor-page { display: flex; flex-direction: column; gap: 12px; }
+.monitor-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
-.crumb {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 14px; font-size: 13px; flex-wrap: wrap; gap: 4px 12px;
-}
-.crumb-path { color: var(--ink); }
-.crumb-path .sep { color: var(--ink-2); margin: 0 6px; }
-.crumb-env { color: var(--ink-2); font-size: 12.5px; }
-.crumb-search {
-  width: 150px; padding: 1px 8px; border: 1px solid var(--line-strong);
-  border-radius: 6px; font-size: 12px; background: #f5f7fa;
-}
+.updated-at { font-size: var(--fs-aux); color: var(--ink-2); align-self: center; }
 
-.metric-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px;
-}
-.metric { padding: 12px 14px; cursor: pointer; transition: box-shadow .15s, border-color .15s; }
-.metric:hover { border-color: var(--brand); box-shadow: var(--shadow); }
-.metric > b { font-size: 12.5px; color: var(--ink-2); }
-.metric-val { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 2px; }
-.metric-val .num { font-size: 20px; font-weight: 700; color: var(--head); }
-.metric-val .pct { font-size: 13px; color: var(--ink-2); }
-.metric > small { color: var(--ink-2); font-size: 12px; }
-.metric.danger { border-left: 3px solid var(--bad); }
+/* stat 卡行 */
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stat { padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
+.stat.clickable { cursor: pointer; transition: box-shadow .15s; }
+.stat.clickable:hover { box-shadow: 0 0 0 2px var(--brand-soft); }
+.stat-label { font-size: var(--fs-aux); color: var(--ink-2); }
+.stat-num { font-size: 22px; font-weight: 700; color: var(--head); line-height: 1.3; }
+.stat-num .slash { color: var(--ink-2); font-weight: 400; margin: 0 2px; }
+.stat-sub { font-size: var(--fs-aux); color: var(--ink-2); }
 
-.cols { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-.col-main { flex: 3; min-width: 420px; display: flex; flex-direction: column; gap: 12px; }
-.col-side { flex: 2; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
+/* 面板 */
+.panel { padding: 12px var(--card-pad); }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.panel-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); }
+.panel-meta { font-size: var(--fs-aux); color: var(--ink-2); }
 
-.panel { padding: 12px 14px; }
-.lbl {
-  font-size: 12px; font-weight: 700; color: var(--ink-2);
-  border-left: 3px solid var(--brand); padding-left: 8px; margin-bottom: 8px;
-}
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
 
-.run-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 8px; border-radius: 6px; font-size: 13px; cursor: pointer;
-}
-.run-item:hover { background: var(--brand-soft); }
-.run-id { font-weight: 600; color: var(--brand); }
-.budget { display: flex; align-items: center; gap: 6px; flex: 1; color: var(--ink-2); font-size: 12.5px; }
-.bar {
-  display: inline-block; width: 90px; height: 8px; border-radius: 4px;
-  background: #e3e8f0; overflow: hidden; vertical-align: middle;
-}
-.bar i { display: block; height: 100%; background: var(--brand); border-radius: 4px; }
-.bar i.hot { background: var(--bad); }
+.llm-nums { display: flex; gap: 48px; padding: 12px 0 4px; }
+.llm-item { display: flex; flex-direction: column; gap: 2px; }
+.llm-num { font-size: 28px; font-weight: 700; color: var(--head); line-height: 1.2; }
+.llm-label { font-size: var(--fs-aux); color: var(--ink-2); }
 
-.box-line {
-  background: #f7f9fc; border: 1px solid var(--line); border-radius: 6px;
-  padding: 7px 10px; font-size: 12.5px; color: var(--ink); margin-bottom: 6px;
-}
-.box-line:last-child { margin-bottom: 0; }
-.ok { color: var(--ok); font-weight: 700; }
+.trend-chart { height: 280px; }
+.tools-chart { height: 220px; }
+.loading-box { height: 160px; }
 </style>

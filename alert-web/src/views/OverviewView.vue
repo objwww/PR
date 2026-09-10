@@ -1,72 +1,67 @@
 <template>
-  <div class="ov">
-    <!-- 面包屑 + 环境/更新时间（线框 P1 crumb） -->
-    <div class="crumb-bar card">
-      <span><b>首页</b><span class="sep">/</span>总览</span>
-      <span class="env">{{ data.env }} ｜ {{ data.timezone }} ｜ 数据更新至 {{ data.updatedAt }}</span>
+  <div class="overview-page">
+    <PageHeader title="工作总览" subtitle="值班人员十秒内知道现在要处理什么">
+      <template #actions>
+        <span class="duty-chip">当前值班：{{ dutyText }}</span>
+        <span class="updated-at">数据更新至 {{ updatedAtText }}</span>
+      </template>
+    </PageHeader>
+
+    <!-- KPI 卡行：整卡为 router-link（键盘可达、链接语义），数字下最多一行解释 -->
+    <div class="kpi-row">
+      <router-link
+        v-for="k in kpis" :key="k.label"
+        :to="k.to" class="kpi card"
+      >
+        <span class="kpi-label">{{ k.label }}</span>
+        <span class="kpi-num" :style="{ color: k.color }">{{ k.value }}</span>
+        <span class="kpi-desc">{{ k.desc }}</span>
+      </router-link>
     </div>
 
-    <!-- 统计卡行：全部可点击，带筛选参数深跳对应工作队列（E-19 §3-P1） -->
-    <div class="stat-row">
-      <div class="stat-card card" @click="jump(s.overdueCases.jump)">
-        <div class="lbl">⏰ 逾期待办</div>
-        <div class="num">{{ s.overdueCases.count }} <span v-if="s.overdueCases.overSla" class="tag t-red">超 SLA</span></div>
-        <div class="jump">最老已逾期 {{ s.overdueCases.oldestOverdueMin }}m ｜ 点击 → 带筛选参数跳 P4 处置</div>
-      </div>
-      <div class="stat-card card" @click="jump(s.stuckFailedRuns.jump)">
-        <div class="lbl">🧱 卡住/失败 Run</div>
-        <div class="num">{{ s.stuckFailedRuns.total }}</div>
-        <div class="jump">卡住 {{ s.stuckFailedRuns.stuck }} ｜ 失败 {{ s.stuckFailedRuns.failed }} ｜ 点击 → 带筛选参数跳 P3 调查队列</div>
-      </div>
-      <div class="stat-card card" @click="jump(s.oldestReady.jump)">
-        <div class="lbl">⏳ 最老 READY</div>
-        <div class="num">{{ s.oldestReady.ageMin }}m</div>
-        <div class="jump">{{ s.oldestReady.runId }} ｜ {{ s.oldestReady.assignee || '未分配' }} ｜ 点击 → 跳 P3 队列（按等待排序）</div>
-      </div>
-      <div class="stat-card card" @click="jump(s.evalRegression.jump)">
-        <div class="lbl">📉 评测回归</div>
-        <div class="num small-num">{{ s.evalRegression.regressedCases }} case ｜ <span v-if="s.evalRegression.blockingCandidate" class="tag t-red">阻断候选</span></div>
-        <div class="jump">{{ s.evalRegression.candidateEvalId }} vs {{ s.evalRegression.baselineEvalId }} ｜ 点击 → 跳 P5 实验对比</div>
-      </div>
-      <div class="stat-card card" @click="jump(s.publishFailures.jump)">
-        <div class="lbl">📮 发布/投递失败</div>
-        <div class="num">{{ s.publishFailures.count }}</div>
-        <div class="jump">outbox 最老 {{ s.publishFailures.outboxOldestMin }}m ｜ 点击 → 跳 P6 监控</div>
-      </div>
+    <!-- 通栏：近 24 小时告警趋势（received/resolved 双系列面积图） -->
+    <div class="card panel">
+      <div class="panel-title">近 24 小时告警趋势</div>
+      <template v-if="trendState === 'ok'">
+        <VChart v-if="hasTrend" :option="trendOption" autoresize class="trend-chart" />
+        <EmptyState v-else description="近 24 小时暂无告警趋势数据" />
+      </template>
+      <EmptyState v-else-if="trendState === 'error'" kind="error" @retry="loadSummary" />
+      <div v-else v-loading="true" class="loading-box" />
     </div>
 
-    <div class="note">
-      <b>统计卡可点击（E-19 §3-P1：腾讯云概览→列表三级下钻、Alerta ASI 计数卡点击过滤）</b>：
-      hover 高亮边框，点击带筛选参数深跳对应工作队列——各卡下方文字即深跳目标。
-    </div>
-
-    <div class="row">
-      <!-- 交接视图：自上次值班以来的变化 -->
-      <div class="card panel" style="flex:2">
-        <div class="lbl">🔁 交接视图：自上次值班以来的变化</div>
-        <div v-for="h in handover" :key="h.id" class="list-item">
-          <span class="time">{{ h.time }}</span> {{ h.text }}
-          <button
-            v-if="h.claimable && !h.claimed"
-            class="btn"
-            :disabled="claiming === h.id"
-            @click="onClaim(h)"
-          >{{ claiming === h.id ? '认领中…' : '认领' }}</button>
-          <span v-else-if="h.claimable && h.claimed" class="tag t-green">已认领</span>
+    <!-- 双列：左 2/3 最新告警 Top5，右 1/3 交接摘要 + 系统健康 -->
+    <div class="grid-2col">
+      <div class="card panel">
+        <div class="panel-head">
+          <span class="panel-title">最新告警（Top 5）</span>
+          <router-link class="more-link" to="/alerts?status=FIRING">查看全部</router-link>
         </div>
+        <template v-if="incidentsState === 'ok'">
+          <IncidentTable :rows="topIncidents" :loading="incidentsLoading" @row-click="openIncident">
+            <template #actions="{ row }">
+              <el-button size="small" @click.stop="openIncident(row)">打开</el-button>
+            </template>
+            <template #empty>
+              <EmptyState description="当前没有告警中的事故" />
+            </template>
+          </IncidentTable>
+        </template>
+        <EmptyState v-else-if="incidentsState === 'forbidden'" kind="forbidden" />
+        <EmptyState v-else-if="incidentsState === 'error'" kind="error" @retry="loadIncidents" />
+        <div v-else v-loading="true" class="loading-box" />
       </div>
-      <!-- 系统健康 -->
-      <div class="card panel" style="flex:1">
-        <div class="lbl">💚 系统健康</div>
-        <div class="box small">
-          control-app <span class="tag" :class="healthTag('control-app')">{{ healthText('control-app') }}</span>
+
+      <div class="side-col">
+        <!-- 交接摘要：无真数据源，如实空态 -->
+        <div class="card panel">
+          <div class="panel-title">交接摘要</div>
+          <EmptyState description="暂无交接记录" :image-size="80" />
         </div>
-        <div class="box small">
-          notify-app <span class="tag" :class="healthTag('notify-app')">{{ healthText('notify-app') }}</span>
-        </div>
-        <div class="box small">
-          litellm <span class="tag" :class="healthTag('litellm')">{{ healthText('litellm') }}</span>
-          holmes <span class="tag t-gray">对照</span>
+        <!-- 系统健康：无真数据源，如实空态 -->
+        <div class="card panel">
+          <div class="panel-title">系统健康</div>
+          <EmptyState description="健康数据未接入" :image-size="80" />
         </div>
       </div>
     </div>
@@ -74,105 +69,175 @@
 </template>
 
 <script setup>
-// P1 总览（/overview）：行动首页——逾期/卡住/最老 READY/评测回归/发布失败优先区 + 可点击统计卡深跳
-// 数据契约：annot「新增行动摘要只读 API」；轮询 30s，不接 SSE；仅允许低风险「认领」
+// UI-2 总览（/overview）：KPI 卡（可点击深跳）+ 24h 趋势面积图 + 最新告警 Top5 + 交接/健康空态
+// 数据全真：GET /v1/overview/summary（KPI/趋势/值班）、GET /v1/incidents?status=FIRING&limit=5（Top5）
+// 字段可 null → 显「—」；交接与健康无真数据源，EmptyState 如实说明
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
-import { fetchActionSummary, claimCase } from '../mocks/overview'
+import PageHeader from '../components/common/PageHeader.vue'
+import EmptyState from '../components/common/EmptyState.vue'
+import IncidentTable from '../components/IncidentTable.vue'
+import { fmtTime } from '../utils/format'
 
 const router = useRouter()
-const data = ref({ env: '生产环境', timezone: 'Asia/Shanghai', updatedAt: '--:--:--', stats: null, handover: [], health: [] })
-const claiming = ref('')
+
+const summary = ref(null)
+const summaryState = ref('loading') // loading | ok | error
+const updatedAt = ref(null)
+
+const topIncidents = ref([])
+const incidentsState = ref('loading') // loading | ok | error | forbidden
+const incidentsLoading = ref(false)
+
 let timer = null
 
-const s = computed(() => data.value.stats || {
-  overdueCases: { count: '—', oldestOverdueMin: '—' },
-  stuckFailedRuns: { total: '—', stuck: '—', failed: '—' },
-  oldestReady: { ageMin: '—', runId: '—' },
-  evalRegression: { regressedCases: '—' },
-  publishFailures: { count: '—', outboxOldestMin: '—' },
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : '—')
+
+const dutyText = computed(() => summary.value?.duty?.oncall || '—')
+const updatedAtText = computed(() => fmtTime(updatedAt.value))
+
+const kpis = computed(() => {
+  const s = summary.value
+  const stuck = s?.runs?.stuck
+  const failed24h = s?.runs?.failed24h
+  const abnormal = (typeof stuck === 'number' && typeof failed24h === 'number')
+    ? stuck + failed24h
+    : (typeof stuck === 'number' ? stuck : (typeof failed24h === 'number' ? failed24h : null))
+  return [
+    {
+      label: '待处理告警',
+      value: num(s?.firingIncidents),
+      desc: '当前处于告警中的事故',
+      to: '/alerts?status=FIRING',
+      color: s?.firingIncidents > 0 ? 'var(--sev-p0)' : 'var(--head)',
+    },
+    {
+      label: '调查异常',
+      value: abnormal == null ? '—' : abnormal,
+      desc: `卡住 ${num(stuck)} ｜ 24h 失败 ${num(failed24h)}`,
+      to: '/runs?tab=intervene',
+      color: abnormal > 0 ? 'var(--sev-p1)' : 'var(--head)',
+    },
+    {
+      label: '待审查',
+      value: num(s?.runs?.awaitingReview),
+      desc: '等待人工审查的调查结论',
+      to: '/runs',
+      color: s?.runs?.awaitingReview > 0 ? 'var(--sev-p2)' : 'var(--head)',
+    },
+    {
+      label: '通知未读',
+      value: num(s?.notifications?.unread),
+      desc: '尚未阅读的值班通知',
+      to: '/notifications',
+      color: s?.notifications?.unread > 0 ? 'var(--sev-p3)' : 'var(--head)',
+    },
+  ]
 })
-const handover = computed(() => data.value.handover)
 
-async function refresh() {
-  data.value = await api('/v1/overview/action-summary', { mock: fetchActionSummary })
-}
+const trend = computed(() => summary.value?.alertTrend24h ?? [])
+const trendState = computed(() => summaryState.value)
+const hasTrend = computed(() => trend.value.some(b => (b?.received ?? 0) > 0 || (b?.resolved ?? 0) > 0))
 
-function jump(target) {
-  if (target) router.push(target)
-}
+const trendOption = computed(() => ({
+  grid: { left: 40, right: 16, top: 32, bottom: 28 },
+  legend: { data: ['接收', '解决'], top: 0, right: 0 },
+  tooltip: { trigger: 'axis' },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: trend.value.map(b => fmtTime(b?.bucketStart).slice(5, 16)),
+  },
+  yAxis: { type: 'value', minInterval: 1 },
+  series: [
+    {
+      name: '接收', type: 'line', smooth: true, showSymbol: false,
+      data: trend.value.map(b => b?.received ?? 0),
+      lineStyle: { color: '#409EFF' }, itemStyle: { color: '#409EFF' },
+      areaStyle: { opacity: 0.15 },
+    },
+    {
+      name: '解决', type: 'line', smooth: true, showSymbol: false,
+      data: trend.value.map(b => b?.resolved ?? 0),
+      lineStyle: { color: '#23C343' }, itemStyle: { color: '#23C343' },
+      areaStyle: { opacity: 0.15 },
+    },
+  ],
+}))
 
-async function onClaim(h) {
-  claiming.value = h.id
+async function loadSummary() {
+  summaryState.value = 'loading'
   try {
-    await api(`/v1/operator-cases/${h.caseId}/claim`, { mock: claimCase })
-    h.claimed = true
-  } finally {
-    claiming.value = ''
+    summary.value = await api('/v1/overview/summary')
+    updatedAt.value = new Date().toISOString()
+    summaryState.value = 'ok'
+  } catch {
+    summaryState.value = 'error'
   }
 }
 
-function health(name) {
-  return data.value.health.find(x => x.name === name)
+async function loadIncidents() {
+  incidentsState.value = 'loading'
+  incidentsLoading.value = true
+  try {
+    const d = await api('/v1/incidents', { params: { status: 'FIRING', limit: 5 } })
+    topIncidents.value = d.items ?? []
+    incidentsState.value = 'ok'
+  } catch (e) {
+    incidentsState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
+  } finally {
+    incidentsLoading.value = false
+  }
 }
-function healthTag(name) {
-  const st = health(name)?.status
-  return st === 'UP' ? 't-green' : st === 'REFERENCE' ? 't-gray' : 't-red'
-}
-function healthText(name) {
-  return health(name)?.status || 'UNKNOWN'
-}
+
+function openIncident(row) { router.push(`/alerts/${row.incidentId}`) }
+
+function refresh() { loadSummary(); loadIncidents() }
 
 onMounted(() => {
   refresh()
-  timer = setInterval(refresh, 30000) // annot：轮询 30s 即可，不接 SSE
+  timer = setInterval(refresh, 30000) // 轮询 30s，不接 SSE
 })
 onBeforeUnmount(() => clearInterval(timer))
 </script>
 
 <style scoped>
-.ov { display: flex; flex-direction: column; gap: 0; }
+.overview-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
-.crumb-bar {
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
-  gap: 4px 12px; padding: 7px 14px; font-size: 12px; color: var(--ink-2);
+.duty-chip {
+  font-size: var(--fs-body); color: var(--head); font-weight: 600;
+  background: var(--brand-soft); border-radius: 999px; padding: 4px 14px;
 }
-.crumb-bar b { color: var(--head); font-weight: 600; }
-.crumb-bar .sep { color: #9aa5b1; margin: 0 4px; }
-.crumb-bar .env { font-size: 11.5px; }
+.updated-at { font-size: var(--fs-aux); color: var(--ink-2); align-self: center; }
 
-.stat-row { display: flex; gap: 12px; padding: 12px 0; }
-.stat-card { flex: 1; padding: 12px 14px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.stat-card:hover { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft), var(--shadow); }
-.stat-card .lbl { font-size: 12px; color: var(--ink-2); font-weight: 600; }
-.stat-card .num { font-size: 22px; font-weight: 700; color: var(--head); margin-top: 2px; }
-.stat-card .num.small-num { font-size: 16px; }
-.stat-card .jump { font-size: 11px; color: var(--brand); margin-top: 5px; }
-
-.note {
-  background: var(--warn-bg); border: 1px solid #ecd9a0; border-left: 4px solid #e6b93f;
-  border-radius: 8px; padding: 10px 14px; font-size: 12.5px; line-height: 1.7; margin-bottom: 12px;
+/* KPI 卡：整卡为 <a>，hover/focus 一致高亮 */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.kpi {
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 2px;
+  color: inherit; transition: box-shadow .15s;
 }
+.kpi:hover, .kpi:focus-visible { box-shadow: 0 0 0 2px var(--brand-soft); }
+.kpi:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand); }
+.kpi-label { font-size: var(--fs-aux); color: var(--ink-2); }
+.kpi-num { font-size: 26px; font-weight: 700; color: var(--head); line-height: 1.3; }
+.kpi-desc { font-size: var(--fs-aux); color: var(--ink-2); }
 
-.row { display: flex; gap: 12px; }
-.panel { padding: 12px 14px; }
-.panel .lbl { font-size: 12px; color: var(--brand); font-weight: 700; margin-bottom: 6px; letter-spacing: .3px; }
-.list-item { border-bottom: 1px solid #edf0f4; padding: 7px 4px; font-size: 12px; }
-.list-item:last-child { border-bottom: none; }
-.list-item .time { color: var(--ink-2); font-weight: 600; margin-right: 4px; }
-.list-item .btn { margin-left: 6px; }
+/* 面板通用 */
+.panel { padding: 12px var(--card-pad) 16px; }
+.panel-title { font-size: var(--fs-section); font-weight: 600; color: var(--head); }
+.panel-head { display: flex; justify-content: space-between; align-items: center; }
+.more-link { font-size: var(--fs-aux); }
+.trend-chart { height: 280px; margin-top: 8px; }
+.loading-box { height: 200px; }
 
-.box {
-  border: 1px solid var(--line); border-radius: 8px; background: #f7f9fc;
-  padding: 8px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.55;
-}
-.box.small { padding: 4px 8px; font-size: 11.5px; }
-.box .tag { margin-left: 4px; }
+/* 双列 2/3 + 1/3 */
+.grid-2col { display: flex; align-items: flex-start; gap: var(--section-gap); }
+.grid-2col > .panel { flex: 2; min-width: 0; }
+.side-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--section-gap); }
 
 @media (max-width: 1100px) {
-  .stat-row { flex-wrap: wrap; }
-  .stat-card { flex: 1 1 30%; }
-  .row { flex-direction: column; }
+  .grid-2col { flex-direction: column; }
+  .grid-2col > .panel, .side-col { width: 100%; flex: none; }
 }
 </style>

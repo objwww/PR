@@ -1,39 +1,65 @@
-/* AM7 设计系统 token：移植自线框图 v1.6（docs/告警-前端页面设计-wireframes-v1.html <style>），单一事实源 */
+/* tokens v2（UI-0）：浅色简洁风——零/极浅阴影、hairline 细线、圆角 6px/4px
+ * 单一事实源；旧变量名/.btn/.tag/.card 保留兼容（内部改指新 token），后续页面卡逐页替换 */
 :root {
-  --bg: #edf0f5; --card: #ffffff; --ink: #1f2733; --ink-2: #5b6572;
-  --line: #dfe4ec; --line-strong: #c3ccd9;
-  --brand: #1f6feb; --brand-deep: #1a56c4; --brand-soft: #e8f0fe;
+  /* ---- 色板（Element 语义色基底，severity 按 Arco 第 6 级） ---- */
+  --brand: #409EFF; --brand-deep: #337ecc; --brand-soft: #ecf5ff;
+  --sev-p0: #F53F3F; --sev-p1: #FF7D00; --sev-p2: #F7BA1E;
+  --sev-p3: #165DFF; --sev-info: #86909C;
+  --ok: #23C343;
+
+  --bg: #f5f6f8; --card: #ffffff; --ink: #1f2733; --ink-2: #5b6572;
+  --line: #e5e8ef; --line-strong: #cdd3df;
   --head: #1e2a3a;
-  --ok: #1e7e34; --ok-bg: #e7f5ec;
-  --bad: #c0362c; --bad-bg: #fdeceb;
-  --warn: #9a6a00; --warn-bg: #fff7e0;
-  --orange: #c25e10; --orange-bg: #fdf0e4;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(30,42,58,.06), 0 8px 24px -10px rgba(30,42,58,.14);
-  /* severity 行首色条（E-19 §4：色条=severity，badge=状态，分离表达） */
-  --sev-p0: #c0362c; --sev-p1: #c25e10; --sev-p2: #8a94a1;
+
+  /* 语义底色对（文字/底），供 .t-* 徽章与提示条沿用 */
+  --ok-bg: #e9f8ee;
+  --bad: var(--sev-p0); --bad-bg: #fdeceb;
+  --warn: #9a6a00; --warn-bg: #fdf6e4;
+  --orange: var(--sev-p1); --orange-bg: #fff3e8;
+
+  /* ---- 尺寸阶梯 ---- */
+  --fs-page-title: 24px; --fs-section: 16px; --fs-body: 14px; --fs-aux: 12px;
+  --page-pad: 24px; --section-gap: 24px; --card-pad: 20px;
+  --ctl-height: 36px; --table-row-height: 48px;
+
+  /* ---- 几何 ---- */
+  --radius: 6px; --radius-ctl: 4px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04);
+
+  /* ---- Element Plus 全局覆盖：控件默认 36px 高（收敛默认 small 倾向）、表格行高 48px ---- */
+  --el-color-primary: var(--brand);
+  --el-component-size: var(--ctl-height);
+  --el-border-radius-base: var(--radius-ctl);
+  --el-border-color: var(--line);
+  --el-border-color-light: var(--line);
+  --el-border-color-lighter: var(--line);
+  --el-border-radius-round: 999px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #app { height: 100%; }
 body {
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
-  background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.6;
+  background: var(--bg); color: var(--ink); font-size: var(--fs-body); line-height: 1.6;
 }
 a { color: var(--brand); text-decoration: none; }
-code { background: #edf1f6; padding: 0 5px; border-radius: 4px; font-size: .92em; }
+code { background: #edf1f6; padding: 0 5px; border-radius: var(--radius-ctl); font-size: .92em; }
 ::selection { background: var(--brand-soft); }
 
-/* 通用件：状态 badge / severity 色条 / 按钮 / 卡片 */
-.tag { display: inline-block; border-radius: 999px; padding: 0 9px; font-size: 11px; line-height: 19px; font-weight: 600; }
-.t-red { background: var(--bad-bg); color: var(--bad); border: 1px solid #e5a19c; }
-.t-green { background: var(--ok-bg); color: var(--ok); border: 1px solid #9ed3ac; }
-.t-gray { background: #eef1f5; color: #5b6572; border: 1px solid var(--line-strong); }
-.t-blue { background: var(--brand-soft); color: var(--brand); border: 1px solid #a8c4f5; }
-.t-orange { background: var(--orange-bg); color: var(--orange); border: 1px solid #eec39b; }
+/* Element 表格默认密度：行高约 48px（紧凑密度由页面自行加 size/类覆盖） */
+.el-table .el-table__cell { padding: 12px 0; }
+
+/* ===== 兼容旧类（基于新 token，待逐页替换为 el-* 后删除） ===== */
+.tag { display: inline-block; border-radius: 999px; padding: 0 9px; font-size: 12px; line-height: 20px; font-weight: 600; }
+.t-red { background: var(--bad-bg); color: var(--bad); border: 1px solid #f2b5b1; }
+.t-green { background: var(--ok-bg); color: var(--ok); border: 1px solid #a6e3b6; }
+.t-gray { background: #f2f4f8; color: var(--ink-2); border: 1px solid var(--line-strong); }
+.t-blue { background: var(--brand-soft); color: var(--brand); border: 1px solid #b3d8ff; }
+.t-orange { background: var(--orange-bg); color: var(--orange); border: 1px solid #ffd3a8; }
 
 .btn {
   display: inline-block; border: 1px solid var(--brand); color: var(--brand);
-  border-radius: 6px; padding: 3px 12px; font-size: 12px; background: #fff;
+  border-radius: var(--radius-ctl); padding: 0 14px; height: 32px; line-height: 30px;
+  font-size: 13px; background: #fff;
   font-weight: 600; cursor: pointer; transition: background .15s, color .15s;
 }
 .btn:hover { background: var(--brand); color: #fff; }

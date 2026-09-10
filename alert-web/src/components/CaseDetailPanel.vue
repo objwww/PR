@@ -1,133 +1,148 @@
 <template>
   <div class="case-detail" v-if="detail">
-    <div class="dt-tabs">
-      <span
-        v-for="t in detailTabs"
-        :key="t.key"
-        :class="{ cur: dtab === t.key }"
-        @click="dtab = t.key"
-      >{{ t.label }}</span>
+    <!-- 头部：裁决结论 + 状态/负责人/期限 -->
+    <div class="head card-in">
+      <div class="head-title">{{ detail.headline }}</div>
+      <div class="head-meta">
+        <el-tag :type="statusType(detail.status)" effect="light">{{ statusLabel(detail.status) }}</el-tag>
+        <span>负责人 {{ detail.owner || '未分配' }}</span>
+        <span>原因 {{ detail.reasonCode }}</span>
+        <span>首次出现 {{ fmtTime(detail.firstSeen) }}</span>
+        <span>认领期限 {{ fmtTime(detail.ackDue) }}</span>
+        <span>解决期限 {{ fmtTime(detail.resolveDue) }}</span>
+        <router-link :to="`/runs/${detail.runId}`">关联调查 →</router-link>
+      </div>
     </div>
 
-    <!-- 详情头部：裁决结论 + 状态/SLA/来源引用（固定区，不随 tab 切换） -->
-    <div class="box head-box">
-      <b>{{ detail.headline }}</b><br>
-      <small>reason_code={{ detail.reasonCode }} ｜ revision={{ detail.revision }}</small>
-    </div>
-    <div class="box small">
-      状态 <b>{{ detail.status }}</b> ｜ owner {{ detail.owner || '未分配' }} ｜ 来源
-      <router-link :to="`/runs/${detail.runId}`">run#{{ detail.runId }}</router-link>/task#{{ detail.taskId }}<br>
-      first_seen {{ detail.firstSeen }} ｜ ack_due {{ detail.ackDue }} ｜ resolve_due {{ detail.resolveDue }}<br>
-      <b>Case 来源引用 {{ detail.sourceRefs.count }} 项</b>：{{ detail.sourceRefs.text }}；snapshot={{ detail.snapshot }} / generation={{ detail.generation }}
+    <!-- 下一步操作（认领/处理中/解决/转派分清主次） -->
+    <div class="card-in ops-block">
+      <div class="blk-title">下一步操作</div>
+      <div class="ops-row">
+        <el-button
+          v-if="detail.status !== 'RESOLVED'" type="primary"
+          @click="resolveOpen = true"
+        >解决并填写原因</el-button>
+        <el-button v-if="!detail.owner" @click="emit('command', 'claim')">认领</el-button>
+        <el-button v-if="detail.status === 'OPEN'" @click="emit('command', 'ack')">标记处理中</el-button>
+        <el-popover v-model:visible="assignOpen" placement="bottom" trigger="click" width="240">
+          <template #reference>
+            <el-button>转派</el-button>
+          </template>
+          <div class="assign-pop">
+            <el-select v-model="assignee" style="width: 100%" placeholder="选择接手人">
+              <el-option v-for="u in assignees" :key="u" :value="u" :label="u" />
+            </el-select>
+            <el-button
+              size="small" type="primary" style="margin-top: 8px"
+              @click="emit('command', 'assign', { assignee }); assignOpen = false"
+            >确认转派</el-button>
+          </div>
+        </el-popover>
+      </div>
+      <div class="ops-hint">状态变更带版本校验与幂等键，操作全部写入审计。</div>
     </div>
 
-    <!-- 摘要 -->
-    <template v-if="dtab === 'summary'">
-      <div class="box small">{{ detail.summary }}</div>
-    </template>
+    <!-- 处置记录（紧跟操作，先于调查证据） -->
+    <div class="card-in">
+      <div class="blk-title">处置记录</div>
+      <el-timeline v-if="detail.activities.length" class="activity-tl">
+        <el-timeline-item v-for="(a, i) in detail.activities" :key="i">{{ a }}</el-timeline-item>
+      </el-timeline>
+      <div v-else class="muted">暂无处置记录</div>
+    </div>
 
-    <!-- 证据工作区（Case 1:N EvidenceRef，N≥1；默认展示安全摘要与 provenance，不含 canonical payload） -->
-    <template v-if="dtab === 'evidence'">
-      <div class="lbl"> 证据工作区（Case 1:N EvidenceRef，N≥1）</div>
-      <div v-for="ev in shownEvidence" :key="ev.id" class="list-item ev-item">
-        <b>{{ ev.id }} {{ ev.type }}</b> ｜ {{ ev.source }} ｜ {{ ev.window }} ｜ gen{{ ev.generation }}
-        <span class="tag" :class="verifyTag(ev.verify)">{{ verifyLabel(ev.verify) }}</span><br>
-        <small>{{ ev.summary }}；payload_digest={{ ev.digest }}<template v-if="ev.taskId"> ｜ 来自 task#{{ ev.taskId }}</template></small>
-        <button v-if="ev.expandable" class="btn" @click="expanded = !expanded">展开安全摘要</button>
-        <div v-if="ev.expandable && expanded" class="safe-summary">
-          安全摘要：prometheus 查询窗口内 cpu_throttle_seconds_total 峰值 92%，已按白名单截断并遮蔽 [REDACTED]；observed_generation=13 与 schema_version 校验通过。
+    <!-- 调查证据与其余信息收进页签 -->
+    <el-tabs v-model="dtab" class="dt-tabs">
+      <el-tab-pane label="摘要" name="summary">
+        <div class="card-in body-text">{{ detail.summary }}</div>
+        <div class="card-in small">
+          来源引用 {{ detail.sourceRefs.count }} 项：{{ detail.sourceRefs.text }}
         </div>
-      </div>
-      <div class="box small matrix">
-        <b>Claim ↔ Evidence 引用矩阵</b><br>
-        <template v-for="cl in detail.claims" :key="cl.id">
-          {{ cl.id }} “{{ cl.text }}” {{ cl.verdict }} → {{ cl.evidenceRefs.join(', ') }}<br>
-        </template>
-        <template v-if="detail.conflictNote">
-          <span class="tag t-red">冲突原因</span> {{ detail.conflictNote }}
-        </template>
-      </div>
-      <div class="box small ops">
-        <button v-if="detail.claims.length >= 2" class="btn" @click="dtab = 'claim'">比较两个 Claim</button>
-        <button class="btn" @click="showAll = !showAll">{{ showAll ? '收起证据' : `查看全部 ${detail.evidence.length} 条证据` }}</button>
-        <router-link class="btn" :to="`/runs/${detail.runId}`">打开调查详情</router-link>
-      </div>
-    </template>
+      </el-tab-pane>
 
-    <!-- Claim 对比 -->
-    <template v-if="dtab === 'claim'">
-      <div class="lbl"> Claim 对比（结论可逐条追溯）</div>
-      <div v-if="!detail.claims.length" class="box small muted">该 Case 无 Claim 冲突。</div>
-      <div v-for="cl in detail.claims" :key="cl.id" class="list-item">
-        <b>{{ cl.id }}</b> “{{ cl.text }}” <span class="tag" :class="cl.verdict === 'TRUE' ? 't-green' : 't-gray'">{{ cl.verdict }}</span><br>
-        <small>证据引用：{{ cl.evidenceRefs.join(', ') }}</small>
-      </div>
-    </template>
+      <el-tab-pane :label="`证据（${detail.evidence.length}）`" name="evidence">
+        <div v-for="ev in shownEvidence" :key="ev.id" class="card-in ev-item">
+          <div class="ev-head">
+            <b>{{ ev.id }}</b>
+            <span class="muted">{{ ev.type }} ｜ 来源 {{ ev.source }} ｜ 窗口 {{ ev.window }}</span>
+            <el-tag size="small" :type="verifyType(ev.verify)" effect="plain">{{ verifyLabel(ev.verify) }}</el-tag>
+          </div>
+          <div class="ev-summary">{{ ev.summary }}<template v-if="ev.taskId">（来自调查任务 {{ ev.taskId }}）</template></div>
+        </div>
+        <div v-if="!detail.evidence.length" class="card-in muted">暂无证据</div>
+        <div class="ops-row" style="margin-top: 8px">
+          <el-button v-if="detail.evidence.length > 3" size="small" @click="showAll = !showAll">
+            {{ showAll ? '收起证据' : `查看全部 ${detail.evidence.length} 条证据` }}
+          </el-button>
+          <router-link :to="`/runs/${detail.runId}`"><el-button size="small">打开调查详情</el-button></router-link>
+        </div>
+      </el-tab-pane>
 
-    <!-- 活动 -->
-    <template v-if="dtab === 'activity'">
-      <div class="lbl"> 活动</div>
-      <div v-for="(a, i) in detail.activities" :key="i" class="list-item"><small>{{ a }}</small></div>
-    </template>
+      <el-tab-pane :label="`结论对比（${detail.claims.length}）`" name="claim">
+        <div v-if="!detail.claims.length" class="card-in muted">无结论冲突。</div>
+        <div v-for="cl in detail.claims" :key="cl.id" class="card-in claim-item">
+          <div>
+            <b>{{ cl.id }}</b> “{{ cl.text }}”
+            <el-tag size="small" :type="cl.verdict === 'TRUE' ? 'success' : 'info'" effect="plain">{{ cl.verdict }}</el-tag>
+          </div>
+          <div class="muted">证据引用：{{ cl.evidenceRefs.join('、') }}</div>
+        </div>
+        <div v-if="detail.conflictNote" class="card-in">
+          <el-tag type="danger" size="small">冲突原因</el-tag> {{ detail.conflictNote }}
+        </div>
+      </el-tab-pane>
 
-    <!-- 审计（actor/action/revision/idempotency_key 全留痕） -->
-    <template v-if="dtab === 'audit'">
-      <div class="lbl"> 审计</div>
-      <div v-for="(a, i) in detail.audits" :key="i" class="list-item">
-        <small>{{ a.time }} ｜ {{ a.actor }} ｜ {{ a.action }} ｜ revision={{ a.revision }} ｜ idempotency_key={{ a.key }}</small>
-      </div>
-    </template>
+      <el-tab-pane label="审计" name="audit">
+        <el-table :data="detail.audits" size="small">
+          <el-table-column label="时间" width="170">
+            <template #default="{ row }">{{ row.time }}</template>
+          </el-table-column>
+          <el-table-column prop="actor" label="操作人" width="120" />
+          <el-table-column prop="action" label="动作" width="120" />
+          <el-table-column label="版本" width="80">
+            <template #default="{ row }">v{{ row.revision }}</template>
+          </el-table-column>
+          <el-table-column prop="key" label="幂等键" show-overflow-tooltip />
+          <template #empty><span class="muted">暂无审计事件</span></template>
+        </el-table>
+      </el-tab-pane>
+    </el-tabs>
 
-    <!-- Case 命令（认领/ACK/解决/转派） -->
-    <div class="box small ops">
-      <button v-if="!detail.owner" class="btn" @click="emit('command', 'claim')">认领</button>
-      <button v-if="detail.status === 'OPEN'" class="btn" @click="emit('command', 'ack')">标记处理中</button>
-      <button v-if="detail.status !== 'RESOLVED'" class="btn primary" @click="resolveOpen = true">解决并填写原因</button>
-      <button class="btn" @click="assignOpen = !assignOpen">转派</button>
-      <template v-if="assignOpen">
-        <select v-model="assignee" class="mini-select">
-          <option v-for="u in assignees" :key="u" :value="u">{{ u }}</option>
-        </select>
-        <button class="btn" @click="emit('command', 'assign', { assignee }); assignOpen = false">确认</button>
+    <!-- 解决：结构化原因 + 备注（必填，写入审计） -->
+    <el-dialog v-model="resolveOpen" title="解决处置" width="460px">
+      <el-form label-width="90px">
+        <el-form-item label="结构化原因">
+          <el-select v-model="resolveReason" style="width: 100%">
+            <el-option value="CONFIRMED_FIXED" label="已确认并修复" />
+            <el-option value="FALSE_POSITIVE" label="误报" />
+            <el-option value="DUPLICATE" label="重复处置" />
+            <el-option value="WONT_FIX" label="暂不处理" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注" required>
+          <el-input v-model="resolveRemark" type="textarea" :rows="3" placeholder="必填：处置说明（写入审计事件）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="resolveOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!resolveRemark.trim()" @click="submitResolve">提交解决</el-button>
       </template>
-    </div>
-    <div class="box small muted">所有状态变更带 expected_revision + idempotency_key，操作写入审计事件。</div>
-
-    <!-- 解决：结构化 reason + 备注（annot：解决必须填写） -->
-    <div v-if="resolveOpen" class="resolve-mask" @click.self="resolveOpen = false">
-      <div class="card resolve-card">
-        <h4>解决 Case {{ detail.id }}</h4>
-        <label>结构化原因
-          <select v-model="resolveReason">
-            <option value="CONFIRMED_FIXED">CONFIRMED_FIXED ｜ 已确认并修复</option>
-            <option value="FALSE_POSITIVE">FALSE_POSITIVE ｜ 误报</option>
-            <option value="DUPLICATE">DUPLICATE ｜ 重复 Case</option>
-            <option value="WONT_FIX">WONT_FIX ｜ 暂不处理</option>
-          </select>
-        </label>
-        <label>备注
-          <textarea v-model="resolveRemark" rows="3" placeholder="必填：处置说明（写入审计事件）"></textarea>
-        </label>
-        <div class="resolve-ops">
-          <button class="btn primary" :disabled="!resolveRemark.trim()" @click="submitResolve">提交（expected_revision={{ detail.revision }}）</button>
-          <button class="btn" @click="resolveOpen = false">取消</button>
-        </div>
-      </div>
-    </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-// P4 处置中心 Case 详情面板（线框图 v1.6 #p4 右栏）：摘要/证据/Claim/活动/审计 tab + Case 命令
+// UI-4 处置详情面板：先下一步操作 + 处置记录，再展开调查证据（摘要/证据/结论对比/审计页签）。
+// 命令经 emit('command') 交 CasesView 统一走 expectedRevision + idempotencyKey。
 import { computed, ref, watch } from 'vue'
 import { VERIFY_STATUS_ZH, zh } from '../dict/displayNameZh.js'
+import { fmtTime } from '../utils/format'
 
 const props = defineProps({ detail: { type: Object, default: null } })
 const emit = defineEmits(['command'])
 
 const dtab = ref('evidence')
 const showAll = ref(false)
-const expanded = ref(false)
 const resolveOpen = ref(false)
 const resolveReason = ref('CONFIRMED_FIXED')
 const resolveRemark = ref('')
@@ -135,22 +150,10 @@ const assignOpen = ref(false)
 const assignee = ref('sre-li')
 const assignees = ['sre-li', 'sre-chen', 'dba-wu']
 
-// 切 Case 时重置到线框默认视图（证据 tab）
+// 切换选中项时回到证据页签并重置临时态
 watch(() => props.detail?.id, () => {
-  dtab.value = 'evidence'; showAll.value = false; expanded.value = false
+  dtab.value = 'evidence'; showAll.value = false
   resolveOpen.value = false; assignOpen.value = false
-})
-
-const detailTabs = computed(() => {
-  const d = props.detail
-  if (!d) return []
-  return [
-    { key: 'summary', label: '摘要' },
-    { key: 'evidence', label: `证据 ${d.evidence.length}` },
-    { key: 'claim', label: `Claim ${d.claims.length}` },
-    { key: 'activity', label: '活动' },
-    { key: 'audit', label: '审计' },
-  ]
 })
 
 const shownEvidence = computed(() => {
@@ -158,10 +161,13 @@ const shownEvidence = computed(() => {
   return showAll.value ? ev : ev.slice(0, 3)
 })
 
-// 中文名统一走 M7-09 版本化词典 src/dict/displayNameZh.js；tag 配色是 UI 本地映射，非词典内容
-const VERIFY_TAG = { FRESH_VERIFIED: 't-green', VERIFIED: 't-green', PENDING_REVIEW: 't-gray' }
+// Case 状态：OPEN=待认领 / ACKED=处理中 / RESOLVED=已解决
+const statusType = s => ({ OPEN: 'warning', ACKED: 'primary', RESOLVED: 'success' }[s] || 'info')
+const statusLabel = s => ({ OPEN: '待认领', ACKED: '处理中', RESOLVED: '已解决' }[s] || s)
+
+// 中文名统一走版本化词典；tag 类型是 UI 本地映射
 const verifyLabel = v => zh(VERIFY_STATUS_ZH, v)
-const verifyTag = v => VERIFY_TAG[v] || 't-gray'
+const verifyType = v => ({ FRESH_VERIFIED: 'success', VERIFIED: 'success', PENDING_REVIEW: 'warning' }[v] || 'info')
 
 function submitResolve() {
   emit('command', 'resolve', { reason: resolveReason.value, remark: resolveRemark.value.trim() })
@@ -171,42 +177,36 @@ function submitResolve() {
 </script>
 
 <style scoped>
-.dt-tabs { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 0 0 0; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
-.dt-tabs span {
-  border: 1px solid var(--line-strong); border-bottom: none; border-radius: 8px 8px 0 0;
-  padding: 5px 12px; font-size: 11.5px; background: #fff; color: var(--ink-2); cursor: pointer;
+.case-detail { display: flex; flex-direction: column; gap: 12px; }
+
+.card-in {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: #fff; padding: 12px 14px; font-size: var(--fs-body);
 }
-.dt-tabs span.cur { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+.card-in.small { font-size: var(--fs-aux); color: var(--ink-2); }
 
-.box { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px 10px; font-size: 12px; margin-bottom: 8px; }
-.box.small { font-size: 11.5px; }
-.head-box { background: var(--brand-soft); border-color: #a8c4f5; }
-.lbl { font-size: 12px; font-weight: 700; color: var(--head); margin: 6px 0 4px; }
-.muted { color: #888; }
-.ops { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.matrix { line-height: 1.9; }
-
-.list-item { border-bottom: 1px solid #edf0f4; padding: 7px 4px; font-size: 12px; }
-.list-item:last-child { border-bottom: none; }
-.ev-item .btn { margin-left: 6px; }
-.safe-summary {
-  margin-top: 6px; padding: 6px 8px; border-left: 3px solid var(--brand);
-  background: #f5f8fe; border-radius: 4px; font-size: 11px; color: var(--ink-2);
+.head { background: var(--brand-soft); border-color: #a8c4f5; }
+.head-title { font-size: var(--fs-section); font-weight: 600; color: var(--head); line-height: 1.5; }
+.head-meta {
+  margin-top: 6px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: var(--fs-aux); color: var(--ink-2);
 }
 
-.mini-select { border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 6px; font-size: 12px; background: #fff; color: var(--ink); }
+.blk-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); margin-bottom: 8px; }
+.ops-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ops-hint { margin-top: 8px; font-size: var(--fs-aux); color: var(--ink-2); }
+.assign-pop { display: flex; flex-direction: column; }
 
-.resolve-mask {
-  position: fixed; inset: 0; background: rgba(30, 42, 58, .35);
-  display: flex; align-items: center; justify-content: center; z-index: 50;
-}
-.resolve-card { width: 420px; padding: 16px; }
-.resolve-card h4 { color: var(--head); margin-bottom: 10px; font-size: 14px; }
-.resolve-card label { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 10px; }
-.resolve-card select, .resolve-card textarea {
-  display: block; width: 100%; margin-top: 4px; border: 1px solid var(--line-strong);
-  border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; background: #fff; color: var(--ink);
-}
-.resolve-ops { display: flex; gap: 8px; }
-.resolve-ops .btn:disabled { opacity: .5; cursor: not-allowed; }
+.activity-tl { padding-left: 2px; }
+.activity-tl :deep(.el-timeline-item__content) { font-size: var(--fs-aux); color: var(--ink); }
+
+.dt-tabs :deep(.el-tabs__content) { padding-top: 4px; }
+.body-text { white-space: pre-wrap; word-break: break-word; line-height: 1.7; }
+
+.ev-item { margin-bottom: 8px; }
+.ev-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-summary { margin-top: 4px; font-size: var(--fs-aux); color: var(--ink-2); }
+.claim-item { margin-bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.muted { color: var(--ink-2); font-size: var(--fs-aux); }
 </style>
