@@ -1,0 +1,138 @@
+{
+  "ledger_schema_version": 1,
+  "run_id": "439f2cb2-5755-4068-8519-3324e44c2914",
+  "basis": "NONE",
+  "state": "UNMATCHED",
+  "best_effort": true,
+  "budget_enforcement": "PROXY_VIRTUAL_KEY",
+  "run_key_alias": "glm5-baseline-0909",
+  "attempts": [
+    {
+      "attempt_id": "548b4613-39a4-4b12-a9a9-45ac0df9a87d",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "50c20044-f8ac-41ce-9f10-055c1c5b1930",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "b3957c4e-c414-4d2f-9c09-6de23fa2eb77",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "0bb02b28-af84-41f5-a82f-95a5e11f4496",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "5d14b66d-49ec-42b0-bcd0-3b850d954178",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "d7f86553-cf52-4ace-a0e9-b87eb79239ae",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "44e242c2-87dd-4ffc-8c2a-8353cb708907",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "9f561d17-d32c-4242-82db-386be08c9e8f",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "9f26e36c-3a02-4398-8e1f-e7d1ea63c6c8",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    },
+    {
+      "attempt_id": "1df7fb65-4128-4fa9-9df0-bbb8ecbf7178",
+      "state": "UNMATCHED",
+      "expected_prompt": null,
+      "expected_completion": null,
+      "observed_prompt": null,
+      "observed_completion": null,
+      "associated_rows": 0,
+      "notes": [
+        "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+      ]
+    }
+  ],
+  "expected_prompt_tokens": 0,
+  "expected_completion_tokens": 0,
+  "observed_prompt_tokens": null,
+  "observed_completion_tokens": null,
+  "notes": [
+    "no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"
+  ]
+}

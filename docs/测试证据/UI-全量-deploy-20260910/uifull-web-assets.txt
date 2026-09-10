@@ -1,0 +1,5 @@
+total 1876
+drwxr-xr-x    2 root     root          4096 Sep 10 15:36 .
+drwxr-xr-x    1 root     root          4096 Sep 10 15:36 ..
+-rw-r--r--    1 root     root        242965 Sep 10 15:36 index-CH7UPDtQ.css
+-rw-r--r--    1 root     root       1666586 Sep 10 15:36 index-GyGdns0J.js

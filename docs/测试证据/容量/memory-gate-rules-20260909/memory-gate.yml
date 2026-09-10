@@ -1,0 +1,53 @@
+# BA-54 三档内存闸（195 本机 HOST1，MemAvailable 三档阈值）
+# 落码日 2026-09-09；证据目录 docs/测试证据/容量/memory-gate-rules-20260909/
+# 备料文档写法修正（已在 Prometheus v3.13.1 API dry-run 实证）：
+#   - PromQL 数字字面量 Gi/Mi 后缀在该版本不支持（"bad number or duration syntax"），
+#     故全部阈值用乘法形式（512*1024*1024 等）；
+#   - node_memory_MemAvailable_bytes{job="node-exporter-host1"} 序列标签恰为 {job,instance}，
+#     tier3 滞回的 on(instance) 匹配无歧义。
+groups:
+  - name: memory-gate
+    rules:
+      # tier1 闸门 1.2GiB（info）：早期水位线，内存压力初现，留观察窗
+      - alert: MemoryGateTier1
+        expr: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1.2*1024*1024*1024
+        for: 5m
+        labels:
+          tier: t1
+          severity: info
+        annotations:
+          summary: "HOST1 可用内存低于 1.2GiB（tier1/info）"
+          description: "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier1 闸门 1.2GiB 且持续 5m。属早期预警，仅需关注新增内存消耗来源。"
+
+      # tier2 闸门 768MiB（warning）：内存趋紧，应主动降载（压低重 IO / 重内存任务）
+      - alert: MemoryGateTier2
+        expr: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 768*1024*1024
+        for: 2m
+        labels:
+          tier: t2
+          severity: warning
+        annotations:
+          summary: "HOST1 可用内存低于 768MiB（tier2/warning）"
+          description: "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier2 闸门 768MiB 且持续 2m。应安排降载动作（暂缓批处理、压低重 IO 任务并发）。"
+
+      # tier3 闸门 512MiB（critical，立即触发）：收口线
+      # 滞回：一旦触发，MemAvailable < 1536MiB 期间维持 firing（ALERTS 自引用惯用法），
+      # 防止在 512MiB 附近抖动。实现约束（2026-09-09 推演+API 验证）：
+      #   1) 必须带 on(instance)：ALERTS 序列额外携带 alertname/alertstate/tier/severity 标签，
+      #      朴素自引用（无 on()）两侧标签集不相等、永不相交，滞回会失效；
+      #   2) 恢复侧"≥1536MiB 持续 10min"无法用纯 ALERTS 惯用法表达（本写法为
+      #      ≥1536MiB 即恢复），若要严格 10min 恢复窗需 recording rule 辅助，本次取舍未做；
+      #   3) Prometheus 重启后 ALERTS 由规则重放重建，滞回状态丢失（恢复到纯阈值判定）。
+      - alert: MemoryGateTier3
+        expr: >-
+          node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 512*1024*1024
+          or on(instance)
+          (ALERTS{alertname="MemoryGateTier3",alertstate="firing"} == 1
+          and on(instance)
+          node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1536*1024*1024)
+        labels:
+          tier: t3
+          severity: critical
+        annotations:
+          summary: "HOST1 可用内存低于 512MiB（tier3/critical，立即触发）"
+          description: "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier3 闸门 512MiB，立即触发。滞回窗口内 $value 显示为告警状态位 1，实际水位以 MemAvailable 查询为准；恢复需回到 1536MiB 以上。"

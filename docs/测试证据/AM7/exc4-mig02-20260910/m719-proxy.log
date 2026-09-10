@@ -1,0 +1,35 @@
+[09:06:05] == [1] 窄反代扩展上机（EX-C4：+3 探针精确路径） ==
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[09:06:05] nginx reloaded
+[09:06:06] == [2] 八探针（5 正向 + 3 负向） ==
+[09:06:06] PROXY snapshot_noauth=401(期401) snapshot_op=200(期200) control_health=404(期200) am_ready=404(期200) arena=404(期200)
+[09:06:06] PROXY neg rca-runs=404(期404) POST_health=404(期403) notifications_GET=403(期403)
+[09:06:06] FATAL: 探针矩阵不符
+[09:06:16] == [1] 窄反代扩展上机（EX-C4：+3 探针精确路径） ==
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[09:06:16] nginx reloaded
+[09:06:17] == [2] 八探针（5 正向 + 3 负向） ==
+[09:06:18] PROXY snapshot_noauth=401(期401) snapshot_op=200(期200) control_health=200(期200) am_ready=200(期200) arena=404(期200)
+[09:06:18] PROXY neg rca-runs=404(期404) POST_health=403(期403) notifications_GET=403(期403)
+[09:06:18] FATAL: 探针矩阵不符
+[09:06:57] == [1] 窄反代扩展上机（EX-C4：+3 探针精确路径） ==
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[09:06:57] nginx reloaded
+[09:06:58] == [2] 八探针（5 正向 + 3 负向） ==
+[09:06:58] PROXY snapshot_noauth=401(期401) snapshot_op=200(期200) control_health=200(期200) am_ready=200(期200) arena=200(期200)
+[09:06:58] PROXY neg rca-runs=404(期404) POST_health=403(期403) notifications_GET=403(期403)
+[09:06:58] == [3] rl-bot 通道种子（EX-C4 ⑥：业务码 45009 沉淀端；幂等） ==
+[09:06:58] FATAL: rl-bot 种子失败
+[09:07:38] == [1] 窄反代扩展上机（EX-C4：+3 探针精确路径） ==
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[09:07:38] nginx reloaded
+[09:07:39] == [2] 八探针（5 正向 + 3 负向） ==
+[09:07:39] PROXY snapshot_noauth=401(期401) snapshot_op=200(期200) control_health=200(期200) am_ready=200(期200) arena=200(期200)
+[09:07:39] PROXY neg rca-runs=404(期404) POST_health=403(期403) notifications_GET=403(期403)
+[09:07:39] == [3] rl-bot 通道种子（EX-C4 ⑥：业务码 45009 沉淀端；幂等） ==
+[09:07:39] CHANNELS: rl-bot:P1 > echo-bot:P2 > dead-bot:P3
+[09:07:39] PROXY_DONE

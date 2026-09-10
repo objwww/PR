@@ -1,0 +1,40 @@
+===== [D0] strip CR if any =====
+
+===== [D1] host file landed =====
+total 32
+drwxrwxr-x 2 root root 4096 Sep  9 16:18 .
+drwxrwxr-x 3 root root 4096 Sep  9 15:37 ..
+-rw-rw-r-- 1 root root 1619 Sep  9 08:46 arena.yml
+-rw-rw-r-- 1 root root   11 Sep  9 08:46 empty-groups.yml
+-rw-r--r-- 1 root root 3347 Sep  9 16:18 memory-gate.yml
+-rw-rw-r-- 1 root root 8389 Sep  9 08:46 prometheus-rules-checkout.yml
+3af53b4fc5a840c9cdd7fd2696407909  /opt/build/pr/deploy/alert/prometheus/rules/memory-gate.yml
+
+===== [D2] docker cp + promtool check (inside container) =====
+Checking /tmp/memory-gate.yml
+  SUCCESS: 3 rules found
+
+promtool_exit=0
+
+===== [D3] md5 compare: host file vs container view (exec cat | md5sum) =====
+host:     3af53b4fc5a840c9cdd7fd2696407909  /opt/build/pr/deploy/alert/prometheus/rules/memory-gate.yml
+in-cntnr: 3af53b4fc5a840c9cdd7fd2696407909  -
+
+===== [D4] HUP hot reload =====
+before HUP: 2026-09-09 16:18:23
+prometheus-am0
+after  HUP: 2026-09-09 16:18:35
+
+===== [D5] /api/v1/rules full dump =====
+14349 /tmp/p2_api_rules.json
+
+===== [D6] presence check: three rule names in dump =====
+1
+1
+1
+
+===== [D7] python3 parsed summary (if available) =====
+group: memory-gate file: /etc/prometheus/rules/memory-gate.yml interval: 15 eval total: 0.000496376
+ rule: MemoryGateTier1 | health: ok | lastError: '' | state: inactive | duration: 300 | labels: {'severity': 'info', 'tier': 't1'}
+ rule: MemoryGateTier2 | health: ok | lastError: '' | state: inactive | duration: 120 | labels: {'severity': 'warning', 'tier': 't2'}
+ rule: MemoryGateTier3 | health: ok | lastError: '' | state: inactive | duration: 0 | labels: {'severity': 'critical', 'tier': 't3'}

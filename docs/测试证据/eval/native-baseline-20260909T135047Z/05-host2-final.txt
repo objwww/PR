@@ -1,0 +1,6 @@
+              total        used        free      shared  buff/cache   available
+Mem:           3757         424         136         140        3196        2956
+/dev/vda1        59G   22G   35G  38% /
+node-exporter	Up 8 hours
+7.0G	/srv/backups-195/
+60K	/srv/alert-eval/

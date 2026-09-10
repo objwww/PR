@@ -1,0 +1,222 @@
+== eval_run ==
+ERROR:  column "report_digest" does not exist
+LINE 1: ...e, unresolved_rate, tp_count, fp_count, fn_count, report_dig...
+                                                             ^
+
+== eval_case_result ==
+-[ RECORD 1 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S1
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 722
+rca_run_id     | 56c660b2-9e21-436d-992e-4dc6aea5cda4
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 17:32:04.775801+00
+-[ RECORD 2 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S1
+round_no       | 2
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1011
+rca_run_id     | 3958b95b-ba51-47db-91fa-9089267547af
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 17:44:03.261775+00
+-[ RECORD 3 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S2
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1324
+rca_run_id     | a7ed14c9-e9f2-422a-8b77-43d55a6525e7
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:09:48.631817+00
+-[ RECORD 4 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S2
+round_no       | 2
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1098
+rca_run_id     | bf18e44c-e314-4ca4-a378-0bd5023fa0dc
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:43:48.266174+00
+-[ RECORD 5 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S3
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1372
+rca_run_id     | 1b1dc875-e22a-4210-bb31-18c6d0aea359
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:45:29.557204+00
+-[ RECORD 6 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S3
+round_no       | 2
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1778
+rca_run_id     | 65c57cb3-b1ea-496d-9d9e-2d92de9204f5
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:51:30.789131+00
+-[ RECORD 7 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S4
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 2073
+rca_run_id     | e3cd78dd-3c94-44d2-82d7-43b64896ff89
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:53:13.863984+00
+-[ RECORD 8 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S4
+round_no       | 2
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 446
+rca_run_id     | cff02915-73b6-41e4-901f-94a9b145090f
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 18:59:15.064877+00
+-[ RECORD 9 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S5
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 653
+rca_run_id     | df7f5110-4644-4e13-b6ab-998180bcc929
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 19:01:44.179303+00
+-[ RECORD 10 ]-+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S5
+round_no       | 2
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 1262
+rca_run_id     | 2ab0a1ce-f68c-4d53-87ff-8a2286eb8c23
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 19:08:59.394249+00
+
+
+== alert_event (batch window, checkout+Arena) ==
+                             incident_key                              | generation |  status  |         starts_at          |          ends_at           |          recorded_at          
+-----------------------------------------------------------------------+------------+----------+----------------------------+----------------------------+-------------------------------
+ alertname=checkout|service=checkout                                   |          4 | resolved | 2026-09-09 16:33:02.984+00 | 2026-09-09 17:01:47.984+00 | 2026-09-09 17:03:33.502861+00
+ alertname=checkout|service=checkout                                   |          5 | firing   | 2026-09-09 17:06:02.984+00 | 0001-01-03 00:00:00+00     | 2026-09-09 17:06:33.602014+00
+ alertname=checkout|service=checkout                                   |          5 | resolved | 2026-09-09 17:32:47.984+00 | 2026-09-09 17:35:47.984+00 | 2026-09-09 17:36:33.020449+00
+ alertname=checkout|service=checkout                                   |          6 | firing   | 2026-09-09 17:40:02.984+00 | 0001-01-03 00:00:00+00     | 2026-09-09 17:40:33.163477+00
+ alertname=checkout|service=checkout                                   |          6 | resolved | 2026-09-09 17:44:47.984+00 | 2026-09-09 17:45:02.984+00 | 2026-09-09 17:45:33.404758+00
+ alertname=checkout|service=checkout                                   |          7 | firing   | 2026-09-09 17:45:47.984+00 | 0001-01-03 00:00:00+00     | 2026-09-09 17:46:19.438906+00
+ alertname=checkout|service=checkout                                   |          7 | resolved | 2026-09-09 17:45:47.984+00 | 2026-09-09 18:09:47.984+00 | 2026-09-09 18:11:18.578987+00
+ alertname=checkout|service=checkout                                   |          8 | firing   | 2026-09-09 18:14:02.984+00 | 0001-01-03 00:00:00+00     | 2026-09-09 18:14:34.739228+00
+ alertname=checkout|service=checkout                                   |          8 | resolved | 2026-09-09 18:14:02.984+00 | 2026-09-09 18:43:47.984+00 | 2026-09-09 18:44:34.171796+00
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    |         67 | firing   | 2026-09-09 18:44:28.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 18:45:00.233908+00
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    |         67 | resolved | 2026-09-09 18:44:28.841+00 | 2026-09-09 18:45:28.841+00 | 2026-09-09 18:50:00.545697+00
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    |         68 | firing   | 2026-09-09 18:50:28.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 18:51:00.577611+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena |         16 | firing   | 2026-09-09 18:52:13.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 18:52:44.657415+00
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    |         68 | resolved | 2026-09-09 18:50:28.841+00 | 2026-09-09 18:51:28.841+00 | 2026-09-09 18:56:00.820238+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena |         16 | resolved | 2026-09-09 18:52:13.841+00 | 2026-09-09 18:53:13.841+00 | 2026-09-09 18:57:44.888677+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena |         17 | firing   | 2026-09-09 18:58:13.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 18:58:44.980361+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         |         21 | firing   | 2026-09-09 19:00:43.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 19:01:15.064775+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena |         17 | resolved | 2026-09-09 18:58:13.841+00 | 2026-09-09 18:59:13.841+00 | 2026-09-09 19:03:45.136125+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         |         21 | resolved | 2026-09-09 19:00:43.841+00 | 2026-09-09 19:01:43.841+00 | 2026-09-09 19:06:15.207384+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         |         22 | firing   | 2026-09-09 19:07:58.841+00 | 0001-01-03 00:00:00+00     | 2026-09-09 19:08:29.276008+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         |         22 | resolved | 2026-09-09 19:07:58.841+00 | 2026-09-09 19:08:58.841+00 | 2026-09-09 19:13:29.448374+00
+(21 rows)
+
+
+== rca_run (batch window) ==
+                  id                  |   state   | trigger_kind | engine |          created_at           |          finished_at          
+--------------------------------------+-----------+--------------+--------+-------------------------------+-------------------------------
+ 56c660b2-9e21-436d-992e-4dc6aea5cda4 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 17:06:33.602619+00 | 2026-09-09 17:06:34.32497+00
+ 3958b95b-ba51-47db-91fa-9089267547af | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 17:40:33.164568+00 | 2026-09-09 17:40:34.176063+00
+ a7ed14c9-e9f2-422a-8b77-43d55a6525e7 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 17:46:19.439599+00 | 2026-09-09 17:46:20.763726+00
+ bf18e44c-e314-4ca4-a378-0bd5023fa0dc | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 18:14:34.74022+00  | 2026-09-09 18:14:35.839001+00
+ 1b1dc875-e22a-4210-bb31-18c6d0aea359 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 18:45:00.234671+00 | 2026-09-09 18:45:01.607112+00
+ 65c57cb3-b1ea-496d-9d9e-2d92de9204f5 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 18:51:00.578265+00 | 2026-09-09 18:51:02.357249+00
+ e3cd78dd-3c94-44d2-82d7-43b64896ff89 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 18:52:44.663404+00 | 2026-09-09 18:52:46.736917+00
+ cff02915-73b6-41e4-901f-94a9b145090f | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 18:58:44.981238+00 | 2026-09-09 18:58:45.427834+00
+ df7f5110-4644-4e13-b6ab-998180bcc929 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 19:01:15.065489+00 | 2026-09-09 19:01:15.718524+00
+ 2ab0a1ce-f68c-4d53-87ff-8a2286eb8c23 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 19:08:29.276744+00 | 2026-09-09 19:08:30.539527+00
+(10 rows)
+
+
+== arena chaos sessions (batch window) ==
+ERROR:  column "opened_at" does not exist
+LINE 1: ...elect scenario_id, fault_type, state, generation, opened_at,...
+                                                             ^
+
+== incident final states (eval surface) ==
+                             incident_key                              |  status  | generation |     episode_started_at     |          resolved_at          
+-----------------------------------------------------------------------+----------+------------+----------------------------+-------------------------------
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    | RESOLVED |         68 | 2026-09-09 18:50:28.841+00 | 2026-09-09 18:56:00.821202+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena | RESOLVED |         17 | 2026-09-09 18:58:13.841+00 | 2026-09-09 19:03:45.136787+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         | RESOLVED |         22 | 2026-09-09 19:07:58.841+00 | 2026-09-09 19:13:29.449021+00
+ alertname=SlothBurnRateHighPage|service=checkout                      | RESOLVED |          0 | 2026-09-04 14:20:00+00     | 2026-09-04 15:50:28.127623+00
+ alertname=checkout|service=checkout                                   | RESOLVED |          8 | 2026-09-09 18:14:02.984+00 | 2026-09-09 18:44:34.172867+00
+(5 rows)
+
+
+
+== eval_run（修正列名后补取，2026-09-09 19:2X UTC）==
+-[ RECORD 1 ]-----------+-----------------------------------------------------------------
+id                      | 439f2cb2-5755-4068-8519-3324e44c2914
+state                   | SUCCEEDED
+started_at              | 2026-09-09 16:59:22.158373+00
+finished_at             | 2026-09-09 19:08:59.406099+00
+total_scenarios         | 10
+decidable_count         | 10
+hit_count               | 0
+unresolved_count        | 0
+timeout_or_absent_count | 0
+tp_count                | 0
+fp_count                | 0
+fn_count                | 10
+coverage                | 1
+conditional_accuracy    | 0
+end_to_end_hit_rate     | 0
+unresolved_rate         | 0
+baseline_report_digest  | 790e6695682b7a29d376745088bfa2d17cea71e780546dbe78d920c49815548f
+registry_digest         | 171a4d75596fb8cbd3cf4f701ca33725f12fc1341ca56c1ddf9de5477440edb8
+model                   | glm-5
+
+== arena.oa_chaos_session（修正列名后补取；S3~S5 每轮独立会话，全部 CLOSED）==
+         scenario_id         | fault_type | state  | generation |          created_at           |          updated_at
+-----------------------------+------------+--------+------------+-------------------------------+-------------------------------
+ chaos-eval-full-0910b-s3-r1 | F1         | CLOSED |          1 | 2026-09-09 18:43:48.3522+00   | 2026-09-09 18:45:06.975868+00
+ chaos-eval-full-0910b-s3-r2 | F1         | CLOSED |          1 | 2026-09-09 18:50:01.706595+00 | 2026-09-09 18:51:12.083334+00
+ chaos-eval-full-0910b-s4-r1 | F2         | CLOSED |          1 | 2026-09-09 18:51:30.801711+00 | 2026-09-09 18:52:52.110659+00
+ chaos-eval-full-0910b-s4-r2 | F2         | CLOSED |          1 | 2026-09-09 18:57:45.982122+00 | 2026-09-09 18:58:57.208682+00
+ chaos-eval-full-0910b-s5-r1 | F3         | CLOSED |          1 | 2026-09-09 18:59:15.077009+00 | 2026-09-09 19:01:22.274563+00
+ chaos-eval-full-0910b-s5-r2 | F3         | CLOSED |          1 | 2026-09-09 19:06:16.274684+00 | 2026-09-09 19:08:37.41655+00
+
+注：本文件前两节（eval_run / chaos session）首版查询因列名笔误报错（report_digest→baseline_report_digest、
+opened_at→created_at），上面为修正后的补取结果；其余各节为首取原文。

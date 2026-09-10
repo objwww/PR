@@ -1,0 +1,2 @@
+deploy-web-1 pr-agent/alert-web:0.0.1-SNAPSHOT Up 4 minutes
+deploy-control-app-1 pr-agent/control-app:0.0.1-SNAPSHOT Up 4 minutes

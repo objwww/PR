@@ -1,0 +1,90 @@
+=== A1 ghost-check: runs per drill incident (expect 1 each, 11 total) ===
+                          incident_key                           | runs 
+-----------------------------------------------------------------+------
+ alertname=Kill9DrillProbe00|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe01|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe02|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe03|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe04|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe05|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe06|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe07|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe08|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe09|service=order-arena|job=order-arena |    1
+ alertname=Kill9DrillProbe10|service=order-arena|job=order-arena |    1
+(11 rows)
+
+=== A1 table-count delta vs baseline (baseline: run225 task375 attempt214 tool_inv192 ext193 model189 incident54 alert_event261) ===
+             t              | count 
+----------------------------+-------
+ alert_event                |   272
+ external_invocation_ledger |   193
+ incident                   |    65
+ model_call_ledger          |   189
+ rca_attempt                |   226
+ rca_run                    |   236
+ rca_task                   |   419
+ rca_tool_invocation        |   225
+(8 rows)
+
+=== A2 crashed-run task/attempt final (expect task DONE epoch2 attempts2) ===
+      task_key       | state | lease_owner | lease_epoch | attempt_count |         available_at          
+---------------------+-------+-------------+-------------+---------------+-------------------------------
+ NATIVE_INVESTIGATE  | DONE  | control-1   |           2 |             2 | 2026-09-10 10:41:09.115109+00
+ investigate-change  | DEAD  |             |           0 |             0 | 2026-09-10 10:30:08.99267+00
+ investigate-logs    | DEAD  |             |           0 |             0 | 2026-09-10 10:30:08.99267+00
+ investigate-metrics | DONE  |             |           0 |             0 | 2026-09-10 10:30:08.99267+00
+(4 rows)
+
+ attempt_no |  status   | lease_epoch | worker_id |          started_at           |          finished_at          
+------------+-----------+-------------+-----------+-------------------------------+-------------------------------
+          1 | STARTED   |           1 | control-1 | 2026-09-10 10:30:08.986509+00 | 
+          2 | SUCCEEDED |           2 | control-1 | 2026-09-10 10:41:09.251248+00 | 2026-09-10 10:41:09.306307+00
+(2 rows)
+
+=== A2/A3 checkpoint ledger for crashed run (call_seq monotonic across attempts; metrics stage3 zero new row) ===
+ call_seq |    tool_name     |  state  |  reason_code  |   att8   |              result_ref              | action_seq |          started_at           |          settled_at           
+----------+------------------+---------+---------------+----------+--------------------------------------+------------+-------------------------------+-------------------------------
+        1 | prometheus.query | SUCCESS |               | 725ac4d7 | 8913a24c-347d-4ad3-bd16-a54188be6cc9 |          1 | 2026-09-10 10:30:09.003349+00 | 2026-09-10 10:30:09.016211+00
+        2 | change.query     | FAILED  | INVALID_INPUT | 7fb02867 |                                      |          2 | 2026-09-10 10:41:09.274156+00 | 2026-09-10 10:41:09.278372+00
+        3 | logs.query       | FAILED  | INVALID_INPUT | 7fb02867 |                                      |          3 | 2026-09-10 10:41:09.287952+00 | 2026-09-10 10:41:09.290407+00
+(3 rows)
+
+=== A3 result_ref target evidence rows still valid (no FK violation) ===
+              result_ref              | evidence_exists 
+--------------------------------------+-----------------
+ 8913a24c-347d-4ad3-bd16-a54188be6cc9 | t
+(1 row)
+
+=== A3 no double-call: prometheus.query rows for metrics task of crashed run (expect exactly 1) ===
+ prometheus_calls 
+------------------
+                1
+(1 row)
+
+=== A3 hanging investigation record UNKNOWN ===
+=== A4 event stream: last_event_seq + rca_event rows for crashed run ===
+                  id                  |   state   | last_event_seq |          started_at           |          finished_at          
+--------------------------------------+-----------+----------------+-------------------------------+-------------------------------
+ 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | SUCCEEDED |              1 | 2026-09-10 10:30:08.986509+00 | 2026-09-10 10:41:09.306307+00
+(1 row)
+
+ERROR:  column "status" does not exist
+LINE 1: SELECT id, status, execution_status, validation_status, atte...
+                   ^
+ events_for_run 
+----------------
+              0
+(1 row)
+
+=== A5 incident + all drill runs terminal ===
+ incident_status | current_rca_run_id 
+-----------------+--------------------
+ FIRING          | 
+(1 row)
+
+=== budget rows for crashed run ===
+ERROR:  column "kind" does not exist
+LINE 1: SELECT kind, state, amount FROM run_budget_entry WHERE run_i...
+               ^
+HINT:  Perhaps you meant to reference the column "run_budget_entry.id".

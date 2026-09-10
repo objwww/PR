@@ -1,0 +1,13 @@
+MANUAL_START_BEGIN 2026-09-10T10:31:42.930Z
+deploy-control-app-1
+MANUAL_START_DONE 2026-09-10T10:31:43.177Z
+running=true pid=32263 startedAt=2026-09-10T10:31:43.17191661Z
+2026-09-10T08:41:39.991Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-10T08:41:42.576Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-10T08:41:42.662Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 11.904 seconds (process running for 13.277)
+2026-09-10T09:17:05.165Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-10T09:17:07.365Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-10T09:17:07.387Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 11.406 seconds (process running for 12.794)
+2026-09-10T10:31:53.803Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-10T10:31:55.976Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-10T10:31:56.058Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 11.689 seconds (process running for 12.882)

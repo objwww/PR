@@ -1,0 +1,49 @@
+=== 2026-09-09T08:30:46.255329 | GET /healthz | from 127.0.0.1
+=== 2026-09-09T08:30:47.815008 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:48.591875 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:49.369650 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:00.151735 | POST /hook | from 172.26.0.2
+{
+  "status": "TRIGGERED",
+  "endpoint": "contract-probe",
+  "group": "contract-test",
+  "target": "http://127.0.0.1:1/",
+  "description": "",
+  "errors": "Get "http://127.0.0.1:1/": dial tcp 127.0.0.1:1: connect: connection refused"
+}
+
+=== 2026-09-09T08:31:17.817904 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:19.371673 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:47.817344 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:48.594851 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:49.372977 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:09.530842 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:10.307733 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:11.085876 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:11.862926 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:21.865831 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:21.867364 | POST /hook | from 172.26.0.2
+{
+  "status": "RESOLVED",
+  "endpoint": "contract-probe",
+  "group": "contract-test",
+  "target": "http://host.docker.internal:18080/healthz",
+  "description": "",
+  "errors": ""
+}
+
+=== 2026-09-09T08:32:31.866863 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:39.533317 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:41.088593 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:41.865466 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:51.867958 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:01.866056 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:09.533193 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:10.309578 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:11.088139 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:11.865179 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:21.865816 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:31.866054 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:36.421979 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:37.198368 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:33:37.975486 | GET /healthz | from 172.26.0.2

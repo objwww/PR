@@ -1,0 +1,67 @@
+=== 1. env operator 登录（.env AUTH_OPERATOR_USERNAME=test，密码实证=12345678） ===
+csrf=200
+{"ok":true}
+operator_login=200
+=== 2. 建平台账号 test/12345678（POST /api/auth/users） ===
+{"error":"forbidden"}
+create_test=403
+=== 3. 建第二平台账号 ui1op（DB 登录路径实证——env 提供者不认识此名） ===
+{"user":{"username":"ui1op","displayName":"UI1验证账号","role":"OPERATOR","active":true,"createdAt":"2026-09-10T14:33:59.900713214Z"},"ok":true}
+create_ui1op=200
+=== 4. 账号列表（无 password_hash 字段） ===
+[{"username":"ui1op","displayName":"UI1验证账号","role":"OPERATOR","active":true,"createdAt":"2026-09-10T14:33:59.899336Z"}]
+list_users=200
+=== 5. 登出 ===
+logout=200
+=== 6. platform_user 库表行（role/active，不出 hash） ===
+ username | display_name |   role   | active 
+----------+--------------+----------+--------
+ ui1op    | UI1验证账号  | OPERATOR | t
+(1 row)
+
+=== 7. ui1op 登录（纯 DB 路径；期望 200） ===
+{"ok":true}
+ui1op_login=200
+=== 8. GET /api/auth/me（ui1op 会话；期望 name=ui1op 证明 DB 主体） ===
+{"name":"ui1op"}
+me=200
+=== 9. ui1op 错口令登录（期望 401） ===
+{"error":"login_failed"}
+ui1op_wrong=401
+=== 10. 不存在用户登录（期望 401） ===
+{"error":"login_failed"}
+ghost_login=401
+=== 11. 停用/启用往返（ui1op deactivate→login 401→reactivate） ===
+{"error":"forbidden"}
+deactivate=403
+{"ok":true}
+deactivated_login=200
+{"error":"forbidden"}
+reactivate=403
+--- 防自锁：停用本人（期望 400） ---
+{"error":"forbidden"}
+self_deactivate=403
+=== 12. GET /api/v1/incidents/summary（修复后实证，ui1op 会话） ===
+summary=200
+{"firingTotal":59,"bySeverity":{"page":12,"warning":47},"unassigned":59,"stormReceived24h":35,"stormEvents24h":15,"mttrMinutes24h":11.7711369875}
+=== 13. 数据溯源：summary.firingTotal vs 列表 status=FIRING total ===
+firing_list=200
+summary.firingTotal = 59
+list(status=FIRING).total = 59
+CONSISTENT
+=== 14. auth_event 审计（最近 10 条） ===
+      actor      |  event_type   |          occurred_at          
+-----------------+---------------+-------------------------------
+ ui1op           | LOGIN_SUCCESS | 2026-09-10 14:34:01.010944+00
+ test            | LOGIN_SUCCESS | 2026-09-10 14:34:00.817116+00
+ no_such_user_x9 | LOGIN_FAILURE | 2026-09-10 14:34:00.721678+00
+ ui1op           | LOGIN_FAILURE | 2026-09-10 14:34:00.549909+00
+ ui1op           | LOGIN_SUCCESS | 2026-09-10 14:34:00.359606+00
+ test            | LOGOUT        | 2026-09-10 14:33:59.928157+00
+ test            | LOGIN_SUCCESS | 2026-09-10 14:33:59.687141+00
+ test            | LOGIN_SUCCESS | 2026-09-10 14:24:58.317209+00
+ no_such_user_x9 | LOGIN_FAILURE | 2026-09-10 14:22:08.125575+00
+ test            | LOGIN_SUCCESS | 2026-09-10 14:22:07.934252+00
+(10 rows)
+
+DONE

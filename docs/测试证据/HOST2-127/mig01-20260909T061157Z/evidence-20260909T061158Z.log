@@ -1,0 +1,47 @@
+== MIG-01 bootstrap  ts=20260909T061158Z host=lavm-bkiywks9c9 role=host2-full
+--- baseline
+Linux lavm-bkiywks9c9 3.10.0-1160.el7.x86_64 #1 SMP Mon Oct 19 16:18:59 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux
+2
+              total        used        free      shared  buff/cache   available
+Mem:           3757         428        1507         249        1822        2827
+Swap:          4095          90        4005
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   15G   42G  26% /
+NAME      TYPE SIZE  USED PRIO
+/swapfile file   4G 90.9M   -2
+docker-server=25.0.5
+RTT to 195 (146.56.195.225):
+10 packets transmitted, 10 received, 0% packet loss, time 9016ms
+rtt min/avg/max/mdev = 21.622/21.713/21.853/0.201 ms
+--- identities
+PASS  uid:evalctl=11000
+PASS  uid:eval-runner=11001
+PASS  uid:eval-scorer=11002
+PASS  uid:eval-importer=11003
+--- directory tree
+PASS  dir:answers 0750 root:eval-scorer
+PASS  dir:scores/private 0700
+PASS  NEG:eval-runner cannot read answers
+--- systemd slices
+PASS  slice:probe priority conf
+--- wireguard scaffold
+HOST2 wireguard public key: OD7fz/5X1PmsyUfSZesNtxO7vCcKe92XanaJuUKSMzw=
+PASS  wg: keypair exists
+PASS  wg: wg0.conf 0600
+PASS  logrotate conf
+--- node_exporter
+PASS  node-exporter running
+PASS  node-exporter metrics
+PASS  node-exporter limit 64m
+PASS  MemAvailable metric visible
+--- seal
+RESULT pass=15 fail=0 evlog=/srv/alert-eval/mig01/evidence-20260909T061158Z.log
+
+NEXT（人工步骤，本脚本不做）：
+  1. 在 195 侧生成/取 WireGuard 公钥，与本机公钥互换；两侧补全 wg0.conf 后 systemctl enable --now wg-quick@wg0。
+     195 侧建议配置（Phase 11 §3）：
+       [Interface] Address = 10.77.0.1/24  PrivateKey = <195 私钥>
+       [Peer] PublicKey = OD7fz/5X1PmsyUfSZesNtxO7vCcKe92XanaJuUKSMzw=  AllowedIPs = 10.77.0.2/32  Endpoint = <127 公网 IP>:51820
+  2. WG 连通后：node_exporter 改绑隧道地址（重新 run，-p 10.77.0.2:9100:9100），195 Prometheus 加 scrape job。
+  3. 负向验收：从本机访问 195:5432 / Chaos Admin / Prometheus 必须失败（§十二.3 网络矩阵）。
+  4. 探针（Gatus）按 Phase 1 修正版部署并跑六项验收——此后 195 才处于外部监护下，才允许继续 MIG-03/04。

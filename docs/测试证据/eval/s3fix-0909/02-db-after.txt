@@ -1,0 +1,40 @@
+-[ RECORD 1 ]----+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id      | S3
+round_no         | 1
+verdict          | DECIDABLE
+root_cause_hit   | f
+tp_count         | 0
+fp_count         | 0
+fn_count         | 1
+latency_ms       | 1852
+rca_run_id       | ace9d2ba-af9a-4558-8be5-79cde0830901
+scored_report_id | fb77d270-c86a-411c-bed8-11aa7f36a23a
+failure_sample   | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+-[ RECORD 2 ]----+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id      | S3
+round_no         | 2
+verdict          | TIMEOUT_OR_ABSENT
+root_cause_hit   | f
+tp_count         | 0
+fp_count         | 0
+fn_count         | 1
+latency_ms       | 
+rca_run_id       | 
+scored_report_id | 
+failure_sample   | {"reason": "run_not_found"}
+
+-[ RECORD 1 ]------+-------------------------------------------------------------------
+id                 | 5552d241-77f4-4bcd-abeb-35f3f2f1a90d
+incident_key       | alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena
+status             | RESOLVED
+generation         | 66
+episode_started_at | 2026-09-09 15:18:58.841+00
+resolved_at        | 2026-09-09 15:39:30.729285+00
+received_count     | 107
+last_event_at      | 2026-09-09 15:39:30.729285+00
+
+-[ RECORD 1 ]------------------------------------
+id         | ace9d2ba-af9a-4558-8be5-79cde0830901
+state      | SUCCEEDED
+created_at | 2026-09-09 15:19:30.030368+00
+

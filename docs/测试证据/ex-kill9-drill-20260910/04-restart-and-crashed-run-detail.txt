@@ -1,0 +1,30 @@
+2026-09-10T10:30:58.256Z
+deploy-control-app-1 Exited (137) 49 seconds ago
+running=false pid=0 startedAt=2026-09-10T09:16:54.585663958Z restartCount=0
+2026-09-10T08:41:39.991Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-10T08:41:42.576Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-10T08:41:42.662Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 11.904 seconds (process running for 13.277)
+2026-09-10T09:17:05.165Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-10T09:17:07.365Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-10T09:17:07.387Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 11.406 seconds (process running for 12.794)
+      task_key       |  state  | lease_owner |          lease_until          | lease_epoch | attempt_count | output_artifact_ref 
+---------------------+---------+-------------+-------------------------------+-------------+---------------+---------------------
+ NATIVE_INVESTIGATE  | LEASED  | control-1   | 2026-09-10 10:40:09.018063+00 |           1 |             1 | 
+ investigate-change  | RUNNING |             |                               |           0 |             0 | 
+ investigate-logs    | READY   |             |                               |           0 |             0 | 
+ investigate-metrics | DONE    |             |                               |           0 |             0 | 
+(4 rows)
+
+                  id                  | status | generation |          current_rca_run_id          | waiting_reason 
+--------------------------------------+--------+------------+--------------------------------------+----------------
+ 5da180d9-949f-4a1f-9f05-d0d0de813477 | FIRING |          0 | 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | 
+(1 row)
+
+ rca_event_rows 
+----------------
+              1
+(1 row)
+
+ERROR:  column "run_id" does not exist
+LINE 1: SELECT run_id, last_event_seq FROM rca_run WHERE id IN ('05b...
+               ^

@@ -1,0 +1,3855 @@
+{
+  "sha": "7f3873d0b455a0d2bf7880eeee1dd0ea7391b2ab",
+  "url": "https://api.github.com/repos/TwiN/gatus/git/trees/7f3873d0b455a0d2bf7880eeee1dd0ea7391b2ab",
+  "tree": [
+    {
+      "path": ".dockerignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "706bbc448b7c0d8f710cf65be7f7e94bab79f8ca",
+      "size": 61,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/706bbc448b7c0d8f710cf65be7f7e94bab79f8ca"
+    },
+    {
+      "path": ".examples",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "aaba60a606d172f61275fb2374e95ad1a849ebaa",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/aaba60a606d172f61275fb2374e95ad1a849ebaa"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "97477b3ce52208dbba42fdbafb54771b6bda73c8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/97477b3ce52208dbba42fdbafb54771b6bda73c8"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "80519718d2b87b78958b6d24d5f405a2e307a45b",
+      "size": 1156,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/80519718d2b87b78958b6d24d5f405a2e307a45b"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b6b3992499e9169950153a1275530e58dba6ded0",
+      "size": 883,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b6b3992499e9169950153a1275530e58dba6ded0"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "74c18a704af23657d56d9f38b9a1da9998a32209",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/74c18a704af23657d56d9f38b9a1da9998a32209"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "38b5fb32d3ccf9b37d32f28c5e8e1f32593c6fc4",
+      "size": 495,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/38b5fb32d3ccf9b37d32f28c5e8e1f32593c6fc4"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5e6d0d529f75913e8a86d9cf28bcc7b4ce2f1272",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/5e6d0d529f75913e8a86d9cf28bcc7b4ce2f1272"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/grafana.ini",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0b97d465bd56550de7071f36611c6a6626fa875f",
+      "size": 774,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0b97d465bd56550de7071f36611c6a6626fa875f"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "19d36b72e13d2c9575a9b242c37c0c2f7feeb776",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/19d36b72e13d2c9575a9b242c37c0c2f7feeb776"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning/dashboards",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0826aa93c50e5eec59540213ac112e57b1ff5edc",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0826aa93c50e5eec59540213ac112e57b1ff5edc"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning/dashboards/dashboard.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f7232c9efce84e79ba4cbc1e8b8dd02beeed756",
+      "size": 199,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9f7232c9efce84e79ba4cbc1e8b8dd02beeed756"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning/dashboards/gatus.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "23e3e6e2a2de07f65a6d1031367d62a13b496fdf",
+      "size": 24900,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/23e3e6e2a2de07f65a6d1031367d62a13b496fdf"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning/datasources",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b6eb3240f5d9f0cb3340af399af373cf7b0d5055",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b6eb3240f5d9f0cb3340af399af373cf7b0d5055"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/grafana/provisioning/datasources/prometheus.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4756423990bc9481be1739baf6febb5cea48371d",
+      "size": 175,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4756423990bc9481be1739baf6febb5cea48371d"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/prometheus",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d3c372b8cbed3300027f8e438cb72c2862c65ed5",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d3c372b8cbed3300027f8e438cb72c2862c65ed5"
+    },
+    {
+      "path": ".examples/docker-compose-grafana-prometheus/prometheus/prometheus.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ea94b6a396347a4fda1ba9a63eb0980d840ce6a4",
+      "size": 121,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ea94b6a396347a4fda1ba9a63eb0980d840ce6a4"
+    },
+    {
+      "path": ".examples/docker-compose-mattermost",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "388d8213e4c088f530d29d4b29ed31ae211c91ac",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/388d8213e4c088f530d29d4b29ed31ae211c91ac"
+    },
+    {
+      "path": ".examples/docker-compose-mattermost/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67a590d1cd977f24d7e60e7579dfa33f91ad1434",
+      "size": 379,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/67a590d1cd977f24d7e60e7579dfa33f91ad1434"
+    },
+    {
+      "path": ".examples/docker-compose-mattermost/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "92913e7bcd22672fe10c81e3d0cdf2d8c6adfe59",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/92913e7bcd22672fe10c81e3d0cdf2d8c6adfe59"
+    },
+    {
+      "path": ".examples/docker-compose-mattermost/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b5087abc8fdff2f94bbf4091f790e5b048fe0545",
+      "size": 351,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b5087abc8fdff2f94bbf4091f790e5b048fe0545"
+    },
+    {
+      "path": ".examples/docker-compose-mtls",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "9cf4d31bbb61f980f64ba7e4510929ba28031926",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/9cf4d31bbb61f980f64ba7e4510929ba28031926"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "929c3898a14ff674da504bda7137e01d2cc08059",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/929c3898a14ff674da504bda7137e01d2cc08059"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/client",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "75f0f5828bd493a0addf73951db73e3883a6d591",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/75f0f5828bd493a0addf73951db73e3883a6d591"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/client/client.crt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "65b705134152ab9ec0e1d4beb297f1023504d0ef",
+      "size": 1801,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/65b705134152ab9ec0e1d4beb297f1023504d0ef"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/client/client.key",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c0c38d8b13f43bcf367cced5e37f013ed61b4075",
+      "size": 3243,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c0c38d8b13f43bcf367cced5e37f013ed61b4075"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/server",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "30c03993b7d69d00c7a34ee9b24874e6b2b5be4d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/30c03993b7d69d00c7a34ee9b24874e6b2b5be4d"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/server/ca.crt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17338ee8c8d767e7152be1eaf7435895225a3b86",
+      "size": 1777,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/17338ee8c8d767e7152be1eaf7435895225a3b86"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/server/server.crt",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f936274ed0c5fb24dd2f1fd0aef8099cfe6abedb",
+      "size": 1814,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f936274ed0c5fb24dd2f1fd0aef8099cfe6abedb"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/certs/server/server.key",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79bd58c20868ad32cebf2ebfa6af85c23a957e7f",
+      "size": 3243,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/79bd58c20868ad32cebf2ebfa6af85c23a957e7f"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "666c27d2faf9c493e7f499825d3006262b172727",
+      "size": 452,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/666c27d2faf9c493e7f499825d3006262b172727"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "92b74e9deb3143ff6e5a1285d80019898d5dbff8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/92b74e9deb3143ff6e5a1285d80019898d5dbff8"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3fb44a9e39603df86f0d5c8b1bf1f44c7071f06e",
+      "size": 284,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3fb44a9e39603df86f0d5c8b1bf1f44c7071f06e"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/nginx",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "52001e4286c4ab0be0755cdbbe8514359a05b2c8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/52001e4286c4ab0be0755cdbbe8514359a05b2c8"
+    },
+    {
+      "path": ".examples/docker-compose-mtls/nginx/default.conf",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67bcbac77c9848abd840d155aa5cc74b3c49a86e",
+      "size": 413,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/67bcbac77c9848abd840d155aa5cc74b3c49a86e"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "11ef5791c222f809ffefe54ba9b22dbf5b76596b",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/11ef5791c222f809ffefe54ba9b22dbf5b76596b"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fa3105f9204b82bbbfd24b3ce86010485e718195",
+      "size": 177,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fa3105f9204b82bbbfd24b3ce86010485e718195"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d3d960608301a5d373bfedd3ac70bde0eef2d3d2",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d3d960608301a5d373bfedd3ac70bde0eef2d3d2"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files/config/backend.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b17d3e1b7c0363738ea32ee6117a6bda4e49383f",
+      "size": 489,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b17d3e1b7c0363738ea32ee6117a6bda4e49383f"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files/config/frontend.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "700d1fe83aa7abf7934a6eea7b16730ac934b8eb",
+      "size": 245,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/700d1fe83aa7abf7934a6eea7b16730ac934b8eb"
+    },
+    {
+      "path": ".examples/docker-compose-multiple-config-files/config/global.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c6c73995de1e461ee0e7bf2f22d01b16fd29e449",
+      "size": 136,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c6c73995de1e461ee0e7bf2f22d01b16fd29e449"
+    },
+    {
+      "path": ".examples/docker-compose-postgres-storage",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "39446b3bb8f4925791228a27fea95a35b8d43f5f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/39446b3bb8f4925791228a27fea95a35b8d43f5f"
+    },
+    {
+      "path": ".examples/docker-compose-postgres-storage/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c849333197c6920d8ba3606378fcd727fb972690",
+      "size": 739,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c849333197c6920d8ba3606378fcd727fb972690"
+    },
+    {
+      "path": ".examples/docker-compose-postgres-storage/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e2c19504279bcb3ea0e306e1990a5077be7b207e",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e2c19504279bcb3ea0e306e1990a5077be7b207e"
+    },
+    {
+      "path": ".examples/docker-compose-postgres-storage/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3bc1451e7761c617e2025e4dab89317d68791c13",
+      "size": 928,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3bc1451e7761c617e2025e4dab89317d68791c13"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "28f4d8e20cca8b7e2ce7b61b5aca29678f59782c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/28f4d8e20cca8b7e2ce7b61b5aca29678f59782c"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6b0186ae085bcdd951494df2e2033d522b06c02b",
+      "size": 149,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6b0186ae085bcdd951494df2e2033d522b06c02b"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d0f82114b38343176da9764c535f3debe2561516",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d0f82114b38343176da9764c535f3debe2561516"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70c083f79cda1a5822c826cec47d4d61dfc6070a",
+      "size": 844,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/70c083f79cda1a5822c826cec47d4d61dfc6070a"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage/data",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d564d0bc3dd917926892c55e3706cc116d5b165e",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d564d0bc3dd917926892c55e3706cc116d5b165e"
+    },
+    {
+      "path": ".examples/docker-compose-sqlite-storage/data/.gitkeep",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "size": 0,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    },
+    {
+      "path": ".examples/docker-compose",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8c69eb5658e21d041731fb758945b2fe2bdd4572",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/8c69eb5658e21d041731fb758945b2fe2bdd4572"
+    },
+    {
+      "path": ".examples/docker-compose/compose.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b835d081c519dd3fa9218099e1646474a07de4de",
+      "size": 125,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b835d081c519dd3fa9218099e1646474a07de4de"
+    },
+    {
+      "path": ".examples/docker-compose/config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "341e4171f938ed78b84d5531af24cd0f934a2c05",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/341e4171f938ed78b84d5531af24cd0f934a2c05"
+    },
+    {
+      "path": ".examples/docker-compose/config/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0a428f944dfda288efb32782444c6f78eedc34ea",
+      "size": 118,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0a428f944dfda288efb32782444c6f78eedc34ea"
+    },
+    {
+      "path": ".examples/docker-minimal",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "13502410e5cbb7d416ce45ea024de826c595bf9c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/13502410e5cbb7d416ce45ea024de826c595bf9c"
+    },
+    {
+      "path": ".examples/docker-minimal/Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9dbd3f9376b24f58a663483926bbc65d4f5b1f90",
+      "size": 62,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9dbd3f9376b24f58a663483926bbc65d4f5b1f90"
+    },
+    {
+      "path": ".examples/docker-minimal/config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0a428f944dfda288efb32782444c6f78eedc34ea",
+      "size": 118,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0a428f944dfda288efb32782444c6f78eedc34ea"
+    },
+    {
+      "path": ".examples/kubernetes",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e7398d176111d465742450c21476080e3f931a3e",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e7398d176111d465742450c21476080e3f931a3e"
+    },
+    {
+      "path": ".examples/kubernetes/gatus.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f5c22c14924c5890697fb393a16c8baaed62b1c9",
+      "size": 2532,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f5c22c14924c5890697fb393a16c8baaed62b1c9"
+    },
+    {
+      "path": ".examples/nixos",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "89216ee30663b3fe00d095e37123234dc50c288d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/89216ee30663b3fe00d095e37123234dc50c288d"
+    },
+    {
+      "path": ".examples/nixos/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f46f1916c0567ec352b38bedca87947a1d790cb2",
+      "size": 97,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f46f1916c0567ec352b38bedca87947a1d790cb2"
+    },
+    {
+      "path": ".examples/nixos/gatus.nix",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbc20812c0e044d3e6df0b84b7db8dd70aad5191",
+      "size": 383,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/dbc20812c0e044d3e6df0b84b7db8dd70aad5191"
+    },
+    {
+      "path": ".gitattributes",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94f480de94e1d767531580401cbf13844868e82b",
+      "size": 18,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/94f480de94e1d767531580401cbf13844868e82b"
+    },
+    {
+      "path": ".github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "82137c05bb4aedcd09c2ff437f0c6e245c5502ee",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/82137c05bb4aedcd09c2ff437f0c6e245c5502ee"
+    },
+    {
+      "path": ".github/FUNDING.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "468866bcb7e08f023a9281ada930b2b253dd22bd",
+      "size": 15,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/468866bcb7e08f023a9281ada930b2b253dd22bd"
+    },
+    {
+      "path": ".github/assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "93f2389af2298a6ad812b77fec24800016ecb285",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/93f2389af2298a6ad812b77fec24800016ecb285"
+    },
+    {
+      "path": ".github/assets/dashboard-conditions.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76bb5666478a51cb18e48b413e62c2ae9f8d46af",
+      "size": 296481,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/76bb5666478a51cb18e48b413e62c2ae9f8d46af"
+    },
+    {
+      "path": ".github/assets/dashboard-dark.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "46f41077eaa2033da248c2f73a599e47f73f6981",
+      "size": 548995,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/46f41077eaa2033da248c2f73a599e47f73f6981"
+    },
+    {
+      "path": ".github/assets/endpoint-groups.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c69472768d7806ddfeee078ad01be6a9c6dc7baf",
+      "size": 384249,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c69472768d7806ddfeee078ad01be6a9c6dc7baf"
+    },
+    {
+      "path": ".github/assets/example.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3338f869580907cb9393b4966c3a933e0c978195",
+      "size": 212155,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3338f869580907cb9393b4966c3a933e0c978195"
+    },
+    {
+      "path": ".github/assets/gatus-diagram.drawio",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "77643ef9b8ce536933c52512a4aa7a6d710e244a",
+      "size": 2405,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/77643ef9b8ce536933c52512a4aa7a6d710e244a"
+    },
+    {
+      "path": ".github/assets/gatus-diagram.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3f90eaf87cddd95eaa6bc0cfde1e9a82e0bee129",
+      "size": 77798,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3f90eaf87cddd95eaa6bc0cfde1e9a82e0bee129"
+    },
+    {
+      "path": ".github/assets/gitea-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67491f0e4bfe9eb54f222264b8450966e18d235a",
+      "size": 653495,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/67491f0e4bfe9eb54f222264b8450966e18d235a"
+    },
+    {
+      "path": ".github/assets/github-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "912569b30924498209087d7d471a50cc37422813",
+      "size": 19907,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/912569b30924498209087d7d471a50cc37422813"
+    },
+    {
+      "path": ".github/assets/gitlab-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8c54732a71c4780749311a866fe743d356ca9e2",
+      "size": 258145,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a8c54732a71c4780749311a866fe743d356ca9e2"
+    },
+    {
+      "path": ".github/assets/gotify-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a36387b879e0a197f87cf559582b8999807d1b69",
+      "size": 43954,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a36387b879e0a197f87cf559582b8999807d1b69"
+    },
+    {
+      "path": ".github/assets/grafana-dashboard.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a4f778aacd1c6243c4b04da5f6d68cb709fe57d4",
+      "size": 123479,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a4f778aacd1c6243c4b04da5f6d68cb709fe57d4"
+    },
+    {
+      "path": ".github/assets/logo-with-dark-text.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bc06bcdc37de691e556470d5ddadd5216de4abde",
+      "size": 41374,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/bc06bcdc37de691e556470d5ddadd5216de4abde"
+    },
+    {
+      "path": ".github/assets/logo.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c1f4826ba757b75d8b27d059bf54539252b332f1",
+      "size": 17608,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c1f4826ba757b75d8b27d059bf54539252b332f1"
+    },
+    {
+      "path": ".github/assets/logo.svg",
+      "mode": "100755",
+      "type": "blob",
+      "sha": "52cc2b84689b08276628a6a1ab0b0faf2c0887ad",
+      "size": 1505,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/52cc2b84689b08276628a6a1ab0b0faf2c0887ad"
+    },
+    {
+      "path": ".github/assets/mattermost-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5f0961cbe0e77127e6812b8af152e4a6a6ec2509",
+      "size": 49649,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5f0961cbe0e77127e6812b8af152e4a6a6ec2509"
+    },
+    {
+      "path": ".github/assets/pagerduty-integration-key.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "41d1522aba0be97ada58f5071cb862b075a5fa79",
+      "size": 88555,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/41d1522aba0be97ada58f5071cb862b075a5fa79"
+    },
+    {
+      "path": ".github/assets/past-announcements.jpg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "873ae3daeead7455f0acc59a67e15fb29435d20e",
+      "size": 70416,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/873ae3daeead7455f0acc59a67e15fb29435d20e"
+    },
+    {
+      "path": ".github/assets/slack-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3f9e3cad1bb26472e9f49ff9c5e44e62936f2b43",
+      "size": 34441,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3f9e3cad1bb26472e9f49ff9c5e44e62936f2b43"
+    },
+    {
+      "path": ".github/assets/teams-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "44b6e898a57a7f9825db2f201aa328d080687f30",
+      "size": 26659,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/44b6e898a57a7f9825db2f201aa328d080687f30"
+    },
+    {
+      "path": ".github/assets/teams-workflows-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "45cc040ebd3afe6788bf0a3ad4506b576f754f31",
+      "size": 12548,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/45cc040ebd3afe6788bf0a3ad4506b576f754f31"
+    },
+    {
+      "path": ".github/assets/telegram-alerts.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0981c64bf5a6461e47a3cc36d9230813d9e34a81",
+      "size": 37376,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0981c64bf5a6461e47a3cc36d9230813d9e34a81"
+    },
+    {
+      "path": ".github/copilot-instructions.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b90d85905c93593aa32d05268414b03600cdcbfe",
+      "size": 36,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b90d85905c93593aa32d05268414b03600cdcbfe"
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ca9dbc2dfab358504ccc9f705cc434bc6f9c54fa",
+      "size": 295,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ca9dbc2dfab358504ccc9f705cc434bc6f9c54fa"
+    },
+    {
+      "path": ".github/workflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d136959b1028bc787a99f9ae8cc51088c3f30f12",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d136959b1028bc787a99f9ae8cc51088c3f30f12"
+    },
+    {
+      "path": ".github/workflows/benchmark.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3fff5593d1c5b18bb0e2c58a11e1458f5330b8c1",
+      "size": 866,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3fff5593d1c5b18bb0e2c58a11e1458f5330b8c1"
+    },
+    {
+      "path": ".github/workflows/labeler.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6de677692b5dee08403819cb2bd824f611a39fc5",
+      "size": 1719,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6de677692b5dee08403819cb2bd824f611a39fc5"
+    },
+    {
+      "path": ".github/workflows/publish-custom.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e1d7300c8ce8bf78285d275b8a01a09129341098",
+      "size": 1540,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e1d7300c8ce8bf78285d275b8a01a09129341098"
+    },
+    {
+      "path": ".github/workflows/publish-experimental.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e62d73fc1bbec630bce8c1065c8b1e13c9abbecd",
+      "size": 1181,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e62d73fc1bbec630bce8c1065c8b1e13c9abbecd"
+    },
+    {
+      "path": ".github/workflows/publish-latest.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b947be5c717d2a4659f9f1ad68adaeffd002195f",
+      "size": 2034,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b947be5c717d2a4659f9f1ad68adaeffd002195f"
+    },
+    {
+      "path": ".github/workflows/publish-release.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d8d2e858cbab6efc0f32bb5ae59e844e09df156",
+      "size": 1868,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9d8d2e858cbab6efc0f32bb5ae59e844e09df156"
+    },
+    {
+      "path": ".github/workflows/regenerate-static-assets.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0c0c40ac0f0a5f5925cdea0b29745d7c9cb57def",
+      "size": 4075,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0c0c40ac0f0a5f5925cdea0b29745d7c9cb57def"
+    },
+    {
+      "path": ".github/workflows/test-ui.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "57c18cdf01e94c6d5a54906c9ffb797a77761f7b",
+      "size": 307,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/57c18cdf01e94c6d5a54906c9ffb797a77761f7b"
+    },
+    {
+      "path": ".github/workflows/test.yml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b89c155506b4011cb57597390b2cf27d16732b1e",
+      "size": 858,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b89c155506b4011cb57597390b2cf27d16732b1e"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ae4df91dc5ca3c60b14f8c02d862b671ac1f4ec2",
+      "size": 141,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ae4df91dc5ca3c60b14f8c02d862b671ac1f4ec2"
+    },
+    {
+      "path": "AGENTS.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ffac147e60be010b63b0a82ad8259fd623ecdbe3",
+      "size": 4733,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ffac147e60be010b63b0a82ad8259fd623ecdbe3"
+    },
+    {
+      "path": "Dockerfile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "76b80012be40f6644017c1a54c8aacf3b37134f9",
+      "size": 744,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/76b80012be40f6644017c1a54c8aacf3b37134f9"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "57bc88a15a0ee8266c259b2667e64608d3f7e292",
+      "size": 11358,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/57bc88a15a0ee8266c259b2667e64608d3f7e292"
+    },
+    {
+      "path": "Makefile",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2bd9aae37c4153e0e7d01989915245256b519ce5",
+      "size": 870,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2bd9aae37c4153e0e7d01989915245256b519ce5"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "72da5ca002cce3add70b989f9703a03ccc7e2e91",
+      "size": 215037,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/72da5ca002cce3add70b989f9703a03ccc7e2e91"
+    },
+    {
+      "path": "alerting",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "eeee5fd04e44df19e5c606c33535e1c3145de5b7",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/eeee5fd04e44df19e5c606c33535e1c3145de5b7"
+    },
+    {
+      "path": "alerting/alert",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5d63bede05950c6c725a79e3e705c77eaea3c6f6",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/5d63bede05950c6c725a79e3e705c77eaea3c6f6"
+    },
+    {
+      "path": "alerting/alert/alert.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7a627df0ecf88c7fb8a837fb7b66a151cd2f763a",
+      "size": 5150,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7a627df0ecf88c7fb8a837fb7b66a151cd2f763a"
+    },
+    {
+      "path": "alerting/alert/alert_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4d75b862c94f1e4372560ad2548735e1c8ab7db9",
+      "size": 7474,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4d75b862c94f1e4372560ad2548735e1c8ab7db9"
+    },
+    {
+      "path": "alerting/alert/type.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6a5759779b46f83ab546b0c79cd30c060652ef86",
+      "size": 3948,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6a5759779b46f83ab546b0c79cd30c060652ef86"
+    },
+    {
+      "path": "alerting/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "923d6cbd8169ab371239dc4f61b814530a9e5190",
+      "size": 8898,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/923d6cbd8169ab371239dc4f61b814530a9e5190"
+    },
+    {
+      "path": "alerting/provider",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4f812829ad66ad54f94e31f25dc193d2e6ffeb75",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4f812829ad66ad54f94e31f25dc193d2e6ffeb75"
+    },
+    {
+      "path": "alerting/provider/awsses",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e4a7ad1bce85b9dd53d3f198415abf4553e30d19",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e4a7ad1bce85b9dd53d3f198415abf4553e30d19"
+    },
+    {
+      "path": "alerting/provider/awsses/awsses.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a944a6d3ff518c570d1f9256bda1d39bf47b4e69",
+      "size": 6902,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a944a6d3ff518c570d1f9256bda1d39bf47b4e69"
+    },
+    {
+      "path": "alerting/provider/awsses/awsses_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "348a2db6f989b5b5a139e1b3a7dcc50afbc94a75",
+      "size": 8239,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/348a2db6f989b5b5a139e1b3a7dcc50afbc94a75"
+    },
+    {
+      "path": "alerting/provider/clickup",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "bfa7b53939b8d1cb7cbadec74bd389544d6b4ae4",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/bfa7b53939b8d1cb7cbadec74bd389544d6b4ae4"
+    },
+    {
+      "path": "alerting/provider/clickup/clickup.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2552c21b2759038c4fdc52b7f7b7f8f5136822f4",
+      "size": 8314,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2552c21b2759038c4fdc52b7f7b7f8f5136822f4"
+    },
+    {
+      "path": "alerting/provider/clickup/clickup_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0f2683b4d21000ee15e176b0c4a358dd5ab365dc",
+      "size": 12030,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0f2683b4d21000ee15e176b0c4a358dd5ab365dc"
+    },
+    {
+      "path": "alerting/provider/custom",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "26c0e8439d7dcfe46113c2dae76f35551d85a161",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/26c0e8439d7dcfe46113c2dae76f35551d85a161"
+    },
+    {
+      "path": "alerting/provider/custom/custom.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "724916e03b479e5243b6606b9f0998f5b602d179",
+      "size": 6741,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/724916e03b479e5243b6606b9f0998f5b602d179"
+    },
+    {
+      "path": "alerting/provider/custom/custom_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c3372cc0db7e9a79ac8bf68157a40e5f5fd58b7d",
+      "size": 17281,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c3372cc0db7e9a79ac8bf68157a40e5f5fd58b7d"
+    },
+    {
+      "path": "alerting/provider/datadog",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c334edc98a2c149237120cb1d684841ff4b6d31f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/c334edc98a2c149237120cb1d684841ff4b6d31f"
+    },
+    {
+      "path": "alerting/provider/datadog/datadog.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7298c7e8fdb81092e32034c32e7336c517d6ea56",
+      "size": 6342,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7298c7e8fdb81092e32034c32e7336c517d6ea56"
+    },
+    {
+      "path": "alerting/provider/datadog/datadog_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "716d5ebd03925bd1c4e903973f12077348fdde5d",
+      "size": 6396,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/716d5ebd03925bd1c4e903973f12077348fdde5d"
+    },
+    {
+      "path": "alerting/provider/discord",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "46eff91fe58d60e4d2c395b413ed049d4612d634",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/46eff91fe58d60e4d2c395b413ed049d4612d634"
+    },
+    {
+      "path": "alerting/provider/discord/discord.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ebbded5eb66efedd7e101bdf635fc5f316fc2626",
+      "size": 6058,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ebbded5eb66efedd7e101bdf635fc5f316fc2626"
+    },
+    {
+      "path": "alerting/provider/discord/discord_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5cea160343ebafd51555471a729018935e567639",
+      "size": 16565,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5cea160343ebafd51555471a729018935e567639"
+    },
+    {
+      "path": "alerting/provider/email",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b0eb4da6138277a344e99787878f1ccc1e273d1c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b0eb4da6138277a344e99787878f1ccc1e273d1c"
+    },
+    {
+      "path": "alerting/provider/email/email.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5093312e97cfa19ce6f5a2ef4e86a7f2e339fcd7",
+      "size": 6670,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5093312e97cfa19ce6f5a2ef4e86a7f2e339fcd7"
+    },
+    {
+      "path": "alerting/provider/email/email_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9d34d2eea8648293eacb83caf7989cd5922db7c0",
+      "size": 10464,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9d34d2eea8648293eacb83caf7989cd5922db7c0"
+    },
+    {
+      "path": "alerting/provider/gitea",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e6ca68f091b33cccd42a94b2bf41ed4e142263d7",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e6ca68f091b33cccd42a94b2bf41ed4e142263d7"
+    },
+    {
+      "path": "alerting/provider/gitea/gitea.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9813dd1986579ae353231c46e5305e7f1585a9a",
+      "size": 6638,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d9813dd1986579ae353231c46e5305e7f1585a9a"
+    },
+    {
+      "path": "alerting/provider/gitea/gitea_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c397df5222d5215702142e37d838c1322e7e46ac",
+      "size": 8831,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c397df5222d5215702142e37d838c1322e7e46ac"
+    },
+    {
+      "path": "alerting/provider/github",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "f63cb738ec87aa2e8d94951b44240d1d8030efc8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/f63cb738ec87aa2e8d94951b44240d1d8030efc8"
+    },
+    {
+      "path": "alerting/provider/github/github.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b89131a7129169f7ed1508ad26545b28cbec6e87",
+      "size": 6511,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b89131a7129169f7ed1508ad26545b28cbec6e87"
+    },
+    {
+      "path": "alerting/provider/github/github_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a701c8ba3c3fb67bd99c35f69784916595b38cc5",
+      "size": 8200,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a701c8ba3c3fb67bd99c35f69784916595b38cc5"
+    },
+    {
+      "path": "alerting/provider/gitlab",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "cffe87d69cf884657c6910734b02e43dc42d928c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/cffe87d69cf884657c6910734b02e43dc42d928c"
+    },
+    {
+      "path": "alerting/provider/gitlab/gitlab.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0ee65d2f22b6212f65fca385b047033d271faf98",
+      "size": 8118,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0ee65d2f22b6212f65fca385b047033d271faf98"
+    },
+    {
+      "path": "alerting/provider/gitlab/gitlab_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2421284eee37044116208bcbf1c7086a85a48ea9",
+      "size": 9429,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2421284eee37044116208bcbf1c7086a85a48ea9"
+    },
+    {
+      "path": "alerting/provider/googlechat",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d873df3633c90f01b8a8bf350149bcb315f2deac",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d873df3633c90f01b8a8bf350149bcb315f2deac"
+    },
+    {
+      "path": "alerting/provider/googlechat/googlechat.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aeeeec9395af2dcf21fc0132f35894a98cdfb51b",
+      "size": 7124,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/aeeeec9395af2dcf21fc0132f35894a98cdfb51b"
+    },
+    {
+      "path": "alerting/provider/googlechat/googlechat_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5dbd6cb1e5854074c0c4aad17eb7c01478f7320a",
+      "size": 12119,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5dbd6cb1e5854074c0c4aad17eb7c01478f7320a"
+    },
+    {
+      "path": "alerting/provider/gotify",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fa591e1678a5f7e5204a44c40d17d0d3b897f785",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/fa591e1678a5f7e5204a44c40d17d0d3b897f785"
+    },
+    {
+      "path": "alerting/provider/gotify/gotify.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1d492910057611611444d75986e9e358d5aa93f8",
+      "size": 4850,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1d492910057611611444d75986e9e358d5aa93f8"
+    },
+    {
+      "path": "alerting/provider/gotify/gotify_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9db618456d7159386a14695b9fed3bc129becde6",
+      "size": 6319,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9db618456d7159386a14695b9fed3bc129becde6"
+    },
+    {
+      "path": "alerting/provider/homeassistant",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "39434c4cafaa197765a40836970046618329b22e",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/39434c4cafaa197765a40836970046618329b22e"
+    },
+    {
+      "path": "alerting/provider/homeassistant/homeassistant.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1b4ad68448b87c16c4bc9454abe3838566d67d3e",
+      "size": 5761,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1b4ad68448b87c16c4bc9454abe3838566d67d3e"
+    },
+    {
+      "path": "alerting/provider/homeassistant/homeassistant_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3bc04ac5dc92e881502597495439d6af1f6a7ef5",
+      "size": 5523,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3bc04ac5dc92e881502597495439d6af1f6a7ef5"
+    },
+    {
+      "path": "alerting/provider/ifttt",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ebfcf91c82c66d43db95019e860d33a5f3b2aec8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/ebfcf91c82c66d43db95019e860d33a5f3b2aec8"
+    },
+    {
+      "path": "alerting/provider/ifttt/ifttt.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "086ea8628058d48084adbe438840f9410022458c",
+      "size": 5683,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/086ea8628058d48084adbe438840f9410022458c"
+    },
+    {
+      "path": "alerting/provider/ifttt/ifttt_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5383be0fba2826a9045119ef8d934e0884c71803",
+      "size": 5365,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5383be0fba2826a9045119ef8d934e0884c71803"
+    },
+    {
+      "path": "alerting/provider/ilert",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a30ff8d6ed48933957f664fbc7a66ab267ecc40c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/a30ff8d6ed48933957f664fbc7a66ab267ecc40c"
+    },
+    {
+      "path": "alerting/provider/ilert/ilert.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ba1822b5c1ffe306fb5034858cd53cdb815f3c30",
+      "size": 4749,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ba1822b5c1ffe306fb5034858cd53cdb815f3c30"
+    },
+    {
+      "path": "alerting/provider/ilert/ilert_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f5040e5e6c2d1a294f9d492672f9456ae0905d96",
+      "size": 11718,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f5040e5e6c2d1a294f9d492672f9456ae0905d96"
+    },
+    {
+      "path": "alerting/provider/incidentio",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1cfa86f55414911e8bb095bc24ae0e873c299651",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/1cfa86f55414911e8bb095bc24ae0e873c299651"
+    },
+    {
+      "path": "alerting/provider/incidentio/dedup.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2bea72bede35da17d95ba188ee61393360213a37",
+      "size": 511,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2bea72bede35da17d95ba188ee61393360213a37"
+    },
+    {
+      "path": "alerting/provider/incidentio/incidentio.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ee1bc86a216105ab647bb5cfbe41df3fb738e14b",
+      "size": 7217,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ee1bc86a216105ab647bb5cfbe41df3fb738e14b"
+    },
+    {
+      "path": "alerting/provider/incidentio/incidentio_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ccab51257abb4c1f34e15f89223169cdcd4eecbb",
+      "size": 16423,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ccab51257abb4c1f34e15f89223169cdcd4eecbb"
+    },
+    {
+      "path": "alerting/provider/line",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0e9ea7bf27e00ea4e5de0e088bf7cb64ac4bac13",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0e9ea7bf27e00ea4e5de0e088bf7cb64ac4bac13"
+    },
+    {
+      "path": "alerting/provider/line/line.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "513c0d01a54f82d1f0b83b3cbba8138e674b6771",
+      "size": 5761,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/513c0d01a54f82d1f0b83b3cbba8138e674b6771"
+    },
+    {
+      "path": "alerting/provider/line/line_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "42a22d739ed7184eddeeb584d668f9b38cb7b13e",
+      "size": 4939,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/42a22d739ed7184eddeeb584d668f9b38cb7b13e"
+    },
+    {
+      "path": "alerting/provider/matrix",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4e19e24cf9ba21a246e0a39b9c3d8b3f62154794",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4e19e24cf9ba21a246e0a39b9c3d8b3f62154794"
+    },
+    {
+      "path": "alerting/provider/matrix/matrix.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9b40c56eca1ba4a5fa83b56f42208f03009b5bc7",
+      "size": 8174,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9b40c56eca1ba4a5fa83b56f42208f03009b5bc7"
+    },
+    {
+      "path": "alerting/provider/matrix/matrix_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "561ae16cf8be5dbd1daf2382e4d56300825b2a8b",
+      "size": 13171,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/561ae16cf8be5dbd1daf2382e4d56300825b2a8b"
+    },
+    {
+      "path": "alerting/provider/mattermost",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "59111837022cf82315fa87ab2408e0c8597e9ec7",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/59111837022cf82315fa87ab2408e0c8597e9ec7"
+    },
+    {
+      "path": "alerting/provider/mattermost/mattermost.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "564eb990fd56161fb77e21e5f2bc3d5cc653e232",
+      "size": 6411,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/564eb990fd56161fb77e21e5f2bc3d5cc653e232"
+    },
+    {
+      "path": "alerting/provider/mattermost/mattermost_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0ce253ab511ce27f8d12044c3b9cccdddadda775",
+      "size": 10398,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0ce253ab511ce27f8d12044c3b9cccdddadda775"
+    },
+    {
+      "path": "alerting/provider/messagebird",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "363ec84b847d3b90a7c723e655b448d378c972f2",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/363ec84b847d3b90a7c723e655b448d378c972f2"
+    },
+    {
+      "path": "alerting/provider/messagebird/messagebird.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fe02d3940a3c06ffee0cf1c7f5b420ca0b67237f",
+      "size": 4244,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fe02d3940a3c06ffee0cf1c7f5b420ca0b67237f"
+    },
+    {
+      "path": "alerting/provider/messagebird/messagebird_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "29b5191e9378c88cc66fcb6303f13c048dae8c46",
+      "size": 7485,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/29b5191e9378c88cc66fcb6303f13c048dae8c46"
+    },
+    {
+      "path": "alerting/provider/n8n",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7801326c33df417c09fa7916c4269e947c4a8a88",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/7801326c33df417c09fa7916c4269e947c4a8a88"
+    },
+    {
+      "path": "alerting/provider/n8n/n8n.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "940442aea56ebabbdc7d1a02a3093acbf33cad27",
+      "size": 5659,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/940442aea56ebabbdc7d1a02a3093acbf33cad27"
+    },
+    {
+      "path": "alerting/provider/n8n/n8n_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "62b5ea13ea5f12e726c78d83882b1422c2ebe747",
+      "size": 12593,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/62b5ea13ea5f12e726c78d83882b1422c2ebe747"
+    },
+    {
+      "path": "alerting/provider/newrelic",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2ac8f1d5bb03d8288525bd8c9ef7b550dc6b3a8d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/2ac8f1d5bb03d8288525bd8c9ef7b550dc6b3a8d"
+    },
+    {
+      "path": "alerting/provider/newrelic/newrelic.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c3e9a8f86701d11a4c2df9bd7974d38d5434b9c9",
+      "size": 6613,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c3e9a8f86701d11a4c2df9bd7974d38d5434b9c9"
+    },
+    {
+      "path": "alerting/provider/newrelic/newrelic_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b7198f8833f181157b016d146635ed4e3df6604a",
+      "size": 6716,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b7198f8833f181157b016d146635ed4e3df6604a"
+    },
+    {
+      "path": "alerting/provider/ntfy",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4ff9355cd457d0026fc33905c27f67de97004ca0",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4ff9355cd457d0026fc33905c27f67de97004ca0"
+    },
+    {
+      "path": "alerting/provider/ntfy/ntfy.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f875129d3a0449f19663604af75b33045e93690",
+      "size": 7213,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9f875129d3a0449f19663604af75b33045e93690"
+    },
+    {
+      "path": "alerting/provider/ntfy/ntfy_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "16ef6cb3d6e6c269b3cd81efafbd076a471879a7",
+      "size": 18948,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/16ef6cb3d6e6c269b3cd81efafbd076a471879a7"
+    },
+    {
+      "path": "alerting/provider/opsgenie",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "18a2adbe0c6da9468823094a3da54585c8b04b17",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/18a2adbe0c6da9468823094a3da54585c8b04b17"
+    },
+    {
+      "path": "alerting/provider/opsgenie/opsgenie.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bd9684276543a29eefc36b97ab2d47a20b4f5e41",
+      "size": 8243,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/bd9684276543a29eefc36b97ab2d47a20b4f5e41"
+    },
+    {
+      "path": "alerting/provider/opsgenie/opsgenie_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "11064c5c19e3c6ad705520edfe8de60aeb2991e2",
+      "size": 11491,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/11064c5c19e3c6ad705520edfe8de60aeb2991e2"
+    },
+    {
+      "path": "alerting/provider/pagerduty",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4543490cb8a59870ac05f3e39ab5894e8ce0e7f8",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4543490cb8a59870ac05f3e39ab5894e8ce0e7f8"
+    },
+    {
+      "path": "alerting/provider/pagerduty/pagerduty.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3a563f937532ba213bf72267c20e8226804d375b",
+      "size": 5919,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3a563f937532ba213bf72267c20e8226804d375b"
+    },
+    {
+      "path": "alerting/provider/pagerduty/pagerduty_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2e66cec3d174815d1b69326463e47c9dc016abba",
+      "size": 9530,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2e66cec3d174815d1b69326463e47c9dc016abba"
+    },
+    {
+      "path": "alerting/provider/plivo",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "bba2cccdcc97e3bfb65622f5408402920b4773d5",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/bba2cccdcc97e3bfb65622f5408402920b4773d5"
+    },
+    {
+      "path": "alerting/provider/plivo/plivo.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a5fb31399a018f9421a7fc926639a2de820bbba2",
+      "size": 5381,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a5fb31399a018f9421a7fc926639a2de820bbba2"
+    },
+    {
+      "path": "alerting/provider/plivo/plivo_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "148a7036a6158d0e2f7166cd5425fa7fe860314f",
+      "size": 16666,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/148a7036a6158d0e2f7166cd5425fa7fe860314f"
+    },
+    {
+      "path": "alerting/provider/provider.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "35beb92c3fc8c855f5496a059344934d6f99ceeb",
+      "size": 8291,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/35beb92c3fc8c855f5496a059344934d6f99ceeb"
+    },
+    {
+      "path": "alerting/provider/provider_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d582c9df7b7d6e5fe2203665774a0e2ba7b4f758",
+      "size": 5342,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d582c9df7b7d6e5fe2203665774a0e2ba7b4f758"
+    },
+    {
+      "path": "alerting/provider/pushover",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ce3a8e90c0ff1d776bd60bd41aa526b7e9adf365",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/ce3a8e90c0ff1d776bd60bd41aa526b7e9adf365"
+    },
+    {
+      "path": "alerting/provider/pushover/pushover.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c8fdd02e233d5f867a10eb5d99d49be0e802478",
+      "size": 6975,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4c8fdd02e233d5f867a10eb5d99d49be0e802478"
+    },
+    {
+      "path": "alerting/provider/pushover/pushover_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4ced2e89094a301a07ee25951d32a0e23413cee5",
+      "size": 13349,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4ced2e89094a301a07ee25951d32a0e23413cee5"
+    },
+    {
+      "path": "alerting/provider/rocketchat",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "2feacb45d67b21a44ab295566ced8389f343506b",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/2feacb45d67b21a44ab295566ced8389f343506b"
+    },
+    {
+      "path": "alerting/provider/rocketchat/rocketchat.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "53f3645a8b11030c23a70f7d04e45e7f90dca10e",
+      "size": 6267,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/53f3645a8b11030c23a70f7d04e45e7f90dca10e"
+    },
+    {
+      "path": "alerting/provider/rocketchat/rocketchat_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fea159d18bee304b765ac9d24af9441d5891901c",
+      "size": 5678,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fea159d18bee304b765ac9d24af9441d5891901c"
+    },
+    {
+      "path": "alerting/provider/sendgrid",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a54bedab8405feeda9d85cabdab84e8eaae41a58",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/a54bedab8405feeda9d85cabdab84e8eaae41a58"
+    },
+    {
+      "path": "alerting/provider/sendgrid/sendgrid.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67c1ef0e9699637be980df74b9f204a750ea9e2a",
+      "size": 7241,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/67c1ef0e9699637be980df74b9f204a750ea9e2a"
+    },
+    {
+      "path": "alerting/provider/sendgrid/sendgrid_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0f80bc67a4a9267441081e9579faba6665aeea9c",
+      "size": 19200,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0f80bc67a4a9267441081e9579faba6665aeea9c"
+    },
+    {
+      "path": "alerting/provider/signal",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e60ddf442fadc12dcfa562cefb3855d15b5b1301",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e60ddf442fadc12dcfa562cefb3855d15b5b1301"
+    },
+    {
+      "path": "alerting/provider/signal/signal.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bef8e7bf90b5073203d3144ea81cb2f8919b88f1",
+      "size": 5882,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/bef8e7bf90b5073203d3144ea81cb2f8919b88f1"
+    },
+    {
+      "path": "alerting/provider/signal/signal_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "88c9991a43e384368379866acc0c25f648d939d5",
+      "size": 5255,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/88c9991a43e384368379866acc0c25f648d939d5"
+    },
+    {
+      "path": "alerting/provider/signl4",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7c782f7c7bc20dcbef84990199641b90542e384c",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/7c782f7c7bc20dcbef84990199641b90542e384c"
+    },
+    {
+      "path": "alerting/provider/signl4/signl4.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e59676fa194ae0fc4a89e2961166fb38e223816f",
+      "size": 5614,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e59676fa194ae0fc4a89e2961166fb38e223816f"
+    },
+    {
+      "path": "alerting/provider/signl4/signl4_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9a0f22dadf67b013eaf81153be98aa4febfc8ab4",
+      "size": 14197,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9a0f22dadf67b013eaf81153be98aa4febfc8ab4"
+    },
+    {
+      "path": "alerting/provider/slack",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "ff46d8dbf6aea05e24fa90aad5a65cdc91c76047",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/ff46d8dbf6aea05e24fa90aad5a65cdc91c76047"
+    },
+    {
+      "path": "alerting/provider/slack/slack.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2cef6d3c34d9f819058351d23532ef243c8cf24e",
+      "size": 5888,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2cef6d3c34d9f819058351d23532ef243c8cf24e"
+    },
+    {
+      "path": "alerting/provider/slack/slack_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b696f6954bc69faa23971ceaf85736dda3e4f72f",
+      "size": 13280,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b696f6954bc69faa23971ceaf85736dda3e4f72f"
+    },
+    {
+      "path": "alerting/provider/splunk",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d9f7c93e88a0611568f5823909336085d91267b6",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d9f7c93e88a0611568f5823909336085d91267b6"
+    },
+    {
+      "path": "alerting/provider/splunk/splunk.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "83c94032106e3731b7be7ab0ad3412d6e6008d26",
+      "size": 6640,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/83c94032106e3731b7be7ab0ad3412d6e6008d26"
+    },
+    {
+      "path": "alerting/provider/splunk/splunk_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "97a447891782096e82f521258094bbfea5fd889c",
+      "size": 5318,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/97a447891782096e82f521258094bbfea5fd889c"
+    },
+    {
+      "path": "alerting/provider/squadcast",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b29956e30ec23fea052e8391dcf8be5646ac9f92",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b29956e30ec23fea052e8391dcf8be5646ac9f92"
+    },
+    {
+      "path": "alerting/provider/squadcast/squadcast.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eff9f3c7902b1c5571f1b0dffef3c638252dbdfe",
+      "size": 5653,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/eff9f3c7902b1c5571f1b0dffef3c638252dbdfe"
+    },
+    {
+      "path": "alerting/provider/squadcast/squadcast_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d2b5270c06e60ef26a8bffdb05d2af939014895d",
+      "size": 4706,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d2b5270c06e60ef26a8bffdb05d2af939014895d"
+    },
+    {
+      "path": "alerting/provider/teams",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e5f59eb9d8f717e0f7bcc1e6d43c3b559455c02f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e5f59eb9d8f717e0f7bcc1e6d43c3b559455c02f"
+    },
+    {
+      "path": "alerting/provider/teams/teams.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bd9e92953f3f50972db80a09e712bfb8ae0dd4eb",
+      "size": 6003,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/bd9e92953f3f50972db80a09e712bfb8ae0dd4eb"
+    },
+    {
+      "path": "alerting/provider/teams/teams_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f2ce4cf25b4483e97d6dd88000d563db440d1b75",
+      "size": 10642,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f2ce4cf25b4483e97d6dd88000d563db440d1b75"
+    },
+    {
+      "path": "alerting/provider/teamsworkflows",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0963b41dd60885ae49933a30f35ec6d39229dda1",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0963b41dd60885ae49933a30f35ec6d39229dda1"
+    },
+    {
+      "path": "alerting/provider/teamsworkflows/teamsworkflows.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dbf124288345f29653ff84cca9b0e9875d320331",
+      "size": 7373,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/dbf124288345f29653ff84cca9b0e9875d320331"
+    },
+    {
+      "path": "alerting/provider/teamsworkflows/teamsworkflows_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "75cf32c0680654b0ec6c7869e787207318e867c5",
+      "size": 11965,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/75cf32c0680654b0ec6c7869e787207318e867c5"
+    },
+    {
+      "path": "alerting/provider/telegram",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "a6a9b6b26ed60652af1da68d32669ae206747e56",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/a6a9b6b26ed60652af1da68d32669ae206747e56"
+    },
+    {
+      "path": "alerting/provider/telegram/telegram.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "eb00d766853ca986887245ee25341e34749305a2",
+      "size": 5978,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/eb00d766853ca986887245ee25341e34749305a2"
+    },
+    {
+      "path": "alerting/provider/telegram/telegram_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "73579bd62524d64731aa2c948a98016fca6c0421",
+      "size": 11992,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/73579bd62524d64731aa2c948a98016fca6c0421"
+    },
+    {
+      "path": "alerting/provider/twilio",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "11cf54b61d9e9d30c81d969adbf22d91380c1617",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/11cf54b61d9e9d30c81d969adbf22d91380c1617"
+    },
+    {
+      "path": "alerting/provider/twilio/twilio.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b88864faa9de4d488db9911e0f590ba0f64dbd35",
+      "size": 5629,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b88864faa9de4d488db9911e0f590ba0f64dbd35"
+    },
+    {
+      "path": "alerting/provider/twilio/twilio_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a896764280387bbadde337c87c20f81c57b2d285",
+      "size": 8506,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a896764280387bbadde337c87c20f81c57b2d285"
+    },
+    {
+      "path": "alerting/provider/vonage",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4fc1255f8abcbdba06e9ab25f238674f9fa5e05d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4fc1255f8abcbdba06e9ab25f238674f9fa5e05d"
+    },
+    {
+      "path": "alerting/provider/vonage/vonage.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f1a521ffa671e0535579686f04b8bfe90666d2b3",
+      "size": 6154,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f1a521ffa671e0535579686f04b8bfe90666d2b3"
+    },
+    {
+      "path": "alerting/provider/vonage/vonage_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8359deb1e0a6e005e9b810fbd04d318dbef5394d",
+      "size": 15397,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8359deb1e0a6e005e9b810fbd04d318dbef5394d"
+    },
+    {
+      "path": "alerting/provider/webex",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4c89fea226251ef64786ab4c5adf4be4ff22d73b",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4c89fea226251ef64786ab4c5adf4be4ff22d73b"
+    },
+    {
+      "path": "alerting/provider/webex/webex.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ef7f988ede11eb683c80cb304e3fc6594a9b8920",
+      "size": 5087,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ef7f988ede11eb683c80cb304e3fc6594a9b8920"
+    },
+    {
+      "path": "alerting/provider/webex/webex_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b7c67ad7d895f716c779d860ae0232dc4b4d9526",
+      "size": 4403,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b7c67ad7d895f716c779d860ae0232dc4b4d9526"
+    },
+    {
+      "path": "alerting/provider/zapier",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8b3a752c47c402ab031f03f1eac9120b1fca6c6b",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/8b3a752c47c402ab031f03f1eac9120b1fca6c6b"
+    },
+    {
+      "path": "alerting/provider/zapier/zapier.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c978ef3bc7b06f67a0428e699a9861c1c0da26a3",
+      "size": 6224,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c978ef3bc7b06f67a0428e699a9861c1c0da26a3"
+    },
+    {
+      "path": "alerting/provider/zapier/zapier_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "84b8f6f0f9d14af9855c3597eb0ecf4582d1d49a",
+      "size": 5669,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/84b8f6f0f9d14af9855c3597eb0ecf4582d1d49a"
+    },
+    {
+      "path": "alerting/provider/zulip",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b5a2b2f23561f975e99535ec8052df48c5c7361a",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b5a2b2f23561f975e99535ec8052df48c5c7361a"
+    },
+    {
+      "path": "alerting/provider/zulip/zulip.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b9fe80daf9ceff6e3dd44f48224208b83de91cf5",
+      "size": 6349,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b9fe80daf9ceff6e3dd44f48224208b83de91cf5"
+    },
+    {
+      "path": "alerting/provider/zulip/zulip_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7e14daffd394a56c833f08ebcf8ffea8ebf2870f",
+      "size": 14443,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7e14daffd394a56c833f08ebcf8ffea8ebf2870f"
+    },
+    {
+      "path": "api",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3d46f5ec487327d9b1e92db4f839352e4f36d839",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/3d46f5ec487327d9b1e92db4f839352e4f36d839"
+    },
+    {
+      "path": "api/api.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ebab376ac01026486cfa0e60a5e91b46d4a819c2",
+      "size": 5091,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ebab376ac01026486cfa0e60a5e91b46d4a819c2"
+    },
+    {
+      "path": "api/api_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "713f6b7d3cb0bedc9a24c9f5e5f9a9b37660c132",
+      "size": 3263,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/713f6b7d3cb0bedc9a24c9f5e5f9a9b37660c132"
+    },
+    {
+      "path": "api/badge.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7600366e6ecd52dcfd96edc3c017ea5ae69d41c2",
+      "size": 12145,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7600366e6ecd52dcfd96edc3c017ea5ae69d41c2"
+    },
+    {
+      "path": "api/badge_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "63982ed51c72648b3ce77697d64f2f89fa63a632",
+      "size": 10992,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/63982ed51c72648b3ce77697d64f2f89fa63a632"
+    },
+    {
+      "path": "api/cache.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1a58baf2b70a88e63082f936b99c72ff0ebd283",
+      "size": 201,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a1a58baf2b70a88e63082f936b99c72ff0ebd283"
+    },
+    {
+      "path": "api/chart.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "17ae43d521c20d2925373400dbfad3194c78d828",
+      "size": 5874,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/17ae43d521c20d2925373400dbfad3194c78d828"
+    },
+    {
+      "path": "api/chart_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d5add72135146dda2a9ed470e6bc0bdd2008d3ff",
+      "size": 4356,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d5add72135146dda2a9ed470e6bc0bdd2008d3ff"
+    },
+    {
+      "path": "api/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "67c71db73d89378bbb7ff5b0fc5c50ebb5d9f66c",
+      "size": 1271,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/67c71db73d89378bbb7ff5b0fc5c50ebb5d9f66c"
+    },
+    {
+      "path": "api/config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1852aaa5c54016b9a24ace3b36826900522d8f55",
+      "size": 1466,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1852aaa5c54016b9a24ace3b36826900522d8f55"
+    },
+    {
+      "path": "api/custom_css.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "792294357804870d2d3ef2830bd4b2011ca137b0",
+      "size": 264,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/792294357804870d2d3ef2830bd4b2011ca137b0"
+    },
+    {
+      "path": "api/endpoint_status.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4be1ad9353ca16182ef522e0e0b53002d26761ff",
+      "size": 5001,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4be1ad9353ca16182ef522e0e0b53002d26761ff"
+    },
+    {
+      "path": "api/endpoint_status_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dd37e570893e2cd9716e2c6a0eb15384ab987a47",
+      "size": 8894,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/dd37e570893e2cd9716e2c6a0eb15384ab987a47"
+    },
+    {
+      "path": "api/external_endpoint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a1a8ee9190a5dcbb9e93c34b3b7b5d2cc1df630c",
+      "size": 3840,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a1a8ee9190a5dcbb9e93c34b3b7b5d2cc1df630c"
+    },
+    {
+      "path": "api/external_endpoint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9f1bd3a7842051530c5ca05cd9621a9140a90217",
+      "size": 6388,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9f1bd3a7842051530c5ca05cd9621a9140a90217"
+    },
+    {
+      "path": "api/raw.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "28666b30a5039e3c7d30b797b0fb5c067165a356",
+      "size": 2508,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/28666b30a5039e3c7d30b797b0fb5c067165a356"
+    },
+    {
+      "path": "api/raw_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a61c4b397dd5c9aa2a9be874852fc4af90010438",
+      "size": 3496,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a61c4b397dd5c9aa2a9be874852fc4af90010438"
+    },
+    {
+      "path": "api/spa.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9e996fa50d6fd9a3e853a41652feea9700a876a9",
+      "size": 1619,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9e996fa50d6fd9a3e853a41652feea9700a876a9"
+    },
+    {
+      "path": "api/spa_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "291892dc7982f6f1c5f4c0c44408f6ca05cb9163",
+      "size": 3039,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/291892dc7982f6f1c5f4c0c44408f6ca05cb9163"
+    },
+    {
+      "path": "api/suite_status.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5ead9c523e911ebba36af9d04d0fc950cbd679a1",
+      "size": 1807,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5ead9c523e911ebba36af9d04d0fc950cbd679a1"
+    },
+    {
+      "path": "api/suite_status_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "162b6b6e2596735a59327200cee40bb116c40ed1",
+      "size": 18720,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/162b6b6e2596735a59327200cee40bb116c40ed1"
+    },
+    {
+      "path": "api/util.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb3b3b31e58c853f1ccd3627fd91f7f7881c80b6",
+      "size": 1184,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fb3b3b31e58c853f1ccd3627fd91f7f7881c80b6"
+    },
+    {
+      "path": "api/util_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a0e846a92c00a8252a02872054aa027eafb209e2",
+      "size": 2381,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a0e846a92c00a8252a02872054aa027eafb209e2"
+    },
+    {
+      "path": "client",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "78c87876a9db2f7ffca464d2fb93a3fdd58411ab",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/78c87876a9db2f7ffca464d2fb93a3fdd58411ab"
+    },
+    {
+      "path": "client/client.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f82f7ee2670cc3a52d479a99cba01aaf45732240",
+      "size": 17545,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f82f7ee2670cc3a52d479a99cba01aaf45732240"
+    },
+    {
+      "path": "client/client_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9b55b8661965a8bd8e0047b7c03ee544108a56a",
+      "size": 19110,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d9b55b8661965a8bd8e0047b7c03ee544108a56a"
+    },
+    {
+      "path": "client/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "740e46e6aeeccdc61a43d1f4421508f37fce3c0a",
+      "size": 12453,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/740e46e6aeeccdc61a43d1f4421508f37fce3c0a"
+    },
+    {
+      "path": "client/config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "82b8d1f0f9b15703b82ffefa944f9c3b2b7445cf",
+      "size": 5771,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/82b8d1f0f9b15703b82ffefa944f9c3b2b7445cf"
+    },
+    {
+      "path": "client/grpc.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0d2be6ea2d02a1c939de0fcafc5c1d9472a43d0a",
+      "size": 2385,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0d2be6ea2d02a1c939de0fcafc5c1d9472a43d0a"
+    },
+    {
+      "path": "config.yaml",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f386ea273c50e108356c11f25c8262e9ae0e1ade",
+      "size": 1153,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f386ea273c50e108356c11f25c8262e9ae0e1ade"
+    },
+    {
+      "path": "config",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "cfea3ab38280dc8da1554c38534c0ff8b8215b20",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/cfea3ab38280dc8da1554c38534c0ff8b8215b20"
+    },
+    {
+      "path": "config/announcement",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0da9916fb859bd779782b76f78e26dc6c1f4cfd2",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0da9916fb859bd779782b76f78e26dc6c1f4cfd2"
+    },
+    {
+      "path": "config/announcement/announcement.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "22474c1eb5b1494c85309de1e2280e7507eedbc2",
+      "size": 2871,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/22474c1eb5b1494c85309de1e2280e7507eedbc2"
+    },
+    {
+      "path": "config/announcement/announcement_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3e38bb80cd6cf7fc50bf9e0f80c8435619d6926f",
+      "size": 7064,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3e38bb80cd6cf7fc50bf9e0f80c8435619d6926f"
+    },
+    {
+      "path": "config/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6f0b5a18cadbe15ce8e92277ed8486635bb99623",
+      "size": 25331,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6f0b5a18cadbe15ce8e92277ed8486635bb99623"
+    },
+    {
+      "path": "config/config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5abfe8e79ae9f7a8fa5fb793b1660bbac53624cb",
+      "size": 89003,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5abfe8e79ae9f7a8fa5fb793b1660bbac53624cb"
+    },
+    {
+      "path": "config/connectivity",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3a8d20a7f5639e3e723ae97c61c3fa74ec9bc54a",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/3a8d20a7f5639e3e723ae97c61c3fa74ec9bc54a"
+    },
+    {
+      "path": "config/connectivity/connectivity.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "994e98c503f85902ac0c08bd4d02d2c78983ba13",
+      "size": 1351,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/994e98c503f85902ac0c08bd4d02d2c78983ba13"
+    },
+    {
+      "path": "config/connectivity/connectivity_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d16520cbc3ee03243b14de9a41e610beb2626c49",
+      "size": 1934,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d16520cbc3ee03243b14de9a41e610beb2626c49"
+    },
+    {
+      "path": "config/endpoint",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0af400a3d8d7991217306f784246d051add122de",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0af400a3d8d7991217306f784246d051add122de"
+    },
+    {
+      "path": "config/endpoint/common.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f3da8bf884acef0c2d533103e697979688b8f9f7",
+      "size": 1031,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f3da8bf884acef0c2d533103e697979688b8f9f7"
+    },
+    {
+      "path": "config/endpoint/common_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ab4fc9ef8e24dbdb7a4b48da474076c5d6836c08",
+      "size": 1147,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ab4fc9ef8e24dbdb7a4b48da474076c5d6836c08"
+    },
+    {
+      "path": "config/endpoint/condition.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "88b36c32038c218d330cc21b13e15b919e6c3ac8",
+      "size": 12302,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/88b36c32038c218d330cc21b13e15b919e6c3ac8"
+    },
+    {
+      "path": "config/endpoint/condition_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4cb0652a23d16fdb6b488c9d9634ca6f1ee2146b",
+      "size": 2534,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4cb0652a23d16fdb6b488c9d9634ca6f1ee2146b"
+    },
+    {
+      "path": "config/endpoint/condition_result.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "00af8620bbc131c766d12eb22fc308931c4a53c6",
+      "size": 264,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/00af8620bbc131c766d12eb22fc308931c4a53c6"
+    },
+    {
+      "path": "config/endpoint/condition_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3abe45e513773d72dad277f55a08b6d68a9e25fb",
+      "size": 33993,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3abe45e513773d72dad277f55a08b6d68a9e25fb"
+    },
+    {
+      "path": "config/endpoint/dns",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e4a87d50b87e2cfe74a28d7cf7c9db0db00f4791",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e4a87d50b87e2cfe74a28d7cf7c9db0db00f4791"
+    },
+    {
+      "path": "config/endpoint/dns/dns.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "47a29bdc4682b1d3e46ce7611c00d95939fb399e",
+      "size": 1015,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/47a29bdc4682b1d3e46ce7611c00d95939fb399e"
+    },
+    {
+      "path": "config/endpoint/dns/dns_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "57e96296c263f89676328ea7f584972a99310311",
+      "size": 675,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/57e96296c263f89676328ea7f584972a99310311"
+    },
+    {
+      "path": "config/endpoint/endpoint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e8c77b7459536d2f76f2de72de81942a9522873",
+      "size": 21803,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0e8c77b7459536d2f76f2de72de81942a9522873"
+    },
+    {
+      "path": "config/endpoint/endpoint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9b60f75b4b96e5dd8d073434db19f5a4b45d25b",
+      "size": 56775,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d9b60f75b4b96e5dd8d073434db19f5a4b45d25b"
+    },
+    {
+      "path": "config/endpoint/event.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "da8d2275bd0fc98cde4919cbcf81b2affcc18eb4",
+      "size": 1000,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/da8d2275bd0fc98cde4919cbcf81b2affcc18eb4"
+    },
+    {
+      "path": "config/endpoint/event_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "bdfe07a24d466285df542eb259787fdf6883cd4b",
+      "size": 374,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/bdfe07a24d466285df542eb259787fdf6883cd4b"
+    },
+    {
+      "path": "config/endpoint/external_endpoint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6db95611b090e44336c2060b5ba23e708cd1feec",
+      "size": 4014,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6db95611b090e44336c2060b5ba23e708cd1feec"
+    },
+    {
+      "path": "config/endpoint/external_endpoint_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e619e57ce27fdb2e241ef7e7111704f116566ca",
+      "size": 8981,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0e619e57ce27fdb2e241ef7e7111704f116566ca"
+    },
+    {
+      "path": "config/endpoint/heartbeat",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "896a694996a35bfdcc7fe7fa1a32e9d5a0c418f1",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/896a694996a35bfdcc7fe7fa1a32e9d5a0c418f1"
+    },
+    {
+      "path": "config/endpoint/heartbeat/heartbeat.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c27b571772ba71698c548c8831872a5a21f55c4f",
+      "size": 541,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c27b571772ba71698c548c8831872a5a21f55c4f"
+    },
+    {
+      "path": "config/endpoint/placeholder.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94ca221f5976fe875d0ad3b70f2aef776d6f20ef",
+      "size": 10004,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/94ca221f5976fe875d0ad3b70f2aef776d6f20ef"
+    },
+    {
+      "path": "config/endpoint/placeholder_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "14ecfffb8ce28f2d17ece8eca682b851a3075b07",
+      "size": 3865,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/14ecfffb8ce28f2d17ece8eca682b851a3075b07"
+    },
+    {
+      "path": "config/endpoint/result.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ca3fbdfb501d534a0c7273a55c38ced9a35e1b93",
+      "size": 2344,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ca3fbdfb501d534a0c7273a55c38ced9a35e1b93"
+    },
+    {
+      "path": "config/endpoint/result_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1e521c8f034fb08a0467cd07a1dfd7bb05aed067",
+      "size": 433,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1e521c8f034fb08a0467cd07a1dfd7bb05aed067"
+    },
+    {
+      "path": "config/endpoint/ssh",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "8a57cd2d65b4d826d297c0eaf3df73a6f5259e27",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/8a57cd2d65b4d826d297c0eaf3df73a6f5259e27"
+    },
+    {
+      "path": "config/endpoint/ssh/ssh.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d09767813b7dac77e48e3ce2c4a1a7f30ebf2bc3",
+      "size": 1366,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d09767813b7dac77e48e3ce2c4a1a7f30ebf2bc3"
+    },
+    {
+      "path": "config/endpoint/ssh/ssh_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "13263bbb0ad79814a74b2b62d7a95708f3621f62",
+      "size": 1108,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/13263bbb0ad79814a74b2b62d7a95708f3621f62"
+    },
+    {
+      "path": "config/endpoint/status.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9367727667d5168bdf2fb9ef5f55fbca364884ff",
+      "size": 1054,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9367727667d5168bdf2fb9ef5f55fbca364884ff"
+    },
+    {
+      "path": "config/endpoint/status_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "510f9b5143e260dce7c8510d1d2fb528259efe25",
+      "size": 449,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/510f9b5143e260dce7c8510d1d2fb528259efe25"
+    },
+    {
+      "path": "config/endpoint/ui",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "dbc461670f15e082a483ad022b0354a6feab9a4f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/dbc461670f15e082a483ad022b0354a6feab9a4f"
+    },
+    {
+      "path": "config/endpoint/ui/ui.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8ea4c8f200fcf3cdf38b1a1a1ac592f8ad70d724",
+      "size": 2412,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8ea4c8f200fcf3cdf38b1a1a1ac592f8ad70d724"
+    },
+    {
+      "path": "config/endpoint/ui/ui_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2bd0e77058b04d7483ca28f49fa4dc72be337d06",
+      "size": 1136,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2bd0e77058b04d7483ca28f49fa4dc72be337d06"
+    },
+    {
+      "path": "config/endpoint/uptime.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "da4d21394c5b495adeccb01eddb09722c90f3a38",
+      "size": 909,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/da4d21394c5b495adeccb01eddb09722c90f3a38"
+    },
+    {
+      "path": "config/gontext",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6374370eb8aa7b4d3cf6266ea274240f1c3b0d36",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/6374370eb8aa7b4d3cf6266ea274240f1c3b0d36"
+    },
+    {
+      "path": "config/gontext/gontext.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3217070592e3f693495563d9bf75317343045125",
+      "size": 2920,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3217070592e3f693495563d9bf75317343045125"
+    },
+    {
+      "path": "config/gontext/gontext_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3962816691f459bac0b8dbf17b5e54a3dcf00d77",
+      "size": 9321,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3962816691f459bac0b8dbf17b5e54a3dcf00d77"
+    },
+    {
+      "path": "config/key",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "208205cbcbc0a310a6edd8f3c75d3e35c4f2a357",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/208205cbcbc0a310a6edd8f3c75d3e35c4f2a357"
+    },
+    {
+      "path": "config/key/key.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4e07283f9a99cdbf53edabcea1ba4aef37e6e4b2",
+      "size": 597,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4e07283f9a99cdbf53edabcea1ba4aef37e6e4b2"
+    },
+    {
+      "path": "config/key/key_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "50f25f4ccdaddfaa3f878e70cf99a709c703d36d",
+      "size": 167,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/50f25f4ccdaddfaa3f878e70cf99a709c703d36d"
+    },
+    {
+      "path": "config/key/key_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54d60b31983e5f15c0a018cfd11b64e55d617f28",
+      "size": 1261,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/54d60b31983e5f15c0a018cfd11b64e55d617f28"
+    },
+    {
+      "path": "config/maintenance",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "90f0399005c2edbb796aaa9c8fb9a6729a511ab9",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/90f0399005c2edbb796aaa9c8fb9a6729a511ab9"
+    },
+    {
+      "path": "config/maintenance/maintenance.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0e0c50f4aaf91651c45e7a3106db438d1b74ab1d",
+      "size": 5095,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0e0c50f4aaf91651c45e7a3106db438d1b74ab1d"
+    },
+    {
+      "path": "config/maintenance/maintenance_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0a846f379b90f9dff12adcf273030b6444921241",
+      "size": 8623,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0a846f379b90f9dff12adcf273030b6444921241"
+    },
+    {
+      "path": "config/remote",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "99f184c4a71ef7d8dd362588452a6cdf852eb406",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/99f184c4a71ef7d8dd362588452a6cdf852eb406"
+    },
+    {
+      "path": "config/remote/remote.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d5bdbc477b724e0c55ccdd8c69c0f52909ad34e9",
+      "size": 1153,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d5bdbc477b724e0c55ccdd8c69c0f52909ad34e9"
+    },
+    {
+      "path": "config/suite",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "660f60d5ce9402d9f27c760d3f151452b22cee41",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/660f60d5ce9402d9f27c760d3f151452b22cee41"
+    },
+    {
+      "path": "config/suite/result.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "23b2045f8124b392e3dfa0bae5241b2e80fda639",
+      "size": 1407,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/23b2045f8124b392e3dfa0bae5241b2e80fda639"
+    },
+    {
+      "path": "config/suite/suite.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "186fd9a913833e22d16d2f62ea870d62bbef7d17",
+      "size": 7435,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/186fd9a913833e22d16d2f62ea870d62bbef7d17"
+    },
+    {
+      "path": "config/suite/suite_status.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4767cb333b95cb831b42ca0dec01eec95fbca83d",
+      "size": 602,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4767cb333b95cb831b42ca0dec01eec95fbca83d"
+    },
+    {
+      "path": "config/suite/suite_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "55b93a5195865633686ca282dd9631e06a742ccc",
+      "size": 13035,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/55b93a5195865633686ca282dd9631e06a742ccc"
+    },
+    {
+      "path": "config/tunneling",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e39110b646013078091be4161e34e05a2afa7bd7",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e39110b646013078091be4161e34e05a2afa7bd7"
+    },
+    {
+      "path": "config/tunneling/sshtunnel",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5bc0dbc3f3eefd2c3e470d6af66d8e9c66ab4695",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/5bc0dbc3f3eefd2c3e470d6af66d8e9c66ab4695"
+    },
+    {
+      "path": "config/tunneling/sshtunnel/sshtunnel.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1d6f4e5f71777632a21d8f6064bece415c80a7b0",
+      "size": 4379,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1d6f4e5f71777632a21d8f6064bece415c80a7b0"
+    },
+    {
+      "path": "config/tunneling/sshtunnel/sshtunnel_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "988af4dfd39cfa7f871f101edea10fdcdf2ca28d",
+      "size": 3337,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/988af4dfd39cfa7f871f101edea10fdcdf2ca28d"
+    },
+    {
+      "path": "config/tunneling/tunneling.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c4f46d235aed5531546ac2b62937f85605b5312c",
+      "size": 1938,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c4f46d235aed5531546ac2b62937f85605b5312c"
+    },
+    {
+      "path": "config/tunneling/tunneling_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c28be5ebcada888059870720e27ba004c63eb821",
+      "size": 4420,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c28be5ebcada888059870720e27ba004c63eb821"
+    },
+    {
+      "path": "config/ui",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "906a462d61296f6502d168cc46b92f59ee621bc0",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/906a462d61296f6502d168cc46b92f59ee621bc0"
+    },
+    {
+      "path": "config/ui/ui.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0feaeb9b6e64761e665421a799e90ad5d93554e2",
+      "size": 7024,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0feaeb9b6e64761e665421a799e90ad5d93554e2"
+    },
+    {
+      "path": "config/ui/ui_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6e1ab130ee3f3cb1f8eaa4266709414c6b4b3aeb",
+      "size": 9811,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6e1ab130ee3f3cb1f8eaa4266709414c6b4b3aeb"
+    },
+    {
+      "path": "config/util.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "280212a918e650dc9dbb3fc3790671fdb9bc1218",
+      "size": 111,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/280212a918e650dc9dbb3fc3790671fdb9bc1218"
+    },
+    {
+      "path": "config/web",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "96248a050853ccfefea6cfa93e1045f7321660cf",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/96248a050853ccfefea6cfa93e1045f7321660cf"
+    },
+    {
+      "path": "config/web/web.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5110df0218bd7c8fd14363d64df3d51edbbf210c",
+      "size": 3349,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5110df0218bd7c8fd14363d64df3d51edbbf210c"
+    },
+    {
+      "path": "config/web/web_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "63a34f968f11a13d5ebf69de7c80c6522b4e8a9b",
+      "size": 6291,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/63a34f968f11a13d5ebf69de7c80c6522b4e8a9b"
+    },
+    {
+      "path": "controller",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c43019aca65cbeb8811ce198215ccb5face87bbb",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/c43019aca65cbeb8811ce198215ccb5face87bbb"
+    },
+    {
+      "path": "controller/controller.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "47645a4c1418f44048569ddb6c758d081914852c",
+      "size": 1100,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/47645a4c1418f44048569ddb6c758d081914852c"
+    },
+    {
+      "path": "controller/controller_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aaefcbdc09f6435edd8a62a8ca6093208065d868",
+      "size": 2675,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/aaefcbdc09f6435edd8a62a8ca6093208065d868"
+    },
+    {
+      "path": "docs",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "f28e18d74681508e642e68276e1d60d45df6971f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/f28e18d74681508e642e68276e1d60d45df6971f"
+    },
+    {
+      "path": "docs/pagerduty-integration-guide.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f0fef82e1e005b7fcb0b3d0487160c7e89ce2485",
+      "size": 4462,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f0fef82e1e005b7fcb0b3d0487160c7e89ce2485"
+    },
+    {
+      "path": "go.mod",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fb52a9b27cca6c9fb492209c65add880ac62d71a",
+      "size": 4615,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fb52a9b27cca6c9fb492209c65add880ac62d71a"
+    },
+    {
+      "path": "go.sum",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e207f7f380064389386e2b751111f2068f05add8",
+      "size": 28893,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e207f7f380064389386e2b751111f2068f05add8"
+    },
+    {
+      "path": "jsonpath",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "60efbc82d0ef91b9c566f28f2ace6d5bb469dd06",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/60efbc82d0ef91b9c566f28f2ace6d5bb469dd06"
+    },
+    {
+      "path": "jsonpath/jsonpath.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "07e123052be0600ea584aa28e1db9db46766cc51",
+      "size": 4368,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/07e123052be0600ea584aa28e1db9db46766cc51"
+    },
+    {
+      "path": "jsonpath/jsonpath_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0dcae659c24627d9df64d431bbc0c5034ccf7d56",
+      "size": 342,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0dcae659c24627d9df64d431bbc0c5034ccf7d56"
+    },
+    {
+      "path": "jsonpath/jsonpath_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8081dc683b63b32617fea4dba2bf6108e40b1d4a",
+      "size": 6887,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8081dc683b63b32617fea4dba2bf6108e40b1d4a"
+    },
+    {
+      "path": "main.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "13788fd10d083192cf9e1288ed7f892897f718a0",
+      "size": 9319,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/13788fd10d083192cf9e1288ed7f892897f718a0"
+    },
+    {
+      "path": "metrics",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b11fed73a03131cc5c3d83f2bad00d9083b9da77",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b11fed73a03131cc5c3d83f2bad00d9083b9da77"
+    },
+    {
+      "path": "metrics/metrics.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "027f6669a6465f6cbcafdcfaae933f1cece3e2b8",
+      "size": 9038,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/027f6669a6465f6cbcafdcfaae933f1cece3e2b8"
+    },
+    {
+      "path": "metrics/metrics_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "951256d80aedb2f8d7a0336d8dbe60f77a11da69",
+      "size": 15943,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/951256d80aedb2f8d7a0336d8dbe60f77a11da69"
+    },
+    {
+      "path": "pattern",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "4dadfd714b207393634b47763c59ece60bebd188",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/4dadfd714b207393634b47763c59ece60bebd188"
+    },
+    {
+      "path": "pattern/pattern.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "91d26ed6971bfbb6050fd4404d524151fb65390d",
+      "size": 607,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/91d26ed6971bfbb6050fd4404d524151fb65390d"
+    },
+    {
+      "path": "pattern/pattern_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e27df78f9e3bd7d03f4f39fddab634fa3bda5e7b",
+      "size": 371,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e27df78f9e3bd7d03f4f39fddab634fa3bda5e7b"
+    },
+    {
+      "path": "pattern/pattern_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c4b84f9b2dcb6cbe62730ecf8ad1be3142ad96fc",
+      "size": 1438,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c4b84f9b2dcb6cbe62730ecf8ad1be3142ad96fc"
+    },
+    {
+      "path": "security",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "515d714ad340a6f41ac04ac632665d58e5fe8bf3",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/515d714ad340a6f41ac04ac632665d58e5fe8bf3"
+    },
+    {
+      "path": "security/basic.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1ae349cbca6b2195b9bea84d8e09fcb73e19b9e0",
+      "size": 636,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1ae349cbca6b2195b9bea84d8e09fcb73e19b9e0"
+    },
+    {
+      "path": "security/basic_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4895f48ecd54d644437ae8f0e3bafa3704f50b69",
+      "size": 646,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4895f48ecd54d644437ae8f0e3bafa3704f50b69"
+    },
+    {
+      "path": "security/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aa785e2d400ec8813e274307ccb837ca34101495",
+      "size": 3634,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/aa785e2d400ec8813e274307ccb837ca34101495"
+    },
+    {
+      "path": "security/config_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "12f10561b17722626acf4b5ee059cfe5fcb6ac24",
+      "size": 5642,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/12f10561b17722626acf4b5ee059cfe5fcb6ac24"
+    },
+    {
+      "path": "security/oidc.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "821f221042a2b465bd3b4da188403e449a62551a",
+      "size": 4916,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/821f221042a2b465bd3b4da188403e449a62551a"
+    },
+    {
+      "path": "security/oidc_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "73dd54d3cf03f3b650de8ec9f8a7f734d9c1aff0",
+      "size": 3255,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/73dd54d3cf03f3b650de8ec9f8a7f734d9c1aff0"
+    },
+    {
+      "path": "security/sessions.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "853f3c3da76f3ea9baaece17ae0e5b574cc596eb",
+      "size": 165,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/853f3c3da76f3ea9baaece17ae0e5b574cc596eb"
+    },
+    {
+      "path": "storage",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "60102e468bcfc8a99f0b594108633665de986074",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/60102e468bcfc8a99f0b594108633665de986074"
+    },
+    {
+      "path": "storage/config.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a707d5ef4d6a91d6fd4de3dde1c3193cbfa52c26",
+      "size": 1951,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a707d5ef4d6a91d6fd4de3dde1c3193cbfa52c26"
+    },
+    {
+      "path": "storage/store",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1a05cf17582fbdaaf86f83caf868acd6b7554b24",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/1a05cf17582fbdaaf86f83caf868acd6b7554b24"
+    },
+    {
+      "path": "storage/store/common",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "d85ae3a7a567389ce7edb1baf78ef9190ee70de6",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/d85ae3a7a567389ce7edb1baf78ef9190ee70de6"
+    },
+    {
+      "path": "storage/store/common/errors.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8cf453b32cb84b8b8003f7906cd58ce608d5cde9",
+      "size": 385,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8cf453b32cb84b8b8003f7906cd58ce608d5cde9"
+    },
+    {
+      "path": "storage/store/common/paging",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "28e65fa1909b92001479755921afd263fe1af05d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/28e65fa1909b92001479755921afd263fe1af05d"
+    },
+    {
+      "path": "storage/store/common/paging/endpoint_status_params.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0471d98ef86b153a74ccf895a8aac42922b085c4",
+      "size": 958,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0471d98ef86b153a74ccf895a8aac42922b085c4"
+    },
+    {
+      "path": "storage/store/common/paging/endpoint_status_params_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "10675eef8b0eebe270deed45d518a3920adb1877",
+      "size": 2563,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/10675eef8b0eebe270deed45d518a3920adb1877"
+    },
+    {
+      "path": "storage/store/common/paging/suite_status_params.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cbabca35de354903ced2cdee4b777f7b4b5f7e91",
+      "size": 565,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/cbabca35de354903ced2cdee4b777f7b4b5f7e91"
+    },
+    {
+      "path": "storage/store/common/paging/suite_status_params_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "07bca06990f93838f992a7ccc85775fb03da4eea",
+      "size": 2879,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/07bca06990f93838f992a7ccc85775fb03da4eea"
+    },
+    {
+      "path": "storage/store/memory",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "1e6626d540e5a6e2420438c9134ba572cd1043b7",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/1e6626d540e5a6e2420438c9134ba572cd1043b7"
+    },
+    {
+      "path": "storage/store/memory/memory.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "edf5d7c34e8a5f4b745f3171ab039892146bb696",
+      "size": 12179,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/edf5d7c34e8a5f4b745f3171ab039892146bb696"
+    },
+    {
+      "path": "storage/store/memory/memory_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e5353e9dfbf8be4fbed73b1686be0cd631c3a9e3",
+      "size": 38103,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e5353e9dfbf8be4fbed73b1686be0cd631c3a9e3"
+    },
+    {
+      "path": "storage/store/memory/uptime.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "93322359fb8056b3d00e6d7d533e6a7bb6410917",
+      "size": 1655,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/93322359fb8056b3d00e6d7d533e6a7bb6410917"
+    },
+    {
+      "path": "storage/store/memory/uptime_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f055339a444e3d196a10163b4000eecb8f04bcac",
+      "size": 657,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f055339a444e3d196a10163b4000eecb8f04bcac"
+    },
+    {
+      "path": "storage/store/memory/uptime_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "61a798a711ea694f23f6ed1779eb63bb370dd7ef",
+      "size": 4379,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/61a798a711ea694f23f6ed1779eb63bb370dd7ef"
+    },
+    {
+      "path": "storage/store/memory/util.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "514fda09e54954bab6b56d08d6b0ab9f9cda1e6c",
+      "size": 4187,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/514fda09e54954bab6b56d08d6b0ab9f9cda1e6c"
+    },
+    {
+      "path": "storage/store/memory/util_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2a81f4e64e069007f813bb5f9e238d593768f439",
+      "size": 604,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2a81f4e64e069007f813bb5f9e238d593768f439"
+    },
+    {
+      "path": "storage/store/memory/util_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dd09d5b4eac02a3b3f59f83e3cc49748836aadb8",
+      "size": 7382,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/dd09d5b4eac02a3b3f59f83e3cc49748836aadb8"
+    },
+    {
+      "path": "storage/store/sql",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e692ed0e80edf14270d5531128640f3c93631285",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e692ed0e80edf14270d5531128640f3c93631285"
+    },
+    {
+      "path": "storage/store/sql/specific_postgres.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "5e20ab0b59947b30d8a82bcf1db3f22f97d56801",
+      "size": 4702,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/5e20ab0b59947b30d8a82bcf1db3f22f97d56801"
+    },
+    {
+      "path": "storage/store/sql/specific_sqlite.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fbb81d3cf68c8131f0ba9c0476091157a62c36f0",
+      "size": 5001,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fbb81d3cf68c8131f0ba9c0476091157a62c36f0"
+    },
+    {
+      "path": "storage/store/sql/sql.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "96349253e5b7f733f95c1ced8413809eee4e8ec6",
+      "size": 58455,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/96349253e5b7f733f95c1ced8413809eee4e8ec6"
+    },
+    {
+      "path": "storage/store/sql/sql_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "b776f7a5ff85c25486b597af01ee47c825297c6c",
+      "size": 42255,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/b776f7a5ff85c25486b597af01ee47c825297c6c"
+    },
+    {
+      "path": "storage/store/store.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "693faa627e4c49e11bd5af2bdf88e23202a07a80",
+      "size": 6798,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/693faa627e4c49e11bd5af2bdf88e23202a07a80"
+    },
+    {
+      "path": "storage/store/store_bench_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d02f715eafde062a9d5e86607e991fb8ed1b7b09",
+      "size": 5686,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d02f715eafde062a9d5e86607e991fb8ed1b7b09"
+    },
+    {
+      "path": "storage/store/store_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "42cdc5ddf0f33640b39f03188eeb93f832c326a8",
+      "size": 27199,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/42cdc5ddf0f33640b39f03188eeb93f832c326a8"
+    },
+    {
+      "path": "storage/type.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4c25350c6382ed3fa91a1ad520f831a6ee02802a",
+      "size": 216,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4c25350c6382ed3fa91a1ad520f831a6ee02802a"
+    },
+    {
+      "path": "test",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "f54b5812dd0811643587a6ee0916586e8a1f7e76",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/f54b5812dd0811643587a6ee0916586e8a1f7e76"
+    },
+    {
+      "path": "test/mock.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8050f4e1d0f03a7341aaa6a3cd70db729dad1633",
+      "size": 192,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8050f4e1d0f03a7341aaa6a3cd70db729dad1633"
+    },
+    {
+      "path": "testdata",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "dce98bf7d7c74959d52b8b8cbe95d731d875dbc5",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/dce98bf7d7c74959d52b8b8cbe95d731d875dbc5"
+    },
+    {
+      "path": "testdata/badcert.key",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d7a9a79b0e5002691c56dc0295a7462ec6185bd8",
+      "size": 57,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d7a9a79b0e5002691c56dc0295a7462ec6185bd8"
+    },
+    {
+      "path": "testdata/badcert.pem",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "002a8474697403907ce36d35c6d3a129cbff3fed",
+      "size": 57,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/002a8474697403907ce36d35c6d3a129cbff3fed"
+    },
+    {
+      "path": "testdata/cert.key",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "20522ab55c00e5213b8a5b4e98cc510d5a3a5e46",
+      "size": 240,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/20522ab55c00e5213b8a5b4e98cc510d5a3a5e46"
+    },
+    {
+      "path": "testdata/cert.pem",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "54c84fed2166ff8a0f7a34c755a927533fd93f8e",
+      "size": 549,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/54c84fed2166ff8a0f7a34c755a927533fd93f8e"
+    },
+    {
+      "path": "watchdog",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "63f7da6c6f0b0aafa2b0083143129360e7370302",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/63f7da6c6f0b0aafa2b0083143129360e7370302"
+    },
+    {
+      "path": "watchdog/alerting.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c71ac33342e6b33477fc2737682a0f13992872b9",
+      "size": 6049,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c71ac33342e6b33477fc2737682a0f13992872b9"
+    },
+    {
+      "path": "watchdog/alerting_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7c0fbad5496f3fc8ff961973f8c8f21c5d2dcec9",
+      "size": 20316,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7c0fbad5496f3fc8ff961973f8c8f21c5d2dcec9"
+    },
+    {
+      "path": "watchdog/endpoint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "9c89bafae5378f7c90f2c35a5359419a35d37778",
+      "size": 3569,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/9c89bafae5378f7c90f2c35a5359419a35d37778"
+    },
+    {
+      "path": "watchdog/external_endpoint.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3f8409b69dfb3acdad63cb93f43b3e6c31b9492c",
+      "size": 4240,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3f8409b69dfb3acdad63cb93f43b3e6c31b9492c"
+    },
+    {
+      "path": "watchdog/suite.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "39d2f0c6e607e178bede310e1ab3ecb8c07416ac",
+      "size": 3073,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/39d2f0c6e607e178bede310e1ab3ecb8c07416ac"
+    },
+    {
+      "path": "watchdog/watchdog.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c172cc5a70caf65ea10a5f97a8cff8514118788a",
+      "size": 2460,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c172cc5a70caf65ea10a5f97a8cff8514118788a"
+    },
+    {
+      "path": "web",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c1a7e40813817ee7d742c098a2fbe9ed971d7ea3",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/c1a7e40813817ee7d742c098a2fbe9ed971d7ea3"
+    },
+    {
+      "path": "web/app",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "314ee3357e74f33c289e1e5c0ca829682dcb0c3f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/314ee3357e74f33c289e1e5c0ca829682dcb0c3f"
+    },
+    {
+      "path": "web/app/.gitignore",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "403adbc1e527906a4aa59558cd582c20bcd1d738",
+      "size": 231,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/403adbc1e527906a4aa59558cd582c20bcd1d738"
+    },
+    {
+      "path": "web/app/README.md",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e0d1daf149e03c0425960e3884b5f3c563a5fccb",
+      "size": 315,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e0d1daf149e03c0425960e3884b5f3c563a5fccb"
+    },
+    {
+      "path": "web/app/babel.config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "e9558405fdcc02f12d757acb308e02937a7444f1",
+      "size": 73,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/e9558405fdcc02f12d757acb308e02937a7444f1"
+    },
+    {
+      "path": "web/app/package-lock.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "57cd9e899ed0b2c5b2da30f78e5e1c108b67603b",
+      "size": 808625,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/57cd9e899ed0b2c5b2da30f78e5e1c108b67603b"
+    },
+    {
+      "path": "web/app/package.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c6239b10c03abed7f01145a4c37adece001632f7",
+      "size": 1835,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c6239b10c03abed7f01145a4c37adece001632f7"
+    },
+    {
+      "path": "web/app/postcss.config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6788c42d2aae51a2dbd0b4729ef72e53e33856c4",
+      "size": 148,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6788c42d2aae51a2dbd0b4729ef72e53e33856c4"
+    },
+    {
+      "path": "web/app/public",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b1b98cc4993bbf002c218008a9599461652eb078",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b1b98cc4993bbf002c218008a9599461652eb078"
+    },
+    {
+      "path": "web/app/public/apple-touch-icon.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "63263f49b27e024abb9c03a00d49136770f8a0d2",
+      "size": 7677,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/63263f49b27e024abb9c03a00d49136770f8a0d2"
+    },
+    {
+      "path": "web/app/public/favicon-16x16.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a3aa9aacb8411ed772dcb46bbfe211a6267fab33",
+      "size": 1053,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a3aa9aacb8411ed772dcb46bbfe211a6267fab33"
+    },
+    {
+      "path": "web/app/public/favicon-32x32.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79febd05780020b9a3cd4fb73942edb907322601",
+      "size": 1703,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/79febd05780020b9a3cd4fb73942edb907322601"
+    },
+    {
+      "path": "web/app/public/favicon.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d4b57285ad72c68aed2dec5d3c8979f1b82280fc",
+      "size": 15086,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d4b57285ad72c68aed2dec5d3c8979f1b82280fc"
+    },
+    {
+      "path": "web/app/public/index.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "cdeeb435056631f3f9191bd9d14c24330356cb03",
+      "size": 2236,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/cdeeb435056631f3f9191bd9d14c24330356cb03"
+    },
+    {
+      "path": "web/app/public/logo-192x192.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "272a45b8587b1c491f9a8a78b1bba30519d07df2",
+      "size": 8659,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/272a45b8587b1c491f9a8a78b1bba30519d07df2"
+    },
+    {
+      "path": "web/app/public/logo-512x512.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "012077232c4df4e7c3c424724376a0f32ea6c3ff",
+      "size": 26692,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/012077232c4df4e7c3c424724376a0f32ea6c3ff"
+    },
+    {
+      "path": "web/app/public/manifest.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d03531206398fa76b9c0cfc115f24bf0705546f4",
+      "size": 577,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d03531206398fa76b9c0cfc115f24bf0705546f4"
+    },
+    {
+      "path": "web/app/src",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "b7f74bfd344b88ac3cd77fa224ed7f9b2a085fe3",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/b7f74bfd344b88ac3cd77fa224ed7f9b2a085fe3"
+    },
+    {
+      "path": "web/app/src/App.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a792c08f6ccb080e186f1b4591383125896fb811",
+      "size": 9938,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a792c08f6ccb080e186f1b4591383125896fb811"
+    },
+    {
+      "path": "web/app/src/assets",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "90aa29157e5bf81bd48f3d218df51ccb020ee5cd",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/90aa29157e5bf81bd48f3d218df51ccb020ee5cd"
+    },
+    {
+      "path": "web/app/src/assets/logo.svg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "52cc2b84689b08276628a6a1ab0b0faf2c0887ad",
+      "size": 1505,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/52cc2b84689b08276628a6a1ab0b0faf2c0887ad"
+    },
+    {
+      "path": "web/app/src/components",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "3266ef36a42fe89cc17f59ebd875d8158bd55a83",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/3266ef36a42fe89cc17f59ebd875d8158bd55a83"
+    },
+    {
+      "path": "web/app/src/components/AnnouncementBanner.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "ae3d317dfbeac9bc64340dbac2f27855d2798a5c",
+      "size": 9729,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/ae3d317dfbeac9bc64340dbac2f27855d2798a5c"
+    },
+    {
+      "path": "web/app/src/components/EndpointCard.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "62b91e2dbe74e2a7da8de37b0c7cffa8b1461498",
+      "size": 6673,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/62b91e2dbe74e2a7da8de37b0c7cffa8b1461498"
+    },
+    {
+      "path": "web/app/src/components/FlowStep.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d861f0963ca9af2d1b177954a17c4811a0755d11",
+      "size": 4914,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d861f0963ca9af2d1b177954a17c4811a0755d11"
+    },
+    {
+      "path": "web/app/src/components/Loading.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "41dfb8c29d9f08e67b15a7d2f466323e073fff05",
+      "size": 667,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/41dfb8c29d9f08e67b15a7d2f466323e073fff05"
+    },
+    {
+      "path": "web/app/src/components/Pagination.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "112a9e903f4a8c4aef101a24c681137760f561d5",
+      "size": 1831,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/112a9e903f4a8c4aef101a24c681137760f561d5"
+    },
+    {
+      "path": "web/app/src/components/PastAnnouncements.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7b426c10c8a898cb92027b17160adae1e0c578e5",
+      "size": 6837,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7b426c10c8a898cb92027b17160adae1e0c578e5"
+    },
+    {
+      "path": "web/app/src/components/ResponseTimeChart.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "fd8680698a1a69bc5aaaf811e9504e2da60ccf47",
+      "size": 8912,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/fd8680698a1a69bc5aaaf811e9504e2da60ccf47"
+    },
+    {
+      "path": "web/app/src/components/SearchBar.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "96899987017cb9123db5d3ac91508221cc449c01",
+      "size": 3501,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/96899987017cb9123db5d3ac91508221cc449c01"
+    },
+    {
+      "path": "web/app/src/components/SequentialFlowDiagram.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "df954b6c170782e57a63fac83f45bbfa3367c205",
+      "size": 4085,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/df954b6c170782e57a63fac83f45bbfa3367c205"
+    },
+    {
+      "path": "web/app/src/components/Settings.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4357732c85b5b076bd97128cd5871deb22ad0467",
+      "size": 5711,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4357732c85b5b076bd97128cd5871deb22ad0467"
+    },
+    {
+      "path": "web/app/src/components/Social.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "47426922ddfc5c524a5716520d183d95dc45a08c",
+      "size": 1099,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/47426922ddfc5c524a5716520d183d95dc45a08c"
+    },
+    {
+      "path": "web/app/src/components/StatusBadge.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6ed473817466c55d67892189b1c890636c11a3c8",
+      "size": 1182,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6ed473817466c55d67892189b1c890636c11a3c8"
+    },
+    {
+      "path": "web/app/src/components/StepDetailsModal.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1037bb0747d2215236f39a2f1e3ecdb52fa94463",
+      "size": 8428,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1037bb0747d2215236f39a2f1e3ecdb52fa94463"
+    },
+    {
+      "path": "web/app/src/components/SuiteCard.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7fbabd2a9b0a337a4c2e2caf0f15822c625f79d3",
+      "size": 6629,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7fbabd2a9b0a337a4c2e2caf0f15822c625f79d3"
+    },
+    {
+      "path": "web/app/src/components/Tooltip.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "88e6528715a182502c0d211cd1e0bbf42a7009bc",
+      "size": 8954,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/88e6528715a182502c0d211cd1e0bbf42a7009bc"
+    },
+    {
+      "path": "web/app/src/components/ui",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "88883e211c0b9d53b81d6a1f5ee97d4537d7ff46",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/88883e211c0b9d53b81d6a1f5ee97d4537d7ff46"
+    },
+    {
+      "path": "web/app/src/components/ui/badge",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "c5628ecbacde3bfc0b31f4475ab0567f6ecb95e0",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/c5628ecbacde3bfc0b31f4475ab0567f6ecb95e0"
+    },
+    {
+      "path": "web/app/src/components/ui/badge/Badge.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d7835170ff6a820d5f772bea852162de26bcb044",
+      "size": 1105,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d7835170ff6a820d5f772bea852162de26bcb044"
+    },
+    {
+      "path": "web/app/src/components/ui/badge/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "738ab441f468fa471c260560ade5708ac7d9eba1",
+      "size": 46,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/738ab441f468fa471c260560ade5708ac7d9eba1"
+    },
+    {
+      "path": "web/app/src/components/ui/button",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "0935015258cfc6c28459b24fcf94fad0bfb9ce7f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/0935015258cfc6c28459b24fcf94fad0bfb9ce7f"
+    },
+    {
+      "path": "web/app/src/components/ui/button/Button.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1346e6ddb487482fab98bf5fbe37cdc4a795323d",
+      "size": 1564,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1346e6ddb487482fab98bf5fbe37cdc4a795323d"
+    },
+    {
+      "path": "web/app/src/components/ui/button/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "3945bc7f23cbf3f9b8125c8ee198b924042ac986",
+      "size": 48,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/3945bc7f23cbf3f9b8125c8ee198b924042ac986"
+    },
+    {
+      "path": "web/app/src/components/ui/card",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "5685ec521ff12e60a1cd64a267d553c68e8bfbad",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/5685ec521ff12e60a1cd64a267d553c68e8bfbad"
+    },
+    {
+      "path": "web/app/src/components/ui/card/Card.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7d4b66e5fad19ed8466fd7acb4defe8667a23171",
+      "size": 228,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7d4b66e5fad19ed8466fd7acb4defe8667a23171"
+    },
+    {
+      "path": "web/app/src/components/ui/card/CardContent.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1edae34ef1edce1baefdfca6447a1903a0e3b016",
+      "size": 180,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1edae34ef1edce1baefdfca6447a1903a0e3b016"
+    },
+    {
+      "path": "web/app/src/components/ui/card/CardHeader.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "6cde610d282782b986eb353d2d01cc7e7ab84b12",
+      "size": 201,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/6cde610d282782b986eb353d2d01cc7e7ab84b12"
+    },
+    {
+      "path": "web/app/src/components/ui/card/CardTitle.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "1991976271b1ddddc60a3d4d670c296011cf3b6a",
+      "size": 220,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/1991976271b1ddddc60a3d4d670c296011cf3b6a"
+    },
+    {
+      "path": "web/app/src/components/ui/card/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4f4350f9cb257c5283fd72d4c12479d3446318a2",
+      "size": 215,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/4f4350f9cb257c5283fd72d4c12479d3446318a2"
+    },
+    {
+      "path": "web/app/src/components/ui/input",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "caae487c5a907bdd8b1771e4dff87ed7e82be995",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/caae487c5a907bdd8b1771e4dff87ed7e82be995"
+    },
+    {
+      "path": "web/app/src/components/ui/input/Input.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c430f477fe6887d6e9fbfdc904a0d52f598e2ea7",
+      "size": 731,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c430f477fe6887d6e9fbfdc904a0d52f598e2ea7"
+    },
+    {
+      "path": "web/app/src/components/ui/input/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "af4d4da1f68b31040ab3812681d1e2be07393375",
+      "size": 46,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/af4d4da1f68b31040ab3812681d1e2be07393375"
+    },
+    {
+      "path": "web/app/src/components/ui/select",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "11b99aeb34a4f898b70f82bfec464cac11cb22bc",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/11b99aeb34a4f898b70f82bfec464cac11cb22bc"
+    },
+    {
+      "path": "web/app/src/components/ui/select/Select.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "aa70d3c3d52f8e0c06c7433dbba239bf390ea6e0",
+      "size": 4101,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/aa70d3c3d52f8e0c06c7433dbba239bf390ea6e0"
+    },
+    {
+      "path": "web/app/src/components/ui/select/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "40d27899277f941642ad7444d9903acff9d08c43",
+      "size": 48,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/40d27899277f941642ad7444d9903acff9d08c43"
+    },
+    {
+      "path": "web/app/src/index.css",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "dd15e9e07a74cb9ffab195c67febe8795beac4b7",
+      "size": 1788,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/dd15e9e07a74cb9ffab195c67febe8795beac4b7"
+    },
+    {
+      "path": "web/app/src/main.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f527f56468b38cd3d0b924f0a85b4b79b3a7c725",
+      "size": 153,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f527f56468b38cd3d0b924f0a85b4b79b3a7c725"
+    },
+    {
+      "path": "web/app/src/router",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "dc15f81682579aa3d9a248a75cd0b4c346af259d",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/dc15f81682579aa3d9a248a75cd0b4c346af259d"
+    },
+    {
+      "path": "web/app/src/router/index.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2e6b58404fadec28272b2857abc4f08058bbb795",
+      "size": 635,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2e6b58404fadec28272b2857abc4f08058bbb795"
+    },
+    {
+      "path": "web/app/src/utils",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "e55ae0253412056f8baf9e885e20d5b46d854941",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/e55ae0253412056f8baf9e885e20d5b46d854941"
+    },
+    {
+      "path": "web/app/src/utils/format.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f65ceea4706e7a3feaf84a4aecd0e2d2ef840832",
+      "size": 513,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f65ceea4706e7a3feaf84a4aecd0e2d2ef840832"
+    },
+    {
+      "path": "web/app/src/utils/markdown.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d9a1fa4200ed6f06a065446fa0956c587b82b2b8",
+      "size": 1411,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d9a1fa4200ed6f06a065446fa0956c587b82b2b8"
+    },
+    {
+      "path": "web/app/src/utils/misc.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "7ca3da67e10adf390591a9125a0f407ddaefcd77",
+      "size": 147,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/7ca3da67e10adf390591a9125a0f407ddaefcd77"
+    },
+    {
+      "path": "web/app/src/utils/time.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "f354346e0b99c353b3b1d6d30245bb0b69bbeb0a",
+      "size": 2958,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/f354346e0b99c353b3b1d6d30245bb0b69bbeb0a"
+    },
+    {
+      "path": "web/app/src/views",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "6d019bc969abf692fe1ad8f75dd14fd193728e31",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/6d019bc969abf692fe1ad8f75dd14fd193728e31"
+    },
+    {
+      "path": "web/app/src/views/EndpointDetails.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "68eefa49d69cc61bc5ac9bc18ab237f1ed066038",
+      "size": 15339,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/68eefa49d69cc61bc5ac9bc18ab237f1ed066038"
+    },
+    {
+      "path": "web/app/src/views/Home.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "729ae091d73092a73b525946df8ed3e0c1d91aa6",
+      "size": 18664,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/729ae091d73092a73b525946df8ed3e0c1d91aa6"
+    },
+    {
+      "path": "web/app/src/views/SuiteDetails.vue",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "94e7b4f7e945093a4e7324122a3121b04e078e1f",
+      "size": 11551,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/94e7b4f7e945093a4e7324122a3121b04e078e1f"
+    },
+    {
+      "path": "web/app/tailwind.config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "2e15e2da6786bb1a548c4305b730c7216efc7f42",
+      "size": 2226,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/2e15e2da6786bb1a548c4305b730c7216efc7f42"
+    },
+    {
+      "path": "web/app/vue.config.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "0734a1cdd1feee7b7443b69fe3050f054fead8e4",
+      "size": 654,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/0734a1cdd1feee7b7443b69fe3050f054fead8e4"
+    },
+    {
+      "path": "web/static.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "97a34f8f9c946fe5390b7b8ad7457dd0a98d20d5",
+      "size": 151,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/97a34f8f9c946fe5390b7b8ad7457dd0a98d20d5"
+    },
+    {
+      "path": "web/static",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "fb1afc20c8b73367847dc5f87c692bb88d3f59f4",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/fb1afc20c8b73367847dc5f87c692bb88d3f59f4"
+    },
+    {
+      "path": "web/static/apple-touch-icon.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "63263f49b27e024abb9c03a00d49136770f8a0d2",
+      "size": 7677,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/63263f49b27e024abb9c03a00d49136770f8a0d2"
+    },
+    {
+      "path": "web/static/css",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "7167669dc156406c9c711b6a6c59588d057e1505",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/7167669dc156406c9c711b6a6c59588d057e1505"
+    },
+    {
+      "path": "web/static/css/app.css",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "70b5b6b3963aa5629b7265527e228b2f9b72b3d2",
+      "size": 34935,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/70b5b6b3963aa5629b7265527e228b2f9b72b3d2"
+    },
+    {
+      "path": "web/static/favicon-16x16.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a3aa9aacb8411ed772dcb46bbfe211a6267fab33",
+      "size": 1053,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a3aa9aacb8411ed772dcb46bbfe211a6267fab33"
+    },
+    {
+      "path": "web/static/favicon-32x32.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "79febd05780020b9a3cd4fb73942edb907322601",
+      "size": 1703,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/79febd05780020b9a3cd4fb73942edb907322601"
+    },
+    {
+      "path": "web/static/favicon.ico",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d4b57285ad72c68aed2dec5d3c8979f1b82280fc",
+      "size": 15086,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d4b57285ad72c68aed2dec5d3c8979f1b82280fc"
+    },
+    {
+      "path": "web/static/img",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "90aa29157e5bf81bd48f3d218df51ccb020ee5cd",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/90aa29157e5bf81bd48f3d218df51ccb020ee5cd"
+    },
+    {
+      "path": "web/static/img/logo.svg",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "52cc2b84689b08276628a6a1ab0b0faf2c0887ad",
+      "size": 1505,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/52cc2b84689b08276628a6a1ab0b0faf2c0887ad"
+    },
+    {
+      "path": "web/static/index.html",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8753c2eaa4f6a56202391fa632a4f06308c14bb",
+      "size": 2229,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a8753c2eaa4f6a56202391fa632a4f06308c14bb"
+    },
+    {
+      "path": "web/static/js",
+      "mode": "040000",
+      "type": "tree",
+      "sha": "876d2ef44123ec59995d7b6f2315f2dbc304128f",
+      "url": "https://api.github.com/repos/TwiN/gatus/git/trees/876d2ef44123ec59995d7b6f2315f2dbc304128f"
+    },
+    {
+      "path": "web/static/js/app.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "8af03135f1eb9f36a924aab49ec5387c52af4d5e",
+      "size": 100803,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/8af03135f1eb9f36a924aab49ec5387c52af4d5e"
+    },
+    {
+      "path": "web/static/js/chunk-vendors.js",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "c8f6665a2282ce4863acf77755bea4fe6ae363d5",
+      "size": 459633,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/c8f6665a2282ce4863acf77755bea4fe6ae363d5"
+    },
+    {
+      "path": "web/static/logo-192x192.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "272a45b8587b1c491f9a8a78b1bba30519d07df2",
+      "size": 8659,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/272a45b8587b1c491f9a8a78b1bba30519d07df2"
+    },
+    {
+      "path": "web/static/logo-512x512.png",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "012077232c4df4e7c3c424724376a0f32ea6c3ff",
+      "size": 26692,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/012077232c4df4e7c3c424724376a0f32ea6c3ff"
+    },
+    {
+      "path": "web/static/manifest.json",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "d03531206398fa76b9c0cfc115f24bf0705546f4",
+      "size": 577,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/d03531206398fa76b9c0cfc115f24bf0705546f4"
+    },
+    {
+      "path": "web/static_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "a8b79adeb07f5de9eb19f59b98e642f5ee5bc007",
+      "size": 1872,
+      "url": "https://api.github.com/repos/TwiN/gatus/git/blobs/a8b79adeb07f5de9eb19f59b98e642f5ee5bc007"
+    }
+  ],
+  "truncated": false
+}

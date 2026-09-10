@@ -1,0 +1,53 @@
+2026-09-10T10:30:36.792Z
+                run_id                |              inc               |   state   | engine |          started_at           |          finished_at          | last_event_seq 
+--------------------------------------+--------------------------------+-----------+--------+-------------------------------+-------------------------------+----------------
+ 90cc1185-116c-412f-9b47-6c30b767016a | alertname=Kill9DrillProbe00|se | SUCCEEDED | NATIVE | 2026-09-10 10:28:54.299369+00 | 2026-09-10 10:28:54.663613+00 |              1
+ d70cf81f-4267-43a2-8a93-096e76480971 | alertname=Kill9DrillProbe01|se | SUCCEEDED | NATIVE | 2026-09-10 10:30:08.826646+00 | 2026-09-10 10:30:08.876366+00 |              1
+ a8fd939d-4b0a-4ec0-9de3-c2784f66c1f5 | alertname=Kill9DrillProbe02|se | SUCCEEDED | NATIVE | 2026-09-10 10:30:08.889224+00 | 2026-09-10 10:30:08.97466+00  |              1
+ 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | alertname=Kill9DrillProbe03|se | RUNNING   | NATIVE | 2026-09-10 10:30:08.986509+00 |                               |              1
+ 04715303-6ce5-43d8-8671-8002a22f1def | alertname=Kill9DrillProbe04|se | QUEUED    | NATIVE |                               |                               |              0
+ d3357180-b305-4b8c-b053-5fbf9269097b | alertname=Kill9DrillProbe05|se | QUEUED    | NATIVE |                               |                               |              0
+ b12a269a-ccb2-41b8-a052-8c0d1e2b7589 | alertname=Kill9DrillProbe06|se | QUEUED    | NATIVE |                               |                               |              0
+ 2030e0df-5620-4e68-8824-014f4f6dc95d | alertname=Kill9DrillProbe07|se | QUEUED    | NATIVE |                               |                               |              0
+ c862ab73-020f-4dba-8021-296ae78efb20 | alertname=Kill9DrillProbe08|se | QUEUED    | NATIVE |                               |                               |              0
+ 44101c4d-6360-4cd0-b346-13e1707c28d8 | alertname=Kill9DrillProbe09|se | QUEUED    | NATIVE |                               |                               |              0
+ 2a41f73a-9eb3-45d7-bc24-0599cd1cc697 | alertname=Kill9DrillProbe10|se | QUEUED    | NATIVE |                               |                               |              0
+(11 rows)
+
+   run8   |      task_key      | state  | lease_owner |          lease_until          | lease_epoch | attempt_count 
+----------+--------------------+--------+-------------+-------------------------------+-------------+---------------
+ 90cc1185 | NATIVE_INVESTIGATE | DONE   | control-1   | 2026-09-10 10:38:54.569422+00 |           1 |             1
+ d70cf81f | NATIVE_INVESTIGATE | DONE   | control-1   | 2026-09-10 10:40:08.868485+00 |           1 |             1
+ a8fd939d | NATIVE_INVESTIGATE | DONE   | control-1   | 2026-09-10 10:40:08.966343+00 |           1 |             1
+ 05b2d85e | NATIVE_INVESTIGATE | LEASED | control-1   | 2026-09-10 10:40:09.018063+00 |           1 |             1
+ 04715303 | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ d3357180 | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ b12a269a | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ c862ab73 | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ 2030e0df | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ 44101c4d | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+ 2a41f73a | NATIVE_INVESTIGATE | READY  |             |                               |           0 |             0
+(11 rows)
+
+  task8   | attempt_no |  status   | worker_id |          started_at           |          finished_at          
+----------+------------+-----------+-----------+-------------------------------+-------------------------------
+ 267ff2e4 |          1 | SUCCEEDED | control-1 | 2026-09-10 10:28:54.299369+00 | 2026-09-10 10:28:54.663613+00
+ c10d91ce |          1 | SUCCEEDED | control-1 | 2026-09-10 10:30:08.826646+00 | 2026-09-10 10:30:08.876366+00
+ 934d57ee |          1 | SUCCEEDED | control-1 | 2026-09-10 10:30:08.889224+00 | 2026-09-10 10:30:08.97466+00
+ aa4407ef |          1 | STARTED   | control-1 | 2026-09-10 10:30:08.986509+00 | 
+(4 rows)
+
+   run8   | call_seq |    tool_name     |  state  |              result_ref              |          started_at           |          settled_at           
+----------+----------+------------------+---------+--------------------------------------+-------------------------------+-------------------------------
+ 90cc1185 |        1 | prometheus.query | SUCCESS | 59ede991-7afe-4bc0-b30f-8332a97e3134 | 2026-09-10 10:28:54.371735+00 | 2026-09-10 10:28:54.501523+00
+ 90cc1185 |        2 | change.query     | FAILED  |                                      | 2026-09-10 10:28:54.509701+00 | 2026-09-10 10:28:54.555691+00
+ 90cc1185 |        3 | logs.query       | FAILED  |                                      | 2026-09-10 10:28:54.564031+00 | 2026-09-10 10:28:54.567402+00
+ d70cf81f |        1 | change.query     | FAILED  |                                      | 2026-09-10 10:30:08.844803+00 | 2026-09-10 10:30:08.847029+00
+ d70cf81f |        2 | logs.query       | FAILED  |                                      | 2026-09-10 10:30:08.852432+00 | 2026-09-10 10:30:08.854552+00
+ d70cf81f |        3 | prometheus.query | SUCCESS | 555b7dcb-77f2-4f04-8e1a-81e4b8a8c545 | 2026-09-10 10:30:08.860052+00 | 2026-09-10 10:30:08.867377+00
+ a8fd939d |        1 | change.query     | FAILED  |                                      | 2026-09-10 10:30:08.90885+00  | 2026-09-10 10:30:08.911343+00
+ a8fd939d |        2 | prometheus.query | SUCCESS | df5413a3-fb37-4bd0-bead-d332abc1203f | 2026-09-10 10:30:08.91904+00  | 2026-09-10 10:30:08.956914+00
+ a8fd939d |        3 | logs.query       | FAILED  |                                      | 2026-09-10 10:30:08.96241+00  | 2026-09-10 10:30:08.964799+00
+ 05b2d85e |        1 | prometheus.query | SUCCESS | 8913a24c-347d-4ad3-bd16-a54188be6cc9 | 2026-09-10 10:30:09.003349+00 | 2026-09-10 10:30:09.016211+00
+(10 rows)
+

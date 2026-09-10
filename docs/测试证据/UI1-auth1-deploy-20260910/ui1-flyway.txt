@@ -1,0 +1,7 @@
+ installed_rank | version |     description     | success 
+----------------+---------+---------------------+---------
+             44 | 44      | auth1 platform user | t
+             43 | 43      | am7 duty            | t
+             42 | 42      | exc3a auth event    | t
+(3 rows)
+

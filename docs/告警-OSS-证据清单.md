@@ -244,3 +244,79 @@
   来源：https://learn.microsoft.com/en-us/azure/architecture/patterns/strangler-fig【明示】
 - **Scientist 适配边界【采纳】**：只借 control/candidate、mismatch context 与 control-vs-control 底噪；其 README 明示 read-only 更安全且 candidate timeout 不受框架保护，本项目生产反向 Shadow 改用 PG 持久工作/租约/预算，不采用请求内双跑或一次性 runner。
   来源：https://github.com/github/scientist/blob/main/README.md【明示+项目适配推断】
+
+## E-21 钉钉/企业微信群机器人 webhook 限流与业务码陷阱【采纳：AM7 值班通知增量 M7-14 投递纪律】
+
+- 钉钉自定义机器人：每个机器人每分钟最多发送 20 条消息，超限限流 10 分钟；安全设置三选一（自定义关键词/加签/IP 白名单），加签 = HmacSHA256(timestamp+"\n"+secret) 后 URL 编码。
+  来源：https://open.dingtalk.com/document/group/custom-robot-access【明示】（核对 2026-09-09）
+- 企业微信群机器人：每个机器人发送的消息不能超过 20 条/分钟；失败可表现为 HTTP 200 + 响应体 errcode≠0（如 45009 限流），只判 HTTP 状态码会静默假成功。
+  来源：https://developer.work.weixin.qq.com/document/path/91770【明示】+ 开发者社区限流算法确认 https://developer.work.weixin.qq.com/community/question/detail?content_id=16540540749918243124【明示】（核对 2026-09-09）
+- **适配性判断**：值班通知天然低频（Alertmanager 聚合兜底），20/min 足够；业务码陷阱直接命中本项目 WebhookChannel 现状（只判 HTTP 状态）——AM7 M7-14 必须补响应体 errcode 判定，否则 Gatus/值班通道误报成功。
+- **引入代价**：投递端需按平台解析响应体；限流退避已有 notify_outbox RETRY_WAIT 范式承接，零新机制。
+
+## E-22 Grafana OnCall / PagerDuty 值班排班模型【采纳：AM7 值班通知增量 M7-12 DutyResolver 分层轮换语义】
+
+- Grafana OnCall 排班：同一 layer 内的 rotations 共享值班时间；更高 layer 的值班时间**覆盖**低层；overrides（临时换班）直接在日历上创建、优先级最高。
+  来源：https://grafana.com/docs/grafana-cloud/observe-and-act/respond-to-incidents/on-call-schedules/create-schedules/【明示】（核对 2026-09-09）
+- PagerDuty 风格 schedule：timezone + layers[]，每层 rotation_type（daily/weekly）+ 起始锚点 + 成员序列 + restrictions（时段限制）；层间不互相感知，交叠靠 override 解决。
+  来源：https://www.pagerduty.com/resources/incident-management-response/learn/call-rotations-schedules/ + PagerDuty 社区官方答复（层间不互相感知，2 layers + override 处理交叠）https://community.pagerduty.com/ask-a-product-question-2/pagerduty-oncall-schedule-scenario-111【明示】（核对 2026-09-09）
+- **适配性判断**：两家语义一致（override > 高层 layer > 低层 layer），可直接抄；轮换数学用 anchor_date + 周期取模即可纯函数化，不引入 cron 排班（表达力过剩）。
+- **引入代价**：仅需三张表（layer/layer_member/override）承载语义；不实现 PagerDuty 的 restrictions 时段裁剪（本项目 7×24 单班制起点，后续有早晚班需求再加）。
+
+## E-23 Gatus v5.17.0 三项契约冲突修正依据【采纳：MIG-02 前半，deploy/gatus 配置修正并 127 实测通过】
+
+- **storage.type 合法值仅 memory/sqlite/postgres**，`file` 非法（`ValidateAndSetDefaults` 直接报错，启动即败）；sqlite 必须给非空 path，memory 不允许 path。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/storage/type.go + https://github.com/TwiN/gatus/blob/v5.17.0/storage/config.go 【明示】（核对 2026-09-09）
+- **告警接收器合法 key 为 `custom`（`webhook` 不是合法 provider）**：`url` 必填、`method` 缺省 GET、`headers` map、`body` 模板占位符全集 6 个（明细归 E-24 第 1 节，不重复）；endpoint 侧必须声明 `alerts:`（`- type: custom`）才接收告警，未显式填的阈值/恢复项由 provider `default-alert` 合并（Alert 结构 type/enabled/failure-threshold/success-threshold/send-on-resolved/description，缺省 3/2/false）。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/alerting/provider/custom/custom.go + https://github.com/TwiN/gatus/blob/v5.17.0/alerting/alert/alert.go + https://github.com/TwiN/gatus/blob/v5.17.0/config/endpoint/endpoint.go + 官方文档页 https://gatus.io/docs/alerting-custom 、https://gatus.io/docs/endpoints 【明示】（核对 2026-09-09）
+- **配置支持 `${ENV_VAR}` 替换**：解析前全文 `os.ExpandEnv`，`$$` 转义为字面 `$`——占位 webhook 地址留 `${GATUS_ONCALL_WEBHOOK_URL}` 等变量写法成立；注意 env 缺失时 custom provider 的 url 展开为空串，Gatus 仅告警 "url not set" 并忽略该 provider 继续启动（**不是** fail-closed，值班通道失明需靠探针自身兜底）。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/config/config.go（parseAndValidateConfigBytes/validateAlertingConfig）【明示】（核对 2026-09-09）
+- **实测第 4 个坑（评审三项之外）**：v5.17.0 镜像 FROM scratch 且 Dockerfile 第 16 行把示例配置烤入 `/config/config.yaml`（7 个示例 endpoint）；配置加载顺序 `GATUS_CONFIG_PATH` → `config/config.yaml` → `config/config.yml`——不显式设 `GATUS_CONFIG_PATH=/config/config.yml` 时，挂载的 config.yml（.yml 后缀）永远不会被读，容器跑的是镜像示例。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/Dockerfile + https://github.com/TwiN/gatus/blob/v5.17.0/config/config.go（LoadConfiguration）【明示】+ 127 实测启动日志【实测】（核对 2026-09-09）
+- **127 实测全链路通过【实测】**：独立 project `gatus-contract-test`，sqlite 持久化生效（重启后 `Loaded 1 persisted triggered alerts`）；custom 告警 firing（`"status": "TRIGGERED"`）与翻转目标后 resolved（`"status": "RESOLVED"`）双 body 捕获留档；删探针重启终态 `Validated 3 endpoints` + `Deleted 1 endpoint statuses`。镜像 digest `sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512` 已 pin 入 `deploy/gatus/compose.gatus.yml`。
+  证据：`docs/测试证据/HOST2-127/gatus-v5170-契约修正/`（README + pull.log + 三阶段 log + 三份 statuses JSON + hook 原始日志）
+- **与 E-24 分工**：E-24 管 duty-adapter 侧语义（Send 判定 >399、lazy retry、配置分层分流），本条管 `deploy/gatus` 配置契约本身；两侧对 `[RESULT_ERRORS]` 原样注入无 JSON 转义的结论一致（firing body 非严格 JSON，adapter 须容错解析）。
+
+## E-24 M7-17 duty-adapter 预备调研：Gatus custom webhook 语义 + 企微/钉钉机器人约束 + 运行时内存形态【备料：AM7 增量 G1 待定，只调研不动码】
+
+> 取证说明（2026-09-09）：gatus.io 官方文档站为 JS 渲染，正文抓不到，占位符/默认值/重试语义全部降级到 **tag v5.17.0 源码直查**（快照经 gh-proxy codeload 镜像取得，留档 `var/m7-research/gatus-5.17.0/`）；钉钉开放平台文档站同为 JS 渲染，正文直读受限，其数字来自官方域页面/搜索快照，标注待实测终核。本机 GitHub 直连不通（E-16 同口径）。
+
+### 1) Gatus alerting.custom（v5.17.0 源码级，核对 2026-09-09）
+
+- 占位符全集（body 与 url 同串替换，`strings.ReplaceAll` 直替无转义）：`[ALERT_DESCRIPTION]`、`[ENDPOINT_NAME]`、`[ENDPOINT_GROUP]`、`[ENDPOINT_URL]`、`[RESULT_ERRORS]`（`result.Errors` 逗号 join）、`[ALERT_TRIGGERED_OR_RESOLVED]`（字面 `TRIGGERED`/`RESOLVED`，可经 `placeholders.ALERT_TRIGGERED_OR_RESOLVED.<状态>` 自定义映射）。**v5.17.0 不存在 `[ALERT_NAME]` 占位符**（AM7 方案若引用须改用 endpoint name/description 表达）。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/alerting/provider/custom/custom.go（buildHTTPRequest）【明示】+ 官方文档页 https://gatus.io/docs/alerting-custom 【明示】（核对 2026-09-09）
+- 出站请求形态：`url` 必填；`method` 未配置默认 GET；`body` 未配置为空串（**无默认 body 模板**）；`headers` 逐条 Set。Send 成败判定：传输错误或 **HTTP 状态码 >399** 即失败（错误信息带响应体），≤399 一律成功——**HTTP 200 + errcode≠0（企微/钉钉假成功）Gatus 记为已发送**，业务码校验只能由 127 duty-adapter 承接（呼应 E-21，Gatus 侧 body 模板解决不了）。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/alerting/provider/custom/custom.go（Send）【明示】（核对 2026-09-09）
+- 发送次数与重试语义：连续失败 ≥ `failure-threshold`（默认 3）才发第 1 条（resolved=false）；已 Triggered 的告警后续评估直接跳过（不重复通知）；发送失败 → Triggered 保持 false → 下个 endpoint `interval`（默认 60s）整条重试（源码注释自称 lazy retry：无退避、无次数上限，直到成功或恢复）；恢复侧连续成功 ≥ `success-threshold`（默认 2）即解除 Triggered 并删持久化记录（无论 resolved 是否发送成功）；`send-on-resolved` 默认 false，为 true 时每个事件最多再发 1 条 resolved，发送失败**不重试**（alert.go Triggered 字段注释明示该取舍）。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/watchdog/alerting.go + https://github.com/TwiN/gatus/blob/v5.17.0/alerting/alert/alert.go + https://github.com/TwiN/gatus/blob/v5.17.0/config/endpoint/endpoint.go【明示】（核对 2026-09-09）
+- 配置分层：provider 级 `DefaultConfig` + group `overrides`（按 endpoint group 匹配）+ per-alert `provider-override`，合并顺序 group override → alert override——127 单 URL 承接多 endpoint 时可用 group override 分流企微/钉钉通道。
+  来源：https://github.com/TwiN/gatus/blob/v5.17.0/alerting/provider/custom/custom.go（GetConfig/Merge/Override）【明示】（核对 2026-09-09）
+
+### 2) 企微/钉钉 markdown 消息约束（核对 2026-09-09）
+
+- 企业微信群机器人：`{"msgtype":"markdown","markdown":{"content":"…"}}`，content UTF-8 **≤4096 字节**；语法子集：1~6 级标题（# 后须空格）、加粗、链接、行内代码（不跨行）、引用、仅 3 种内置字体色（info/comment/warning）、`<@userid>`/`@all`；**不支持斜体与跨行代码块**（markdown_v2 才支持部分扩展且不支持字体色/@成员）；频控 20 条/分钟（E-21 已录）。
+  来源：https://developer.work.weixin.qq.com/document/path/91770 【明示】（核对 2026-09-09）
+- 钉钉自定义机器人：`{"msgtype":"markdown","markdown":{"title":"…","text":"…"}}`，title=首屏会话透出的展示内容（会话列表预览），text=markdown 正文；官方消息类型页标注 markdown 消息**最大不超过 5000 字符**；安全设置三选一（E-21 已录频控 20/min、超限限流 10 分钟）对 payload 的影响：**自定义关键词**（最多 10 个）要求消息至少含其中 1 个关键词才可发送；**加签**只改 URL（拼 `&timestamp=…&sign=…`，HmacSHA256(timestamp+"\n"+secret)→Base64→urlEncode）不改 payload；IP 白名单不改请求内容。
+  来源：https://open.dingtalk.com/document/isvapp/custom-bot-access-send-message + https://open.dingtalk.com/document/development/message-types-and-data-format + https://open.dingtalk.com/document/robots/customize-robot-security-settings + https://open.dingtalk.com/document/isvapp/customize-robot-security-settings-1 【明示（官方域页面/搜索快照；站体 JS 渲染直读受限，127 实发一条终核）】（核对 2026-09-09）
+- **一行结论**：同为"标题+正文"模型，企微单 content 字段 4096 字节 vs 钉钉 title+text 两字段 5000 字符——模板须按平台分支拼装；钉钉关键词模式匹配"消息"（title/text 均计入），模板里固定放业务关键词（如"值班"）最稳；两平台频控同为 20/min。
+
+### 3) duty-adapter 运行时内存形态对比（核对 2026-09-09）
+
+- Java/Spring Boot 3（最小形态：1 个 webhook POST 入口 + 业务码校验 + 拼 markdown + 出站 POST + 读快照）：基础 Boot 应用（内嵌 Tomcat）启动即 ~100~150MB（社区口径）；JVM 官方从不发布 RSS 数字（RSS=堆+Metaspace+线程栈+CodeCache+DirectBuffer，官方方法论用 `-XX:MaxMetaspaceSize` 封顶 + `-XX:NativeMemoryTracking=summary` 核账）。堆 -Xmx128m~256m + metaspace 封顶 128m 下，**稳态 RSS 可靠区间 ~150~400MB**（瘦依赖+小堆压榨态 150~250MB，常规余量态 250~400MB）。
+  来源：https://www.baeldung.com/spring-boot-memory-usage-optimization（基础应用 ~150MB）+ https://www.javacodegeeks.com/memory-usage-optimization-in-spring-boot.html（~100MB）+ https://spring.io/blog/2015/12/10/spring-boot-memory-performance（官方调优方法论）【明示（社区实测口径+官方方法论；127 实测后定门）】（核对 2026-09-09）
+- Go（同功能 net/http 单二进制）：hello world HTTP 服务 RSS ~4MB 量级（128MB MIPS 设备实测帖）；实用小服务稳态 **~10~30MB**（go vs java 对比 ~25MB；容器口径讨论同量级）；静态单二进制 ~2MB，`GOOS=linux GOARCH=amd64` 本机交叉编译，scp+systemd 或 FROM scratch 镜像均可。注意 Go VSS（虚拟内存）虚高是 arena 预留常态，报数以 RSS 为准。
+  来源：https://groups.google.com/g/golang-nuts/c/FCMPvaBMaMg/m/jEYVs_5GDAAJ（~4MB RSS）+ https://medium.com/deno-the-complete-reference/go-vs-java-native-http-server-performance-comparison-for-hello-world-case-2e30b5ec18ec（~25MB）+ https://news.ycombinator.com/item?id=31322073【明示（社区实测口径）】（核对 2026-09-09）
+- 中间态 GraalVM native-image（Spring Boot 3 官方支持路径）：RSS **~50~100MB**；额外代价=native 构建耗时与构建机内存（构建期比运行期贵一个量级）、反射/资源额外配置、与团队现有 Spring 调试/热部署习惯割裂。
+  来源：https://docs.spring.io/spring-boot/docs/3.2.3/reference/html/native-image.html（官方明示 smaller memory footprint）+ https://www.graalvm.org/jdk24/reference-manual/native-image/guides/optimize-memory-footprint/ + 社区口径 JVM 200~500MB vs native 10~100MB（javacodegeeks 2025-10）【明示】（核对 2026-09-09）
+
+**对比结论（两列代价如实并列，不下死命令，供 G1 权衡）**：
+
+| 维度 | Spring Boot 3（JVM） | Go net/http | （中间态）GraalVM native |
+|---|---|---|---|
+| 稳态 RSS | ~150~400MB | ~10~30MB | ~50~100MB |
+| 占 127 available ~2.8G | ~5%~14% | ~0.4%~1.1% | ~2%~4% |
+| 构建/部署面 | 需 JRE 基础镜像（127 有 docker 可跑） | 本机交叉编译单二进制，零镜像也可 systemd 直跑 | 栈不变，但需 native 构建链与额外配置 |
+| 团队栈匹配 | 全栈 Java/Spring，零新栈 | 新增构建链+运维技能+与 control-app 双栈并存 | 栈不变，构建/调优面变化 |
+
+- 若 Go 形态内存优势显著（本对比约一个数量级：10~30MB vs 150~400MB），其代价是引入新栈（Go 构建链、运维技能、双栈维护）；而 Spring Boot 3 常规小堆形态在 2.8G 余量下占 ~5%~14%，属可承受量级。duty-adapter 具体技术形态由 AM7 增量方案（G1 评审）裁定，本条仅备料。
+- **未核实项**：钉钉 5000 字符上限在 title/text 间的精确归属（官方站正文不可直读）；两平台真实 RSS 上限数字（均无官方发布，127 实测后定门）。

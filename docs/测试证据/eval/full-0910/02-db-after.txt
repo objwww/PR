@@ -1,0 +1,166 @@
+== eval_run ==
+ERROR:  column "report_digest" does not exist
+LINE 1: ...e, unresolved_rate, tp_count, fp_count, fn_count, report_dig...
+                                                             ^
+
+== eval_case_result ==
+-[ RECORD 1 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S1
+round_no       | 1
+verdict        | DECIDABLE
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 598
+rca_run_id     | 57f00da5-ce44-47ad-bfbc-9cc7ac072fb3
+failure_sample | {"reason": "root_cause_miss_or_unresolved", "actualRootCause": {"component": "unknown", "fault_type": "unresolved", "reason_code": "NO_CONFIRMED_ROOT_CAUSE"}, "actualSymptomCodes": []}
+created_at     | 2026-09-09 16:43:36.878319+00
+-[ RECORD 2 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S1
+round_no       | 2
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.892525+00
+-[ RECORD 3 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S2
+round_no       | 1
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.893589+00
+-[ RECORD 4 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S2
+round_no       | 2
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.894658+00
+-[ RECORD 5 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S3
+round_no       | 1
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.895821+00
+-[ RECORD 6 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S3
+round_no       | 2
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.896889+00
+-[ RECORD 7 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S4
+round_no       | 1
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.89781+00
+-[ RECORD 8 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S4
+round_no       | 2
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.898663+00
+-[ RECORD 9 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S5
+round_no       | 1
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.899439+00
+-[ RECORD 10 ]-+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+scenario_id    | S5
+round_no       | 2
+verdict        | TIMEOUT_OR_ABSENT
+root_cause_hit | f
+tp_count       | 0
+fp_count       | 0
+fn_count       | 1
+latency_ms     | 
+rca_run_id     | 
+failure_sample | {"reason": "gate_blocked"}
+created_at     | 2026-09-09 16:43:36.90078+00
+
+
+== incident (checkout/Arena) ==
+                             incident_key                              |  status  | generation |     episode_started_at     |          resolved_at          |         last_event_at         
+-----------------------------------------------------------------------+----------+------------+----------------------------+-------------------------------+-------------------------------
+ alertname=checkout|service=checkout                                   | FIRING   |          4 | 2026-09-09 16:33:02.984+00 |                               | 2026-09-09 16:33:34.554752+00
+ alertname=ArenaDuplicateOrders|service=order-arena|job=order-arena    | RESOLVED |         66 | 2026-09-09 15:18:58.841+00 | 2026-09-09 15:39:30.729285+00 | 2026-09-09 15:39:30.729285+00
+ alertname=ArenaOrderStuck|service=order-arena|job=order-arena         | RESOLVED |         20 | 2026-09-08 05:34:58.841+00 | 2026-09-08 05:49:59.317557+00 | 2026-09-08 05:49:59.317557+00
+ alertname=ArenaIllegalTransitions|service=order-arena|job=order-arena | RESOLVED |         15 | 2026-09-08 05:31:28.841+00 | 2026-09-08 05:33:06.979758+00 | 2026-09-08 05:32:00.465865+00
+ alertname=SlothBurnRateHighPage|service=checkout                      | RESOLVED |          0 | 2026-09-04 14:20:00+00     | 2026-09-04 15:50:28.127623+00 | 2026-09-04 15:50:28.127623+00
+(5 rows)
+
+
+== rca_run (batch window) ==
+                  id                  |             incident_id              |   state   | trigger_kind | engine |          created_at           |          started_at          |          finished_at          
+--------------------------------------+--------------------------------------+-----------+--------------+--------+-------------------------------+------------------------------+-------------------------------
+ 57f00da5-ce44-47ad-bfbc-9cc7ac072fb3 | 49ea2bf5-e7cc-4e62-9b93-eac85e161135 | SUCCEEDED | INITIAL      | NATIVE | 2026-09-09 16:33:34.554752+00 | 2026-09-09 16:33:35.08868+00 | 2026-09-09 16:33:35.153528+00
+(1 row)
+
+
+== alert_event (batch window) ==
+ generation | status |         starts_at          |        ends_at         |          recorded_at          |    an    | sev  
+------------+--------+----------------------------+------------------------+-------------------------------+----------+------
+          4 | firing | 2026-09-09 16:33:02.984+00 | 0001-01-03 00:00:00+00 | 2026-09-09 16:33:34.552208+00 | checkout | page
+(1 row)
+
+
+== chaos sessions non-CLOSED ==
+ non_closed 
+------------
+          0
+(1 row)
+
+
+== flagd ==
+paymentFailure = off
+paymentUnreachable = off
+
+== sloth windows @16:52 ==
+5m=0 30m=0.0968 1h=0.0492 2h=0.0222 6h=0.0798 1d=0.0208 3d=0.0070 (page alert branch2: 30m>0.06 AND 6h>0.06 = firing)

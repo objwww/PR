@@ -1,0 +1,37 @@
+=== DATE ===
+Wed Sep  9 08:22:47 UTC 2026
+=== DOCKER PS -A (gatus only) ===
+(no gatus container)
+=== DOCKER IMAGES (gatus only) ===
+(no gatus image)
+=== DOCKER VERSION ===
+Docker version 25.0.5, build 5dc9bcc
+Docker Compose version v2.27.1
+=== PYTHON3 ===
+Python 3.6.8
+=== NC ===
+/usr/bin/nc
+/usr/bin/ncat
+=== LISTEN PORTS (ss -tlnp) ===
+State      Recv-Q Send-Q Local Address:Port               Peer Address:Port              
+LISTEN     0      128    10.250.250.2:9100                     *:*                   users:(("docker-proxy",pid=31523,fd=4))
+LISTEN     0      128          *:111                      *:*                   users:(("rpcbind",pid=508,fd=8))
+LISTEN     0      128    127.0.0.1:1234                     *:*                   users:(("ifrit-agent",pid=19765,fd=7))
+LISTEN     0      128          *:22                       *:*                   users:(("sshd",pid=22451,fd=3))
+LISTEN     0      128       [::]:111                   [::]:*                   users:(("rpcbind",pid=508,fd=11))
+LISTEN     0      128       [::]:22                    [::]:*                   users:(("sshd",pid=22451,fd=4))
+=== /opt/gatus-contract-test exists? ===
+ls: cannot access /opt/gatus-contract-test: No such file or directory
+(not exists)
+=== /opt listing ===
+total 28
+drwxr-xr-x.  7 root root 4096 Aug 28 17:25 .
+dr-xr-xr-x. 20 root root 4096 Aug 17 22:07 ..
+drwxr-xr-x   4 root root 4096 Aug 30 05:47 backups
+drwx--x--x   4 root root 4096 Jun 27 22:37 containerd
+drwxr-xr-x   6 1001 1001 4096 Aug  9  2023 node16
+drwxr-xr-x   2 root root 4096 Aug 30 06:26 projects
+drwxr-xr-x   2 root root 4096 Aug 19 14:24 src
+=== DF /opt ===
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   18G   39G  32% /

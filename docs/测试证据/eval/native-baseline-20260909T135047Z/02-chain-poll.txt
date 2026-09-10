@@ -1,0 +1,182 @@
+===== Wed Sep  9 13:51:18 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3283MiB
+===== Wed Sep  9 13:56:18 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3270MiB
+===== Wed Sep  9 14:01:18 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3251MiB
+===== Wed Sep  9 14:06:19 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3278MiB
+===== Wed Sep  9 14:11:19 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788963079.265,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3264MiB
+===== Wed Sep  9 14:16:19 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788963379.494,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3257MiB
+===== Wed Sep  9 14:21:19 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788963679.717,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3270MiB
+===== Wed Sep  9 14:26:19 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788963979.945,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3242MiB
+===== Wed Sep  9 14:31:20 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788964280.153,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3262MiB
+===== Wed Sep  9 14:36:20 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788964580.388,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3236MiB
+===== Wed Sep  9 14:41:20 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788964880.645,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3262MiB
+===== Wed Sep  9 14:46:20 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788965180.854,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3265MiB
+===== Wed Sep  9 14:51:21 UTC 2026 =====
+-- firing --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"ALERTS","alertname":"checkout","alertstate":"firing","category":"availability","owner":"am0","service":"checkout","severity":"page","sloth_id":"checkout-availability","sloth_service":"checkout","sloth_severity":"page","sloth_slo":"availability"},"value":[1788965481.112,"1"]}]}}
+-- chain counts --
+incident=54
+rca_run=213
+rca_report=139
+eval_case_result=47
+-- batch tail --
+2026-09-09T13:50:54.665Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-09-09T13:50:54.896Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1fc8047f
+2026-09-09T13:50:54.900Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+-- mem --
+available=3268MiB

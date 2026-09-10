@@ -1,0 +1,20 @@
+===== Q: 11_final_tier1 =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1.2*1024*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 12_final_tier2 =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 768*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 13_final_tier3 =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 512*1024*1024 or on(instance) (ALERTS{alertname="MemoryGateTier3",alertstate="firing"} == 1 and on(instance) node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1536*1024*1024)
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 14_tier3_positive_probe_mult =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 100*1024*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"node_memory_MemAvailable_bytes","instance":"10.250.250.1:9100","job":"node-exporter-host1"},"value":[1788941749.192,"3744149504"]}]}}
+
+===== Q: 15_labels_of_series =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"}
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"node_memory_MemAvailable_bytes","instance":"10.250.250.1:9100","job":"node-exporter-host1"},"value":[1788941749.197,"3744149504"]}]}}
+

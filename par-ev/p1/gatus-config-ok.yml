@@ -1,0 +1,97 @@
+# M5-17 Gatus 外部探针配置（2C4G 独立故障域，预算 96MiB——架构 §内存表）
+#
+# 红线（INV-AM5-4 外部腿，调研 §7 裁定）：
+#   - Gatus 告警走**独立渠道**直达值班接收器（GATUS_ONCALL_WEBHOOK_URL），恢复同报；
+#   - **永不进本系统 Incident 管线**——本配置不得出现 control-app webhook 入口；
+#   - 不承载 RCA：纯黑盒探测 + 合成告警。
+#
+# 真栈证据 = E2E-AM5-08：停 195 control endpoint → 本探针阈值内告警与恢复（部署段）。
+# 凭据/目标全部 env 注入（值只进 2C4G .env；${VAR} 由 Gatus 的 os.ExpandEnv 展开，缺失展开为空）。
+#
+# 契约基线 = Gatus v5.17.0（官方文档与 tag 源码，逐条出处见 docs/告警-OSS-证据清单.md E-23）：
+#   - alerting 用 custom（不是 webhook）：url 必填、method 缺省 GET（本配置显式 POST）；
+#     body 占位符仅 6 个：[ALERT_TRIGGERED_OR_RESOLVED] [ENDPOINT_NAME] [ENDPOINT_GROUP]
+#     [ENDPOINT_URL] [ALERT_DESCRIPTION] [RESULT_ERRORS]（无 [ALERT_NAME]，勿用）
+#   - storage.type 仅 memory|sqlite|postgres（"file" 非法，启动即败）；sqlite 必须给 path
+#   - endpoint 必须声明 alerts:（type: custom）才会接收告警；阈值/恢复由 default-alert 合并
+# 已知坑（实测留证）：[RESULT_ERRORS] 原样注入不做 JSON 转义，连接类错误串自带引号
+#   （如 Get "http://..."），firing body 因此非严格 JSON——duty-adapter 须容错解析：
+#   先读 status 字段判状态，errors 视为不透明文本。
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+ui:
+  title: PR-Agent 外部探针（2C4G 独立故障域）
+
+alerting:
+  custom:
+    # 独立值班通道（custom = 任意 HTTP API 接收器；红线：永不指向 control-app）
+    url: ${GATUS_ONCALL_WEBHOOK_URL}
+    method: POST
+    headers:
+      Content-Type: application/json
+    # duty-adapter 解析契约：status = TRIGGERED|RESOLVED；endpoint/group/target 定位探针
+    body: |
+      {
+        "status": "[ALERT_TRIGGERED_OR_RESOLVED]",
+        "endpoint": "[ENDPOINT_NAME]",
+        "group": "[ENDPOINT_GROUP]",
+        "target": "[ENDPOINT_URL]",
+        "description": "[ALERT_DESCRIPTION]",
+        "errors": "[RESULT_ERRORS]"
+      }
+    default-alert:
+      enabled: true
+      send-on-resolved: true   # 阈值内恢复通知（E2E-AM5-08 恢复半边）
+      failure-threshold: 3     # 连续 3 败才告警（单抖动不扰值班）
+      success-threshold: 2     # 连续 2 胜才恢复
+
+endpoints:
+  # 控制面黑盒 health（停 195 control endpoint 的主探测腿）
+  - name: RCA_SYSTEM_control_health
+    group: control-plane
+    url: ${CONTROL_HEALTH_URL}
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 3000"
+    alerts:
+      # 继承 default-alert：3 败告警 / 2 胜恢复 / 恢复同报
+      - type: custom
+
+  # 告警链路自身（AM health；值班通道失明面独立可见）
+  - name: RCA_SYSTEM_alertmanager_health
+    group: control-plane
+    url: ${ALERTMANAGER_HEALTH_URL}
+    interval: 60s
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: custom
+
+  # 合成 canary（业务面探针；arena 前端经 envoy 的黑盒健康）
+  - name: business_canary_arena_frontend
+    group: business-canary
+    url: ${ARENA_HEALTH_URL}
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
+    alerts:
+      - type: custom
+
+  # [临时] 契约验证探针（resolved 阶段）：firing 验证完成后，URL 临时翻转到捕获监听
+  # （存活目标），触发恢复半边验证；验收后整个 endpoint 删除
+  - name: contract-probe
+    group: contract-test
+    url: http://host.docker.internal:18080/healthz
+    interval: 10s
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: custom
+        failure-threshold: 2   # 小阈值：约 20-30s 出 firing，缩短验证窗口
+        success-threshold: 2
+        send-on-resolved: true

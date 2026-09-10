@@ -1,0 +1,48 @@
+operator username parsed:  (password length: 0)
+=== 1. env operator 登录 ===
+csrf=200
+operator_login=401
+{"error":"login_failed"}
+=== 2. operator 会话建平台账号 test/12345678 ===
+{"error":"unauthorized"}
+create_user=401
+=== 3. 账号列表（应含 test，且无 password_hash 字段） ===
+{"error":"unauthorized"}
+list_users=401
+=== 4. operator 登出 ===
+logout=200
+=== 5. test 登录 ===
+csrf=200
+{"ok":true}
+test_login=200
+=== 6. GET /api/auth/me（test 会话） ===
+{"name":"test"}
+me=200
+=== 7. 不存在用户登录（期望 401） ===
+{"error":"login_failed"}
+ghost_login=401
+=== 8. GET /api/v1/incidents（列表首页） ===
+incidents=200
+{"items":[{"incidentId":"2c88e64b-0cb0-42e4-8133-16d61852ee5a","incidentKey":"alertname=Kill9DrillProbe10|service=order-arena|job=order-arena","alertname":"Kill9DrillProbe10","service":"order-arena","severity":"page","status":"FIRING","episodeStartedAt":"2026-09-10T10:30:08.238Z","lastEventAt":"2026-09-10T10:30:08.468513Z","resolvedAt":null,"receivedCount":1,"distinctEventCount":1,"notificationCount":0,"currentRcaRunId":null,"runState":null,"waitingReason":null},{"incidentId":"b0418135-2fac-4baa-b718-b239d7292025","incidentKey":"alertname=Kill9DrillProbe09|service=order-arena|job=order-arena","alertname":"Kill9DrillProbe09","service":"order-arena","severity":"page","status":"FIRING","episodeStartedAt":"2026-09-10T10:30:08.235Z","lastEventAt":"2026-09-10T10:30:08.461227Z","resolvedAt":null,"receivedCount":1,"distinctEventCount":1,"notificationCount":0,"currentRcaRunId":null,"runState":null,"waitingReason":null},{"incidentId":"e94867c8-2ac0-46ec-bf9f-1335f3e1882f","incidentKey":"alertname=Kill9DrillProbe07|service=order-arena|job=order-arena","alertname":"Kill9DrillProbe07","service":"order-arena","severity":"page","status":"FIRING","episodeStartedAt":"2026-09-10T10:30:08.225Z","lastEventAt":"2026-09-10T10:30:08.451210Z","resolvedAt":null,"receivedCount":1,"distinctEventCount":1,"notificationCount":0,"currentRcaRunId":null,"runState":null,"waitingReason":null},{"incidentId":"d8cb07de-6fdf-4fa3-affc-d771e1887f05","incidentKey":"alertname=Kill9DrillProbe08|service=order-arena|job
+=== 9. GET /api/v1/incidents/facets ===
+{"status":{"FIRING":59,"RESOLVED":6},"severity":{"warning":47,"page":18},"service":{"order-arena":14,"checkout":2,"probe":2,"am6e2e00-p0-20260908t173047z":1,"am6e2e00-p0-20260908t173434z":1,"am6e2e00-p0-20260908t173520z":1,"am6e2e01-native":1,"am6e2e01-post-20260908t173656z":1,"am6e2e01-post-20260908t175148z":1,"am6e2e01-s1-20260908t173553z":1,"am6e2e01-s1-20260908t173656z":1,"am6e2e01-s1-20260908t174202z":1,"am6e2e01-s1-20260908t174551z":1,"am6e2e01-s1-20260908t175148z":1,"am6e2e01-s2-20260908t173553z":1,"am6e2e01-s2-20260908t173656z":1,"am6e2e01-s2-20260908t174202z":1,"am6e2e01-s2-20260908t174551z":1,"am6e2e01-s2-20260908t175148z":1,"am6e2e01-s3-20260908t173553z":1,"am6e2e01-s3-20260908t173656z":1,"am6e2e01-s3-20260908t174202z":1,"am6e2e01-s3-20260908t174551z":1,"am6e2e01-s3-20260908t175148z":1,"am6e2e01-s4-20260908t173553z":1,"am6e2e01-s4-20260908t173656z":1,"am6e2e01-s4-20260908t174202z":1,"am6e2e01-s4-20260908t174551z":1,"am6e2e01-s4-20260908t175148z":1,"am6e2e01-s5-20260908t173553z":1,"am6e2e01-s5-20260908t173656z":1,"am6e2e01-s5-20260908t174202z":1,"am6e2e01-s5-20260908t174551z":1,"am6e2e01-s5-20260908t175148z":1,"am6e2e02-holmes-20260908t185601z":1,"am6e2e02-holmes-20260908t185858z":1,"am6e2e03-native":1,"am6e2e03-post-20260908t192428z":1,"am6e2e04-fb":1,"am6e2e05-shadow":1,"am6e2e05-shadow-20260908t221722z":1,"am6e2e05-shadow-20260908t222122z":1,"am6e2e07-final-20260909t011231z":1,"am6e2e00-nocanary-20260908t173434z":1,"am6e2e07-holmes-20260909t011231z":1,"am6e2e07-native-20260909t010941z":1,"am6e2e07-native-20260909t011231z":1,"am6e2e07-holmes-20260909t010941z":1,"am6e2e00-nocanary-20260908t173520z":1,"am6e2e00-p0-20260908T172614Z":1}}
+facets=200
+=== 10. GET /api/v1/incidents/summary ===
+summary=403
+{"error":"forbidden"}
+=== 11. GET /api/v1/overview/summary ===
+{"firingIncidents":59,"runs":{"active":2,"awaitingReview":168,"stuck":0,"failed24h":0,"oldestReadyWaitSeconds":260433},"cases":{"open":0,"unassigned":0,"overdue":0},"notifications":{"unread":14},"duty":{"oncall":"alice","snapshotValidUntil":"2026-09-10T14:23:38.457672983Z"},"alertTrend24h":[{"bucketStart":"2026-09-09T15:00:00Z","received":1,"resolved":1},{"bucketStart":"2026-09-09T16:00:00Z","received":1,"resolved":1},{"bucketStart":"2026-09-09T17:00:00Z","received":3,"resolved":3},{"bucketStart":"2026-09-09T18:00:00Z","received":5,"resolved":5},{"bucketStart":"2026-09-09T19:00:00Z","received":2,"resolved":2},{"bucketStart":"2026-09-09T20:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-09T21:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-09T22:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-09T23:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T00:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T01:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T02:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T03:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T04:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T05:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T06:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T07:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T08:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T09:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T10:00:00Z","received":11,"resolved":0},{"bucketStart":"2026-09-10T11:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T12:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T13:00:00Z","received":0,"resolved":0},{"bucketStart":"2026-09-10T14:00:00Z","received":0,"resolved":0}]}
+overview=200
+=== 12. 真实 incident 详情 ===
+picked incidentId=2c88e64b-0cb0-42e4-8133-16d61852ee5a
+detail=200
+{"incidentId":"2c88e64b-0cb0-42e4-8133-16d61852ee5a","incidentKey":"alertname=Kill9DrillProbe10|service=order-arena|job=order-arena","alertname":"Kill9DrillProbe10","service":"order-arena","severity":"page","status":"FIRING","episodeStartedAt":"2026-09-10T10:30:08.238Z","lastEventAt":"2026-09-10T10:30:08.468513Z","resolvedAt":null,"receivedCount":1,"distinctEventCount":1,"notificationCount":0,"currentRcaRunId":null,"runState":null,"waitingReason":null,"labels":{"job":"order-arena","service":"order-arena","instance":"order-arena:8080","severity":"page","alertname":"Kill9DrillProbe10","fault_type":"DRILL"},"annotations":{"summary":"kill9 crash recovery drill 10"},"timeline":[{"eventId":"cc41d4a7-42ac-4797-8c34-38e1ef969847","status":"firing","startsAt":"2026-09-10T10:30:08.238Z","endsAt":"0001-01-01T00:00:00Z","severity":"page","labels":{"job":"order-arena","service":"order-arena","instance":"order-arena:8080","severity":"page","alertname":"Kill9DrillProbe10","fault_type":"DRILL"},"annotations":{"summary":"kill9 crash recovery drill 10"}}],"run":null}
+=== 13. 数据溯源：summary.firingTotal vs 列表 firing 过滤 total ===
+summary.firingTotal = None
+firing_list=400
+list(status=firing).total = None
+=== 14. auth_event 审计落表（最近 6 条，不含口令） ===
+ERROR:  column "created_at" does not exist
+LINE 1: select actor, event_type, created_at from auth_event order b...
+                                  ^
+DONE

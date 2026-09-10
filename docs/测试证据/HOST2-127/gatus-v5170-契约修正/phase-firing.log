@@ -1,0 +1,51 @@
+=== DATE ===
+Wed Sep  9 08:31:36 UTC 2026
+=== docker compose ps ===
+NAME                          IMAGE                                                                                          COMMAND    SERVICE   CREATED          STATUS          PORTS
+gatus-contract-test-gatus-1   twinproduction/gatus@sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512   "/gatus"   gatus     51 seconds ago   Up 50 seconds   127.0.0.1:8081->8080/tcp
+=== gatus logs ===
+gatus-1  | 2026/09/09 08:30:46 [main.configureLogging] Log Level is set to INFO
+gatus-1  | 2026/09/09 08:30:46 [config.LoadConfiguration] Reading configuration from configFile=/config/config.yml
+gatus-1  | 2026/09/09 08:30:46 [config.validateAlertingConfig] configuredProviders=[custom]; ignoredProviders=[aws-ses discord email github gitlab gitea googlechat gotify jetbrainsspace matrix mattermost messagebird ntfy opsgenie pagerduty pushover slack teams teams-workflows telegram twilio zulip incident-io]
+gatus-1  | 2026/09/09 08:30:46 [config.validateEndpointsConfig] Validated 4 endpoints
+gatus-1  | 2026/09/09 08:30:46 [config.validateEndpointsConfig] Validated 0 external endpoints
+gatus-1  | 2026/09/09 08:30:47 [controller.Handle] Listening on 0.0.0.0:8080
+gatus-1  | 
+gatus-1  |  ┌───────────────────────────────────────────────────┐ 
+gatus-1  |  │                   Fiber v2.52.6                   │ 
+gatus-1  |  │                 http://[::]:8080                  │ 
+gatus-1  |  │                                                   │ 
+gatus-1  |  │ Handlers ............ 31  Processes ........... 1 │ 
+gatus-1  |  │ Prefork ....... Disabled  PID ................. 1 │ 
+gatus-1  |  └───────────────────────────────────────────────────┘ 
+gatus-1  | 
+gatus-1  | 2026/09/09 08:30:47 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:30:48 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_alertmanager_health; key=control-plane_rca-system-alertmanager-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:30:49 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:30:50 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:00 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:00 [watchdog.handleAlertsToTrigger] Sending custom alert because alert for endpoint with key=contract-test_contract-probe with description='' has been TRIGGERED
+gatus-1  | 2026/09/09 08:31:10 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:17 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:19 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:20 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:30 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+=== statuses API ===
+[{"name":"business_canary_arena_frontend","group":"business-canary","key":"business-canary_business-canary-arena-frontend","results":[{"status":200,"hostname":"host.docker.internal","duration":921828,"conditionResults":[{"condition":"[STATUS] == 200","success":true},{"condition":"[RESPONSE_TIME] \u003c 5000","success":true}],"success":true,"timestamp":"2026-09-09T08:30:49.369878041Z"},{"status":200,"hostname":"host.docker.internal","duration":884850,"conditionResults":[{"condition":"[STATUS] == 200","success":true},{"condition":"[RESPONSE_TIME] \u003c 5000","success":true}],"success":true,"timestamp":"2026-09-09T08:31:19.371974005Z"}]},{"name":"contract-probe","group":"contract-test","key":"contract-test_contract-probe","results":[{"hostname":"127.0.0.1","duration":280190,"errors":["Get \"http://127.0.0.1:1/\": dial tcp 127.0.0.1:1: connect: connection refused"],"conditionResults":[{"condition":"[STATUS] (0) == 200","success":false}],"success":false,"timestamp":"2026-09-09T08:30:50.146963273Z"},{"hostname":"127.0.0.1","duration":237064,"errors":["Get \"http://127.0.0.1:1/\": dial tcp 127.0.0.1:1: connect: connection refused"],"conditionResults":[{"condition":"[STATUS] (0) == 200","success":false}],"success":false,"timestamp":"2026-09-09T08:31:00.150302748Z"},{"hostname":"127.0.0.1","duration":237209,"errors":["Get \"http://127.0.0.1:1/\": dial tcp 127.0.0.1:1: connect: connection refused"],"conditionResults":[{"condition":"[STATUS] (0) == 200","success":false}],"success":false,"timestamp":"2026-09-09T08:31:10.148315483Z"},{"hostname":"127.0.0.1","duration":214618,"errors":["Get \"http://127.0.0.1:1/\": dial tcp 127.0.0.1:1: connect: connection refused"],"conditionResults":[{"condition":"[STATUS] (0) == 200","success":false}],"success":false,"timestamp":"2026-09-09T08:31:20.148392232Z"},{"hostname":"127.0.0.1","duration":288674,"errors":["Get \"http://127.0.0.1:1/\": dial tcp 127.0.0.1:1: connect: connection refused"],"conditionResults":[{"condition":"[STATUS] (0) == 200","success":false}],"success":false,"timestamp":"2026-09-09T08:31:30.150434091Z"}]},{"name":"RCA_SYSTEM_alertmanager_health","group":"control-plane","key":"control-plane_rca-system-alertmanager-health","results":[{"status":200,"hostname":"host.docker.internal","duration":882234,"conditionResults":[{"condition":"[STATUS] == 200","success":true}],"success":true,"timestamp":"2026-09-09T08:30:48.592100488Z"}]},{"name":"RCA_SYSTEM_control_health","group":"control-plane","key":"control-plane_rca-system-control-health","results":[{"status":200,"hostname":"host.docker.internal","duration":1484312,"conditionResults":[{"condition":"[STATUS] == 200","success":true},{"condition":"[RESPONSE_TIME] \u003c 3000","success":true}],"success":true,"timestamp":"2026-09-09T08:30:47.815299174Z"},{"status":200,"hostname":"host.docker.internal","duration":974515,"conditionResults":[{"condition":"[STATUS] == 200","success":true},{"condition":"[RESPONSE_TIME] \u003c 3000","success":true}],"success":true,"timestamp":"2026-09-09T08:31:17.818169538Z"}]}]
+=== hook log ===
+=== 2026-09-09T08:30:46.255329 | GET /healthz | from 127.0.0.1
+=== 2026-09-09T08:30:47.815008 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:48.591875 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:49.369650 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:00.151735 | POST /hook | from 172.26.0.2
+{
+  "status": "TRIGGERED",
+  "endpoint": "contract-probe",
+  "group": "contract-test",
+  "target": "http://127.0.0.1:1/",
+  "description": "",
+  "errors": "Get "http://127.0.0.1:1/": dial tcp 127.0.0.1:1: connect: connection refused"
+}
+
+=== 2026-09-09T08:31:17.817904 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:19.371673 | GET /healthz | from 172.26.0.2

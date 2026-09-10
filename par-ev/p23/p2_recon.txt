@@ -1,0 +1,118 @@
+===== [1] docker ps -a (names/image/status) =====
+node-exporter	prom/node-exporter:v1.9.1	Up 36 minutes
+deploy-control-app-1	pr-agent/control-app:0.0.1-SNAPSHOT	Up 7 hours
+deploy-otelcol-control-1	otel/opentelemetry-collector-contrib:0.104.0	Up 24 hours
+flagd-admin-am3	pr-agent/flagd-admin:0.0.1-SNAPSHOT	Up 3 days (healthy)
+litellm-am3	litellm/litellm:1.89.0	Up 31 hours (healthy)
+deploy-notify-app-1	pr-agent/notify-app:0.0.1-SNAPSHOT	Up 3 days
+alert-arena-chaos-admin-1	pr-agent/arena-chaos-admin:0.0.1-SNAPSHOT	Up 4 days (healthy)
+alert-order-arena-1	pr-agent/order-arena:0.0.1-SNAPSHOT	Up 13 hours (healthy)
+prometheus-am0	quay.io/prometheus/prometheus:v3.13.1	Up 36 minutes
+deploy-postgres-1	postgres:16-alpine	Up 4 days (healthy)
+alertmanager-am0	prom/alertmanager:latest	Up 26 hours
+otel-collector	ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.159.0	Up 5 days
+frontend-proxy	ghcr.io/open-telemetry/demo:latest-frontend-proxy	Up 5 days (healthy)
+load-generator	ghcr.io/open-telemetry/demo:latest-load-generator	Up 4 days (healthy)
+frontend	ghcr.io/open-telemetry/demo:latest-frontend	Up 4 days (healthy)
+recommendation	ghcr.io/open-telemetry/demo:latest-recommendation	Up 4 days (healthy)
+checkout	ghcr.io/open-telemetry/demo:latest-checkout	Up 4 days (healthy)
+product-catalog	ghcr.io/open-telemetry/demo:latest-product-catalog	Up 5 days (healthy)
+cart	ghcr.io/open-telemetry/demo:latest-cart	Up 5 days
+shipping	ghcr.io/open-telemetry/demo:latest-shipping	Up 5 days (healthy)
+ad	ghcr.io/open-telemetry/demo:latest-ad	Up 5 days (healthy)
+payment	ghcr.io/open-telemetry/demo:latest-payment	Up 5 days (healthy)
+flagd-ui	ghcr.io/open-telemetry/demo:latest-flagd-ui	Up 5 days (healthy)
+currency	ghcr.io/open-telemetry/demo:latest-currency	Up 5 days (healthy)
+quote	ghcr.io/open-telemetry/demo:latest-quote	Up 5 days (healthy)
+email	ghcr.io/open-telemetry/demo:latest-email	Up 5 days (healthy)
+image-provider	ghcr.io/open-telemetry/demo:latest-image-provider	Up 5 days (healthy)
+astronomy-db	postgres:18.4	Up 5 days (healthy)
+flagd	ghcr.io/open-feature/flagd:v0.16.0	Up 3 days
+telemetry-docs	ghcr.io/open-telemetry/demo:latest-telemetry-docs	Up 5 days (healthy)
+valkey-cart	ghcr.io/valkey-io/valkey:9.0.4-alpine3.23	Up 5 days (healthy)
+echo-receiver	wiremock/wiremock:3.9.1	Up 5 days (healthy)
+
+===== [2] prometheus-like running containers =====
+prometheus-am0
+PROM_CONTAINER=prometheus-am0
+
+===== [3] inspect mounts of prometheus-am0 =====
+bind|/opt/build/pr/deploy/alert/prometheus/prometheus.yml|/etc/prometheus/prometheus.yml|ro
+bind|/opt/build/pr/deploy/alert/prometheus/rules|/etc/prometheus/rules|ro
+volume|/var/lib/docker/volumes/11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104/_data|/prometheus|
+
+
+===== [3b] image =====
+quay.io/prometheus/prometheus:v3.13.1
+
+===== [3c] promtool version (inside container) =====
+promtool, version 3.13.1 (branch: HEAD, revision: 73ff57ce2b8161059ac7fe5188f03f1c3d22b29a)
+  build user:       root@6a98665b49f7
+  build date:       20260710-08:18:27
+  go version:       go1.26.5
+  platform:         linux/amd64
+
+===== [4] host prometheus.yml =====
+# AM0 独立 Prometheus（告警AM0-部署验证设计.md §6 S5）
+# 只抓 otel-collector 的 prometheus exporter（demo core 全部指标经 collector 汇出）
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:9464']
+  # AM2 靶场（order-arena 内嵌 /metrics；指标自带 service="order-arena" 公共标签）
+  - job_name: order-arena
+    static_configs:
+      - targets: ['order-arena:8080']
+  # HOST2(127=117.72.208.68) node_exporter，经 WireGuard 隧道（2026-09-09，Phase 11 MIG-01）
+  - job_name: node-exporter-host2
+    static_configs:
+      - targets: ['10.250.250.2:9100']
+  # HOST1(195) 本机 node_exporter，经隧道地址绑定（2026-09-09，BA-61 流程修正后）
+  - job_name: node-exporter-host1
+    static_configs:
+      - targets: ['10.250.250.1:9100']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager-am0:9093']
+
+===== [5] host rules dir =====
+total 28
+drwxrwxr-x 2 root root 4096 Sep  9 08:46 .
+drwxrwxr-x 3 root root 4096 Sep  9 15:37 ..
+-rw-rw-r-- 1 root root 1619 Sep  9 08:46 arena.yml
+-rw-rw-r-- 1 root root   11 Sep  9 08:46 empty-groups.yml
+-rw-rw-r-- 1 root root 8389 Sep  9 08:46 prometheus-rules-checkout.yml
+
+===== [6] df -h / =====
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   42G   16G  74% /
+
+===== [7] free -m =====
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3644         179         234        3900        3538
+Swap:          4095         416        3679
+
+===== [8] current ALERTS (head) =====
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== [9] container-internal rules path listing =====
+total 28
+drwxrwxr-x    2 root     root          4096 Sep  9 00:46 .
+drwxr-xr-x    1 nobody   nobody        4096 Sep  4 19:59 ..
+-rw-rw-r--    1 root     root          1619 Sep  9 00:46 arena.yml
+-rw-rw-r--    1 root     root            11 Sep  9 00:46 empty-groups.yml
+-rw-rw-r--    1 root     root          8389 Sep  9 00:46 prometheus-rules-checkout.yml
+total 20
+drwxr-xr-x    1 nobody   nobody        4096 Sep  4 19:59 .
+drwxr-xr-x    1 root     root          4096 Sep  4 19:59 ..
+-rw-rw-r--    1 root     root          1037 Sep  9 07:37 prometheus.yml
+drwxrwxr-x    2 root     root          4096 Sep  9 00:46 rules

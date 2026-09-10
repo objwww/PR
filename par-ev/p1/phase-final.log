@@ -1,0 +1,38 @@
+=== DATE ===
+Wed Sep  9 08:34:00 UTC 2026
+=== gatus logs (since restart) ===
+gatus-1  | 2026/09/09 08:33:01 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=2ms
+gatus-1  | 2026/09/09 08:33:09 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:10 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_alertmanager_health; key=control-plane_rca-system-alertmanager-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:11 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:11 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:21 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:31 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:35 Received termination signal, attempting to gracefully shut down
+gatus-1  | 2026/09/09 08:33:35 [controller.Handle] Server has shut down successfully
+gatus-1  | 2026/09/09 08:33:35 Shutting down
+gatus-1  | 2026/09/09 08:33:35 [main.configureLogging] Log Level is set to INFO
+gatus-1  | 2026/09/09 08:33:35 [config.LoadConfiguration] Reading configuration from configFile=/config/config.yml
+gatus-1  | 2026/09/09 08:33:35 [config.validateAlertingConfig] configuredProviders=[custom]; ignoredProviders=[aws-ses discord email github gitlab gitea googlechat gotify jetbrainsspace matrix mattermost messagebird ntfy opsgenie pagerduty pushover slack teams teams-workflows telegram twilio zulip incident-io]
+gatus-1  | 2026/09/09 08:33:35 [config.validateEndpointsConfig] Validated 3 endpoints
+gatus-1  | 2026/09/09 08:33:35 [config.validateEndpointsConfig] Validated 0 external endpoints
+gatus-1  | 2026/09/09 08:33:35 [main.initializeStorage] Deleted 1 endpoint statuses because their matching endpoints no longer existed
+gatus-1  | 2026/09/09 08:33:35 [controller.Handle] Listening on 0.0.0.0:8080
+gatus-1  | 
+gatus-1  |  ┌───────────────────────────────────────────────────┐ 
+gatus-1  |  │                   Fiber v2.52.6                   │ 
+gatus-1  |  │                 http://[::]:8080                  │ 
+gatus-1  |  │                                                   │ 
+gatus-1  |  │ Handlers ............ 31  Processes ........... 1 │ 
+gatus-1  |  │ Prefork ....... Disabled  PID ................. 1 │ 
+gatus-1  |  └───────────────────────────────────────────────────┘ 
+gatus-1  | 
+gatus-1  | 2026/09/09 08:33:36 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=2ms
+gatus-1  | 2026/09/09 08:33:37 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_alertmanager_health; key=control-plane_rca-system-alertmanager-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:33:37 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+=== statuses API ===
+(saved)
+=== sqlite file in volume ===
+OCI runtime exec failed: exec failed: unable to start container process: exec: "ls": executable file not found in $PATH: unknown
+=== full hook log size ===
+49 /tmp/gatus-hook.log

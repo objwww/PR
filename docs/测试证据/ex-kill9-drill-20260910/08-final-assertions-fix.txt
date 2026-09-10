@@ -1,0 +1,98 @@
+=== investigation_result columns ===
+                     Table "public.rca_investigation_result"
+       Column        |           Type           | Collation | Nullable | Default 
+---------------------+--------------------------+-----------+----------+---------
+ id                  | uuid                     |           | not null | 
+ attempt_id          | uuid                     |           | not null | 
+ run_id              | uuid                     |           | not null | 
+ observed_generation | integer                  |           | not null | 
+ schema_version      | integer                  |           | not null | 
+ execution_status    | character varying(16)    |           | not null | 
+ validation_status   | character varying(32)    |           | not null | 
+ validation_errors   | jsonb                    |           |          | 
+ package_json        | jsonb                    |           |          | 
+ raw_artifact_ref    | text                     |           |          | 
+ raw_digest          | character(64)            |           |          | 
+ payload_digest      | character(64)            |           |          | 
+ model               | text                     |           |          | 
+ usage_json          | jsonb                    |           |          | 
+ created_at          | timestamp with time zone |           | not null | 
+ finished_at         | timestamp with time zone |           |          | 
+Indexes:
+    "rca_investigation_result_pkey" PRIMARY KEY, btree (id)
+    "ix_rca_ir_run" btree (run_id, created_at DESC)
+    "ix_rca_ir_started" btree (created_at) WHERE execution_status::text = 'STARTED'::text
+    "uq_rca_investigation_result_attempt" UNIQUE CONSTRAINT, btree (attempt_id)
+Check constraints:
+    "ck_rca_ir_execution" CHECK (execution_status::text = ANY (ARRAY['STARTED'::character varying, 'SUCCEEDED'::character varying, 'FAILED'::character varying, 'TIMEOUT'::character varying, 'UNKNOWN'::character varying, 'CANCELLED'::character varying]::text[]))
+    "ck_rca_ir_execution_lifecycle" CHECK (execution_status::text = 'STARTED'::text AND finished_at IS NULL OR execution_status::text <> 'STARTED'::text AND finished_at IS NOT NULL)
+    "ck_rca_ir_schema_version" CHECK (schema_version > 0)
+    "ck_rca_ir_validated_has_package" CHECK (validation_status::text <> 'STRUCTURE_VALIDATED'::text OR package_json IS NOT NULL)
+    "ck_rca_ir_validation" CHECK (validation_status::text = ANY (ARRAY['NOT_VALIDATED'::character varying, 'STRUCTURE_VALIDATED'::character varying, 'REJECTED_MALFORMED'::character varying, 'REJECTED_OVERSIZE'::character varying, 'REJECTED_SCHEMA_VERSION'::character varying, 'REJECTED_SCHEMA_MISMATCH'::character varying]::text[]))
+Foreign-key constraints:
+    "rca_investigation_result_attempt_id_fkey" FOREIGN KEY (attempt_id) REFERENCES rca_attempt(id)
+    "rca_investigation_result_run_id_fkey" FOREIGN KEY (run_id) REFERENCES rca_run(id)
+Referenced by:
+    TABLE "rca_tool_call" CONSTRAINT "rca_tool_call_investigation_result_id_fkey" FOREIGN KEY (investigation_result_id) REFERENCES rca_investigation_result(id)
+
+=== investigation rows for crashed run ===
+                  id                  | execution_status |  validation_status  |              attempt_id              
+--------------------------------------+------------------+---------------------+--------------------------------------
+ 725ac4d7-f27d-4954-9bd5-95dafee0850f | UNKNOWN          | NOT_VALIDATED       | 725ac4d7-f27d-4954-9bd5-95dafee0850f
+ 7fb02867-225b-4eb0-bffe-029effd9287a | SUCCEEDED        | STRUCTURE_VALIDATED | 7fb02867-225b-4eb0-bffe-029effd9287a
+(2 rows)
+
+=== control run (Probe04, never crashed) subtask states + ledger for comparison ===
+      task_key       | state 
+---------------------+-------
+ NATIVE_INVESTIGATE  | DONE
+ investigate-logs    | DEAD
+ investigate-change  | DEAD
+ investigate-metrics | DONE
+(4 rows)
+
+ call_seq |    tool_name     |  state  |  reason_code  
+----------+------------------+---------+---------------
+        1 | logs.query       | FAILED  | INVALID_INPUT
+        2 | change.query     | FAILED  | INVALID_INPUT
+        3 | prometheus.query | SUCCESS | 
+(3 rows)
+
+=== budget entry columns + rows for crashed run ===
+                       Table "public.run_budget_entry"
+     Column      |           Type           | Collation | Nullable | Default 
+-----------------+--------------------------+-----------+----------+---------
+ id              | uuid                     |           | not null | 
+ run_id          | uuid                     |           | not null | 
+ task_id         | uuid                     |           | not null | 
+ attempt_id      | uuid                     |           | not null | 
+ call_seq        | bigint                   |           | not null | 
+ budget_kind     | character varying(16)    |           | not null | 
+ state           | character varying(16)    |           | not null | 
+ reserved_units  | bigint                   |           | not null | 
+ committed_units | bigint                   |           |          | 
+ created_at      | timestamp with time zone |           | not null | now()
+ settled_at      | timestamp with time zone |           |          | 
+Indexes:
+    "pk_run_budget_entry" PRIMARY KEY, btree (id)
+    "ix_run_budget_entry_stale" btree (created_at) WHERE state::text = ANY (ARRAY['RESERVED'::character varying, 'PROVISIONAL'::character varying]::text[])
+    "uq_run_budget_entry_key" UNIQUE CONSTRAINT, btree (run_id, task_id, attempt_id, call_seq, budget_kind)
+Check constraints:
+    "ck_run_budget_entry_kind" CHECK (budget_kind::text = ANY (ARRAY['STEP'::character varying, 'TOOL_CALL'::character varying, 'EVIDENCE'::character varying, 'SUBTASK'::character varying, 'TOKEN'::character varying, 'REPORT'::character varying]::text[]))
+    "ck_run_budget_entry_reserved" CHECK (reserved_units > 0)
+    "ck_run_budget_entry_settled" CHECK (state::text = 'RESERVED'::text AND committed_units IS NULL AND settled_at IS NULL OR state::text = 'COMMITTED'::text AND committed_units IS NOT NULL AND committed_units >= 0 AND settled_at IS NOT NULL OR state::text = 'RELEASED'::text AND committed_units IS NULL AND settled_at IS NOT NULL OR state::text = 'PROVISIONAL'::text AND committed_units IS NULL AND settled_at IS NULL OR state::text = 'UNMATCHED'::text AND committed_units IS NULL AND settled_at IS NOT NULL)
+    "ck_run_budget_entry_state" CHECK (state::text = ANY (ARRAY['RESERVED'::character varying, 'COMMITTED'::character varying, 'RELEASED'::character varying, 'PROVISIONAL'::character varying, 'UNMATCHED'::character varying]::text[]))
+
+                  id                  |                run_id                |               task_id                |              attempt_id              | call_seq | budget_kind |   state   | reserved_units | committed_units |          created_at           |          settled_at           
+--------------------------------------+--------------------------------------+--------------------------------------+--------------------------------------+----------+-------------+-----------+----------------+-----------------+-------------------------------+-------------------------------
+ dbfb3668-c374-497c-8205-0b0cacd323f9 | 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | 2d555469-3997-47e0-ad91-2e524a9c0931 | 725ac4d7-f27d-4954-9bd5-95dafee0850f |        1 | TOOL_CALL   | COMMITTED |              1 |               1 | 2026-09-10 10:30:09.001078+00 | 2026-09-10 10:30:09.010526+00
+ 4435741e-2193-4dae-a435-14f03298808f | 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | a04e4459-c322-418c-8038-ae98b3ff96dc | 7fb02867-225b-4eb0-bffe-029effd9287a |        2 | TOOL_CALL   | RELEASED  |              1 |                 | 2026-09-10 10:41:09.270154+00 | 2026-09-10 10:41:09.276679+00
+ 58b3e64c-033e-45c6-9113-dd8be27ee82f | 05b2d85e-3946-4bc2-bad1-1c094d8344c1 | ffc669cc-db16-4555-bd41-1455a48018fe | 7fb02867-225b-4eb0-bffe-029effd9287a |        3 | TOOL_CALL   | RELEASED  |              1 |                 | 2026-09-10 10:41:09.284556+00 | 2026-09-10 10:41:09.289161+00
+(3 rows)
+
+=== incident current_rca_run_id for a control drill incident ===
+                          incident_key                           | status | current_rca_run_id 
+-----------------------------------------------------------------+--------+--------------------
+ alertname=Kill9DrillProbe04|service=order-arena|job=order-arena | FIRING | 
+(1 row)
+

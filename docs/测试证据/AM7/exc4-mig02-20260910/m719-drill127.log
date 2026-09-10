@@ -1,0 +1,12 @@
+[09:10:35] == [A] hook 试射（firing；Gatus body 形态含 [RESULT_ERRORS] 引号坑样本） ==
+[09:10:35] HOOK_A: {"ok":false,"detail":"env_missing:K_DUTY_DEAD_WEBHOOK","delivered":false}
+HTTP=503
+[09:10:38] SINK_LOG: 2026-09-10T09:07:58.256857 POST /ok bytes=2 -> 200 2026-09-10T09:07:58.262335 POST /rl bytes=2 -> 200 
+[09:10:38] ADAPTER_LOG: 2026-09-10T09:08:25.835Z  INFO 1 --- [duty-adapter] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms 2026-09-10T09:10:35.644Z  WARN 1 --- [duty-adapter] [nio-8080-exec-2] c.o.pr.duty.hook.DutyHookController      : DUTY_CHANNEL_FAILED channel=rl-bot detail=io:ConnectException 2026-09-10T09:10:35.648Z  WARN 1 --- [duty-adapter] [nio-8080-exec-2] c.o.pr.duty.hook.DutyHookController      : DUTY_CHANNEL_FAILED channel=echo-bot detail=io:ConnectException 2026-09-10T09:10:35.648Z  WARN 1 --- [duty-adapter] [nio-8080-exec-2] c.o.pr.duty.hook.DutyHookController      : DUTY_CHANNEL_FAILED channel=dead-bot detail=env_missing:K_DUTY_DEAD_WEBHOOK 2026-09-10T09:10:35.841Z ERROR 1 --- [duty-adapter] [nio-8080-exec-2] c.o.pr.duty.hook.DutyHookController      : DUTY_HOOK_EXHAUSTED endpoint=RCA_SYSTEM_control_health status=TRIGGERED detail=env_missing:K_DUTY_DEAD_WEBHOOK 
+[09:10:38] PHASE_A_DONE
+[09:13:09] == [A] hook 试射（firing；Gatus body 形态含 [RESULT_ERRORS] 引号坑样本） ==
+[09:13:09] HOOK_A: {"channel":"echo-bot","delivered":true,"ok":true}
+HTTP=202
+[09:13:12] SINK_LOG: 2026-09-10T09:07:58.262335 POST /rl bytes=2 -> 200 2026-09-10T09:11:20.476748 POST /rl bytes=2 -> 200 2026-09-10T09:13:09.152642 POST /rl bytes=333 -> 200 2026-09-10T09:13:09.246724 POST /ok bytes=333 -> 200 
+[09:13:12] ADAPTER_LOG: 2026-09-10T09:11:46.547Z  INFO 1 --- [duty-adapter] [           main] c.objwww.pr.duty.DutyAdapterApplication  : Started DutyAdapterApplication in 21.398 seconds (process running for 25.119) 2026-09-10T09:11:48.034Z  INFO 1 --- [duty-adapter] [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet' 2026-09-10T09:11:48.035Z  INFO 1 --- [duty-adapter] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet' 2026-09-10T09:11:48.036Z  INFO 1 --- [duty-adapter] [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms 2026-09-10T09:13:09.243Z  WARN 1 --- [duty-adapter] [nio-8080-exec-8] c.o.pr.duty.hook.DutyHookController      : DUTY_CHANNEL_FAILED channel=rl-bot detail=errcode_45009:api rate limited 
+[09:13:12] PHASE_A_DONE

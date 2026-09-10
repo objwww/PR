@@ -1,0 +1,173 @@
+===== [M1] dangling volumes metadata (CreatedAt/Labels) =====
+--- 0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4
+created=2026-08-29T16:13:52+08:00 labels={"com.docker.volume.anonymous":""}
+--- 1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927
+created=2026-08-29T14:33:25+08:00 labels={"com.docker.volume.anonymous":""}
+--- 2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c
+created=2026-09-05T13:04:39+08:00 labels={"com.docker.volume.anonymous":""}
+--- 4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78
+created=2026-09-05T13:08:30+08:00 labels={"com.docker.volume.anonymous":""}
+--- 5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535
+created=2026-08-30T18:25:46+08:00 labels={"com.docker.volume.anonymous":""}
+--- 5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937
+created=2026-08-29T14:19:23+08:00 labels={"com.docker.volume.anonymous":""}
+--- 5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7
+created=2026-08-30T18:10:55+08:00 labels={"com.docker.volume.anonymous":""}
+--- 6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea
+created=2026-09-05T22:07:47+08:00 labels={"com.docker.volume.anonymous":""}
+--- 8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d
+created=2026-08-29T16:13:21+08:00 labels={"com.docker.volume.anonymous":""}
+--- 9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09
+created=2026-09-03T16:57:33+08:00 labels={"com.docker.volume.anonymous":""}
+--- 23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186
+created=2026-09-03T19:58:27+08:00 labels={"com.docker.volume.anonymous":""}
+--- 41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319
+created=2026-09-05T13:02:12+08:00 labels={"com.docker.volume.anonymous":""}
+--- 56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747
+created=2026-09-05T13:01:35+08:00 labels={"com.docker.volume.anonymous":""}
+--- 99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c
+created=2026-08-30T18:26:10+08:00 labels={"com.docker.volume.anonymous":""}
+--- 251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64
+created=2026-08-29T16:14:50+08:00 labels={"com.docker.volume.anonymous":""}
+--- 0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d
+created=2026-09-05T13:00:04+08:00 labels={"com.docker.volume.anonymous":""}
+--- 347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021
+created=2026-09-03T17:02:52+08:00 labels={"com.docker.volume.anonymous":""}
+--- 817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa
+created=2026-09-05T13:05:13+08:00 labels={"com.docker.volume.anonymous":""}
+--- 848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371
+created=2026-08-29T16:14:18+08:00 labels={"com.docker.volume.anonymous":""}
+--- 998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a
+created=2026-09-03T17:05:32+08:00 labels={"com.docker.volume.anonymous":""}
+--- 3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf
+created=2026-08-30T07:53:28+08:00 labels={"com.docker.volume.anonymous":""}
+--- 6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5
+created=2026-09-05T13:01:53+08:00 labels={"com.docker.volume.anonymous":""}
+--- a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c
+created=2026-09-05T13:01:16+08:00 labels={"com.docker.volume.anonymous":""}
+--- adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778
+created=2026-08-13T22:11:57+08:00 labels={"com.docker.volume.anonymous":""}
+--- b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f
+created=2026-08-31T00:32:32+08:00 labels={"com.docker.volume.anonymous":""}
+--- b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368
+created=2026-09-05T02:00:37+08:00 labels={"com.docker.volume.anonymous":""}
+--- c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b
+created=2026-09-05T02:05:42+08:00 labels={"com.docker.volume.anonymous":""}
+--- cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd
+created=2026-09-05T01:57:14+08:00 labels={"com.docker.volume.anonymous":""}
+--- e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc
+created=2026-08-30T16:33:51+08:00 labels={"com.docker.volume.anonymous":""}
+--- f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253
+created=2026-09-03T19:50:14+08:00 labels={"com.docker.volume.anonymous":""}
+--- f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8
+created=2026-08-30T07:55:26+08:00 labels={"com.docker.volume.anonymous":""}
+--- f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247
+created=2026-09-05T12:56:08+08:00 labels={"com.docker.volume.anonymous":""}
+--- hotel-platform-obs_hotel-logs
+created=2026-08-13T15:38:00+08:00 labels={"com.docker.compose.project":"hotel-platform-obs","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"hotel-logs"}
+--- hotel-platform-obs_hotel-otelcol-state
+created=2026-08-13T15:38:00+08:00 labels={"com.docker.compose.project":"hotel-platform-obs","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"hotel-otelcol-state"}
+--- hotel-platform_hotel-logs
+created=2026-08-09T19:47:42+08:00 labels={"com.docker.compose.project":"hotel-platform","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"hotel-logs"}
+--- hotel-platform_hotel-media
+created=2026-08-09T19:47:42+08:00 labels={"com.docker.compose.project":"hotel-platform","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"hotel-media"}
+--- hotel-platform_hotel-mysql
+created=2026-08-09T19:47:42+08:00 labels={"com.docker.compose.project":"hotel-platform","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"hotel-mysql"}
+--- m2repo
+created=2026-08-30T18:00:46+08:00 labels=null
+
+===== [M2] in-use volumes metadata =====
+--- deploy_cas-data
+created=2026-08-30T19:26:50+08:00 labels={"com.docker.compose.project":"deploy","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"cas-data"}
+--- deploy_pg-data
+created=2026-08-30T19:26:50+08:00 labels={"com.docker.compose.project":"deploy","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"pg-data"}
+--- alert_litellm-logs
+created=2026-09-05T22:07:47+08:00 labels={"com.docker.compose.project":"alert","com.docker.compose.version":"2.27.1","com.docker.compose.volume":"litellm-logs"}
+--- 11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104
+created=2026-09-05T03:59:04+08:00 labels={"com.docker.volume.anonymous":""}
+--- 09ffdba56f7dc3921937a6d2e86bcb4130ddc7c937e766fbaf090366fd08bf0d
+created=2026-09-04T21:01:37+08:00 labels={"com.docker.volume.anonymous":""}
+--- 9e8630d0ec29055b87b8905ea0f0bc730416af903100e41d96f863d73713e34d
+created=2026-09-03T19:41:25+08:00 labels={"com.docker.volume.anonymous":""}
+
+===== [M3] compose files under /opt (maxdepth 5, light find) =====
+/opt/deploy/mall-app/docker-compose.yml
+/opt/projects/alert_agent/compose.am0-override.yaml
+/opt/projects/pr_agent_it/deploy/gatus/compose.gatus.yml
+/opt/projects/pr_agent_it/deploy/alert/docker-compose.yml
+/opt/projects/pr_agent_it/deploy/docker-compose.yml
+/opt/observability/skywalking/docker-compose.yml
+/opt/build/pr.bak-20260907T134128Z/deploy/alert/docker-compose.yml
+/opt/build/pr.bak-20260907T134128Z/deploy/docker-compose.yml
+/opt/build/pr-sync-stage/deploy/alert/docker-compose.yml
+/opt/build/pr-sync-stage/deploy/docker-compose.yml
+/opt/build/opentelemetry-demo/compose.tests.yaml
+/opt/build/opentelemetry-demo/compose.yaml
+/opt/build/opentelemetry-demo/compose.profiling.yaml
+/opt/build/opentelemetry-demo/compose.agent.yaml
+/opt/build/opentelemetry-demo/compose.extras.yaml
+/opt/build/opentelemetry-demo/compose.full.yaml
+/opt/build/opentelemetry-demo/compose.observability.yaml
+/opt/build/pr/am5-stage/deploy/docker-compose.yml
+/opt/build/pr/deploy/gatus/compose.gatus.yml
+/opt/build/pr/deploy/alert/docker-compose.yml
+/opt/build/pr/deploy/docker-compose.yml
+
+===== [M4] grep hotel / m2repo refs in those compose files =====
+HIT: /opt/observability/skywalking/docker-compose.yml
+30:      SW_LOG_LAL_FILES: hotel-platform
+(no HIT above = no compose decl found)
+
+===== [M5] /root one-level du =====
+48K	/root/agent-observability/
+52K	/root/deployment/
+56K	/root/hotel-obs/
+80K	/root/logs/
+80K	/root/mall-tools-mcp-server/
+116K	/root/agent-model-openai/
+144K	/root/agent-eval-core/
+340K	/root/agent-persistence-postgres/
+420K	/root/after-sales-diagnosis-core/
+992K	/root/after-sales-agent-app/
+1.3M	/root/agent-runner-core/
+30M	/root/go/
+32M	/root/hotel/
+47M	/root/hotel-src/
+
+===== [M6] /root files >20M (maxdepth 1) =====
+
+===== [M7] /opt one-level du =====
+0	/opt/maven
+4.0K	/opt/jdk21-setup.sh
+4.0K	/opt/rh
+16K	/opt/containerd
+48K	/opt/skywalking-tools
+64K	/opt/mellanox
+8.7M	/opt/apache-maven-3.9.9-bin.tar.gz
+11M	/opt/apache-maven-3.9.9
+20M	/opt/deploy
+45M	/opt/src
+65M	/opt/observability
+134M	/opt/m2
+136M	/opt/projects
+161M	/opt/node18
+192M	/opt/node22
+198M	/opt/jdk21.tar.gz
+250M	/opt/m2repo
+346M	/opt/jdk-21.0.12.1+1
+399M	/opt/node16
+5.8G	/opt/build
+6.4G	/opt/backups
+
+===== [M8] /var/lib/docker one-level du =====
+4.0K	/var/lib/docker/engine-id
+4.0K	/var/lib/docker/runtimes
+4.0K	/var/lib/docker/swarm
+8.0K	/var/lib/docker/tmp
+16K	/var/lib/docker/plugins
+268K	/var/lib/docker/network
+28M	/var/lib/docker/image
+31M	/var/lib/docker/buildkit
+99M	/var/lib/docker/containers
+4.5G	/var/lib/docker/volumes
+19G	/var/lib/docker/overlay2

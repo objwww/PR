@@ -1,0 +1,58 @@
+=== 0. 未认证访问 /api/eval/runs（期望 401） ===
+anon_eval=401
+anon_agentops=401
+=== 1. test 平台账号登录 ===
+login=200
+{"name":"test"}
+me=200
+=== 2. GET /api/eval/runs（应含 full-0910b） ===
+eval_runs=200
+{"items":[{"runId":"439f2cb2-5755-4068-8519-3324e44c2914","datasetVersion":"full-0910b","registryDigest":"171a4d75596fb8cbd3cf4f701ca33725f12fc1341ca56c1ddf9de5477440edb8","model":"glm-5","promptVersion":"am3-rca-v2","configDigest":"b05cb5ae4524a735bd44c5a64548c0e123ee9c5af2b9f3c14bfb77307bb8a5f3","state":"SUCCEEDED","startedAt":"2026-09-09T16:59:22.158373Z","finishedAt":"2026-09-09T19:08:59.406099Z","coverage":1.0,"conditionalAccuracy":0.0,"endToEndHitRate":0.0,"unresolvedRate":0.0,"tp":0,"fp":0,"fn":10},{"runId":"fd72d103-10a4-4989-9c81-3fe88e965aa3","datasetVersion":"full-0910","registryDigest":"136f60af443b760e06e0674611237bed197e2f8c28ee1845993f31cb9d3957ba","model":"glm-5","promptVersion":"am3-rca-v2","configDigest":"29e826d2a20449bb053f4be1b1a3b46cbced9f054ee2c26ebeb50408732c16b7","state":"SUCCEEDED","startedAt":"2026-09-09T16:29:03.446459Z","finishedAt":"2026-09-09T16:43:36.911122Z","coverage":0.1,"conditionalAccuracy":0.0,"endToEndHitRate":0.0,"unresolvedRate":0.0,"tp":0,"fp":0,"fn":10},{"runId":"e512a37c-656b-4d91-9daf-f67db6393223","datasetVersion":"s3fix-0909","registryDigest":"c37e00453c05ad64801b981c5dcbd895b0a67ac880b12aadbe47127cddbe1f0d","model":"glm-5","promptVers
+total items = 23
+row: {"runId": "439f2cb2-5755-4068-8519-3324e44c2914", "datasetVersion": "full-0910b", "registryDigest": "171a4d75596fb8cbd3cf4f701ca33725f12fc1341ca56c1ddf9de5477440edb8", "model": "glm-5", "promptVersion
+row: {"runId": "fd72d103-10a4-4989-9c81-3fe88e965aa3", "datasetVersion": "full-0910", "registryDigest": "136f60af443b760e06e0674611237bed197e2f8c28ee1845993f31cb9d3957ba", "model": "glm-5", "promptVersion"
+row: {"runId": "e512a37c-656b-4d91-9daf-f67db6393223", "datasetVersion": "s3fix-0909", "registryDigest": "c37e00453c05ad64801b981c5dcbd895b0a67ac880b12aadbe47127cddbe1f0d", "model": "glm-5", "promptVersion
+row: {"runId": "0cb7c43b-fc95-43e0-acb0-96e3e352013e", "datasetVersion": "glm5-full-0909", "registryDigest": "136f60af443b760e06e0674611237bed197e2f8c28ee1845993f31cb9d3957ba", "model": "glm-5", "promptVer
+row: {"runId": "2deb71ea-5abe-4004-9326-a54f61700492", "datasetVersion": "am3-e2e05-0905", "registryDigest": "c37e00453c05ad64801b981c5dcbd895b0a67ac880b12aadbe47127cddbe1f0d", "model": "deepseek-v3", "pro
+full-0910b present = True
+=== 3. 挑真实 eval run：/api/eval/runs/{id} 与 /cases ===
+picked evalRunId=439f2cb2-5755-4068-8519-3324e44c2914
+eval_run_detail=200
+{"runId":"439f2cb2-5755-4068-8519-3324e44c2914","datasetVersion":"full-0910b","registryDigest":"171a4d75596fb8cbd3cf4f701ca33725f12fc1341ca56c1ddf9de5477440edb8","model":"glm-5","promptVersion":"am3-rca-v2","configDigest":"b05cb5ae4524a735bd44c5a64548c0e123ee9c5af2b9f3c14bfb77307bb8a5f3","state":"SUCCEEDED","startedAt":"2026-09-09T16:59:22.158373Z","finishedAt":"2026-09-09T19:08:59.406099Z","coverage":1.0,"conditionalAccuracy":0.0,"endToEndHitRate":0.0,"unresolvedRate":0.0,"tp":0,"fp":0,"fn":10,"caseCount":10}
+eval_run_cases=200
+{"items":[{"scenarioId":"S1","roundNo":1,"verdict":"DECIDABLE","rootCauseHit":false,"expectedRootCause":"payment/BUSINESS_ERROR_RATE/PAYMENT_CHARGE_FAILURE","actualRootCause":"unknown/unresolved/NO_CONFIRMED_ROOT_CAUSE","latencyMs":722,"failureSample":"{\"reason\": \"root_cause_miss_or_unresolved\", \"actualRootCause\": {\"component\": \"unknown\", \"fault_type\": \"unresolved\", \"reason_code\": \"NO_CONFIRMED_ROOT_CAUSE\"}, \"actualSymptomCodes\": []}"},{"scenarioId":"S1","roundNo":2,"verdict":"DECIDABLE","rootCauseHit":false,"expectedRootCause":"payment/BUSINESS_ERROR_RATE/PAYMENT_CHARGE_FAILURE","actualRootCause":"unknown/unresolved/NO_CONFIRMED_ROOT_CAUSE","latencyMs":1011,"failureSample":"{\"reason\": \"root_cause_miss_or_unresolved\", \"actualRootCause\": {\"component\": \"unknown\"
+=== 4. GET /api/eval/datasets ===
+datasets=200
+{"items":[]}
+=== 5. GET /api/agent-ops/summary ===
+agentops=200
+{"activeRuns":2,"awaitingReviewRuns":168,"readyTasks":1,"oldestReadyWaitSeconds":264959,"openCases":0,"notifyOutboxPending":0,"notifyOutboxFailed24h":6,"llmCalls24h":0,"tokens24h":null,"topTools24h":[],"generatedAt":"2026-09-10T15:37:33.984033743Z"}
+=== 6. 回归：v1 三面 ===
+incidents=200
+{"firingTotal":59,"bySeverity":{"page":12,"warning":47},"unassigned":59,"stormReceived24h":34,"stormEvents24h":15,"mttrMinutes24h":11.7711369875}
+summary=200
+overview=200
+=== 7. RLS 实证：HOLDOUT 行不可见（库内比对） ===
+ all_cases 
+-----------
+         0
+(1 row)
+
+ partition_class | count 
+-----------------+-------
+(0 rows)
+
+SET
+ visible_to_control_app 
+------------------------
+                      0
+(1 row)
+
+RESET
+=== 8. 取一个真实 rca run id（供截图用） ===
+rca_runs=200
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+IndexError: list index out of range
+evalRunId=439f2cb2-5755-4068-8519-3324e44c2914
+DONE

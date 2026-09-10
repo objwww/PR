@@ -1,0 +1,53 @@
+== MIG-01 bootstrap  ts=20260909T060902Z host=lavm-bkiywks9c9 role=host2-full
+--- baseline
+Linux lavm-bkiywks9c9 3.10.0-1160.el7.x86_64 #1 SMP Mon Oct 19 16:18:59 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux
+2
+              total        used        free      shared  buff/cache   available
+Mem:           3757         414        1589         248        1753        2841
+Swap:          4095          90        4005
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   15G   42G  26% /
+NAME      TYPE SIZE  USED PRIO
+/swapfile file   4G 90.9M   -2
+docker-server=25.0.5
+RTT to 195 (146.56.195.225):
+10 packets transmitted, 10 received, 0% packet loss, time 9015ms
+rtt min/avg/max/mdev = 17.603/17.729/18.050/0.125 ms
+--- identities
+created user evalctl(11000)
+created user eval-runner(11001)
+created user eval-scorer(11002)
+created user eval-importer(11003)
+PASS  uid:evalctl=11000
+PASS  uid:eval-runner=11001
+PASS  uid:eval-scorer=11002
+PASS  uid:eval-importer=11003
+--- directory tree
+PASS  dir:answers 0750 root:eval-scorer
+PASS  dir:scores/private 0700
+PASS  NEG:eval-runner cannot read answers
+--- systemd slices
+PASS  slice:probe priority conf
+--- wireguard scaffold
+wg keypair generated
+HOST2 wireguard public key: OD7fz/5X1PmsyUfSZesNtxO7vCcKe92XanaJuUKSMzw=
+PASS  wg: keypair exists
+PASS  wg: wg0.conf 0600
+PASS  logrotate conf
+--- node_exporter
+Unable to find image 'prom/node-exporter:v1.9.1' locally
+v1.9.1: Pulling from prom/node-exporter
+9fa9226be034: Pulling fs layer
+1617e25568b2: Pulling fs layer
+c6e37428e3b3: Pulling fs layer
+1617e25568b2: Verifying Checksum
+1617e25568b2: Download complete
+9fa9226be034: Download complete
+9fa9226be034: Pull complete
+1617e25568b2: Pull complete
+c6e37428e3b3: Verifying Checksum
+c6e37428e3b3: Download complete
+c6e37428e3b3: Pull complete
+Digest: sha256:d00a542e409ee618a4edc67da14dd48c5da66726bbd5537ab2af9c1dfc442c8a
+Status: Downloaded newer image for prom/node-exporter:v1.9.1
+8bd9ffa43c05ab707bf9dc92dcdfeec6014e588527202339f1ef6488f4ffbc9d

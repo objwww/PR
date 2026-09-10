@@ -1,0 +1,11 @@
+[09:07:56] == [1] 演练 sink（127.0.0.1:18080：/rl=200 errcode 45009；/ok=200 errcode 0） ==
+[09:07:58] SINK self-test ok=200 rl_body={"errcode":45009,"errmsg":"api rate limited"}
+[09:07:58] == [2] adapter K_DUTY_* env 直通 + 重建 ==
+[09:08:26] ADAPTER health=200（期200；重启后 60s 内会重拉快照）
+[09:08:26] == [3] Gatus 上机（/srv/gatus；token 机内流转零回显） ==
+[09:08:29] GATUS statuses head: [{"name":"RCA_SYSTEM_control_health","group":"control-plane"
+[09:08:29] == [4] 快照缓存就绪等待（adapter 60s 拉取周期，rl-bot 进缓存后 hook 才会走 rl→echo 链） ==
+[09:09:44] DEPLOY127_DONE（rl-bot 在缓存与否以 hook 试射后 sink 收到 /rl 为准）
+[09:11:20] SINK rebind self-test rl={"errcode":45009,"errmsg":"api rate limited"}
+[09:11:48] ADAPTER health=200（等 75s 快照重拉后可试射）
+[09:13:03] REBIND_DONE

@@ -688,3 +688,259 @@
 - **影响面**：1%→10%→50%→100% 晋升弧全程=E2E 脚本发布不同 percent 的 ConfigBundle 姿态推进，**非窗门禁驱动的晋升**；拆解 §9 M6-01 单项验收"连续窗口门禁不劣"形式上未被走过。根因链：O-63 spike（K/最小样本/墙钟冻结）从未执行 → 窗参数未冻结 → bundle canary.window 段从未发布 → 策略面恒 empty → 采集评估不触发。M6-01 台账"采集面归 M6-02"未兑现。
 - **缓和事实**：M6-06 决策记录含"诚实换轨声明"（n=1 不构成差异收敛证明，退场依据=架构性退场条件四项），未隐瞒非证据驱动晋升；M6-07 percent=100 标为弧终点设计。
 - **裁定去向（待 G2 一并签）**：主会话建议=登记为"机制建成未启用"已知偏差关闭——Holmes 已物理下线，窗门禁的渐进晋升评估对象已不存在，补接线（新采集器+评估循环）无消费场景；若未来引入第三引擎或模型大版本更换，窗门禁机制（表+评估器+单测）在位可接线启用。
+
+### 2026-09-09 AM7 增量：值班通知消息列表+值班表 —— 工序 1 完成，待 G1
+
+- 用户当场裁定三事项：①并入 AM7 前端阶段（任务号续 M7-11 起）；②消息列表=值班通知专用（不接 RCA 报告通知）；③值班表含时间排班。用户需求原文末尾"或"字截断，按"企微/钉钉 webhook 或其他可扩展通道"理解入方案。
+- 工序 1 产物：`docs/告警AM7-值班通知与值班表增量技术方案.md` v1.0（12 节全；M7-11~M7-18 八任务）；OSS 证据 E-21（钉钉/企微 webhook 限流与业务码陷阱）/E-22（Grafana OnCall/PagerDuty 分层排班模型）入册。
+- 设计要点：复用 notify_outbox 六态投递范式但新建 duty_delivery 表（V9 report_id NOT NULL 不放松，AM5 C-16② 同律）；排班=override > 高层 layer > 低层 layer（anchor_date+周期取模纯函数）；127 部署 duty-adapter 独立故障域承接 Gatus 外部腿（快照 60s 拉取+磁盘兜底，127 自有公网出口发 webhook）；195 窄反向代理只放两条 /api/duty 路径上隧道地址。
+- 同日已完成（Phase 11 迁移线）：MIG-01 验收（15/15+4/4 PASS）；195 磁盘 98%→74% 处置；WireGuard 隧道真相查明（已存在，10.250.250.0/30，用户态 wireguard-go）；node_exporter 双机部署 + 127 经隧道入 Prometheus（job node-exporter-host2 up）；BA-61（单文件 bind mount 假绿）入 BUGLOG；rsync /opt/backups 6.4G→127 传输进行中。
+- 下一步动作：①用户 G1 评审 AM7 增量方案；②rsync 完成后 sha256 校验→删 195 /opt/backups→重传 holmes 镜像→rmi；③Gatus 部署（MIG-02）待 M7-17 adapter 落地或用户另行裁定先行。
+
+### 2026-09-09 下午 Phase 11 续：监控面收口 + 假绿排查 + E2E 验证矩阵
+
+- 用户追加批准三事项：①195 node_exporter 改绑隧道地址入库 ✅（双绑 127.0.0.1+10.250.250.1:9100，job node-exporter-host1 up，`node_memory_MemAvailable_bytes` 双 job 真值回读——BA-54 P7 B1 数据源缺口闭合，备份 prometheus.yml.bak-20260909T073714Z）；②假绿排查 ✅ → 全量单文件 bind mount 审计（195 八处+127 零），产出 BA-62（审计工具链两级失真：docker cp 对 ro bind mount 返回宿主源=假绿；distroless 无 coreutils=假红）、BA-63（litellm-am3 运行副本 qwen3.7-plus vs 宿主 glm-5 语义漂移，**开放**，待用户确认重启；alertmanager 纯 CRLF 漂移顺带清）；③迁移 E2E 验证矩阵已写入评审文档 Phase 11 §5.1（五步迁移各配真实链路验证，MIG-01 行已绿）。
+- AM7 增量（值班通知+值班表）方案 v1.0 仍待用户 G1 评审。
+- 待确认项：litellm-am3 重启应用 glm-5（当前零模型流量经 litellm，风险低）；rsync 传输中。
+
+### 2026-09-09 晚 并行备料五项全部交付（其他执行者执行，主会话验收）
+
+- **P1 Gatus 契约修正 ✅**：三项冲突全修（alerting.custom / storage sqlite / endpoint alerts），v5.17.0 镜像实测五项验收全 PASS；额外抓到第 4 个坑（镜像烤入示例配置抢加载，须显式 GATUS_CONFIG_PATH）；digest 已 pin；占位符全集 6 个（无 [ALERT_NAME]）实测。证据 `docs/测试证据/HOST2-127/gatus-v5170-契约修正/`，E-23 入册。127 测试现场已 down -v 清理，镜像保留待用。
+- **P2 内存闸 Prom rules ✅**：memory-gate.yml 三档规则（t1 1.2GiB/5m、t2 768MiB/2m、t3 512MiB+滞回 ALERTS 自引用带 on(instance)）经 HUP 热加载在场、health=ok、当前 inactive（水位 3.49GiB）；修正备料文档两处写法（Gi/Mi 字面量 v3.13.1 不可用、滞回惯法必须 on(instance)）；BA-54 追加进展不关单（动作面仍缺）。证据 `docs/测试证据/容量/memory-gate-rules-20260909/`。
+- **P3 磁盘深查 ✅**：38 dangling 卷逐卷裁定（17 空卷零风险可删等分类）、/root 仅 0.14G 干净、RECLAIMABLE 3.42G 明细；全程只读零删除。`docs/测试证据/容量/195-disk-deep-dive-20260909.md`。
+- **P4 端点缺口盘点 ✅**：28 调用点全扫——仅 3 端点真通、3 契约偏差、21 纯 mock；抓到 3 个全局联调阻断项（vite rewrite 剥 /api 必 404、前端零鉴权头必 401、Controller 仅 docker profile 注册）。`docs/告警-前端联调-端点缺口盘点-v1.md`，直接喂 Phase 12 任务排序。
+- **P5 duty-adapter 调研 ✅**：E-24 入册——Gatus custom 源码级语义（Send 判定 >399、lazy retry 无上限、resolved 不重试、group override 可分流）、企微 4096B/钉钉 5000 字符与关键词安全约束、业务码假成功只能 adapter 承接的定论。Gatus 源码快照留档 var/m7-research/gatus-5.17.0/。
+- 主会话侧：rsync 守望中（127 已收 ~3.9G，杀重复传输后回落属正常——旧孤儿进程的部分临时文件被清）；下一步等守望通知后校验删源。
+
+### 2026-09-09 晚② BA-63 关单 + P3 卷删除执行（用户当场批准）
+
+- BA-63 已关闭：docker restart litellm-am3 → healthy → /v1/models 实证只含 glm-5 → 真实 chat 经 litellm→上游往返成功 → restart alertmanager-am0 → /-/healthy 200 → mount 审计复跑双 MATCH。195 单文件 bind mount 现全量零 DIVERGED。
+- P3 卷删除：B 类 21 卷先 tar 留档 `/opt/vol-archive-20260909/`（238M，抽查 3 个 tar -t 通过）后删 21/21；A 类空卷删 16/16；m2repo（358M）按报告"待问"跳过。195 磁盘 74%→**69%（余 18G）**，dangling 卷仅剩 m2repo。留档目录待 rsync 主传输完成后随迁 127。
+- 多 Agent 现状对用户口径：系统内多 Agent RCA = AM4 已交付的"确定性 Supervisor + 固定三 Agent DAG（metrics/logs/change）串行执行"；并行 fan-out/join、冲突归并、有界 loop = Phase 7（P2/P3）未开工。
+
+### 2026-09-09 晚③ 过程事故：北极星指标失守与门禁制度修正（用户追责）
+
+- **事故**：北极星指标"评测真实命中率 0/47"自 AM3 G2（2026-09-06）记录在案后，AM4~AM7 四个阶段的任务树（全部主会话拆解）零任务指向它；G2 验收材料历来只有工程绿（测试/部署），从无质量指标面——LLM 在产品主链路静默归零（M6-07 Holmes 退场后 NATIVE 无 LLM 调用），无人叫停。责任在主会话：任务拆解、门禁材料、排期均为主会话产出，用户只能批递上去的方案。
+- **制度修正（已落码）**：`milestone-workflow` skill 新增两处强制——①工序 6 G2 增设"质量指标硬门"：验收材料必含北极星指标现值/LLM 在环状态变化/本阶段收敛贡献三问，缺节用户应直接打回；②全局红线新增质量红线：任务树与北极星指标的关系必须能答出，连续两阶段零关联主会话必须主动叫停提交排期修正。
+- **排期修正（待用户裁定）**：AM8 立项 = 有界 LLM loop 最小面（模型提议下一步工具、Supervisor 裁决、评测门禁卡命中率、可回放可降级），前置=评测底座迁 127（MIG-03/04）。按红线 AM8 工序 1 须待 AM7 G2 后启动；如用户指示 LLM 面优先，可破例并行启动 AM8 工序 1（调研+方案，不写实现码）。
+
+### 2026-09-09 晚④ 全系统收口与端到端评测主计划 v1.0 出炉（待用户评审）
+
+- 产物：`docs/告警-全系统收口与端到端评测主计划.md` v1.0。核心数字：剩余 15 个任务包、约 65~115 净开发日（不含可选 MCP spike），2~3 执行者并行墙钟约 6~9 周到"搭建完"（D1~D8 八域全绿 + 终态评测考卷首次全量通过）。
+- 关键路径：G1 批准 → R2 迁移收尾 → R5 真实 logs/change 工具 → R6 离线盲评底座 → R7 有界 LLM loop（AM8 吸收 Phase 7）→ R8/R9 RAG+Skill → 终态评测。R6 为质量结论唯一可信来源，R7 硬前置不接受破例。
+- 评测阶段现在启动：第一动作 = glm-5 基线重测（旧 0/47 是 deepseek-v3 时代，BA-63 关单后现役已是 glm-5）——rsync 完后先 S3 smoke 再全量 47 Case（墙钟粗估 3~5h），结果作为一切后续阶段"收敛贡献"的参照原点。
+- 终态考卷定死：三维矩阵（模型×提示词×Skill）× 双层评测（Live E2E 47 Case + 离线盲评三臂 MATCHED 晋升制）× 统计纪律（scenario_family_id 整组分区、chance/lift 校正、小样本不放行）。
+- 引用核对：eval-scenarios.yml（registry v1，S1~S5，rounds=2，S1/S2 firing 等待 1500s 校准值）、EvalRunnerMain（one-shot 跑批+四指标+TP/FP/FN+usage 出账）、评审文档 Phase 工期逐项对照，均属实。
+- 用户当场指示"别管传输，先出计划"：rsync 守望任务已停（远端孤儿进程继续在传），收尾四步（sha256 校验→删 195 /opt/backups→holmes 镜像 docker save 归档→vol-archive 随迁）改列为 Q7 待传输完成后执行。
+- 待用户裁定：Q1 计划整体 / Q2 基线重测立即跑 / Q3 AM7 G1 / Q4 AM8 立项 / Q5 m2repo 等处置 / Q6 MCP 可选维持。
+
+### 2026-09-09 晚⑤ 传输收口 + 源码审计并入主计划 v1.1
+
+- **rsync 传输完成并校验通过**：127 侧 6,609,756KB ≈ 源端 6,609,768KB（12KB=du 块粒度噪声）；manifest 已到；127 上 `sha256sum -c` 16/16 全 OK。剩余收尾：②删 195 /opt/backups（收 6.3G，不可逆，待用户点头）③holmesgpt am0/am1-http 镜像 docker save 归档 127 后 rmi（再收 1.66G）④vol-archive 随迁 ⑤回填证据文档。
+- 用户问"能否本地上传至 127"：已答复不可行/不必要——数据源在 195（/opt/backups 6.3G 是 195 本机备份产物），本地上传=195→本地→127 双跳经家庭/办公上行的两倍流量；服务器直传已对且已完成。
+- **主计划 v1.1**：并入《告警系统-生产级多Agent与Harness源码审计.md》（F01~F24 + §九 十三门）与用户裁定方向（保留 PG/工具网关/Outbox；先真 LLM 多 Agent RCA，再并发/恢复/权限/运维可验证；RAG/MCP/Skill 延后到闭环可独立评测之后）。新增 §八：F01~F24 全映射表（无漏项）、新增 R16 Harness 正确性地基（12~18d，R7 硬前置）与 R17 真实认证（3~5d）、R7 重定义为三角色闭环（12~16d，含 ActionGuard 固定顺序/预算纪律/身份三分/Claim 四类型/所有权裁定=driver 独占+checkpoint）、R1 并入 F20/F21（5~8d）、R8/R9/R14 移出主线。合计修订 85~140 净开发日、墙钟约 8~11 周。里程碑 A/B/C/D 替换智能面波次；考卷增第 0 层正确性门（十三项）。glm-5 基线重测仍为评测第一动作。
+
+### 2026-09-09 晚⑥ 评测执行方案 v1 出炉（交接执行者版）+ 删源完成
+
+- 产物：`docs/告警-评测执行方案-v1.md`。核心回答用户"换模型全量重跑代价太大"：①当前 NATIVE 链不调 LLM（F01），换模型对评测结果零影响、无需重跑，glm-5 基线只需跑一次冻结；②里程碑 A 后启用 Tier 0~3 触发矩阵（同档互换只跑 T0+T1+T2 ≈ 1~1.5h，全量 T3 仅在新模型首引/大版本/里程碑 G2/双周门点）；③长期靠 R6 replay 底座把回归降到分钟级。成本结构拆解：全量贵的大头是 S1/S2 双窗烧损 firing 等待（1500s/轮）而非模型调用费。
+- 首批任务 EV-01~04（前置核查→T0/T1 冒烟→T3 全量 47 Case→基线报告归档），纪律：串行 slot=1、resolved 未归并禁入下轮、BA-19 精确改写、预算硬拦+三态对账、只测不改（BUGLOG 下一编号 BA-64）、取证照 AM3 e2e-m3-02 模板。
+- 迁移收尾：195 /opt/backups 已删（校验 16/16 在案，磁盘 69%→58% 余 25G）；holmes 镜像归档→校验→rmi→vol-archive 随迁后台任务执行中（bash-th0n5wtb）。
+
+### 2026-09-09 深夜 双机全链路演练点火 + 压缩排期与技术方案 v1.0
+
+- 迁移线全收：holmes 双镜像归档 127（463M，sha256 23800d4f…）验证后 rmi、vol-archive 随迁完、195 磁盘 **55%（余 26G）**、holmes 镜像清零。
+- 用户裁定"195 和 127 一起将所有流程走一遍"：编排脚本 `full-chain-drill.sh` 上 195 执行——双机前置快照 → 全量 47 Case 批（glm5-full-0909，启动器经 Holmes 退场修订：digest 锚 NativeInvestigationExecutor+工具面全集，模型元数据 glm-5）→ 批中每 5min 逐环取证 → 批后报告/通知面+监控面+127 联动 → 证据打包。eval-runner 已 Up 运行中（预计 3~5h），守望任务 bash-0681ii7f 完成后自动回收证据至 `docs/测试证据/eval/glm5-baseline-<ts>/`。缺口如实标注：Gatus→值班通知链（待 M7-17）、评测上 127（待拆管线 M1~M3）。
+- 产物：`docs/告警-压缩排期与近期技术方案.md` v1.0——四线并行（线1 拆管线上 127 主会话驱 / 线2 R16 前段 / 线3 R5 真实工具 / 线4 前端三阻断→AM7→R17→Gatus），核心建成（A+B+C+D+考卷首跑）压至 **5~6 周**；R8/R9/R11/R12/R14 后置不卡核心。线1 任务卡 M1-1~M3-3+X-1 共 10 卡（11~17 净开发日，M0 由今日 47 批顶替）。压缩全部来自并行与合并，考卷第 0 层十三项一门不砍。
+
+### 2026-09-09 深夜② 问责机制落地（用户再次追责后的制度化回应）
+
+- **责任归属（书面化）**：任务拆解、排期、门禁材料、指标核查、延期预警 = 主会话责任，无分担项。用户只批递上来的方案，方案错=主会话错。
+- **防复发三机制**：①G2 质量指标硬门（已立法，milestone-workflow skill）——验收材料缺"北极星现值/LLM 在环变化/本阶段收敛贡献"三问直接打回，主会话递交前必须先自查；②每日 21:43 强制检查点（cron 01M2383606PQZC7XGJ680TAZCN）——指标现值+四线进度偏差+LLM 在环状态，写 PROGRESS 并向用户简报，无进展也要报原因，不许沉默；③延期预警时限——任何线偏差>2 天当天上报附修正方案，禁止到验收才爆雷。
+- 第一份实证在跑：glm5-full-0909 全量 47 批，跑完报四指标+逐场景明细，红直报。
+
+### 2026-09-09 深夜③ 执行者 ABC 方案 + R7 真 LLM 多 Agent 方案出炉
+
+- `docs/告警-执行者ABC-改造技术方案.md` v1.0：A/B/C 三线 10 卡全代码级（agent-46 核查钉行号）；单执行者口径核心建成修正 6~7 周；开工序 EX-A1→A2→A3→B1→B2（里程碑 A 前置 12~19d）。
+- `docs/告警R7-真LLM多Agent技术方案.md` v1.0：三角色（MetricInvestigationAgent/LogChangeInvestigationAgent/RcaDiagnosisAgent）+ 有界 AgentLoop（max_steps≤4）+ ActionGuard 组装件（LeaseFence+RunBudgetGate+allowlist）+ RcaModelCallContext/rca_model_call 账本（F02，账本不可写=零触网）+ Claim 四类型门 + A/B 门验收口径。硬前置=EX-A1~B2 绿；F02 模型网关适配无冲突，主会话 W2 先行落码，里程碑 A 提前约一周。
+
+### 2026-09-09 深夜④ 联合评审意见（P1-01~08+排期）全采纳修订
+
+- 评审文 `docs/告警-ABC与R7方案评审意见.md`（用户方评审，核源码后出）结论：方向通过；"全部卡已足够精确/6~7 周承诺/现在跑的是 glm-5 基线"不宜通过。八项修订全部采纳落地：
+- **ABC v2.0**：A4 拆 A0（身份与执行契约冻结，最先行）/A4a（F05/F13/F16/F17+F06 存储契约，真实 LLM A 门前必绿）/A4b（F18/F19/F23/F24，C 门前）；删除"无回执按幂等键重驱"→四阶段恢复语义+checkpoint 八字段（run/round/task/attempt/action_seq/request_digest/reservation_id/dispatch/result_ref/driver_epoch）；结果准入+任务状态+事件提交入受 owner/epoch/generation 保护的同一事务（二次 LeaseFence 不够）；预算按 RunBudgetGate 真实 API（call/ReservationKey）+多维一次准入+单一预算所有者；B1 变更事实与 pointer CAS 同事务；B2 盘点追到业务服务日志源、Loki 改 otlphttp 官方路径、512MiB 降为试验上限；C3a 认证最小闭环先于生产写界面（二选一成熟机制，禁自建协议）；C2a 外部通知最小腿从 AM7 拆出前移（Gatus 不再被页面阻塞）；AM7 补六契约+工期统一 6~9。合计重核 **34~51 净开发日**。
+- **R7 v2.0**：模型与工具同一 ActionGuard 入口；不新抽 ModelRouter（复用现有 ModelGateway 面）；补证 round 状态机（round_id/去重键/最大轮数≤2/拒绝原因/预算不随轮重置/旧快照不可追加；Supervisor 全终态→REPORTING 条件必须改，"不动已测核心"作废）；Observation/Findings/Claim 三层来源分离（模型复述不算第二来源；诊断 Agent 唯一模型出口+ClaimValidator 代码准入）；A 门改"单指标 Agent 真实模型闭环"（B1/B2 降为 B 门前置不阻塞 A）；B 门三对照（零补证/有效补证/明确终止，不作每条告警硬要求）。
+- **口径纠正**：在跑的 47 批改标 **Native 确定性基线**（P1-08：配置模型/chat 成功/容器正常≠RCA 调用模型；真实模型臂须 run→task→attempt→模型请求/回执关联完整，里程碑 A 后才可能出现）；证据目录改 native-baseline-<ts>（守望任务回收后改名）。R6 规则统一（最小回放契约尽早+完整盲评为晋升硬前置不阻塞 R7）。排期统一为**两条开发线 8~10 周讨论窗口不作承诺**（四线压缩版文首标记废止；原 5~6/6~7 周作废）。AM7 工期三处统一 6~9。
+- 统一任务卡模板（评审 §5）入 ABC v2.0 §六：基准 commit/输入契约/事务锁边界/状态转换/持久身份/具名 IT（mvn verify，failsafe）/迁移回滚/完成证据——"mvn test 绿"不再算交付。
+
+### 2026-09-09 深夜⑤ glm5-full-0909 批红直报：通知链断链根因坐实并修复（BA-64）
+
+- **批结果（Native 口径，不粉饰）**：run=0cb7c43b-fc95-43e0-acb0-96e3e352013e，state=SUCCEEDED（假绿），**coverage=0 / conditional=0 / e2e=0 / tp=0 fp=0 fn=10**；10 Case（5 场景×2 轮，当前 registry v1 展开口径）全 TIMEOUT_OR_ABSENT：S1R1=run_not_found、其余 9=gate_blocked。窗口内 incident/rca_run/rca_report 新增全 0（底数 54/213/139 全程不动）；usage ledger UNMATCHED、no_rows_under_run_key（符合 NATIVE 零模型调用）。证据 `docs/测试证据/eval/native-baseline-20260909T135047Z/`（8 文件）。
+- **断链根因（日志铁证）**：alertmanager-am0 配置引用 `credentials_file: /etc/alertmanager/secrets/webhook-bearer`，但宿主挂载源目录 `deploy/alert/alertmanager/secrets/` **为空**——compose 注释写明 bearer "由 deploy/.env 派生"，派生步骤从未执行。14:23~15:10 UTC 每 5 分钟一轮重试 15/16 次全失败；control-app 同期 3 小时日志 grep webhook/alertmanager/incident **零命中**。修复中暴露第二层：补文件 600 root 与容器运行身份 nobody(65534) 不匹配（permission denied）。
+- **修复**：从 deploy/.env 派生 ALERTMANAGER_WEBHOOK_BEARER_TOKEN 落盘 secrets/webhook-bearer（644）→ docker restart alertmanager-am0 启动干净。flagd paymentFailure 已核为 off（无需动）；checkout 烧损窗稀释后自然 resolved（ALERTS firing 已空）。
+- **性质判定**：BA-61/62/63 **假绿族第四例**——BA-62 mount 审计只对拍 alertmanager.yml 单文件（MATCH），secrets 目录挂载"内容非空+容器内可读"从未进审计面。已登记 **BA-64**（状态处理中，S3 smoke 全链验证通过后关闭）；预防措施含目录挂载内容审计、notify 无失败门禁、同步配方补 secrets 派生步骤。
+- **复盘责任（主会话自查）**：此断链在 BA-63 重启 alertmanager 后已存在，当日 mount 审计与重启后验证均未覆盖"secrets 文件存在且可读"，导致晚间演练批 10 Case 白跑——审计面缺口是主会话设计审计清单时的遗漏，已转化为 BA-64 预防措施①②③。
+- **后续**：S3 smoke（registry=eval-scenarios-s3.yml，tag=s3fix-0909）复跑验证 注入→firing→incident→RCA→报告→评分 全链，结果见下一条记录。
+
+### 2026-09-09 深夜⑥ S3 smoke 复验通过：通知链双向实证恢复，BA-64 关闭
+
+- **复跑结果（s3fix-0909，eval_run=e512a37c，S3 单场景×2 轮）**：coverage=0.5 / conditional=0 / e2e=0 / tp=0 fp=0 fn=2；usage ledger UNMATCHED/no_rows_under_run_key（符合 NATIVE 零模型调用）。证据 `docs/测试证据/eval/s3fix-0909/`（README+01 运行日志+02 DB 取证）。
+- **S3R1=DECIDABLE——Native 口径下第一条完整真实链路**：chaos on(F1)→ArenaDuplicateOrders firing（15:18:58）→alertmanager webhook（修复后首轮即达）→control-app incident 5552d241 事件（generation 66）→rca_run ace9d2ba **SUCCEEDED**→报告 fb77d270→评分 DECIDABLE。fn=1 因 actual=NO_CONFIRMED_ROOT_CAUSE：Native 执行器如实报 UNKNOWN 不伪造根因，符合基线口径（真根因命中待里程碑 A 的 LLM 在环）。
+- **恢复侧同步验证**：chaos off→oa_duplicate_orders_current 归零；firing 双 0（Prometheus+alertmanager）；resolved webhook 送达，incident 15:39:30 **RESOLVED**（send_resolved 链路透）；现场无残留。BA-64 关闭。
+- **S3R2=run_not_found（非断链，评测设计问题）**：同一 alert group 在 R1 后仍处活动期，alertmanager `repeat_interval=4h` 抑制同组重复通知→R2 无新 webhook→无新 RCA run。**全量批"5 场景×2 轮"结构受此影响**，评测执行方案需解决（等 resolved+repeat 窗 / eval 专用 AM 配置 / 轮次改单轮多场景）——已记入 s3fix-0909/README 结论 3，下一步修评测方案时对齐（含"47 Case 旧口径 vs 当前 10"）。
+
+### 2026-09-09 深夜⑦ G1 通过，两线开工；ABC v2.0 补 §七 测试分层与防假绿纪律
+
+- 用户裁定 G1 通过：技术方案文档群冻结；EX 线合并为一个连续任务（13 卡按序一次跑完，中间不设阶段请示，质量门留在代码层 mvn verify+卡面验收）。
+- 两执行者已派出：agent-47（评测线：修多轮 run_not_found→全量批）、agent-48（EX 线：A0 起按卡序连续执行，进度写 var/ex-a0/progress.md）。
+- ABC v2.0 新增 **§七 测试环境分层与防假绿纪律**（用户质询"线2 只在 195 测还是 127 也测"后补写）：7.1 环境现状写死（195=唯一全栈真机；127 实测只有 node-exporter+空目录树，**迁移未完成**；127 验收只属于 MIG-02+ 迁移任务，完成定义=195+127 联合全流程走一遍）；7.2 L0~L3 分层矩阵（L2 真机 E2E 只能 195）；7.3 六条防假绿纪律（BA-61~64 出处逐条对应，含"SUCCEEDED≠绿""容器 up≠绿"）。
+
+### 2026-09-10 凌晨① full-0910b 全量批收官：coverage=1.0，Native 基线原点确立
+
+- **批终版（run=439f2cb2-5755-4068-8519-3324e44c2914，registry v2，墙钟 2h09m37s）**：**coverage=1.0** / conditional=0 / e2e=0 / unresolvedRate=0，TP/FP/FN=0/0/10；**10/10 Case 全 DECIDABLE**，gate_blocked/run_not_found/prev_round_not_resolved/activate_failed 全 0（对照 full-0910 的 gate_blocked 9）。10 个 INITIAL/NATIVE run 与 Case 一一对应，incident 逐轮 revive（checkout gen 5→8，Arena 三路 gen 67/68、16/17、21/22），6 个 chaos 会话全 CLOSED。
+- **fn=10 定性=Native 零命中基线原点**：所有 miss 同构 NO_CONFIRMED_ROOT_CAUSE——测量仪已可信（coverage 1.0），e2e=0 是零 LLM 引擎的诚实读数；usage ledger UNMATCHED/no_rows_under_run_key 符合 NATIVE 零调用预期（glm-5 本批 0 次在环）。差异归因：管线修复→coverage 0→1.0 可认定；Holmes 对照缺失 UNKNOWN；glm-5 未测量≠零贡献。
+- **修复实证**：多轮结构冲突修复（轮前 incident RESOLVED 门）在 5 场景全生效；抓到设计外活样本——S1 两轮复位后各一次 30m 窗临界震荡再 firing，均被轮前门兜住（无此门即重蹈 full-0910）。
+- **证据**：`docs/测试证据/eval/full-0910b/`（README=EV-04 §6 基线报告全要素+01 批日志+02 DB 取证+03 usage ledger json）。
+- **现场**：flagd 双 flag=off、firing=0、评测面 incident 全 RESOLVED、chaos 清零、零容器重启；mem 3G/盘 25G。（incident 表 48 行 M6 线历史陈旧 FIRING 与评测面零交集，未动。）
+- **遗留观察**：S2R2 恢复窗实测 29m11s，距 2100s 预算仅余 ~6min——6h 窗更热时 S1/S2 有超预算风险，下批前复核（full-0910b/README 注 3）。
+- 评测执行方案已对齐：47→10 Case 口径、registry v2、多轮隔离机制条目。Native 基线**冻结**——LLM 入环（里程碑 A）前不因模型切换重跑。
+
+### 2026-09-10 凌晨② 增强线方案先行落地；改造线 9/13 抽验
+
+- 用户裁定：**Skill/Tool/MCP/RAG 技术方案先行，编码硬门=EX 线 13/13 收口+C 门**（"不收口不编码"）。方案落地 `docs/告警-增强线-Tool-MCP-RAG-Skill技术方案-v1.md`：RAG 三库分立（runbook/历史 RCA/评测判例，HOLDOUT 永禁入库防泄漏）+pgvector 复用+dashscope embedding；Skill 五态状态机（候选仅 EVALUATING 参评，晋升必过盲评门，自动晋级待 20 个人工晋级版本后再评估）；MCP=现有 ToolGateway 协议适配 spike（否决条件写明）；Tool 随 R7 生长不单列；**不引入 Redis/MQ**（触发再评估条件=多 worker 横扩+PG 锁竞争实测成瓶颈，届时首选 Redis Stream）。
+- 改造线（用户自有执行者）进度核账：执行日志记 A0/A1/A2/A4a/A3/B1/B2/A4b/C3a **9/13 收口**，C2a 开卡中；主会话 195 抽验：flyway 至 V42 五行 success=t、auth_event 8 行、change_event 6 行、health 200——部署面属实。剩余 C2a/C1/C2(AM7 6~9d)/C4。C 门验收由主会话按 §7.2 分层独立复核，不看日志自述。
+
+### 2026-09-10 凌晨③ 增强线方案 v1.1（四路开源调研重写版）
+
+- 用户裁定：方案太粗返工，纪律记死进 skill——`milestone-workflow/SKILL.md` 新增 §五 技术方案写作铁律五条（调研先行宗旨是抄/清单具名/动态性给机制/否决条件/四问自查）。
+- 四路调研落盘 `var/research/`（512 行，全部一手源带 URL）：rca-agent-toolsets（HolmesGPT/SigNoz/OpenRCA/sre-agent）、mcp-ecosystem（server 清单+动态加载机制）、alert-mcp-tools（告警域专项+鉴权对照）、agent-harness-survey（hermes=NousResearch hermes-agent/openclaw/pi-mono/deepseek-harness/autogen/codex/claude-code/langgraph/langchain/goose/openhands 名称消歧+逐项目机制）。
+- `docs/告警-增强线-Tool-MCP-RAG-Skill技术方案-v1.1.md` 取代 v1.0：①Tool 具名清单 20 个（五类 P0~P2，每个带输入输出/数据源/抄自）；②MCP 具名 server 清单（P0 alertmanager+prometheus 直接可用；P1 mcp-grafana/lark或dingtalk/github；排除项带理由）+动态挂载三范式（Unla COW 快照+validate-then-swap / MCPJungle stateless-per-call / 先禁后删+generation 围栏 dispatch 前校验）+java-sdk 2.0.x 编程式接入（Spring AI starter 启动快照已证不可用）；③RAG 重大修订：先抄 HolmesGPT catalog+fetch_runbook 轻模式，pgvector 向量召回降为阶段 2（带否决条件）；④harness 结论作为 R7 开工输入（AgentTool 编排/声明式角色/Codex 两轴权限/stall monitor/副作用后移纪律）；⑤每个方向带否决条件。
+
+### 2026-09-10 EX-C2 全卡收官（M7-11~18）+ EX-C4/MIG-02 完成——值班接收器决策门解除
+
+- **EX-C2 全闭**：195 部署门（V43 八表 + control/notify/web 三镜像 + 窄反代）+ 127
+  duty-adapter 上机（health 200、107.5MiB/192MiB）+ L2 六相演练全绿（全链 SENT/去重/
+  已读 CAS/降级链 DEAD→SENT/GATUS 回写去重）；B-53~B-57 五 bug 闭环，其中 **B-57
+  （loadSnapshot 漏 .list()=死语句，SQL 从未执行→派发恒 NO_CHANNEL）** 以真 PG 守卫
+  IT 红→绿钉死 + 全仓 RowMapper 终结操作扫描（60+ 点仅此一处）。
+- **EX-C4 完成**：Gatus v5.17.0（digest pin）常驻 127，五 endpoint（3 原 + M7 值班链
+  快照黑盒 + adapter 自身 /health）；窄反代 +3 精确 GET 健康路径（八探针矩阵含负向）；
+  **六项验收真栈全过**（config 读取/无示例/失败达 adapter/恢复回执/探针死亡=自指边界
+  如实复现/45009 业务码不误判）；**MIG-02 断链演练**：停 control→双探针 TRIGGERED→
+  adapter 降级链送达→spool 持久化→恢复→重放落账+resolved 配对（契约①）。
+- **门状态**：AM7 DoD #3 值班接收器决策门解除；MIG-03+ 前置（Gatus 六项验收全过）
+  就绪；真机器人 webhook URL 注入=运维面待办（sink=D01 替身在岗）。
+- **证据**：`docs/测试证据/AM7/exc4-mig02-20260910/`（README 六项表+时序 + statuses
+  JSON + gatus 日志摘录 + sink 日志 + 195 台账 + 双机部署日志）；执行日志 EX-C2 四块
+  + EX-C4 一块。
+
+### 2026-09-10 傍晚 EX-D1 值班通知群内模拟（真企微/钉钉暂不接，前端聊天框模拟）——代码+本地验证完成，未部署
+
+- **用户原话**：「真实企微/钉钉 webhook 暂时不接，将通知在前端页面新开一个对话聊天框来模拟」。
+- **摸底结论（数据通路选型）**：通知链产物已有现成落点，不新造写路径、不加表——
+  ①主链（RCA_SYSTEM/MANUAL）：control-app DutyDispatchService 落 `duty_notification` +
+  首行 `duty_delivery`（V43），notify-app 领取投递、六态（PENDING/CLAIMED/SENT/
+  RETRY_WAIT/DEAD/SUPPRESSED）回写 delivery 行；②GATUS 腿：127 duty-adapter 直发
+  （D01 echo sink 替身）后 best-effort 回写，**195 侧只落台账行、无 delivery 行**
+  （DutyStore.insertExternalNotification 契约注释钉死）。故 feed=通知行 LEFT 语义
+   join 投递行：有行显示真实状态，空组按 source 如实标注「127 直发回写」/「无投递行」。
+- **改动清单**（未 commit）：
+  - 后端 control-app：`ops/duty/domain/DutyStore.java`（+NotificationFeedView/DeliveryView
+    两投影 + listFeed/listDeliveries 两方法；drill=演练通道标记由通道名/env 键名含
+    echo/test 推导，D01 替身期恒真、真机器人上线后随配置自然翻 false）；
+    `infrastructure/persistence/PostgresDutyStore.java`（两查询实现，last_error 截 300
+    字符，空入参短路）；`ops/duty/interfaces/DutyQueryController.java`（+GET
+    /api/duty/notifications/feed，游标分页复用 createdAtEpochMs/id 语义）。
+  - 测试：`DutyQueryControllerTest` +1 案（气泡形状/降级链 DEAD→SENT 两行/drill 标记
+    /GATUS 空组/游标）；`PostgresDutyStoreIT` +1 案（真 PG 钉正文+投递行+drill 推导+
+    空组，本地跳过、195 部署时跑）；`SecurityConfigTest` duty 矩阵 +2 断言（feed 并入
+    /api/duty/** 既有认证面，op 线放行/未认证 401，不开洞）；`DutyTestSupport`/
+    `DutyDispatchServiceTest`/`DutyFallbackWatcherTest` 三假件补接口方法。
+  - 前端 alert-web：新 `views/DutyChatView.vue`（聊天气泡页：机器人头像+气泡=标题/
+    级别/事件态/正文摘要+页脚送达 chips，新消息在下、30s 轮询、无 mock 直连真 API）；
+    `router/index.js` +/duty/chat 路由；`layouts/AppShell.vue` +「群模拟」导航
+    （isCur 加守卫避免与「值班」双高亮）。
+- **测试与构建**：`mvn -pl control-app -am test` **1087 测 0F/0E/21 skipped**
+  （本地既有 21 IT 跳过，含本任务新增 1 IT——真 PG 环境项，195 部署时补跑）；
+  `npm run build` 绿（200 模块，dist 产出正常）。前端渲染自证：本地 vite dev
+  （临时 proxy 指向 node stub 假 feed 数据，已清理）——/duty/chat 路由 200、
+  DutyChatView.vue SFC 编译 200、/api/duty/notifications/feed 经代理透传契约 JSON
+  一致；**浏览器 DOM 级渲染与真后端联调未验**（本地无 PG/后端运行环境，195 为生产
+  认证链不可随意登录），留部署后验证。
+- **部署步骤（留给主会话审计后执行）**：①195 构建面 `mvn -pl control-app -am verify`
+  补跑真 PG IT（含本任务 feed IT）；②control-app 镜像重建 + recreate（只读新端点，
+  无迁移——V43 之后无新 flyway）；③alert-web 镜像重建 + recreate（nginx 反代 /api
+  不变）；④验证：登 web → 「群模拟」页见历史通知气泡 + 演练通道标记；POST
+  /api/duty/test-notification 发一条 MANUAL → 30s 内气泡出现、delivery 行从
+  PENDING→SENT/DEAD 如实演进。
+
+### 2026-09-10 傍晚② EX-D1 校准：群模拟页对齐企微/钉钉真群外观基准
+
+- 依据 `var/research/wecom-dingtalk-bot-20260910.md` §D1 真群视觉清单 + §C 两张
+  告警卡片模板，重写 `alert-web/src/views/DutyChatView.vue`（仅前端，零新依赖）：
+  ①顶部白底居中群名栏「值班通知群（模拟）」+演练提示副行；②圆形头像（PR）+昵称
+  「PR 告警中心」（=§C source.desc）+灰色「机器人」小标签（钉钉特征）；③灰色居中
+  时间分隔条（间隔>5min 或跨日插条，当天只显 HH:MM）；④卡片骨架对齐 §C
+  text_notice/actionCard 共同形态——来源行（16px 圆图标+灰字 PR 告警中心）→黑粗
+  标题【级别】告警名→灰副标题（firing=橙红「告警」/resolved=绿「恢复」tag + 来源 ·
+  时间）→markdown 正文→底部「查看 RCA 报告 >」跳转行（仅 RCA_SYSTEM 行出，落
+  /alerts 列表——台账无 runId 可绑，GATUS/MANUAL 不出此行，不伪造链接）；
+  ⑤markdown 手写子集渲染器（标题加粗/引用左灰竖条/三色 font：warning 橙红、info
+  绿、comment 灰/链接新窗/@人蓝色高亮占位），先转义后渲染（v-html 面 XSS 安全，
+  `<script>` 注入样本实测转义）；⑥六态 chips +「演练通道」虚框标记原样保留
+  （真实状态面与外观校准不冲突）。
+- **验证**：`npm run build` 绿（dist 正常；chunk 501kB 触发 >500kB 提示属存量阈值
+  问题，校准前 499kB 已贴线，非本次新增体量）；markdown 子集渲染器 node 沙盒逐项
+  实测（§C 钉钉 actionCard text 样本：标题/引用/三色/粗体/@zhangwei/链接/XSS 转义
+  全对）。无组件测试基座（alert-web 无 test 脚本），无测试可跑。
+
+### 2026-09-10 BUGLOG 转登：EX 线内联 bug 台账 B-16~B-58 入册（BA-66~BA-107）
+
+- **范围**：`docs/告警-EX执行日志-20260910.md` 各卡块内联的 43 个 B 编号中，B-16~B-57 共 42 条逐条转登为 **BA-66~BA-107**（八列全填，状态/根因/修复/预防按日志原文提炼）；**B-58 不重复登**——该条已先于本次以 BA-65 在册（关联列本就注明「B-58（执行日志）」）。
+- **来源索引**：执行日志 L1263~1375「EX 线总核账交接包」§三 Bug 台账索引（B-16~B-18=EX-A4a L193 / B-19~21=EX-A3 L236 / B-22~31=EX-B1 L300 / B-32~35=EX-B2 L383 / B-36=EX-A4b L454 / B-37=EX-C3a L537 / B-38~41=EX-C2a L630/L663/L675/L689 / B-42~49=EX-C2 M7-11~15 L977（实际 B-42 在 L978，索引 L754 锚为卡块收口行）/ B-50~52=M7-17 L1081 / B-53~57=M7-18 L1141 / B-58=EX-C4/BA-65 已登）。每行关联列注明 `EX线内编号 B-NN ↔ 执行日志 L行号` + 证据路径。
+- **勘误落实**：BA-60 行关联列补注「执行日志 L1184/L1338 的『B-60』系笔误实指 BA-60，EX 线编号至 B-58 止」。
+- **抽查结果**：42 行 awk 按 `|` 分列全部 fields=8（无裸竖线/无换行破表）；三行渲染抽查 BA-66（L74）/BA-87（L95）/BA-107（L115）编号、状态、现象列完整；追加接缝 BA-65→BA-66 独立成行，文件尾 CRLF 正常。
+- **根因待查条目**：无——43 条全部有日志在册根因（B-17/19/20 为测试前提错、B-21 为 V27 潜伏列宽、B-57 死语句三重不可见等均已挖到底）。
+
+### 2026-09-10 傍晚③ kill -9 真崩溃演练 PASS + BUGLOG 转登闭环 + C 门跟进项清零
+
+- **kill -9 演练（agent-57，195 真机）**：webhook 直打 10 连发造繁忙窗，docker kill -s KILL 一次命中 RUNNING 中 run。五断言全 PASS：无幽灵 run（行数增量逐一相等，0 条 23503/duplicate）；checkpoint 面完整（result_ref FK 完好，call_seq 跨 attempt 单调，幂等收尾零新增）；UNKNOWN 语义（悬挂记录诚实 UNKNOWN，prometheus.query 不重复计费，预算无 PROVISIONAL 悬挂）；事件流无洞无重；终态收敛 SUCCEEDED（租约 10min+退避 1min=设计值分秒不差）。**偏差 D1**：docker CLI kill 被 daemon 标手动停止致 restart=unless-stopped 未自动拉起（人工 start 补回，恢复语义验证不受影响；容器内 kill -9 1 路径预期可自动重启，部署文档待明确）。观察项：被杀 attempt 行永久滞留 STARTED（ABANDONED 枚举无写入点，孤儿行即崩溃证据，设计内）。证据 docs/测试证据/ex-kill9-drill-20260910/。
+- **BUGLOG 转登（agent-56）**：B-16~B-57 共 42 条入册 BA-66~BA-107，零根因待查；B-58=BA-65 不重复；BA-60 勘误注、B-42 锚点偏差修正。C 门审计跟进项②闭环。
+- 根目录三个 shell 事故文件（$null / '2026-09-08 / 'input_snapshot_digest'）已删除（执行者验明无信息量）。
+- 群模拟页（agent-54 两阶段）：零新表复用 V43 duty_notification/duty_delivery，GET /api/duty/notifications/feed 归既有认证面；外观按 wecom-dingtalk-bot 调研 §D1 校准（机器人标签/三色 severity/卡片骨架/时间分隔条）；mvn 1087 测绿、npm build 绿。**待部署**（control-app 无迁移、alert-web 重建、195 补跑真 PG feed IT、POST /api/duty/test-notification 端到端验证）。
+
+### 2026-09-10 晚 EX-D1 部署（195 真栈，C 门审计收场后执行）——四条验证全 PASS
+
+- **同步**：tar 两模块上 195，diff 预演确认增量恰 EX-D1 改动集 12 文件（零并行会话
+  漂移），解包覆盖后双侧 sha256 前 16 全等。
+- **构建**：195 真 PG `mvn verify -pl control-app -am`（JAVA_HOME=/opt/jdk-21.0.12.1+1
+  固化）——surefire **1087/0F/0E/0 skip**、failsafe **178/0F/0E/0 skip**（含
+  PostgresDutyStoreIT 5/5，新增 feed IT 真库实跑）；`docker compose build
+  control-app web` exit=0。
+- **部署**：`docker compose up -d control-app web`（仅两容器，其余未动）；health
+  200、web /duty/chat SPA 200。无 flyway 迁移。
+- **验证四 PASS**：①feed 历史气泡 + drill:true×2（演练通道标记真实在数）；
+  ②AM webhook(cr 线) 202 → 29s 真实降级演进 `DEAD@rl-bot(channel_not_configured
+  诚实错误)→SENT@echo-bot(drill)`；GATUS 回写行 deliveries 空组如实——**MANUAL
+  入口以 RCA 全链替代**（写面主人=浏览器会话+CSRF，operator 口令按 EX-C3a 纪律
+  零落盘不可得，等价语义用真实链路验，入口本身 UT 锚定）；③DOM 级渲染全项 true
+  （Edge headless+CDP+契约 stub，组件渲染为真、截图留证）；④未认证 feed 直打
+  /经 web 均 401，op 线 200。
+- **终态**：control-app/web Up，其余 30+ 容器未动；内存 available 3358M；磁盘 62%。
+- **证据**：`docs/测试证据/EX-D1-duty-chat-deploy-20260910/`（README + verify 全量
+  log + deploy-verify log + DOM 断言 JSON/DOM 原文/截图 + 脚手架两枚）。
+
+### 2026-09-10 21:43 每日质量与进度强制检查点（cron 例行）
+
+**北极星指标现值**（195 真库直查）：
+- 最近 eval_run = full-0910b（2026-09-09 16:59，glm-5，SUCCEEDED）：coverage=1.0、conditional_accuracy=0、end_to_end_hit_rate=**0**——仍为已冻结的 Native 零命中基线原点，今日无新评测批。
+- LLM 在环状态：external_invocation_ledger 近 24h 调用 **0 次**（token 无）。近 24h rca_run 22 条全部 NATIVE 引擎 SUCCEEDED（kill-9 演练探针告警驱动）；引擎总账 NATIVE 32 / HOLMES 204。**主链仍无 LLM 在环，与 R7/多 Agent 未编码一致，非退化**。
+
+**进度对照**（旧压缩排期已作废，现行=执行者ABC v2.0 + R7 v2.0 + 主计划 v1.2，8~10 周讨论窗口）：
+- 今日主线进展=**前端重设计与全量联通线当日收官并部署 195**：UI-0 基座（Element Plus+zh-cn+tokens v2）→ UI-1 告警三页+后端 B1-B4 → AUTH-1 platform_user 白名单登录（V44，按用户澄清返工：不值班也可授权登录）→ UI-2/3/4/5/6 全页重构 → UI-7 mocks 物理删除+硬编码扫描清零 → 全量部署+15 页截图验收（证据 docs/测试证据/UI-全量-deploy-20260910/）。V44/V45 迁移真库成功；过程修 2 个真-PG-only 缺陷并补 IT 钉。
+- EX 线 13/13、评测线 full-0910b、C 门、群模拟部署——均已在前序条目收口。
+
+**风险与阻塞**：
+1. **北极星指标连续无在跑任务指向**：当前唯一能动 end_to_end_hit_rate 的线是 R7 真 LLM 多 Agent/增强线编码，其方案（增强线 v1.1 + Prompt/Skill 版本演进补充评审）**待用户审核**，编码线今日起处于待审闲置。按质量红线在此上报：建议用户尽快给出审核结论以解锁编码，或明确改派其他动指标的活。
+2. eval datasets 端点恒空：dataset_version/case_version 真库 0 行（评测数据生产面未接入 UI 可见面），非缺陷但影响评测页可用性。
+3. 值班快照/环境徽章等边缘项：VITE_ENV_LABEL 未注入（显"未标记"）；test/12345678 弱口令待换。
+
+**次日动作**（无用户新指令时）：①等用户对样板页审美反馈并迭代；②用户审过增强线方案后启动编码线（动北极星指标）；③kill-9 D1 部署文档补写。

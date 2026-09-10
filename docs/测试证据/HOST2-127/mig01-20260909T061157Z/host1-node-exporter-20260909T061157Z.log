@@ -1,0 +1,38 @@
+== MIG-01 bootstrap  ts=20260909T061213Z host=VM-0-4-centos role=node-exporter-only
+--- baseline
+Linux VM-0-4-centos 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+4
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3652         938         235        3134        3529
+Swap:          4095         398        3697
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   56G  1.4G  98% /
+NAME      TYPE SIZE   USED PRIO
+/swapfile file   4G 398.9M   -2
+docker-server=26.1.4
+RTT to 195 (146.56.195.225):
+10 packets transmitted, 10 received, 0% packet loss, time 8999ms
+rtt min/avg/max/mdev = 0.193/0.206/0.235/0.020 ms
+--- node_exporter
+Unable to find image 'prom/node-exporter:v1.9.1' locally
+v1.9.1: Pulling from prom/node-exporter
+9fa9226be034: Pulling fs layer
+1617e25568b2: Pulling fs layer
+c6e37428e3b3: Pulling fs layer
+1617e25568b2: Verifying Checksum
+1617e25568b2: Download complete
+9fa9226be034: Verifying Checksum
+9fa9226be034: Pull complete
+1617e25568b2: Pull complete
+c6e37428e3b3: Verifying Checksum
+c6e37428e3b3: Download complete
+c6e37428e3b3: Pull complete
+Digest: sha256:d00a542e409ee618a4edc67da14dd48c5da66726bbd5537ab2af9c1dfc442c8a
+Status: Downloaded newer image for prom/node-exporter:v1.9.1
+d3402e2721c77567e872f7863788324a418d335660fdc0f679c7c561b88d3a00
+PASS  node-exporter running
+PASS  node-exporter metrics
+PASS  node-exporter limit 64m
+PASS  MemAvailable metric visible
+--- seal
+RESULT pass=4 fail=0 evlog=/srv/alert-eval/mig01/evidence-20260909T061213Z.log

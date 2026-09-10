@@ -1,0 +1,109 @@
+-- memory-gate rules state --
+{"status":"success","data":{"resultType":"vector","result":[]}}
+-- node MemAvailable 双 job --
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"node_memory_MemAvailable_bytes","instance":"10.250.250.2:9100","job":"node-exporter-host2"},"value":[1788965781.773,"3104903168"]},{"metric":{"__name__":"node_memory_MemAvailable_bytes","instance":"10.250.250.1:9100","job":"node-exporter-host1"},"value":[1788965781.773,"3654332416"]}]}}
+-- eval 表 schema --
+                               Table "public.eval_run"
+          Column          |           Type           | Collation | Nullable | Default 
+--------------------------+--------------------------+-----------+----------+---------
+ id                       | uuid                     |           | not null | 
+ schema_version           | integer                  |           | not null | 
+ dataset_version          | text                     |           | not null | 
+ registry_digest          | character(64)            |           | not null | 
+ lexicon_version          | integer                  |           | not null | 
+ model                    | text                     |           | not null | 
+ prompt_version           | text                     |           | not null | 
+ prompt_digest            | character(64)            |           | not null | 
+ tool_registry_digest     | character(64)            |           | not null | 
+ temperature              | numeric                  |           |          | 
+ top_p                    | numeric                  |           |          | 
+ max_tokens               | integer                  |           |          | 
+ requested_seed           | bigint                   |           |          | 
+ effective_seed           | bigint                   |           |          | 
+ provider_fingerprint     | text                     |           | not null | 
+ alert_rule_digest        | character(64)            |           | not null | 
+ scenario_driver_version  | text                     |           | not null | 
+ config_digest            | character(64)            |           | not null | 
+ state                    | character varying(16)    |           | not null | 
+ started_at               | timestamp with time zone |           | not null | 
+ finished_at              | timestamp with time zone |           |          | 
+ total_scenarios          | integer                  |           |          | 
+ decidable_count          | integer                  |           |          | 
+ hit_count                | integer                  |           |          | 
+ unresolved_count         | integer                  |           |          | 
+ structure_rejected_count | integer                  |           |          | 
+ timeout_or_absent_count  | integer                  |           |          | 
+ tp_count                 | integer                  |           |          | 
+ fp_count                 | integer                  |           |          | 
+ fn_count                 | integer                  |           |          | 
+ coverage                 | double precision         |           |          | 
+ conditional_accuracy     | double precision         |           |          | 
+ end_to_end_hit_rate      | double precision         |           |          | 
+ unresolved_rate          | double precision         |           |          | 
+ baseline_report_digest   | character(64)            |           |          | 
+ created_at               | timestamp with time zone |           | not null | now()
+Indexes:
+                           Table "public.eval_case_result"
+          Column          |           Type           | Collation | Nullable | Default 
+--------------------------+--------------------------+-----------+----------+---------
+ id                       | uuid                     |           | not null | 
+ eval_run_id              | uuid                     |           | not null | 
+ scenario_id              | text                     |           | not null | 
+ round_no                 | integer                  |           | not null | 
+ selection_policy_version | text                     |           | not null | 
+ rca_run_id               | uuid                     |           |          | 
+ scored_attempt_id        | uuid                     |           |          | 
+ scored_report_id         | uuid                     |           |          | 
+ verdict                  | character varying(20)    |           | not null | 
+ root_cause_hit           | boolean                  |           | not null | 
+ expected_root_cause      | jsonb                    |           | not null | 
+ actual_root_cause        | jsonb                    |           |          | 
+ expected_symptom_codes   | jsonb                    |           | not null | 
+ actual_symptom_codes     | jsonb                    |           |          | 
+ tp_count                 | integer                  |           | not null | 0
+ fp_count                 | integer                  |           | not null | 0
+ fn_count                 | integer                  |           | not null | 0
+ latency_ms               | bigint                   |           |          | 
+ silence_penalty          | boolean                  |           | not null | false
+ failure_sample           | jsonb                    |           |          | 
+ created_at               | timestamp with time zone |           | not null | now()
+Indexes:
+    "eval_case_result_pkey" PRIMARY KEY, btree (id)
+    "ix_eval_case_scenario" btree (scenario_id, created_at)
+    "uq_eval_case_result" UNIQUE CONSTRAINT, btree (eval_run_id, scenario_id, round_no)
+Check constraints:
+    "ck_eval_case_hit_only_decidable" CHECK (NOT root_cause_hit OR verdict::text = 'DECIDABLE'::text)
+    "ck_eval_case_verdict" CHECK (verdict::text = ANY (ARRAY['DECIDABLE'::character varying, 'UNRESOLVED'::character varying, 'STRUCTURE_REJECTED'::character varying, 'TIMEOUT_OR_ABSENT'::character varying]::text[]))
+    "ck_eval_case_verdict_shape" CHECK (verdict::text = 'DECIDABLE'::text AND scored_report_id IS NOT NULL AND scored_attempt_id IS NOT NULL OR verdict::text = 'UNRESOLVED'::text AND scored_report_id IS NOT NULL OR (verdict::text = ANY (ARRAY['STRUCTURE_REJECTED'::character varying, 'TIMEOUT_OR_ABSENT'::character varying]::text[])) AND scored_report_id IS NULL)
+    "eval_case_result_fn_count_check" CHECK (fn_count >= 0)
+    "eval_case_result_fp_count_check" CHECK (fp_count >= 0)
+    "eval_case_result_latency_ms_check" CHECK (latency_ms IS NULL OR latency_ms >= 0)
+    "eval_case_result_round_no_check" CHECK (round_no >= 1)
+    "eval_case_result_tp_count_check" CHECK (tp_count >= 0)
+Foreign-key constraints:
+    "eval_case_result_eval_run_id_fkey" FOREIGN KEY (eval_run_id) REFERENCES eval_run(id)
+    "eval_case_result_rca_run_id_fkey" FOREIGN KEY (rca_run_id) REFERENCES rca_run(id)
+-- 195 终态 --
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3701        1277         234        2746        3482
+/dev/vda1        59G   31G   26G  55% /
+node-exporter	11.91MiB / 64MiB
+deploy-control-app-1	223.3MiB / 768MiB
+deploy-otelcol-control-1	29.02MiB / 384MiB
+flagd-admin-am3	17.96MiB / 64MiB
+litellm-am3	460.1MiB / 1.5GiB
+deploy-notify-app-1	173.3MiB / 384MiB
+alert-arena-chaos-admin-1	182.2MiB / 384MiB
+alert-order-arena-1	222.2MiB / 512MiB
+prometheus-am0	264.6MiB / 300MiB
+deploy-postgres-1	347.2MiB / 512MiB
+alertmanager-am0	10.71MiB / 7.545GiB
+otel-collector	128.6MiB / 400MiB
+frontend-proxy	21.44MiB / 90MiB
+load-generator	188.5MiB / 1.465GiB
+frontend	100.4MiB / 250MiB
+recommendation	41.43MiB / 500MiB
+checkout	16.09MiB / 20MiB
+product-catalog	19.89MiB / 20MiB
+cart	54.79MiB / 160MiB
+shipping	7.77MiB / 20MiB

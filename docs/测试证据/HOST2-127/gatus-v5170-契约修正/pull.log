@@ -1,0 +1,21 @@
+=== docker pull twinproduction/gatus:v5.17.0 ===
+Wed Sep  9 08:26:58 UTC 2026
+v5.17.0: Pulling from twinproduction/gatus
+396d5518efcc: Pulling fs layer
+cf2d56fcd7b1: Pulling fs layer
+838a07d22073: Pulling fs layer
+838a07d22073: Verifying Checksum
+838a07d22073: Download complete
+396d5518efcc: Download complete
+396d5518efcc: Pull complete
+cf2d56fcd7b1: Verifying Checksum
+cf2d56fcd7b1: Download complete
+cf2d56fcd7b1: Pull complete
+838a07d22073: Pull complete
+Digest: sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512
+Status: Downloaded newer image for twinproduction/gatus:v5.17.0
+docker.io/twinproduction/gatus:v5.17.0
+=== docker images --digests (gatus) ===
+twinproduction/gatus                   v5.17.0                     sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512   7286de66b391   17 months ago   47.9MB
+=== inspect RepoDigests ===
+twinproduction/gatus@sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512

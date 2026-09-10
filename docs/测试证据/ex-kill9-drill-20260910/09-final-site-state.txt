@@ -1,0 +1,10 @@
+0
+===FLEET===
+===HEALTH===
+Up 15 minutes
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3829         969         235        2926        3353
+/dev/vda1        59G   35G   23G  61% /
+===AM===
+0
+no Kill9Drill in alertmanager (never sent there)

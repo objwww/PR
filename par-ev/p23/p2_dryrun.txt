@@ -1,0 +1,49 @@
+===== [B1] backup tar =====
+-rw-r--r-- 1 root root 1942 Sep  9 16:15 /root/prom-rules-backup-20260909.tgz
+--- sha256 ---
+4c5e3143040da95ce406d1aedd4fc287c8aa1ed0e64d5c2e8b8c0fef5df0dd42  /root/prom-rules-backup-20260909.tgz
+--- tar content ---
+rules/
+rules/arena.yml
+rules/empty-groups.yml
+rules/prometheus-rules-checkout.yml
+===== Q: 01_memavail_true =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"}
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"__name__":"node_memory_MemAvailable_bytes","instance":"10.250.250.1:9100","job":"node-exporter-host1"},"value":[1788941718.840,"3744256000"]}]}}
+
+===== Q: 02_suffix_1_2Gi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1.2Gi
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"1.2\""}
+
+===== Q: 03_suffix_768Mi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 768Mi
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"768\""}
+
+===== Q: 04_suffix_512Mi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 512Mi
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"512\""}
+
+===== Q: 05_mult_1_2Gi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1.2*1024*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 06_mult_768Mi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 768*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 07_mult_512Mi =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 512*1024*1024
+{"status":"success","data":{"resultType":"vector","result":[]}}
+
+===== Q: 08_suffix_100Gi_positive =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 100Gi
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"100\""}
+
+===== Q: 09_tier3_full_expr_with_ALERTS =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 512Mi or on(instance) (ALERTS{alertname="MemoryGateTier3",alertstate="firing"} == 1 and on(instance) node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1536Mi)
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"512\""}
+
+===== Q: 10_tier3_recovery_probe =====
+query: node_memory_MemAvailable_bytes{job="node-exporter-host1"} < 1536Mi
+{"status":"error","errorType":"bad_data","error":"invalid parameter \"query\": 1:61: parse error: bad number or duration syntax: \"1536\""}
+

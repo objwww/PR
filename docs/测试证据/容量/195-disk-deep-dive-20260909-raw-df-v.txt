@@ -1,0 +1,388 @@
+===== [1] df -h (all) =====
+Filesystem      Size  Used Avail Use% Mounted on
+devtmpfs        3.8G  4.0K  3.8G   1% /dev
+tmpfs           3.8G   24K  3.8G   1% /dev/shm
+tmpfs           3.8G  3.2M  3.8G   1% /run
+tmpfs           3.8G     0  3.8G   0% /sys/fs/cgroup
+/dev/vda1        59G   42G   16G  74% /
+tmpfs           773M     0  773M   0% /run/user/0
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/b63b0a94d51b0f67a384837c0ff9a67529c0355f8962106ca7740669a372b461/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/f7f9a303fe9d8ea49177059daa68c7cf18ea9ec7aa6c53194cca97d1d5c7a6c2/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/8028066c3c379a18c63108e137431906836e0e273847b39ebc94485a55a79a5f/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/bc23753b4444a76c9f732bb286c9d7f960588f313d46096e694172afde3fb326/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/4b97ee2cd055550f320c904ed27119d631b91433230cd04ef2d587943574c749/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/aacb55c3b6a3347dae3d357d479ed2a7aa8bd15d8e22afb2f1cefd291115a7f0/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/e7453f5ab9ff4b7e350bbf978eafa4c7a91e22eecbc0863d38ecacb34a4361a8/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/fdb204b7a43c58c784f97b464614ad2d0428bbb58cb39d5730c63f1a3231b7c6/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/ef75f29e127de134068a48bfe40aa40191306649403ad8a9689776e6414e3252/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/48aed822c15c6c4d84de961a2e64adb89a33bbe48ef74f64feb4ead0c1d965f8/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/882d3ed9df271d9e3a556ba57ec6b8d07d5011d658041d3738ef054068c19891/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/c7050e4972ea44d09fc442bd445458e519dfe07157f44baed620536a53bda1e8/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/2e895ec9e72b98db0c0e4d18033f973dfe38ba75c0d727ce81d36cc46abc0865/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/15b6b4ec9f7322230fce666b5cd42b0f425fe51563f0fd5d1ffb072b93ae4deb/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/b8b8bce032bace235ce1d4e09b38573ca79de4e6d02e8dcdc62d01cc78fa5b94/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/36fb406ecd430dc06d35c6dd5661599e03c739a88e9e3c80f2083550082a67d9/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/f470a16fb1640560a1f8827f51a9c0743d58e4811aee74ba64fbc1126bbe628f/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/215be589dc5e67f24c9d5a9a6a4cf34b2c9080895f4dbedcba204199c032f306/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/fad77fb3bdcc64d4221da7b3ed8fa0a647f3eb1fabe383f1009b2f8f040e9aa9/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/ceb3fcea4f5facd6ae96bd95b4bdb6f5ff622794304a3b8f2bb5ae939758da28/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/362ba43664118a7dff546304b708b7626d2ee61e64fab77f1c23d57b9658e1a6/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/c7930b3669b397251799286da1573d39a9bc8487101011067417473515c0aec5/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/845d3b3fb6e02c63200cd878d4226c7f79b1a6133f136a24d8e1628c44ae22d3/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/d064fba7bef84e370c672b31b1bcaa26cafb44a7381660a3418600fbac97501d/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/0036dd49fa406a0cb0d6d64baeb7722cb18090330c16a49d466d73fc5fb86ffe/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/8ba592a89907b87144f59a67e433c5bb0998c50da8bf5a3052780e562e31749c/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/7083a9d39ec0e65b660bca7270fe2969b63ea01e3d064c17ce6c099c2e6f12b4/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/9e7d17b5357360ed66aaac32721b092771d303e56d87ef9ca02908c6d25688f1/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/4ca4b2cbed8e7f96393e81bded890b7b497b8955fc5fc79d5e19f7470750f07e/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/37daa3491be006987305c0c310f78101b2a9262f464c46aa71558c8d3f12ef53/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/6679f89103073f73c41ff58415ad581026095eb62bc3252450a1d9c1700e6462/merged
+overlay          59G   42G   16G  74% /var/lib/docker/overlay2/201fcf2bc3507b84af6a583776892377434dac52b3d212b7374c83fcc564f0c2/merged
+
+===== [2] docker system df =====
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          34        32        9.321GB   1.898GB (20%)
+Containers      32        32        75.54MB   0B (0%)
+Local Volumes   44        6         4.802GB   3.42GB (71%)
+Build Cache     0         0         0B        0B
+
+===== [3] docker system df -v (full) =====
+Images space usage:
+
+REPOSITORY                                                                                TAG                      IMAGE ID       CREATED         SIZE      SHARED SIZE   UNIQUE SIZE   CONTAINERS
+pr-agent/control-app                                                                      0.0.1-SNAPSHOT           430a3fd3c505   7 hours ago     358MB     318.1MB       40.22MB       1
+pr-agent/flagd-admin                                                                      0.0.1-SNAPSHOT           faff3e9500e1   3 days ago      60.8MB    8.416MB       52.38MB       1
+pr-agent/notify-app                                                                       0.0.1-SNAPSHOT           bb2c40a1d63e   3 days ago      344MB     318.1MB       25.72MB       1
+pr-agent/arena-chaos-admin                                                                0.0.1-SNAPSHOT           6b6ec2ad42a7   4 days ago      344MB     318.1MB       25.71MB       1
+pr-agent/order-arena                                                                      0.0.1-SNAPSHOT           0d34cdd42815   4 days ago      347MB     318.1MB       29.32MB       1
+local/holmesgpt                                                                           am1-http                 d0a0518d734c   4 days ago      830MB     127.4MB       702.5MB       0
+local/holmesgpt                                                                           am0                      caf8f7c28977   6 days ago      831MB     127.4MB       703.3MB       0
+ghcr.io/open-telemetry/demo                                                               latest-currency          3fe74e224fca   6 days ago      117MB     8.416MB       108.9MB       1
+ghcr.io/open-telemetry/demo                                                               latest-frontend          5d0b54c7076c   6 days ago      607MB     27.56MB       579.8MB       1
+ghcr.io/open-telemetry/demo                                                               latest-load-generator    45ac14229128   6 days ago      1.35GB    0B            1.352GB       1
+ghcr.io/open-telemetry/demo                                                               latest-email             1cf1ee852f3e   6 days ago      189MB     0B            189.1MB       1
+ghcr.io/open-telemetry/demo                                                               latest-frontend-proxy    b811cd861c6d   6 days ago      203MB     0B            203.1MB       1
+ghcr.io/open-telemetry/demo                                                               latest-shipping          44b1c626033c   7 days ago      50.7MB    27.56MB       23.12MB       1
+ghcr.io/open-telemetry/demo                                                               latest-flagd-ui          d2a2e2f92e7a   7 days ago      138MB     0B            137.8MB       1
+ghcr.io/open-telemetry/demo                                                               latest-quote             3480fd732f7f   7 days ago      153MB     8.416MB       144.2MB       1
+ghcr.io/open-telemetry/demo                                                               latest-checkout          b5bd1dc117ab   7 days ago      39.6MB    2.114MB       37.49MB       1
+ghcr.io/open-telemetry/demo                                                               latest-product-catalog   8ad080118539   7 days ago      38.4MB    2.114MB       36.25MB       1
+ghcr.io/open-telemetry/demo                                                               latest-ad                22b0665495f7   7 days ago      414MB     0B            414.4MB       1
+ghcr.io/open-telemetry/demo                                                               latest-payment           6591874e0e88   7 days ago      234MB     0B            233.6MB       1
+ghcr.io/open-telemetry/demo                                                               latest-recommendation    887f15013643   7 days ago      103MB     8.416MB       94.72MB       1
+ghcr.io/open-telemetry/demo                                                               latest-image-provider    c044ad117bf1   7 days ago      90.4MB    0B            90.36MB       1
+ghcr.io/open-telemetry/demo                                                               latest-cart              1a4270307aee   7 days ago      133MB     8.411MB       124.9MB       1
+ghcr.io/open-telemetry/demo                                                               latest-telemetry-docs    a5711cbd808e   7 days ago      100MB     8.411MB       91.87MB       1
+ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib   0.159.0                  e11c83206a71   3 weeks ago     392MB     0B            391.5MB       1
+prom/alertmanager                                                                         latest                   c4e1c067b29e   3 weeks ago     82MB      0B            82.05MB       1
+postgres                                                                                  16-alpine                75f5a96988cd   3 weeks ago     294MB     8.416MB       285.9MB       1
+postgres                                                                                  18.4                     4b87d5343a0e   5 weeks ago     456MB     0B            456.3MB       1
+ghcr.io/valkey-io/valkey                                                                  9.0.4-alpine3.23         050be54bbd78   8 weeks ago     43.4MB    8.411MB       35.02MB       1
+quay.io/prometheus/prometheus                                                             v3.13.1                  9c3c26cff425   2 months ago    250MB     0B            250.2MB       1
+litellm/litellm                                                                           1.89.0                   c350e7d34e21   2 months ago    1.21GB    0B            1.214GB       1
+ghcr.io/open-feature/flagd                                                                v0.16.0                  94df37d44981   3 months ago    115MB     0B            115.3MB       1
+prom/node-exporter                                                                        v1.9.1                   255ec253085f   17 months ago   25MB      0B            24.98MB       1
+wiremock/wiremock                                                                         3.9.1                    cb94f7a4f456   2 years ago     277MB     0B            276.7MB       1
+otel/opentelemetry-collector-contrib                                                      0.104.0                  dd3edc30f393   2 years ago     256MB     0B            256MB         1
+
+Containers space usage:
+
+CONTAINER ID   IMAGE                                                                                             COMMAND                  LOCAL VOLUMES   SIZE      CREATED          STATUS                  NAMES
+4c6a51f4564f   prom/node-exporter:v1.9.1                                                                         "/bin/node_exporter …"   0               0B        44 minutes ago   Up 44 minutes           node-exporter
+491c32975b63   pr-agent/control-app:0.0.1-SNAPSHOT                                                               "java -jar /app/app.…"   1               0B        7 hours ago      Up 7 hours              deploy-control-app-1
+afe88b704029   otel/opentelemetry-collector-contrib:0.104.0                                                      "/otelcol-contrib --…"   0               0B        24 hours ago     Up 24 hours             deploy-otelcol-control-1
+2a7f24d3f650   pr-agent/flagd-admin:0.0.1-SNAPSHOT                                                               "python -u /app/serv…"   0               0B        3 days ago       Up 3 days (healthy)     flagd-admin-am3
+29e2fc658f13   litellm/litellm:1.89.0                                                                            "docker/prod_entrypo…"   1               54.2MB    3 days ago       Up 31 hours (healthy)   litellm-am3
+a4b99d85f327   pr-agent/notify-app:0.0.1-SNAPSHOT                                                                "java -jar /app/app.…"   0               0B        3 days ago       Up 3 days               deploy-notify-app-1
+26b384b7ace3   pr-agent/arena-chaos-admin:0.0.1-SNAPSHOT                                                         "java -XX:MaxRAMPerc…"   0               0B        4 days ago       Up 4 days (healthy)     alert-arena-chaos-admin-1
+19ac9007432c   pr-agent/order-arena:0.0.1-SNAPSHOT                                                               "java -XX:MaxRAMPerc…"   0               0B        4 days ago       Up 13 hours (healthy)   alert-order-arena-1
+930e8a5367a5   quay.io/prometheus/prometheus:v3.13.1                                                             "/bin/prometheus --c…"   1               3.35kB    4 days ago       Up 44 minutes           prometheus-am0
+194edd41c827   postgres:16-alpine                                                                                "docker-entrypoint.s…"   1               63B       4 days ago       Up 4 days (healthy)     deploy-postgres-1
+22f4fe3903ba   prom/alertmanager:latest                                                                          "/bin/alertmanager -…"   1               237B      4 days ago       Up 26 hours             alertmanager-am0
+8641f84b6008   ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.159.0   "/otelcol-contrib --…"   0               0B        5 days ago       Up 5 days               otel-collector
+acabc4322335   ghcr.io/open-telemetry/demo:latest-frontend-proxy                                                 "/bin/sh -c 'envsubs…"   0               14.6kB    5 days ago       Up 5 days (healthy)     frontend-proxy
+6857407cfaac   ghcr.io/open-telemetry/demo:latest-load-generator                                                 "locust --skip-log-s…"   0               3.85MB    5 days ago       Up 4 days (healthy)     load-generator
+92ac37b76e8e   ghcr.io/open-telemetry/demo:latest-frontend                                                       "/nodejs/bin/node --…"   0               0B        5 days ago       Up 4 days (healthy)     frontend
+fd2000882224   ghcr.io/open-telemetry/demo:latest-recommendation                                                 "/venv/bin/opentelem…"   0               4.26MB    5 days ago       Up 4 days (healthy)     recommendation
+ae03bf0128ff   ghcr.io/open-telemetry/demo:latest-checkout                                                       "./checkout"             0               0B        5 days ago       Up 4 days (healthy)     checkout
+a426f389db41   ghcr.io/open-telemetry/demo:latest-product-catalog                                                "./product-catalog"      0               0B        5 days ago       Up 5 days (healthy)     product-catalog
+7ecc4f159f4a   ghcr.io/open-telemetry/demo:latest-cart                                                           "./cart"                 0               0B        5 days ago       Up 5 days               cart
+46b029f90e99   ghcr.io/open-telemetry/demo:latest-shipping                                                       "./shipping"             0               0B        5 days ago       Up 5 days (healthy)     shipping
+2624e035bdd1   ghcr.io/open-telemetry/demo:latest-ad                                                             "./build/install/ope…"   0               32.8kB    5 days ago       Up 5 days (healthy)     ad
+f73772c5f882   ghcr.io/open-telemetry/demo:latest-payment                                                        "/nodejs/bin/node in…"   0               0B        5 days ago       Up 5 days (healthy)     payment
+fc19debdbd49   ghcr.io/open-telemetry/demo:latest-flagd-ui                                                       "sh -c 'ulimit -n 65…"   0               0B        5 days ago       Up 5 days (healthy)     flagd-ui
+043c3bf1a43a   ghcr.io/open-telemetry/demo:latest-currency                                                       "sh -c './usr/local/…"   0               0B        5 days ago       Up 5 days (healthy)     currency
+1943d7dbdd40   ghcr.io/open-telemetry/demo:latest-quote                                                          "docker-php-entrypoi…"   0               0B        5 days ago       Up 5 days (healthy)     quote
+5c34035ad061   ghcr.io/open-telemetry/demo:latest-email                                                          "bundle exec ruby em…"   0               0B        5 days ago       Up 5 days (healthy)     email
+f84e9bcc89ba   ghcr.io/open-telemetry/demo:latest-image-provider                                                 "/docker-entrypoint.…"   0               13.1MB    5 days ago       Up 5 days (healthy)     image-provider
+f1ce6e898c04   postgres:18.4                                                                                     "docker-entrypoint.s…"   1               68B       5 days ago       Up 5 days (healthy)     astronomy-db
+f154e1b95315   ghcr.io/open-feature/flagd:v0.16.0                                                                "/flagd-build start …"   0               0B        5 days ago       Up 3 days               flagd
+9a9f750ee552   ghcr.io/open-telemetry/demo:latest-telemetry-docs                                                 "/docker-entrypoint.…"   0               1.6kB     5 days ago       Up 5 days (healthy)     telemetry-docs
+6e4d29255dff   ghcr.io/valkey-io/valkey:9.0.4-alpine3.23                                                         "docker-entrypoint.s…"   0               24.3kB    5 days ago       Up 5 days (healthy)     valkey-cart
+54033768a33c   wiremock/wiremock:3.9.1                                                                           "/docker-entrypoint.…"   0               32.8kB    5 days ago       Up 5 days (healthy)     echo-receiver
+
+Local Volumes space usage:
+
+VOLUME NAME                                                        LINKS     SIZE
+hotel-platform_hotel-logs                                          0         58.18MB
+848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371   0         247MB
+9e8630d0ec29055b87b8905ea0f0bc730416af903100e41d96f863d73713e34d   1         65.91MB
+f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247   0         0B
+56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747   0         0B
+alert_litellm-logs                                                 1         0B
+99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c   0         40.23MB
+deploy_pg-data                                                     1         987.8MB
+hotel-platform-obs_hotel-otelcol-state                             0         237.6MB
+b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f   0         41.03MB
+9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09   0         0B
+0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d   0         0B
+8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d   0         278MB
+e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc   0         48.98MB
+5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7   0         40.27MB
+347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021   0         0B
+c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b   0         0B
+3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf   0         0B
+m2repo                                                             0         354.7MB
+5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535   0         40.22MB
+23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186   0         0B
+hotel-platform-obs_hotel-logs                                      0         103.9MB
+0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4   0         278MB
+a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c   0         0B
+6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea   0         0B
+998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a   0         0B
+b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368   0         0B
+4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78   0         52.13MB
+hotel-platform_hotel-mysql                                         0         496.1MB
+f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8   0         40.2MB
+09ffdba56f7dc3921937a6d2e86bcb4130ddc7c937e766fbaf090366fd08bf0d   1         0B
+cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd   0         0B
+6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5   0         0B
+adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778   0         0B
+817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa   0         52.14MB
+f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253   0         129.8MB
+2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c   0         47.55MB
+1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927   0         278MB
+5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937   0         278MB
+deploy_cas-data                                                    1         20.98MB
+11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104   1         307MB
+41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319   0         0B
+hotel-platform_hotel-media                                         0         0B
+251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64   0         278MB
+
+Build cache usage: 0B
+
+CACHE ID   CACHE TYPE   SIZE      CREATED   LAST USED   USAGE     SHARED
+===== [4] dangling volumes (names) =====
+0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4
+1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927
+2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c
+4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78
+5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535
+5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937
+5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7
+6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea
+8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d
+9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09
+23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186
+41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319
+56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747
+99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c
+251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64
+0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d
+347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021
+817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa
+848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371
+998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a
+3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf
+6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5
+a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c
+adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778
+b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f
+b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368
+c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b
+cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd
+e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc
+f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253
+f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8
+f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247
+hotel-platform-obs_hotel-logs
+hotel-platform-obs_hotel-otelcol-state
+hotel-platform_hotel-logs
+hotel-platform_hotel-media
+hotel-platform_hotel-mysql
+m2repo
+
+count:
+38
+
+===== [5] all volumes =====
+DRIVER    VOLUME NAME
+local     0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4
+local     1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927
+local     2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c
+local     4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78
+local     5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535
+local     5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937
+local     5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7
+local     6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea
+local     8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d
+local     9e8630d0ec29055b87b8905ea0f0bc730416af903100e41d96f863d73713e34d
+local     9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09
+local     09ffdba56f7dc3921937a6d2e86bcb4130ddc7c937e766fbaf090366fd08bf0d
+local     23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186
+local     41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319
+local     56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747
+local     99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c
+local     251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64
+local     0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d
+local     347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021
+local     817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa
+local     848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371
+local     998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a
+local     3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf
+local     6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5
+local     11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104
+local     a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c
+local     adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778
+local     alert_litellm-logs
+local     b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f
+local     b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368
+local     c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b
+local     cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd
+local     deploy_cas-data
+local     deploy_pg-data
+local     e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc
+local     f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253
+local     f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8
+local     f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247
+local     hotel-platform-obs_hotel-logs
+local     hotel-platform-obs_hotel-otelcol-state
+local     hotel-platform_hotel-logs
+local     hotel-platform_hotel-media
+local     hotel-platform_hotel-mysql
+local     m2repo
+
+===== [6] running containers with mounts =====
+--- node-exporter ---
+bind|/sys|/host/sys
+bind|/|/rootfs
+bind|/proc|/host/proc
+
+--- deploy-control-app-1 ---
+volume|deploy_cas-data/var/lib/docker/volumes/deploy_cas-data/_data|/var/cas
+
+--- deploy-otelcol-control-1 ---
+bind|/opt/build/pr/deploy/otelcol-control/otelcol-config.yml|/etc/otelcol/otelcol-config.yml
+
+--- flagd-admin-am3 ---
+bind|/opt/build/opentelemetry-demo/src/flagd|/flags
+
+--- litellm-am3 ---
+bind|/opt/build/pr/deploy/alert/litellm/config.yaml|/app/config.yaml
+volume|alert_litellm-logs/var/lib/docker/volumes/alert_litellm-logs/_data|/app/logs
+
+--- deploy-notify-app-1 ---
+
+--- alert-arena-chaos-admin-1 ---
+
+--- alert-order-arena-1 ---
+
+--- prometheus-am0 ---
+bind|/opt/build/pr/deploy/alert/prometheus/prometheus.yml|/etc/prometheus/prometheus.yml
+bind|/opt/build/pr/deploy/alert/prometheus/rules|/etc/prometheus/rules
+volume|11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104/var/lib/docker/volumes/11851d574af737b711c69b29b68e764dea4c5de6c1dde0c9bf0d240900baa104/_data|/prometheus
+
+--- deploy-postgres-1 ---
+bind|/opt/build/pr/deploy/db/01-roles.sh|/docker-entrypoint-initdb.d/01-roles.sh
+volume|deploy_pg-data/var/lib/docker/volumes/deploy_pg-data/_data|/var/lib/postgresql/data
+
+--- alertmanager-am0 ---
+bind|/opt/build/pr/deploy/alert/alertmanager/alertmanager.yml|/etc/alertmanager/alertmanager.yml
+bind|/opt/build/pr/deploy/alert/alertmanager/secrets|/etc/alertmanager/secrets
+volume|09ffdba56f7dc3921937a6d2e86bcb4130ddc7c937e766fbaf090366fd08bf0d/var/lib/docker/volumes/09ffdba56f7dc3921937a6d2e86bcb4130ddc7c937e766fbaf090366fd08bf0d/_data|/alertmanager
+
+--- otel-collector ---
+bind|/opt/build/opentelemetry-demo/src/otel-collector/otelcol-config.yml|/etc/otelcol-config.yml
+bind|/opt/build/opentelemetry-demo/src/otel-collector/otelcol-config-extras.yml|/etc/otelcol-config-extras.yml
+bind|/|/hostfs
+bind|/var/run/docker.sock|/var/run/docker.sock
+
+--- frontend-proxy ---
+
+--- load-generator ---
+
+--- frontend ---
+
+--- recommendation ---
+
+--- checkout ---
+
+--- product-catalog ---
+bind|/opt/build/opentelemetry-demo/otel-config.yml|/otel-config.yml
+
+--- cart ---
+
+--- shipping ---
+
+--- ad ---
+
+--- payment ---
+
+--- flagd-ui ---
+bind|/opt/build/opentelemetry-demo/src/flagd|/app/data
+
+--- currency ---
+
+--- quote ---
+
+--- email ---
+
+--- image-provider ---
+
+--- astronomy-db ---
+volume|9e8630d0ec29055b87b8905ea0f0bc730416af903100e41d96f863d73713e34d/var/lib/docker/volumes/9e8630d0ec29055b87b8905ea0f0bc730416af903100e41d96f863d73713e34d/_data|/var/lib/postgresql
+bind|/opt/build/opentelemetry-demo/src/postgresql/init.sql|/docker-entrypoint-initdb.d/init.sql
+
+--- flagd ---
+bind|/opt/build/opentelemetry-demo/src/flagd|/etc/flagd
+
+--- telemetry-docs ---
+
+--- valkey-cart ---
+
+--- echo-receiver ---
+
+
+===== [7] all containers (ps -a) names+status =====
+node-exporter	Up 44 minutes
+deploy-control-app-1	Up 7 hours
+deploy-otelcol-control-1	Up 24 hours
+flagd-admin-am3	Up 3 days (healthy)
+litellm-am3	Up 31 hours (healthy)
+deploy-notify-app-1	Up 3 days
+alert-arena-chaos-admin-1	Up 4 days (healthy)
+alert-order-arena-1	Up 13 hours (healthy)
+prometheus-am0	Up 44 minutes
+deploy-postgres-1	Up 4 days (healthy)
+alertmanager-am0	Up 26 hours
+otel-collector	Up 5 days
+frontend-proxy	Up 5 days (healthy)
+load-generator	Up 4 days (healthy)
+frontend	Up 4 days (healthy)
+recommendation	Up 4 days (healthy)
+checkout	Up 4 days (healthy)
+product-catalog	Up 5 days (healthy)
+cart	Up 5 days
+shipping	Up 5 days (healthy)
+ad	Up 5 days (healthy)
+payment	Up 5 days (healthy)
+flagd-ui	Up 5 days (healthy)
+currency	Up 5 days (healthy)
+quote	Up 5 days (healthy)
+email	Up 5 days (healthy)
+image-provider	Up 5 days (healthy)
+astronomy-db	Up 5 days (healthy)
+flagd	Up 3 days
+telemetry-docs	Up 5 days (healthy)
+valkey-cart	Up 5 days (healthy)
+echo-receiver	Up 5 days (healthy)

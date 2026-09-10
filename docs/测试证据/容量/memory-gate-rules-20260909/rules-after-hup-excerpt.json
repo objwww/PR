@@ -1,0 +1,76 @@
+﻿{
+    "name":  "memory-gate",
+    "file":  "/etc/prometheus/rules/memory-gate.yml",
+    "rules":  [
+                  {
+                      "state":  "inactive",
+                      "name":  "MemoryGateTier1",
+                      "query":  "node_memory_MemAvailable_bytes{job=\"node-exporter-host1\"} \u003c 1.2 * 1024 * 1024 * 1024",
+                      "duration":  300,
+                      "keepFiringFor":  0,
+                      "labels":  {
+                                     "severity":  "info",
+                                     "tier":  "t1"
+                                 },
+                      "annotations":  {
+                                          "description":  "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier1 闸门 1.2GiB 且持续 5m。属早期预警，仅需关注新增内存消耗来源。",
+                                          "summary":  "HOST1 可用内存低于 1.2GiB（tier1/info）"
+                                      },
+                      "alerts":  [
+
+                                 ],
+                      "health":  "ok",
+                      "evaluationTime":  0.000256173,
+                      "lastEvaluation":  "2026-09-09T08:18:23.95300886Z",
+                      "type":  "alerting"
+                  },
+                  {
+                      "state":  "inactive",
+                      "name":  "MemoryGateTier2",
+                      "query":  "node_memory_MemAvailable_bytes{job=\"node-exporter-host1\"} \u003c 768 * 1024 * 1024",
+                      "duration":  120,
+                      "keepFiringFor":  0,
+                      "labels":  {
+                                     "severity":  "warning",
+                                     "tier":  "t2"
+                                 },
+                      "annotations":  {
+                                          "description":  "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier2 闸门 768MiB 且持续 2m。应安排降载动作（暂缓批处理、压低重 IO 任务并发）。",
+                                          "summary":  "HOST1 可用内存低于 768MiB（tier2/warning）"
+                                      },
+                      "alerts":  [
+
+                                 ],
+                      "health":  "ok",
+                      "evaluationTime":  0.000074,
+                      "lastEvaluation":  "2026-09-09T08:18:23.95326922Z",
+                      "type":  "alerting"
+                  },
+                  {
+                      "state":  "inactive",
+                      "name":  "MemoryGateTier3",
+                      "query":  "node_memory_MemAvailable_bytes{job=\"node-exporter-host1\"} \u003c 512 * 1024 * 1024 or on (instance) (ALERTS{alertname=\"MemoryGateTier3\",alertstate=\"firing\"} == 1 and on (instance) node_memory_MemAvailable_bytes{job=\"node-exporter-host1\"} \u003c 1536 * 1024 * 1024)",
+                      "duration":  0,
+                      "keepFiringFor":  0,
+                      "labels":  {
+                                     "severity":  "critical",
+                                     "tier":  "t3"
+                                 },
+                      "annotations":  {
+                                          "description":  "195 本机 MemAvailable={{ $value | humanize1024 }}，跌破 tier3 闸门 512MiB，立即触发。滞回窗口内 $value 显示为告警状态位 1，实际水位以 MemAvailable 查询为准；恢复需回到 1536MiB 以上。",
+                                          "summary":  "HOST1 可用内存低于 512MiB（tier3/critical，立即触发）"
+                                      },
+                      "alerts":  [
+
+                                 ],
+                      "health":  "ok",
+                      "evaluationTime":  0.000121509,
+                      "lastEvaluation":  "2026-09-09T08:18:23.953345905Z",
+                      "type":  "alerting"
+                  }
+              ],
+    "interval":  15,
+    "limit":  0,
+    "evaluationTime":  0.000496376,
+    "lastEvaluation":  "2026-09-09T08:18:23.952973203Z"
+}

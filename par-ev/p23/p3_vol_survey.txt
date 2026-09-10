@@ -1,0 +1,465 @@
+===== VOL 0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4 =====
+267M	/var/lib/docker/volumes/0afcb36a5690d511fb5330ec5a7496d2c8b95dd6d567155019367953fff346d4/_data
+total 188508
+drwxrwxrwt 6 polkitd input     4096 Aug 29 16:14 .
+drwx-----x 3 root    root      4096 Aug 29 16:13 ..
+-rw-r----- 1 polkitd input       56 Aug 29 16:13 auto.cnf
+-rw------- 1 polkitd input     1676 Aug 29 16:13 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:13 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:13 client-cert.pem
+-rw------- 1 polkitd input     1680 Aug 29 16:13 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 16:13 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 16:14 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:14 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:13 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 16:14 ibtmp1
+drwxr-x--- 2 polkitd input    20480 Aug 29 16:14 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 16:13 mysql
+
+===== VOL 1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927 =====
+260M	/var/lib/docker/volumes/1f0179211a452178b45b4805528ffe0ac64842da3f48f690e9e0cb51a80ff927/_data
+total 188504
+drwxrwxrwt 6 polkitd input     4096 Aug 29 14:33 .
+drwx-----x 3 root    root      4096 Aug 29 14:33 ..
+-rw-r----- 1 polkitd input       56 Aug 29 14:33 auto.cnf
+-rw------- 1 polkitd input     1676 Aug 29 14:33 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 14:33 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 14:33 client-cert.pem
+-rw------- 1 polkitd input     1680 Aug 29 14:33 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 14:33 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 14:34 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 14:34 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 14:33 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 14:33 ibtmp1
+drwxr-x--- 2 polkitd input    20480 Aug 29 14:34 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 14:33 mysql
+
+===== VOL 2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c =====
+46M	/var/lib/docker/volumes/2cdc4285e930bcfcc3b6486847a7aba31a984d5865d45dcef1be8f7e7cffba3c/_data
+total 136
+drwx------ 19   70   70  4096 Sep  5 13:04 .
+drwx-----x  3 root root  4096 Sep  5 13:04 ..
+drwx------  6   70   70  4096 Sep  5 13:04 base
+drwx------  2   70   70  4096 Sep  5 13:04 global
+drwx------  2   70   70  4096 Sep  5 13:04 pg_commit_ts
+drwx------  2   70   70  4096 Sep  5 13:04 pg_dynshmem
+-rw-------  1   70   70  5743 Sep  5 13:04 pg_hba.conf
+-rw-------  1   70   70  2640 Sep  5 13:04 pg_ident.conf
+drwx------  4   70   70  4096 Sep  5 13:04 pg_logical
+drwx------  4   70   70  4096 Sep  5 13:04 pg_multixact
+drwx------  2   70   70  4096 Sep  5 13:04 pg_notify
+drwx------  2   70   70  4096 Sep  5 13:04 pg_replslot
+drwx------  2   70   70  4096 Sep  5 13:04 pg_serial
+drwx------  2   70   70  4096 Sep  5 13:04 pg_snapshots
+
+===== VOL 4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78 =====
+50M	/var/lib/docker/volumes/4d54bb867e70b989b7a816c95ca89f330c9a9348cd9aee1eaec15664a30dea78/_data
+total 136
+drwx------ 19   70   70  4096 Sep  5 13:08 .
+drwx-----x  3 root root  4096 Sep  5 13:08 ..
+drwx------  6   70   70  4096 Sep  5 13:08 base
+drwx------  2   70   70  4096 Sep  5 13:10 global
+drwx------  2   70   70  4096 Sep  5 13:08 pg_commit_ts
+drwx------  2   70   70  4096 Sep  5 13:08 pg_dynshmem
+-rw-------  1   70   70  5743 Sep  5 13:08 pg_hba.conf
+-rw-------  1   70   70  2640 Sep  5 13:08 pg_ident.conf
+drwx------  4   70   70  4096 Sep  5 13:08 pg_logical
+drwx------  4   70   70  4096 Sep  5 13:08 pg_multixact
+drwx------  2   70   70  4096 Sep  5 13:08 pg_notify
+drwx------  2   70   70  4096 Sep  5 13:08 pg_replslot
+drwx------  2   70   70  4096 Sep  5 13:08 pg_serial
+drwx------  2   70   70  4096 Sep  5 13:08 pg_snapshots
+
+===== VOL 5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535 =====
+39M	/var/lib/docker/volumes/5d837ad73f751f7960467c5ac7872f971f600d63ef0c38707d655139b350e535/_data
+total 136
+drwx------ 19   70   70  4096 Aug 30 18:25 .
+drwx-----x  3 root root  4096 Aug 30 18:25 ..
+drwx------  5   70   70  4096 Aug 30 18:25 base
+drwx------  2   70   70  4096 Aug 30 18:25 global
+drwx------  2   70   70  4096 Aug 30 18:25 pg_commit_ts
+drwx------  2   70   70  4096 Aug 30 18:25 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 30 18:25 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 30 18:25 pg_ident.conf
+drwx------  4   70   70  4096 Aug 30 18:25 pg_logical
+drwx------  4   70   70  4096 Aug 30 18:25 pg_multixact
+drwx------  2   70   70  4096 Aug 30 18:25 pg_notify
+drwx------  2   70   70  4096 Aug 30 18:25 pg_replslot
+drwx------  2   70   70  4096 Aug 30 18:25 pg_serial
+drwx------  2   70   70  4096 Aug 30 18:25 pg_snapshots
+
+===== VOL 5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937 =====
+267M	/var/lib/docker/volumes/5fce55f5d026ae2cad20d33e71f184ec4495bf4dc4dc21de8ddbea9cc79a1937/_data
+total 188504
+drwxrwxrwt 6 polkitd input     4096 Aug 29 14:19 .
+drwx-----x 3 root    root      4096 Aug 29 14:19 ..
+-rw-r----- 1 polkitd input       56 Aug 29 14:19 auto.cnf
+-rw------- 1 polkitd input     1680 Aug 29 14:19 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 14:19 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 14:19 client-cert.pem
+-rw------- 1 polkitd input     1676 Aug 29 14:19 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 14:19 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 14:20 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 14:20 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 14:19 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 14:19 ibtmp1
+drwxr-x--- 2 polkitd input    20480 Aug 29 14:19 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 14:19 mysql
+
+===== VOL 5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7 =====
+39M	/var/lib/docker/volumes/5ff53569d60ef175d35373b019c63783fd969aef32e584c591084131df2ad0c7/_data
+total 136
+drwx------ 19   70   70  4096 Aug 30 18:10 .
+drwx-----x  3 root root  4096 Aug 30 18:10 ..
+drwx------  5   70   70  4096 Aug 30 18:10 base
+drwx------  2   70   70  4096 Aug 30 18:11 global
+drwx------  2   70   70  4096 Aug 30 18:10 pg_commit_ts
+drwx------  2   70   70  4096 Aug 30 18:10 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 30 18:10 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 30 18:10 pg_ident.conf
+drwx------  4   70   70  4096 Aug 30 18:10 pg_logical
+drwx------  4   70   70  4096 Aug 30 18:10 pg_multixact
+drwx------  2   70   70  4096 Aug 30 18:10 pg_notify
+drwx------  2   70   70  4096 Aug 30 18:10 pg_replslot
+drwx------  2   70   70  4096 Aug 30 18:10 pg_serial
+drwx------  2   70   70  4096 Aug 30 18:10 pg_snapshots
+
+===== VOL 6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea =====
+4.0K	/var/lib/docker/volumes/6e8dd9cf54fde0fc074f516be511e80cb38e75ca2befcad4c2a0e594206660ea/_data
+total 8
+drwxrwxrwt 2   70   70 4096 Aug 14 03:18 .
+drwx-----x 3 root root 4096 Sep  5 22:07 ..
+
+===== VOL 8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d =====
+260M	/var/lib/docker/volumes/8d68da942b4b812ca3a057911928a1e54334ac1cf09ddac7bc153df1d459358d/_data
+total 188504
+drwxrwxrwt 6 polkitd input     4096 Aug 29 16:13 .
+drwx-----x 3 root    root      4096 Aug 29 16:13 ..
+-rw-r----- 1 polkitd input       56 Aug 29 16:13 auto.cnf
+-rw------- 1 polkitd input     1680 Aug 29 16:13 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:13 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:13 client-cert.pem
+-rw------- 1 polkitd input     1680 Aug 29 16:13 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 16:13 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 16:13 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:13 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:13 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 16:13 ibtmp1
+drwxr-x--- 2 polkitd input    20480 Aug 29 16:13 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 16:13 mysql
+
+===== VOL 9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09 =====
+4.0K	/var/lib/docker/volumes/9ef722ee833e43b0d8d0d0a7345abb8f43bd3e5ab5c956ce918839e369c5af09/_data
+total 8
+drwx------ 2   70   70 4096 Sep  3 16:57 .
+drwx-----x 3 root root 4096 Sep  3 16:57 ..
+
+===== VOL 23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186 =====
+4.0K	/var/lib/docker/volumes/23f3979d0907e0fbb81e12f51d3f81de561e84dd27a8f0513c1662fc74129186/_data
+total 8
+drwxrwxr-x 2 65534 65534 4096 Sep  4 21:01 .
+drwx-----x 3 root  root  4096 Sep  3 19:58 ..
+-rw-r--r-- 1 65534 65534    0 Sep  4 21:01 nflog
+-rw-r--r-- 1 65534 65534    0 Sep  4 21:01 silences
+
+===== VOL 41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319 =====
+4.0K	/var/lib/docker/volumes/41e51a6f07d513af2e2003b7e2977bc7f5481d74bbdb666eba6d296b60389319/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 13:02 .
+drwx-----x 3 root root 4096 Sep  5 13:02 ..
+
+===== VOL 56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747 =====
+4.0K	/var/lib/docker/volumes/56dea56d0ed7498f868ebc31ab8d6931bc013ac469020a390d68dc64e8445747/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 13:01 .
+drwx-----x 3 root root 4096 Sep  5 13:01 ..
+
+===== VOL 99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c =====
+39M	/var/lib/docker/volumes/99dcd43b0e099ba22dbb5ac6309cce99deae16e033bbee81471516e98f42ad2c/_data
+total 136
+drwx------ 19   70   70  4096 Aug 30 18:26 .
+drwx-----x  3 root root  4096 Aug 30 18:26 ..
+drwx------  5   70   70  4096 Aug 30 18:26 base
+drwx------  2   70   70  4096 Aug 30 18:26 global
+drwx------  2   70   70  4096 Aug 30 18:26 pg_commit_ts
+drwx------  2   70   70  4096 Aug 30 18:26 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 30 18:26 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 30 18:26 pg_ident.conf
+drwx------  4   70   70  4096 Aug 30 18:26 pg_logical
+drwx------  4   70   70  4096 Aug 30 18:26 pg_multixact
+drwx------  2   70   70  4096 Aug 30 18:26 pg_notify
+drwx------  2   70   70  4096 Aug 30 18:26 pg_replslot
+drwx------  2   70   70  4096 Aug 30 18:26 pg_serial
+drwx------  2   70   70  4096 Aug 30 18:26 pg_snapshots
+
+===== VOL 251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64 =====
+260M	/var/lib/docker/volumes/251e00417b19f1907f873b3b9b5c9cd4917d4a0e6989991c2a59c29aaec7fc64/_data
+total 188504
+drwxrwxrwt 6 polkitd input     4096 Aug 29 16:14 .
+drwx-----x 3 root    root      4096 Aug 29 16:14 ..
+-rw-r----- 1 polkitd input       56 Aug 29 16:14 auto.cnf
+-rw------- 1 polkitd input     1676 Aug 29 16:14 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:14 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:14 client-cert.pem
+-rw------- 1 polkitd input     1676 Aug 29 16:14 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 16:14 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 16:14 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:15 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:14 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 16:14 ibtmp1
+drwxr-x--- 2 polkitd input    20480 Aug 29 16:15 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 16:14 mysql
+
+===== VOL 0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d =====
+4.0K	/var/lib/docker/volumes/0306f83653a4cf7deb42497f3108008cc95b2e1562f9c0b86f736c41e1dac31d/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 13:00 .
+drwx-----x 3 root root 4096 Sep  5 13:00 ..
+
+===== VOL 347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021 =====
+4.0K	/var/lib/docker/volumes/347dfac030d3a643a11b621dd14e7d58e15c7174fccd6d8f035d81c72eee2021/_data
+total 8
+drwx------ 2   70   70 4096 Sep  3 17:02 .
+drwx-----x 3 root root 4096 Sep  3 17:02 ..
+
+===== VOL 817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa =====
+50M	/var/lib/docker/volumes/817e404d63f3be60c5977aa6ad08b6cf423df5776b6b34912370681153a6feaa/_data
+total 136
+drwx------ 19   70   70  4096 Sep  5 13:05 .
+drwx-----x  3 root root  4096 Sep  5 13:05 ..
+drwx------  6   70   70  4096 Sep  5 13:05 base
+drwx------  2   70   70  4096 Sep  5 13:06 global
+drwx------  2   70   70  4096 Sep  5 13:05 pg_commit_ts
+drwx------  2   70   70  4096 Sep  5 13:05 pg_dynshmem
+-rw-------  1   70   70  5743 Sep  5 13:05 pg_hba.conf
+-rw-------  1   70   70  2640 Sep  5 13:05 pg_ident.conf
+drwx------  4   70   70  4096 Sep  5 13:05 pg_logical
+drwx------  4   70   70  4096 Sep  5 13:05 pg_multixact
+drwx------  2   70   70  4096 Sep  5 13:05 pg_notify
+drwx------  2   70   70  4096 Sep  5 13:05 pg_replslot
+drwx------  2   70   70  4096 Sep  5 13:05 pg_serial
+drwx------  2   70   70  4096 Sep  5 13:05 pg_snapshots
+
+===== VOL 848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371 =====
+237M	/var/lib/docker/volumes/848f43e47540d8fe33e5adba1dc12fbb00d3350f58b590bda578ccf75aa5b371/_data
+total 188488
+drwxrwxrwt 6 polkitd input     4096 Aug 29 16:14 .
+drwx-----x 3 root    root      4096 Aug 29 16:14 ..
+-rw-r----- 1 polkitd input       56 Aug 29 16:14 auto.cnf
+-rw------- 1 polkitd input     1676 Aug 29 16:14 ca-key.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:14 ca.pem
+-rw-r--r-- 1 polkitd input     1112 Aug 29 16:14 client-cert.pem
+-rw------- 1 polkitd input     1676 Aug 29 16:14 client-key.pem
+-rw-r----- 1 polkitd input     1318 Aug 29 16:14 ib_buffer_pool
+-rw-r----- 1 polkitd input 79691776 Aug 29 16:14 ibdata1
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:14 ib_logfile0
+-rw-r----- 1 polkitd input 50331648 Aug 29 16:14 ib_logfile1
+-rw-r----- 1 polkitd input 12582912 Aug 29 16:14 ibtmp1
+drwxr-x--- 2 polkitd input     4096 Aug 29 16:14 mall
+drwxr-x--- 2 polkitd input     4096 Aug 29 16:14 mysql
+
+===== VOL 998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a =====
+4.0K	/var/lib/docker/volumes/998b089522b1b2f3381f8c7acd95e121963b65b15c16fccad3c09a65e273f08a/_data
+total 8
+drwxrwxrwt 2   70   70 4096 Aug 14 03:18 .
+drwx-----x 3 root root 4096 Sep  3 17:05 ..
+
+===== VOL 3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf =====
+4.0K	/var/lib/docker/volumes/3194f5c6fbb23d7974ab9028238f97c45bfe15de638caaf28a9a1b33126d50cf/_data
+total 8
+drwx------ 2   70   70 4096 Aug 30 07:53 .
+drwx-----x 3 root root 4096 Aug 30 07:53 ..
+
+===== VOL 6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5 =====
+4.0K	/var/lib/docker/volumes/6698f8c0da7e2c74c42768b0063591ca73e32c75a88df4794e9b8965189c61a5/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 13:01 .
+drwx-----x 3 root root 4096 Sep  5 13:01 ..
+
+===== VOL a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c =====
+4.0K	/var/lib/docker/volumes/a3b7aafaa460cae80df1afd99a77d794205ba2eb83c0e6a58c979ddaca7aeb0c/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 13:01 .
+drwx-----x 3 root root 4096 Sep  5 13:01 ..
+
+===== VOL adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778 =====
+4.0K	/var/lib/docker/volumes/adc5eb3bb3570e36b15516ce17ae7d336a31df5f780b7fec44fed1d2e6554778/_data
+total 8
+drwxr-xr-x 2 polkitd input 4096 May 16 00:42 .
+drwx-----x 3 root    root  4096 Aug 13 22:11 ..
+
+===== VOL b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f =====
+40M	/var/lib/docker/volumes/b5b53b12b14e1f0996f0a1c86f3208caee7231a6beddc29cdd202395a53d370f/_data
+total 136
+drwx------ 19   70   70  4096 Aug 31 00:32 .
+drwx-----x  3 root root  4096 Aug 31 00:32 ..
+drwx------  5   70   70  4096 Aug 31 00:32 base
+drwx------  2   70   70  4096 Aug 31 00:33 global
+drwx------  2   70   70  4096 Aug 31 00:32 pg_commit_ts
+drwx------  2   70   70  4096 Aug 31 00:32 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 31 00:32 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 31 00:32 pg_ident.conf
+drwx------  4   70   70  4096 Aug 31 00:32 pg_logical
+drwx------  4   70   70  4096 Aug 31 00:32 pg_multixact
+drwx------  2   70   70  4096 Aug 31 00:32 pg_notify
+drwx------  2   70   70  4096 Aug 31 00:32 pg_replslot
+drwx------  2   70   70  4096 Aug 31 00:32 pg_serial
+drwx------  2   70   70  4096 Aug 31 00:32 pg_snapshots
+
+===== VOL b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368 =====
+4.0K	/var/lib/docker/volumes/b889f246b57531f3c65bcc8a9468143c7422e3b1b7f1c7f1f6f90aa0ee2e6368/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 02:00 .
+drwx-----x 3 root root 4096 Sep  5 02:00 ..
+
+===== VOL c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b =====
+4.0K	/var/lib/docker/volumes/c534159bec981df2bc208004342a802449a3c8cc5519c7953049b8d0d1df345b/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 02:05 .
+drwx-----x 3 root root 4096 Sep  5 02:05 ..
+
+===== VOL cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd =====
+4.0K	/var/lib/docker/volumes/cd74811db30b3daabbbce5b6261b2ba6450c64626e0d3ab550695b45186154dd/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 01:57 .
+drwx-----x 3 root root 4096 Sep  5 01:57 ..
+
+===== VOL e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc =====
+47M	/var/lib/docker/volumes/e92efa1c5e0fbf4f81d0fbfef3b1ef1a28daee20a7ec85935397bf716051b9dc/_data
+total 136
+drwx------ 19   70   70  4096 Aug 30 16:33 .
+drwx-----x  3 root root  4096 Aug 30 16:33 ..
+drwx------  6   70   70  4096 Aug 30 16:33 base
+drwx------  2   70   70  4096 Aug 30 16:36 global
+drwx------  2   70   70  4096 Aug 30 16:33 pg_commit_ts
+drwx------  2   70   70  4096 Aug 30 16:33 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 30 16:33 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 30 16:33 pg_ident.conf
+drwx------  4   70   70  4096 Aug 30 16:38 pg_logical
+drwx------  4   70   70  4096 Aug 30 16:33 pg_multixact
+drwx------  2   70   70  4096 Aug 30 16:33 pg_notify
+drwx------  2   70   70  4096 Aug 30 16:33 pg_replslot
+drwx------  2   70   70  4096 Aug 30 16:33 pg_serial
+drwx------  2   70   70  4096 Aug 30 16:33 pg_snapshots
+
+===== VOL f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253 =====
+124M	/var/lib/docker/volumes/f6a93336bba646d191c6684756c4e32995a010d9296f7be3b7200d131f035253/_data
+total 60
+drwxrwxr-x 10 65534 65534  4096 Sep  5 03:00 .
+drwx-----x  3 root  root   4096 Sep  3 19:50 ..
+drwxr-xr-x  3 65534 65534  4096 Sep  4 13:00 01M1NCKKADF0JNFEHAK0RKYS90
+drwxr-xr-x  3 65534 65534  4096 Sep  4 19:00 01M1P16RK6E63JPAPRFW1J2NEK
+drwxr-xr-x  3 65534 65534  4096 Sep  4 23:00 01M1PEY59BEP8G45C8HZ7QKT57
+drwxr-xr-x  3 65534 65534  4096 Sep  5 01:00 01M1PNSWHB4ZE281674WRQCMKH
+drwxr-xr-x  3 65534 65534  4096 Sep  5 01:00 01M1PNSWTT2NS4CW0Y3J7JZB39
+drwxr-xr-x  3 65534 65534  4096 Sep  5 03:00 01M1PWNKSB0A841JEMED6AK008
+drwxr-xr-x  2 65534 65534  4096 Sep  5 03:01 chunks_head
+-rw-r--r--  1 65534 65534     0 Sep  3 19:58 lock
+-rw-r--r--  1 65534 65534 20001 Sep  5 03:59 queries.active
+drwxr-xr-x  3 65534 65534  4096 Sep  5 03:00 wal
+
+===== VOL f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8 =====
+39M	/var/lib/docker/volumes/f118c8f547428bca81acf06c8aab9807aa0343ffd5c05057c4a6e876f68691d8/_data
+total 136
+drwx------ 19   70   70  4096 Aug 30 07:55 .
+drwx-----x  3 root root  4096 Aug 30 07:55 ..
+drwx------  5   70   70  4096 Aug 30 07:55 base
+drwx------  2   70   70  4096 Aug 30 07:55 global
+drwx------  2   70   70  4096 Aug 30 07:55 pg_commit_ts
+drwx------  2   70   70  4096 Aug 30 07:55 pg_dynshmem
+-rw-------  1   70   70  5743 Aug 30 07:55 pg_hba.conf
+-rw-------  1   70   70  2640 Aug 30 07:55 pg_ident.conf
+drwx------  4   70   70  4096 Aug 30 07:55 pg_logical
+drwx------  4   70   70  4096 Aug 30 07:55 pg_multixact
+drwx------  2   70   70  4096 Aug 30 07:55 pg_notify
+drwx------  2   70   70  4096 Aug 30 07:55 pg_replslot
+drwx------  2   70   70  4096 Aug 30 07:55 pg_serial
+drwx------  2   70   70  4096 Aug 30 07:55 pg_snapshots
+
+===== VOL f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247 =====
+4.0K	/var/lib/docker/volumes/f676ad4fe6c33476f033c17ca464c992eaddf6f257b527f414bc71879a775247/_data
+total 8
+drwx------ 2   70   70 4096 Sep  5 12:56 .
+drwx-----x 3 root root 4096 Sep  5 12:56 ..
+
+===== VOL hotel-platform-obs_hotel-logs =====
+100M	/var/lib/docker/volumes/hotel-platform-obs_hotel-logs/_data
+total 101516
+drwxr-xr-x 2 10001 input     4096 Aug 13 15:43 .
+drwx-----x 3 root  root      4096 Aug 13 15:38 ..
+-rw-r--r-- 1 10001 input 10624274 Aug 13 20:54 after-sale.log
+-rw-r--r-- 1 10001 input  5403586 Aug 13 20:54 inventory.log
+-rw-r--r-- 1 10001 input  2527760 Aug 13 20:54 member.log
+-rw-r--r-- 1 10001 input  2921525 Aug 13 20:54 offer.log
+-rw-r--r-- 1 10001 input 32560521 Aug 13 20:54 payment.log
+-rw-r--r-- 1 10001 input 25323724 Aug 13 20:54 supplier-adapter.log
+-rw-r--r-- 1 10001 input 24537476 Aug 13 20:54 trade.log
+
+===== VOL hotel-platform-obs_hotel-otelcol-state =====
+212M	/var/lib/docker/volumes/hotel-platform-obs_hotel-otelcol-state/_data
+total 16
+drwxr-xr-x 4 root root 4096 Aug 13 15:38 .
+drwx-----x 3 root root 4096 Aug 13 15:38 ..
+drwxr-x--- 2 root root 4096 Aug 13 15:38 exporter
+drwxr-x--- 2 root root 4096 Aug 13 15:38 receiver
+
+===== VOL hotel-platform_hotel-logs =====
+56M	/var/lib/docker/volumes/hotel-platform_hotel-logs/_data
+total 56984
+drwxr-xr-x 2 10001 input     4096 Aug 12 12:39 .
+drwx-----x 3 root  root      4096 Aug  9 19:47 ..
+-rw-r--r-- 1 10001 input  1951707 Aug 12 12:39 after-sale.log
+-rw-r--r-- 1 10001 input   224701 Aug 10 08:00 after-sale.log.2026-08-09.0.gz
+-rw-r--r-- 1 10001 input   532273 Aug 11 08:00 after-sale.log.2026-08-10.0.gz
+-rw-r--r-- 1 10001 input   562137 Aug 12 08:00 after-sale.log.2026-08-11.0.gz
+-rw-r--r-- 1 10001 input    76101 Aug 10 15:06 catalog.log
+-rw-r--r-- 1 10001 input     2724 Aug 10 15:02 catalog.log.2026-08-09.0.gz
+-rw-r--r-- 1 10001 input  1745559 Aug 12 12:39 inventory.log
+-rw-r--r-- 1 10001 input   200943 Aug 10 08:00 inventory.log.2026-08-09.0.gz
+-rw-r--r-- 1 10001 input   478287 Aug 11 08:00 inventory.log.2026-08-10.0.gz
+-rw-r--r-- 1 10001 input   510009 Aug 12 08:00 inventory.log.2026-08-11.0.gz
+-rw-r--r-- 1 10001 input  1872912 Aug 12 12:39 member.log
+-rw-r--r-- 1 10001 input   204925 Aug 10 08:00 member.log.2026-08-09.0.gz
+
+===== VOL hotel-platform_hotel-media =====
+4.0K	/var/lib/docker/volumes/hotel-platform_hotel-media/_data
+total 8
+drwxr-xr-x 2 10001 input 4096 Aug  9 19:19 .
+drwx-----x 3 root  root  4096 Aug  9 19:47 ..
+
+===== VOL hotel-platform_hotel-mysql =====
+474M	/var/lib/docker/volumes/hotel-platform_hotel-mysql/_data
+total 363464
+drwxrwxrwt 17 polkitd input      4096 Aug 12 12:39 .
+drwx-----x  3 root    root       4096 Aug  9 19:47 ..
+-rw-r-----  1 polkitd input        56 Aug  9 19:47 auto.cnf
+-rw-r-----  1 polkitd input   3005474 Aug  9 19:47 binlog.000001
+-rw-r-----  1 polkitd input   1023584 Aug  9 22:15 binlog.000002
+-rw-r-----  1 polkitd input    280914 Aug  9 22:26 binlog.000003
+-rw-r-----  1 polkitd input 272312241 Aug 12 12:39 binlog.000004
+-rw-r-----  1 polkitd input        64 Aug  9 22:26 binlog.index
+-rw-------  1 polkitd input      1705 Aug  9 19:47 ca-key.pem
+-rw-r--r--  1 polkitd input      1112 Aug  9 19:47 ca.pem
+-rw-r--r--  1 polkitd input      1112 Aug  9 19:47 client-cert.pem
+-rw-------  1 polkitd input      1705 Aug  9 19:47 client-key.pem
+drwxr-x---  2 polkitd input      4096 Aug  9 20:04 hotel_after_sale
+drwxr-x---  2 polkitd input      4096 Aug  9 19:47 hotel_catalog
+
+===== VOL m2repo =====
+358M	/var/lib/docker/volumes/m2repo/_data
+total 64
+drwxr-xr-x 14 root root 4096 Sep  5 20:29 .
+drwx-----x  3 root root 4096 Aug 30 18:00 ..
+drwxr-xr-x  3 root root 4096 Sep  5 20:29 aopalliance
+drwxr-xr-x  3 root root 4096 Aug 30 19:20 ch
+drwxr-xr-x 12 root root 4096 Aug 30 19:21 com
+drwxr-xr-x  3 root root 4096 Aug 30 19:20 commons-codec
+drwxr-xr-x  3 root root 4096 Aug 30 19:20 commons-io
+-rw-r--r--  1 root root 3018 Sep  2 20:12 copy_reference_file.log
+drwxr-xr-x 11 root root 4096 Aug 30 19:20 io
+drwxr-xr-x  6 root root 4096 Aug 30 19:20 jakarta
+drwxr-xr-x  4 root root 4096 Aug 30 19:20 javax
+drwxr-xr-x  3 root root 4096 Aug 30 19:21 junit
+drwxr-xr-x  5 root root 4096 Aug 30 19:21 net
+drwxr-xr-x 40 root root 4096 Aug 30 19:21 org
+

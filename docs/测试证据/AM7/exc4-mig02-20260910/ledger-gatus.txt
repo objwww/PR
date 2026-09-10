@@ -1,0 +1,6 @@
+GATUS resolved UNREAD 探针告警 duty_chain_snapshot [resolved] @09:17:58
+GATUS resolved UNREAD 探针告警 RCA_SYSTEM_control_health [resolved] @09:17:58
+GATUS firing UNREAD 探针告警 duty_chain_snapshot [firing] @09:17:31
+GATUS firing UNREAD 探针告警 RCA_SYSTEM_control_health [firing] @09:17:31
+GATUS firing UNREAD 探针告警 RCA_SYSTEM_control_health [firing] @09:13:09
+GATUS firing UNREAD 探针告警 RCA_SYSTEM_control_health [firing] @09:10:35

@@ -1,0 +1,50 @@
+# Gatus v5.17.0 三项契约修正实测（127 / MIG-02 前半）——独立 project 名隔离测试
+# 与生产模板 deploy/gatus/compose.gatus.yml 的差异仅三处：
+#   1) name: gatus-contract-test（compose 项目名隔离）
+#   2) extra_hosts host-gateway（容器内经 host.docker.internal 打宿主机捕获监听）
+#   3) env 值为测试占位目标（全部指向宿主机 18080 捕获监听，非真实值班通道）
+
+name: gatus-contract-test
+
+services:
+  gatus:
+    # digest pin：127 实拉 twinproduction/gatus:v5.17.0 记录（/tmp/gatus-evidence/pull.log）
+    image: twinproduction/gatus@sha256:a8c53f9e9f1a3876cd00e44a42c80fc984e118d5ba0bdbaf08980cb627d61512
+    restart: unless-stopped
+    environment:
+      # 镜像自带示例 /config/config.yaml（7 个示例 endpoint）——不指路会加载示例，必须钉死
+      GATUS_CONFIG_PATH: /config/config.yml
+      # 测试占位值班通道 = 宿主机捕获监听（非真实地址，非密钥）
+      GATUS_ONCALL_WEBHOOK_URL: http://host.docker.internal:18080/hook
+      CONTROL_HEALTH_URL: http://host.docker.internal:18080/healthz
+      ALERTMANAGER_HEALTH_URL: http://host.docker.internal:18080/healthz
+      ARENA_HEALTH_URL: http://host.docker.internal:18080/healthz
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # 配置只读挂载；探针状态落本地卷（跨重启可追）
+      - ./config.yml:/config/config.yml:ro
+      - gatus-data:/data
+    ports:
+      # UI 仅 loopback（公网零暴露）
+      - "127.0.0.1:8081:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+          cpus: "0.25"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  gatus-data:

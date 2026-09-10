@@ -1,0 +1,298 @@
+== batch final summary ==
+2026-09-09T14:53:05.672Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : eval 批量完成: run=0cb7c43b-fc95-43e0-acb0-96e3e352013e coverage=0.0 conditional=0.0 e2e=0.0 unresolvedRate=0.0 tp=0 fp=0 fn=10 reportDigest=f3b663b7f14dda3ab6d8b4bd58612f4381cde10c276aecb3601afeef4c13a35d
+2026-09-09T14:53:26.087Z  WARN 1 --- [control-app] [           main] [                                                 ] c.o.p.c.eval.application.EvalRunnerMain  : usage ledger: {"ledger_schema_version":1,"run_id":"0cb7c43b-fc95-43e0-acb0-96e3e352013e","basis":"NONE","state":"UNMATCHED","best_effort":true,"budget_enforcement":"PROXY_VIRTUAL_KEY","run_key_alias":"glm5-baseline-0909","attempts":[],"expected_prompt_tokens":0,"expected_completion_tokens":0,"observed_prompt_tokens":null,"observed_completion_tokens":null,"notes":["no_rows_under_run_key（key 下零行：未 flush/查询失败/该 run 确无模型调用）"]}
+== eval_run this window ==
+-[ RECORD 1 ]------------+-----------------------------------------------------------------
+id                       | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+schema_version           | 1
+dataset_version          | glm5-full-0909
+registry_digest          | 136f60af443b760e06e0674611237bed197e2f8c28ee1845993f31cb9d3957ba
+lexicon_version          | 1
+model                    | glm-5
+prompt_version           | am3-rca-v2
+prompt_digest            | 7366ee3f94b605bc8c2b8c247ae906a320289fcb0cd3ed1f20b87b2738dc3529
+tool_registry_digest     | ce95f54b9ad6557a9bdea79d135941c5a133cc5b2dcb321f713a059c7734bfef
+temperature              | 
+top_p                    | 
+max_tokens               | 
+requested_seed           | 
+effective_seed           | 
+provider_fingerprint     | litellm-1.89.0::glm-5::native-deterministic-v1
+alert_rule_digest        | 4c00d51c0f51b7e6468a4ce7cd4f465bbeee9e526f260047ba6154cbb85bccf5
+scenario_driver_version  | scenario-driver-v1
+config_digest            | bf7120e8d20a3a0af504a9ef449349730ca406d5980f3f3b0883770c3f551812
+state                    | SUCCEEDED
+started_at               | 2026-09-09 13:50:54.639794+00
+finished_at              | 2026-09-09 14:53:05.666753+00
+total_scenarios          | 10
+decidable_count          | 0
+hit_count                | 0
+unresolved_count         | 0
+structure_rejected_count | 0
+timeout_or_absent_count  | 10
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 10
+coverage                 | 0
+conditional_accuracy     | 0
+end_to_end_hit_rate      | 0
+unresolved_rate          | 0
+baseline_report_digest   | f3b663b7f14dda3ab6d8b4bd58612f4381cde10c276aecb3601afeef4c13a35d
+created_at               | 2026-09-09 13:50:54.914852+00
+
+== eval_case_result this window ==
+-[ RECORD 1 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 3308bd06-4f03-4cc9-816b-d0682847a748
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S1
+round_no                 | 1
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "payment", "fault_type": "BUSINESS_ERROR_RATE", "reason_code": "PAYMENT_CHARGE_FAILURE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["checkout"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "run_not_found"}
+created_at               | 2026-09-09 14:53:05.638468+00
+-[ RECORD 2 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 3ffc8025-3ba7-4b01-8dfa-5670ce41e5e9
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S1
+round_no                 | 2
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "payment", "fault_type": "BUSINESS_ERROR_RATE", "reason_code": "PAYMENT_CHARGE_FAILURE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["checkout"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.65137+00
+-[ RECORD 3 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | aa06d319-428e-4a05-bfa2-cd462814e4a9
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S2
+round_no                 | 1
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "payment", "fault_type": "DEPENDENCY_UNREACHABLE", "reason_code": "PAYMENT_SERVICE_UNREACHABLE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["checkout"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.652324+00
+-[ RECORD 4 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 4dec9c9a-606e-41c5-aeaa-4c0b126e9a7e
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S2
+round_no                 | 2
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "payment", "fault_type": "DEPENDENCY_UNREACHABLE", "reason_code": "PAYMENT_SERVICE_UNREACHABLE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["checkout"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.6532+00
+-[ RECORD 5 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 100077b5-ad45-4f59-ae73-8a130730e68a
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S3
+round_no                 | 1
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "IDEMPOTENCY_BYPASS", "reason_code": "DUPLICATE_CREATE_SAME_INTENT"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaDuplicateOrders"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.654108+00
+-[ RECORD 6 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 88c5cb4d-ec60-4199-bde7-bacc33b4c3eb
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S3
+round_no                 | 2
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "IDEMPOTENCY_BYPASS", "reason_code": "DUPLICATE_CREATE_SAME_INTENT"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaDuplicateOrders"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.655007+00
+-[ RECORD 7 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | 0dc0b046-cf8f-433b-ac33-595385736ba6
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S4
+round_no                 | 1
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "ILLEGAL_STATE_TRANSITION", "reason_code": "STATE_ROLLBACK_DIRECT_WRITE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaIllegalTransitions"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.655797+00
+-[ RECORD 8 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | f14b6f70-d56f-45d7-af92-e77c362c9998
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S4
+round_no                 | 2
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "ILLEGAL_STATE_TRANSITION", "reason_code": "STATE_ROLLBACK_DIRECT_WRITE"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaIllegalTransitions"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.656584+00
+-[ RECORD 9 ]------------+---------------------------------------------------------------------------------------------------------------------
+id                       | a3e27fe6-87f2-49b2-9b59-02acb5513da1
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S5
+round_no                 | 1
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "UNCERTAIN_TIMEOUT", "reason_code": "PAYMENT_OUTCOME_UNKNOWN"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaOrderStuck"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.657248+00
+-[ RECORD 10 ]-----------+---------------------------------------------------------------------------------------------------------------------
+id                       | 7f58756e-198d-4f23-a988-0220b38bc375
+eval_run_id              | 0cb7c43b-fc95-43e0-acb0-96e3e352013e
+scenario_id              | S5
+round_no                 | 2
+selection_policy_version | final-validated-report-v1
+rca_run_id               | 
+scored_attempt_id        | 
+scored_report_id         | 
+verdict                  | TIMEOUT_OR_ABSENT
+root_cause_hit           | f
+expected_root_cause      | {"component": "order-arena", "fault_type": "UNCERTAIN_TIMEOUT", "reason_code": "PAYMENT_OUTCOME_UNKNOWN"}
+actual_root_cause        | 
+expected_symptom_codes   | ["ArenaOrderStuck"]
+actual_symptom_codes     | 
+tp_count                 | 0
+fp_count                 | 0
+fn_count                 | 1
+latency_ms               | 
+silence_penalty          | f
+failure_sample           | {"reason": "gate_blocked"}
+created_at               | 2026-09-09 14:53:05.657961+00
+
+== 报告/通知面（本窗口新增） ==
+ incidents_new 
+---------------
+             0
+(1 row)
+
+ runs_new 
+----------
+        0
+(1 row)
+
+ reports_new 
+-------------
+           0
+(1 row)
+
+-- report_publication --
+ count 
+-------
+   127
+(1 row)
+
+-- notify_outbox --
+ count 
+-------
+   127
+(1 row)
+
+-- notification_outbox --
+table NA
+-- outbox_message --
+table NA
+-- duty_delivery --
+table NA

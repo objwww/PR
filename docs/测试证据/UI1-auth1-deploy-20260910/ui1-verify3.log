@@ -1,0 +1,38 @@
+operator_login=200
+=== A. 建平台账号 test/12345678 ===
+{"user":{"username":"test","displayName":"测试账号","role":"OPERATOR","active":true,"createdAt":"2026-09-10T14:35:31.731037381Z"},"ok":true}
+create_test=200
+=== B. 账号列表 ===
+[{"username":"test","displayName":"测试账号","role":"OPERATOR","active":true,"createdAt":"2026-09-10T14:35:31.730400Z"},{"username":"ui1op","displayName":"UI1验证账号","role":"OPERATOR","active":true,"createdAt":"2026-09-10T14:33:59.899336Z"}]
+list=200
+=== C. 停用 ui1op ===
+{"ok":true}
+deactivate=200
+=== D. 停用态登录 ui1op（期望 401） ===
+{"error":"login_failed"}
+deactivated_login=401
+=== E. 重新启用 ui1op ===
+{"ok":true}
+reactivate=200
+=== F. 防自锁：停用本人 test（期望 400） ===
+{"error":"不能停用当前登录者本人账号（防自锁）","ok":false}
+self_deactivate=400
+=== G. 重置 ui1op 密码 → 旧口令 401 / 新口令 200 ===
+{"ok":true}
+reset_pw=200
+old_pw_login=401
+new_pw_login=200
+=== H. 短密码拒绝（期望 400） ===
+{"error":"password 必填且至少 8 位","ok":false}
+short_pw=400
+=== I. 重复建号（期望 409） ===
+{"error":"username 已存在","ok":false}
+dup=409
+=== J. platform_user 终态 ===
+ username | display_name |   role   | active 
+----------+--------------+----------+--------
+ test     | 测试账号     | OPERATOR | t
+ ui1op    | UI1验证账号  | OPERATOR | t
+(2 rows)
+
+DONE

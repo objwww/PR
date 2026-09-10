@@ -1,0 +1,75 @@
+[11:01:10] == [R] recreate control-app + web（其余容器不动） ==
+ Container deploy-postgres-1  Running
+ Container deploy-migrate-1  Created
+ Container deploy-control-app-1  Recreate
+ Container deploy-control-app-1  Recreated
+ Container deploy-web-1  Recreate
+ Container deploy-web-1  Recreated
+ Container deploy-postgres-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Starting
+ Container deploy-migrate-1  Started
+ Container deploy-postgres-1  Waiting
+ Container deploy-migrate-1  Waiting
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+ Container deploy-web-1  Starting
+ Container deploy-web-1  Started
+[11:01:15] recreate exit=0
+[11:01:30] HEALTH control-app=200（期望200）
+[11:01:30] WEB /duty/chat SPA=200（期望200）
+[11:01:30] == [V4] 认证面：未认证打 feed ==
+[11:01:30] FEED no-auth direct=401（期望401） via-web=401（期望401） op-line=200（期望200）
+[11:01:30] == [V1] feed 现状（历史气泡+演练通道标记） ==
+{"messages":[{"id":"af7bbec6-261a-4bf8-a94c-898fc1df3036","source":"GATUS","episodeId":"4d68bd7b7bea6335c239304e9390f3002ade60e355828779077cdb160281ee26","eventStatus":"resolved","severity":null,"title":"探针告警 duty_chain_snapshot [resolved]","body":"group=duty-chain target=http://10.250.250.1:8090/api/duty/schedule/snapshot description= errors=","status":"UNREAD","createdAt":"2026-09-10T10:32:28.899167Z","deliveries":[]},{"id":"a3a45ecb-9c11-4cde-acc6-baeaf7e9ccae","source":"GATUS","episodeId":"f100465bd5532c0dc1076d3ebe2c95997ebf5eabaacbaff61a0326ec1feeaa71","eventStatus":"resolved","severity":null,"title":"探针告警 RCA_SYSTEM_control_health [resolved]","body":"group=control-plane target=http://10.250.250.1:8090/probe/control-health description= errors=","status":"UNREAD","createdAt":"2026-09-10T10:32:28.121230Z","deliveries":[]},{"id":"83ee5e77-1a10-4a95-ab23-a02ae4e3b9df","source":"GATUS","episodeId":"01e6f77950eced87d58c5f88ed0ea84359135e082c9e399f106bc947dbadb2bd","eventStatus":"firing","severity":null,"title":"探针告警 duty_chain_snapshot [firing]","body":"group=duty-chain target=http://10.250.250.1:8090/api/duty/schedule/snapshot description= errors=","status":"UNREAD","createdAt":"2026-09-10T10:32:17.551375Z","deliveries":[]}],"nextCursor":"1789036337551/83ee5e77-1a10-4a95-ab23-a02ae4e3b9df"}
+[11:01:30] FEED drill 标记数=2
+[11:01:30] == [V2] RCA_SYSTEM 全链：AM webhook(cr线) → feed 气泡 → delivery 状态演进 ==
+[11:01:30] DISPATCH: {"status":"accepted","routed":"oncall","dutyNotificationId":"7b50e304-00f8-4bb0-90d6-c7c171ee6769","inboxId":"c074908f-14b9-4101-9206-c1c0abd5634b"} HTTP=202
+[11:01:33] NID=7b50e304-00f8-4bb0-90d6-c7c171ee6769
+[11:01:33] DELIVERY[1]: DEAD@rl-bot(0)
+[11:02:09] DELIVERY[3]: DEAD@rl-bot(0) | SENT@echo-bot(0)
+[11:02:09] FEED_ROW: {"id": "7b50e304-00f8-4bb0-90d6-c7c171ee6769", "source": "RCA_SYSTEM", "episodeId": "b6502bf718f84cbce2e3b7be7d139c5d45e46ee6bfb7a4eb0fefe8b6757bc115", "eventStatus": "firing", "severity": "warning", "title": "值班告警 EXD1_VERIFY [firing]", "body": "receiver=rca-oncall groupKey=exd1-verify alerts=1 labels={alertname=EXD1_VERIFY, monitoring_scope=rca_system, severity=warning}", "status": "UNREAD", "createdAt": "2026-09-10T11:01:30.657415Z", "deliveries": [{"channel": "rl-bot", "platform": "DINGTALK", "priority": 1, "state": "DEAD", "attempts": 0, "sentAt": null, "lastError": "{\"error\": \"webhook 未注入（渠道 DINGTALK 拒绝无凭证创建，INV-AM3-3）\", \"reason\": \"channel_not_configured\"}", "drill": false}, {"channel": "echo-bot", "platform": "DINGTALK", "priority": 2, "state": "SENT", "attempts": 0, "sentAt": "2026-09-10T11:01:59.216360Z", "lastError": null, "drill": true}]}
+[11:02:09] == [V2b] GATUS 回写（da 线）→ feed 空投递组标注 ==
+[11:02:09] GATUS_WRITEBACK: {"ok":true,"created":true,"notificationId":"0113b6e3-f675-4422-aeae-c851c992c982"} HTTP=200
+[11:02:09] FEED_GATUS: {"id": "0113b6e3-f675-4422-aeae-c851c992c982", "source": "GATUS", "episodeId": "3ea63bd48f800a7be9107fad922d566fdbae47a0efa27bba156cabe9b6bf16ee", "eventStatus": "firing", "severity": null, "title": "EXD1_GATUS 探针模拟", "body": "group=exd1 验证直发回写标注", "status": "UNREAD", "createdAt": "2026-09-10T11:02:09.918155Z", "deliveries": []}
+[11:02:09] == [F] 现场终态 ==
+deploy-web-1 Up 54 seconds
+deploy-control-app-1 Up 54 seconds
+deploy-notify-app-1 Up 3 hours
+deploy-loki-1 Up 11 hours
+deploy-otelcol-control-1 Up 11 hours
+node-exporter Up 27 hours
+flagd-admin-am3 Up 4 days (healthy)
+litellm-am3 Up 25 hours (healthy)
+alert-arena-chaos-admin-1 Up 5 days (healthy)
+alert-order-arena-1 Up 40 hours (healthy)
+prometheus-am0 Up 27 hours
+deploy-postgres-1 Up 5 days (healthy)
+alertmanager-am0 Up 20 hours
+otel-collector Up 11 hours
+frontend-proxy Up 6 days (healthy)
+load-generator Up 5 days (healthy)
+frontend Up 5 days (healthy)
+recommendation Up 5 days (healthy)
+checkout Up 5 days (healthy)
+product-catalog Up 6 days (healthy)
+cart Up 6 days
+shipping Up 6 days (healthy)
+ad Up 6 days (healthy)
+payment Up 6 days (healthy)
+flagd-ui Up 6 days (healthy)
+currency Up 6 days (healthy)
+quote Up 6 days (healthy)
+email Up 6 days (healthy)
+image-provider Up 6 days (healthy)
+astronomy-db Up 6 days (healthy)
+flagd Up 4 days
+telemetry-docs Up 6 days (healthy)
+valkey-cart Up 6 days (healthy)
+echo-receiver Up 7 days (healthy)
+              total        used        free      shared  buff/cache   available
+Mem:           7725        3825         953         234        2946        3358
+/dev/vda1        59G   35G   22G  62% /
+[11:02:10] == DONE ==

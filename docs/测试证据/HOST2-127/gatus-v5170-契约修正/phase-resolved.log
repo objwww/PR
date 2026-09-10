@@ -1,0 +1,88 @@
+=== DATE ===
+Wed Sep  9 08:32:53 UTC 2026
+=== gatus logs (since restart) ===
+gatus-1  | 2026/09/09 08:31:00 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:00 [watchdog.handleAlertsToTrigger] Sending custom alert because alert for endpoint with key=contract-test_contract-probe with description='' has been TRIGGERED
+gatus-1  | 2026/09/09 08:31:10 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:17 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:19 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:20 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:30 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:40 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:31:47 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:48 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_alertmanager_health; key=control-plane_rca-system-alertmanager-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:49 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:31:50 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:32:00 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=false; errors=1; duration=0s
+gatus-1  | 2026/09/09 08:32:08 Received termination signal, attempting to gracefully shut down
+gatus-1  | 2026/09/09 08:32:08 [controller.Handle] Server has shut down successfully
+gatus-1  | 2026/09/09 08:32:08 Shutting down
+gatus-1  | 2026/09/09 08:32:08 [main.configureLogging] Log Level is set to INFO
+gatus-1  | 2026/09/09 08:32:08 [config.LoadConfiguration] Reading configuration from configFile=/config/config.yml
+gatus-1  | 2026/09/09 08:32:08 [config.validateAlertingConfig] configuredProviders=[custom]; ignoredProviders=[aws-ses discord email github gitlab gitea googlechat gotify jetbrainsspace matrix mattermost messagebird ntfy opsgenie pagerduty pushover slack teams teams-workflows telegram twilio zulip incident-io]
+gatus-1  | 2026/09/09 08:32:08 [config.validateEndpointsConfig] Validated 4 endpoints
+gatus-1  | 2026/09/09 08:32:08 [config.validateEndpointsConfig] Validated 0 external endpoints
+gatus-1  | 2026/09/09 08:32:08 [main.initializeStorage] Loaded 1 persisted triggered alerts
+gatus-1  | 2026/09/09 08:32:08 [controller.Handle] Listening on 0.0.0.0:8080
+gatus-1  | 
+gatus-1  |  ┌───────────────────────────────────────────────────┐ 
+gatus-1  |  │                   Fiber v2.52.6                   │ 
+gatus-1  |  │                 http://[::]:8080                  │ 
+gatus-1  |  │                                                   │ 
+gatus-1  |  │ Handlers ............ 31  Processes ........... 1 │ 
+gatus-1  |  │ Prefork ....... Disabled  PID ................. 1 │ 
+gatus-1  |  └───────────────────────────────────────────────────┘ 
+gatus-1  | 
+gatus-1  | 2026/09/09 08:32:09 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:10 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_alertmanager_health; key=control-plane_rca-system-alertmanager-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:11 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:11 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:21 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:21 [watchdog.handleAlertsToResolve] Sending custom alert because alert for endpoint with key=contract-test_contract-probe with description='' has been RESOLVED
+gatus-1  | 2026/09/09 08:32:31 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:39 [watchdog.execute] Monitored group=control-plane; endpoint=RCA_SYSTEM_control_health; key=control-plane_rca-system-control-health; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:41 [watchdog.execute] Monitored group=business-canary; endpoint=business_canary_arena_frontend; key=business-canary_business-canary-arena-frontend; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:41 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+gatus-1  | 2026/09/09 08:32:51 [watchdog.execute] Monitored group=contract-test; endpoint=contract-probe; key=contract-test_contract-probe; success=true; errors=0; duration=1ms
+=== hook log (tail) ===
+=== 2026-09-09T08:30:46.255329 | GET /healthz | from 127.0.0.1
+=== 2026-09-09T08:30:47.815008 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:48.591875 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:30:49.369650 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:00.151735 | POST /hook | from 172.26.0.2
+{
+  "status": "TRIGGERED",
+  "endpoint": "contract-probe",
+  "group": "contract-test",
+  "target": "http://127.0.0.1:1/",
+  "description": "",
+  "errors": "Get "http://127.0.0.1:1/": dial tcp 127.0.0.1:1: connect: connection refused"
+}
+
+=== 2026-09-09T08:31:17.817904 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:19.371673 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:47.817344 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:48.594851 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:31:49.372977 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:09.530842 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:10.307733 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:11.085876 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:11.862926 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:21.865831 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:21.867364 | POST /hook | from 172.26.0.2
+{
+  "status": "RESOLVED",
+  "endpoint": "contract-probe",
+  "group": "contract-test",
+  "target": "http://host.docker.internal:18080/healthz",
+  "description": "",
+  "errors": ""
+}
+
+=== 2026-09-09T08:32:31.866863 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:39.533317 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:41.088593 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:41.865466 | GET /healthz | from 172.26.0.2
+=== 2026-09-09T08:32:51.867958 | GET /healthz | from 172.26.0.2
+=== statuses API ===
+(saved)
