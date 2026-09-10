@@ -23,37 +23,95 @@
           </div>
           <div class="head-item">
             <div class="hi-label">当前阶段</div>
-            <div class="hi-value muted">未统计（阶段投影依赖 EV-03）</div>
+            <div class="hi-value" :class="{ muted: !run.facets?.phase }">
+              {{ fmtPhase(run.facets?.phase) }}
+              <span v-if="run.facets?.stageEnteredAt" class="hi-sub">（{{ fmtTime(run.facets.stageEnteredAt) }} 进入）</span>
+            </div>
           </div>
           <div class="head-item">
             <div class="hi-label">最后有效进展时间</div>
-            <div class="hi-value muted">未统计（依赖 EV-03）</div>
+            <div class="hi-value" :class="{ muted: !run.facets?.lastProgressAt }">
+              {{ run.facets?.lastProgressAt ? fmtTime(run.facets.lastProgressAt) : '未统计' }}
+            </div>
           </div>
         </div>
         <div class="head-versions">
-          模型 <b>{{ run.model ?? '未统计' }}</b>
+          名称 <b>{{ run.displayName ?? '未统计' }}</b>
+          <span class="sep">·</span> 模式 <b>{{ run.mode ?? '未统计' }}</b>
+          <span class="sep">·</span> 模型 <b>{{ run.model ?? '未统计' }}</b>
           <span class="sep">·</span> Prompt <b>{{ run.promptVersion ?? '未统计' }}</b>
           <span class="sep">·</span> 数据集 <b>{{ run.datasetVersion ?? '未统计' }}</b>
-          <span class="sep">·</span> 案例数 <b>{{ fmtCount(run.caseCount) }}</b>
+          <span class="sep">·</span> 已结清案例 <b>{{ fmtPair(run.caseCount, run.totalScenarios) }}</b>
         </div>
         <div class="quality-strip">
           <div class="qs-item">
             <div class="qs-label">端到端命中率</div>
-            <div class="qs-value">{{ fmtPctStat(run.endToEndHitRate) }}</div>
+            <div class="qs-value">{{ fmtRatioStatOr(run.quality?.endToEndHitRate, run.endToEndHitRate) }}</div>
           </div>
           <div class="qs-item">
             <div class="qs-label">条件准确率</div>
-            <div class="qs-value">{{ fmtPctStat(run.conditionalAccuracy) }}</div>
+            <div class="qs-value">{{ fmtRatioStatOr(run.quality?.conditionalAccuracy, run.conditionalAccuracy) }}</div>
           </div>
           <div class="qs-item">
             <div class="qs-label">根因可判定覆盖率</div>
-            <div class="qs-value">{{ fmtPctStat(run.coverage) }}</div>
+            <div class="qs-value">{{ fmtRatioStatOr(run.quality?.coverage, run.coverage) }}</div>
           </div>
           <div class="qs-item">
             <div class="qs-label">未决率</div>
-            <div class="qs-value">{{ fmtPctStat(run.unresolvedRate) }}</div>
+            <div class="qs-value">{{ fmtRatioStatOr(run.quality?.unresolvedRate, run.unresolvedRate) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">错误确认率</div>
+            <div class="qs-value">{{ fmtRatioStat(run.quality?.falseConfirmation) }}</div>
           </div>
         </div>
+
+        <!-- EV-03 六状态分面：各面独立表达互不顶替；UNKNOWN/字段缺席一律“未统计”，tooltip 注明数据来源归属 -->
+        <el-descriptions class="facets" :column="3" border size="small">
+          <el-descriptions-item label="执行状态（executionState）">
+            <StatusBadge :status="badgeState(run.facets?.executionState ?? run.state)" />
+          </el-descriptions-item>
+          <el-descriptions-item label="阶段（phase）">
+            <span :class="{ muted: !run.facets?.phase }">{{ fmtPhase(run.facets?.phase) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              质量门（qualityVerdict）
+              <el-tooltip content="数据来源归 EV-07（质量门持久化）；当前后端未接线，恒 UNKNOWN" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </template>
+            <span :class="{ muted: isUnknownFacet(run.facets?.qualityVerdict) }">{{ fmtFacet(run.facets?.qualityVerdict) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              恢复（recoveryState）
+              <el-tooltip content="数据来源归 EV-04（持久化 worker / L 模式恢复）；当前后端未接线，恒 UNKNOWN" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </template>
+            <span :class="{ muted: isUnknownFacet(run.facets?.recoveryState) }">{{ fmtFacet(run.facets?.recoveryState) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              用量（usageStatus）
+              <el-tooltip content="数据来源归 EV-06（R7 RCA 调用账本显式接线）；RV08 红线——不读 PR 域账本冒充，当前恒 UNKNOWN" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </template>
+            <span :class="{ muted: isUnknownFacet(run.facets?.usageStatus) }">{{ fmtFacet(run.facets?.usageStatus) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item>
+            <template #label>
+              新鲜度（freshness）
+              <el-tooltip content="投影同步直读主表，无滞后即为实时（LIVE）" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </template>
+            <span :class="{ muted: isUnknownFacet(run.facets?.freshness) }">{{ fmtFacet(run.facets?.freshness) }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="asof muted">数据截至 {{ run.asOf ? fmtClock(run.asOf) : '未统计' }}</div>
 
         <!-- 配置详情默认折叠，完整 digest 不占首屏 -->
         <el-collapse class="cfg-collapse">
@@ -159,21 +217,26 @@
 </template>
 
 <script setup>
-// 实验详情（/eval/runs/:runId）：固定首屏（身份/状态/阶段/进展时间）+ 折叠配置 + 案例 / 用量与对账页签。
+// 实验详情（/eval/runs/:runId）：固定首屏（身份/状态/阶段/进展时间）+ 六状态分面 + 折叠配置 + 案例 / 用量与对账页签。
 // EV-01：复合 row-key（caseExecutionId，旧接口回退 runId+scenarioId+roundNo）；watch runId 取消旧请求、
 // 清空案例缓存、请求序号防旧响应覆盖；null 显示“未统计”；“已加载 N 条”。
+// EV-03 接线：displayName/mode/totalScenarios/quality（比率三件套，旧契约回退旧数值字段）/
+// facets 六分面（UNKNOWN→未统计并注明归属）/asOf 数据截至。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import { fmtCount, fmtDuration, fmtPctStat, fmtTime } from '../utils/format'
+import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
 
 const runId = computed(() => String(route.params.runId ?? ''))
 const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: 'FAILED' }[s] ?? s)
+
+// 分面未接线/缺席（UNKNOWN/null）→ 弱化显示
+const isUnknownFacet = v => v == null || v === 'UNKNOWN'
 
 // RV02：优先 caseExecutionId；旧接口无该字段时回退 runId+scenarioId+roundNo，禁止数组下标
 const caseKey = row =>
@@ -359,6 +422,7 @@ onMounted(() => {
 .head-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; }
 .hi-label { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 2px; }
 .hi-value { font-size: 15px; }
+.hi-sub { font-size: var(--fs-aux); color: var(--ink-2); }
 .head-versions { font-size: var(--fs-body); color: var(--ink-2); }
 .head-versions b { color: var(--ink); font-weight: 600; }
 .head-versions .sep { margin: 0 8px; color: var(--line-strong); }
@@ -366,6 +430,15 @@ onMounted(() => {
 .quality-strip { display: flex; gap: 24px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
 .qs-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .qs-value { font-size: 18px; font-weight: 600; color: var(--head); }
+
+.facets { border-top: 1px solid var(--line); padding-top: 12px; }
+.facet-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; margin-left: 4px; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--ink-2);
+  font-size: 10px; line-height: 1; cursor: help; vertical-align: 1px;
+}
+.asof { font-size: var(--fs-aux); text-align: right; }
 
 .cfg-collapse { border-top: 1px solid var(--line); }
 .cfg-collapse :deep(.el-collapse-item__header) { font-size: var(--fs-body); }

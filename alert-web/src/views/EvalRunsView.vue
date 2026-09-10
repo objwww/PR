@@ -45,10 +45,10 @@
           <el-table-column label="实验名称与模式" min-width="180">
             <template #default="{ row }">
               <div class="cell-main">
-                <span class="mono" :title="row.runId">{{ shortId(row.runId) }}</span>
+                <span :class="{ mono: !row.displayName }" :title="row.runId">{{ row.displayName ?? shortId(row.runId) }}</span>
                 <el-button size="small" text @click.stop="copyText(row.runId, '实验 ID 已复制')">复制</el-button>
               </div>
-              <div class="cell-sub">模式：未统计（依赖 EV-03）</div>
+              <div class="cell-sub">模式：{{ row.mode ?? '未统计' }}</div>
             </template>
           </el-table-column>
           <el-table-column label="版本差异摘要" min-width="150">
@@ -60,19 +60,23 @@
           <el-table-column label="数据集与样本数" min-width="130">
             <template #default="{ row }">
               <div class="cell-main">{{ row.datasetVersion ?? '未统计' }}</div>
-              <div class="cell-sub">样本数：未统计（依赖 EV-03）</div>
+              <div class="cell-sub">样本数：{{ fmtCount(row.totalScenarios) }}</div>
             </template>
           </el-table-column>
           <el-table-column label="执行阶段 / 已结清案例" width="170">
             <template #default="{ row }">
               <div class="cell-main"><StatusBadge :status="badgeState(row.state)" /></div>
-              <div class="cell-sub">已结清案例：未统计（依赖 EV-03）</div>
+              <div class="cell-sub">阶段：{{ fmtPhase(row.facets?.phase) }}</div>
+              <div class="cell-sub">已结清案例：{{ fmtPair(row.caseCount, row.totalScenarios) }}</div>
             </template>
           </el-table-column>
           <el-table-column label="质量摘要" width="150">
             <template #default="{ row }">
-              <div class="cell-main">端到端命中：{{ fmtPctStat(row.endToEndHitRate) }}</div>
-              <div class="cell-sub">未决 {{ fmtPctStat(row.unresolvedRate) }} · 错误确认 未统计</div>
+              <div class="cell-main">端到端命中：{{ fmtRatioStatOr(row.quality?.endToEndHitRate, row.endToEndHitRate) }}</div>
+              <div class="cell-sub">
+                未决 {{ fmtRatioStatOr(row.quality?.unresolvedRate, row.unresolvedRate) }}
+                · 错误确认 {{ fmtRatioStat(row.quality?.falseConfirmation) }}
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="费用状态与耗时" width="140">
@@ -122,15 +126,17 @@
 </template>
 
 <script setup>
-// 实验列表（/eval/runs）：页头 + 三过滤项 + 筛选栏（EV-03 待开放）+ 七列表格 + 上下文比较条。
+// 实验列表（/eval/runs）：页头 + 三过滤项 + 筛选栏（EV-03 查询参数待开放）+ 七列表格 + 上下文比较条。
 // EV-01：固定 queryKey + 请求序号防竞态；null 显示“未统计”；“已加载 N 条”。
+// EV-03 接线：displayName/mode/totalScenarios/quality（比率三件套）/facets.phase；
+// 字段缺席（旧契约）一律“未统计”，不填 0 冒充。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import { fmtDuration, fmtPctStat, fmtTime } from '../utils/format'
+import { fmtCount, fmtDuration, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
