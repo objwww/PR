@@ -42,9 +42,24 @@ class ConfigBundleControllerTest {
     void setUp() {
         repository = new InMemoryBundles();
         mvc = MockMvcBuilders.standaloneSetup(
-                new ConfigBundleController(new ConfigBundleService(repository))).build();
+                new ConfigBundleController(new ConfigBundleService(repository,
+                        new NoopAssets()))).build();
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("release-operator", null, List.of()));
+    }
+
+    /** EN-01 资产仓储空实现（控制器 UT 不触资产面；闭包面在 ServiceTest/IT 覆盖） */
+    static final class NoopAssets implements com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository {
+        @Override
+        public boolean insert(com.objwww.pr.control.release.domain.model.ReleaseAsset asset) {
+            return true;
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.control.release.domain.model.ReleaseAsset> findByDigest(
+                String kind, Digest digest) {
+            return java.util.Optional.empty();
+        }
     }
 
     @AfterEach

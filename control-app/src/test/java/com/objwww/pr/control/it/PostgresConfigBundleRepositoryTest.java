@@ -37,7 +37,9 @@ class PostgresConfigBundleRepositoryTest extends PostgresITBase {
         adminJdbc.sql("INSERT INTO config_bundle_active (id) VALUES (1)").update();
 
         repo = new PostgresConfigBundleRepository(controlDataSource());
-        service = new ConfigBundleService(repo);
+        service = new ConfigBundleService(repo,
+                new com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository(
+                        controlDataSource()));
     }
 
     private static Map<String, Object> content(String promptVersion) {

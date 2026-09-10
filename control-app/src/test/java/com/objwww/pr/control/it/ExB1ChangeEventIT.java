@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.domain.tool.ToolControlReason;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleReason;
 import com.objwww.pr.control.infrastructure.persistence.PostgresConfigBundleRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository;
 import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
 import com.objwww.pr.control.release.application.ConfigBundleService;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
@@ -47,7 +48,8 @@ class ExB1ChangeEventIT extends PostgresITBase {
         adminJdbc.sql("INSERT INTO config_bundle_active (id) VALUES (1)").update();
 
         repo = new PostgresConfigBundleRepository(controlDataSource());
-        service = new ConfigBundleService(repo);
+        service = new ConfigBundleService(repo,
+                new PostgresReleaseAssetRepository(controlDataSource()));
     }
 
     private static Map<String, Object> content(String promptVersion) {

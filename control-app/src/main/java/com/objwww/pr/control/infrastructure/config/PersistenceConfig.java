@@ -266,10 +266,20 @@ public class PersistenceConfig {
                 dataSource);
     }
 
+    /** EN-01（V60）：发布资产仓储——release_manifest 依赖闭包的解析面 */
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository releaseAssetRepository(
+            DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository(
+                dataSource);
+    }
+
     @Bean
     public com.objwww.pr.control.release.application.ConfigBundleService configBundleService(
-            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository repository) {
-        return new com.objwww.pr.control.release.application.ConfigBundleService(repository);
+            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository repository,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository releaseAssetRepository) {
+        return new com.objwww.pr.control.release.application.ConfigBundleService(repository,
+                releaseAssetRepository);
     }
 
     // M5-10 Canary 决策审计追加面（V25；BA-45：195 真启动实证装配缺口——canaryRouter

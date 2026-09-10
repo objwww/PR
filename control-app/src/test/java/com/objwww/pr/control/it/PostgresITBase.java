@@ -83,6 +83,8 @@ public abstract class PostgresITBase {
             "run_budget_state", "run_budget_entry",
             // V40（EX-B1 变更事实）——BA-41 同律（config_bundle 两表仍由组件测试自管）
             "change_event",
+            // V60（EN-01 发布资产）——BA-41 同律：release_asset 无种子行，入清单统一清场
+            "release_asset",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
             "duty_override", "duty_channel", "duty_member", "duty_schedule");

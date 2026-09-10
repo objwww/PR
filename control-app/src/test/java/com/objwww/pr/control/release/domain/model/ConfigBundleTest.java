@@ -124,4 +124,60 @@ class ConfigBundleTest {
                 .isThrownBy(() -> new ConfigBundle(UUID.randomUUID(),
                         Digest.sha256Of("x"), 0L, content(), "op", Instant.now()));
     }
+
+    // ------------------------------------------------- EN-01 release_manifest 段
+
+    private static Map<String, Object> manifestSection() {
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("schema_version", ReleaseManifest.SCHEMA_VERSION);
+        manifest.put("roles", Map.of("primary", "aa".repeat(32)));
+        manifest.put("skills", List.of("bb".repeat(32)));
+        manifest.put("tool_schemas", List.of("cc".repeat(32)));
+        manifest.put("model_routing", Map.of("model", "glm-4-flash"));
+        manifest.put("rag_corpus", Map.of("runbook", "catalog-v1"));
+        manifest.put("context_rules", Map.of("max_tool_results", 20));
+        manifest.put("harness_compat", List.of("r7-v2.1"));
+        return manifest;
+    }
+
+    @Test
+    @DisplayName("EN-01：release_manifest 段结构非法 → 构造拒绝（typed manifest，fail-closed）")
+    void invalidManifestSectionRejected() {
+        Map<String, Object> bad = content();
+        bad.put("release_manifest", Map.of("schema_version", "release-manifest.v2"));
+        assertThatIllegalArgumentException().isThrownBy(() -> bundle(bad))
+                .withMessageContaining("schema_version");
+        Map<String, Object> notMap = content();
+        notMap.put("release_manifest", "text");
+        assertThatIllegalArgumentException().isThrownBy(() -> bundle(notMap))
+                .withMessageContaining("release_manifest");
+    }
+
+    @Test
+    @DisplayName("EN-01：合法 manifest 段随 bundle 构造，releaseManifest() 视图可读；段参与 canonical digest")
+    void validManifestSectionRoundTrips() {
+        Map<String, Object> withManifest = content();
+        withManifest.put("release_manifest", manifestSection());
+        ConfigBundle b = bundle(withManifest);
+
+        assertThat(b.releaseManifest()).isPresent();
+        assertThat(b.releaseManifest().orElseThrow().roles()).containsEntry("primary",
+                "aa".repeat(32));
+        // 段参与内容 → 与无段 bundle digest 不同（依赖变动产生新组合身份，§8.2）
+        assertThat(b.bundleDigest()).isNotEqualTo(bundle(content()).bundleDigest());
+    }
+
+    @Test
+    @DisplayName("EN-01/P01：manifest 段键序不同 → 同一 bundle digest（canonical 键序无关）")
+    void manifestSectionDigestStableAcrossKeyOrder() {
+        Map<String, Object> first = content();
+        first.put("release_manifest", manifestSection());
+        Map<String, Object> reorderedSection = new LinkedHashMap<>();
+        manifestSection().forEach(reorderedSection::put);
+        Map<String, Object> second = new LinkedHashMap<>();
+        second.put("release_manifest", reorderedSection);
+        content().forEach(second::put);
+
+        assertThat(bundle(second).bundleDigest()).isEqualTo(bundle(first).bundleDigest());
+    }
 }
