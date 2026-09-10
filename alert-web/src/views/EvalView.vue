@@ -13,6 +13,8 @@
           :class="{ cur: isCur(t) }"
         >{{ t.label }}</router-link>
       </template>
+      <!-- 故障演练互链（DR-01）：评测中心保留质量对比与数据集，演练是独立对象，不在此内嵌 -->
+      <router-link to="/drills" class="drill-link" title="故障演练是独立作业：从选场景到恢复核验，不在评测页内嵌">去故障演练 →</router-link>
     </div>
 
     <router-view />
@@ -54,4 +56,5 @@ function isCur(t) {
 .tab-disabled { cursor: not-allowed; color: var(--line-strong); }
 .tab-disabled:hover { background: none; }
 .tab-note { font-size: 12px; font-weight: 400; }
+.drill-link { margin-left: auto; align-self: center; white-space: nowrap; font-size: 13px; }
 </style>
