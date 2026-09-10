@@ -1,0 +1,23 @@
+# 127 duty-adapter（M7-17）：所有敏感值 env 注入（compose :? 强制），本文件零密钥。
+spring:
+  application:
+    name: duty-adapter
+  main:
+    banner-mode: off
+
+server:
+  port: 8080
+  shutdown: graceful
+
+app:
+  # /hook/gatus 验签（Gatus custom provider headers 经 os.ExpandEnv 注入）
+  token: ${DUTY_ADAPTER_TOKEN}
+  # 195 窄反代（WG 隧道 10.250.250.1:8090，只放行两条 duty 路径）
+  snapshot-url: ${DUTY_SNAPSHOT_URL:http://10.250.250.1:8090/api/duty/schedule/snapshot}
+  writeback-url: ${DUTY_WRITEBACK_URL:http://10.250.250.1:8090/api/duty/notifications}
+  # 快照拉取走 operator 机器线（GET /api/duty/**）；回写走 duty-adapter 线（POST 专用）
+  operator-bearer: ${DUTY_SNAPSHOT_BEARER}
+  writeback-bearer: ${DUTY_WRITEBACK_BEARER}
+  data-dir: ${DUTY_DATA_DIR:/data}
+  pull-interval-ms: 60000
+  replay-interval-ms: 60000

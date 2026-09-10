@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.objwww.pr</groupId>
+        <artifactId>pr-agent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>duty-adapter</artifactId>
+    <name>duty-adapter</name>
+    <description>127 独立故障域值班适配器（M7-17：Gatus 探针事件 → 排班快照解析 → 直连企微/钉钉
+        webhook → 业务码校验降级；195 台账 best-effort 回写 + spool 兜底。192MiB 内存预算）</description>
+
+    <dependencies>
+        <!-- 最小面：web（tomcat+jackson）即全部——无 JDBC/无 security/无 actuator
+             （唯一入口 /hook/gatus 由控制器内常量时间 bearer 验签，单一面不值得安全过滤器栈） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
