@@ -53,6 +53,13 @@
             <el-select v-model="form.datasetVersion" placeholder="选择数据集版本" :loading="datasetsLoading" class="w-full">
               <el-option v-for="d in datasets" :key="d.version" :value="d.version" :label="`${d.version}（${d.caseCount} 案例）`" />
             </el-select>
+            <div v-if="datasetsError" class="field-note">
+              数据集列表加载失败（真实接口 GET /eval/datasets）。
+              <el-button size="small" text type="primary" @click="loadDatasets">重试</el-button>
+            </div>
+            <div v-else-if="!datasetsLoading && !datasets.length" class="field-note">
+              数据集接口（GET /eval/datasets）返回空列表，暂无可选版本；提交本已禁用（依赖 EV-04 后端），此处不提供静态兜底选项。
+            </div>
           </el-form-item>
           <el-form-item label="重复次数">
             <el-input-number v-model="form.repeat" :min="1" :max="100" />
@@ -140,21 +147,25 @@ const form = reactive({
   deadline: null,
 })
 
-// 数据集列表是真实端点（GET /eval/datasets）
+// 数据集列表是真实端点（GET /eval/datasets）；失败/空列表诚实提示，不做静态兜底
 const datasets = ref([])
 const datasetsLoading = ref(false)
+const datasetsError = ref(false)
 
-onMounted(async () => {
+async function loadDatasets() {
   datasetsLoading.value = true
+  datasetsError.value = false
   try {
     const d = await api('/eval/datasets')
     datasets.value = d.items ?? []
   } catch {
-    // 数据集加载失败不阻塞骨架，提交本就禁用
+    datasetsError.value = true // 加载失败不阻塞骨架，提交本就禁用（EV-04）
   } finally {
     datasetsLoading.value = false
   }
-})
+}
+
+onMounted(loadDatasets)
 </script>
 
 <style scoped>
@@ -173,6 +184,7 @@ onMounted(async () => {
 .form { max-width: 560px; }
 .w-full { width: 100%; }
 .hint { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 12px; max-width: 720px; line-height: 1.7; }
+.field-note { font-size: var(--fs-aux); color: var(--ink-2); line-height: 1.6; }
 
 .mode-card {
   border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
