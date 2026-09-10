@@ -2,6 +2,8 @@
   <div class="duty-page">
     <PageHeader title="值班管理" subtitle="当前值班、未来七天排班与通知通道">
       <template #actions>
+        <el-button @click="botDrawer = true">仿真机器人</el-button>
+        <el-tag type="warning" effect="plain">仿真</el-tag>
         <el-button :loading="loading" @click="reload">刷新快照</el-button>
       </template>
     </PageHeader>
@@ -213,6 +215,11 @@
       </el-tabs>
     </div>
 
+    <!-- UX-02 值班仿真机器人对话窗：抽屉式右侧分栏，默认收起不挤压值班表主体 -->
+    <DetailDrawer v-model="botDrawer" title="值班仿真机器人" :size="480">
+      <DutyBotPanel />
+    </DetailDrawer>
+
     <!-- 排班参数编辑弹窗 -->
     <el-dialog v-model="schedDialog" title="编辑排班参数" width="480px">
       <el-form label-width="90px">
@@ -367,6 +374,7 @@ import { api } from '../api/client.js'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
+import DutyBotPanel from '../components/DutyBotPanel.vue'
 import { fmtTime } from '../utils/format'
 
 const snap = ref(null)
@@ -385,6 +393,7 @@ const overrideDialog = ref(false)
 const memberDialog = ref(false)
 const channelDialog = ref(false)
 const channelDrawer = ref(false)
+const botDrawer = ref(false)
 const activeChannel = ref(null)
 const testResult = ref(null)
 
