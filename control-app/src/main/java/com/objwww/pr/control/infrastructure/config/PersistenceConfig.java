@@ -444,6 +444,37 @@ public class PersistenceConfig {
                 agentOpsReader, java.time.Instant::now);
     }
 
+    // ---------------- UX-02 值班仿真机器人（/api/v1/duty-bot/**；V83 授权面——control_app 只增读） ----------------
+
+    /** 仿真会话/消息存储（V83 chat_session/chat_message，insert-only） */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.domain.DutyBotStore dutyBotStore(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresDutyBotStore(
+                jdbc, objectMapper);
+    }
+
+    /** 通知 outbox 只读状态面（V9 既有 SELECT 授权，零新授权） */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.domain.NotifyStatusReader notifyStatusReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifyStatusReader(jdbc);
+    }
+
+    /** 对话服务：DutyStore（值班快照）+ IncidentQueryReader（告警投影）复用既有口径，不新造 */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.application.DutyBotService dutyBotService(
+            com.objwww.pr.control.ops.dutybot.domain.DutyBotStore dutyBotStore,
+            com.objwww.pr.control.ops.duty.domain.DutyStore dutyStore,
+            com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader,
+            com.objwww.pr.control.ops.dutybot.domain.NotifyStatusReader notifyStatusReader,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.duty-bot.ops-zone:Asia/Shanghai}") String opsZone) {
+        return new com.objwww.pr.control.ops.dutybot.application.DutyBotService(
+                dutyBotStore, dutyStore, incidentQueryReader, notifyStatusReader, tx,
+                java.time.Instant::now, java.time.ZoneId.of(opsZone));
+    }
+
     // ---------------- AM5 命令域（V27，M5-14 装配；HTTP 面 = alert/interfaces RunCommandController） ----------------
 
     @Bean

@@ -89,7 +89,9 @@ public abstract class PostgresITBase {
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
             "duty_override", "duty_channel", "duty_member", "duty_schedule",
             // V82（UX-01 分类 override 审计）——BA-41 同律
-            "incident_category_override");
+            "incident_category_override",
+            // V83（UX-02 仿真机器人两表）——BA-41 同律
+            "chat_message", "chat_session");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
