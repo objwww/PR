@@ -29,6 +29,9 @@ class EnMigrationContractTest {
     private static final Path V63 = Path.of(
             "src/main/resources/db/migration/V63__en04_run_config_epoch.sql");
 
+    private static final Path V64 = Path.of(
+            "src/main/resources/db/migration/V64__en06_mcp_server_registry.sql");
+
     private static String normalized(Path migration) throws IOException {
         return Files.readString(migration).toLowerCase().replaceAll("\\s+", " ");
     }
@@ -98,5 +101,27 @@ class EnMigrationContractTest {
                 .contains("'config_switch'")
                 .contains("'waiting_safe_point'")
                 .contains("'expired'");
+    }
+
+    @Test
+    void v64McpServerRegistryPinsGenerationAndGrantFace() throws IOException {
+        String sql = normalized(V64);
+
+        assertThat(sql)
+                .contains("create table mcp_server_registry")
+                // §2.3：name/transport/url-or-command/args/headers_ref/enabled/generation/updated_at
+                .contains("constraint pk_mcp_server_registry primary key (name)")
+                .contains("check (transport in ('streamable_http', 'stdio'))")
+                .contains("endpoint text not null")
+                .contains("args jsonb not null")
+                .contains("headers_ref text")
+                .contains("enabled boolean not null")
+                .contains("generation bigint not null")
+                .contains("updated_at timestamptz not null")
+                // 管理面（register/disable/enable/deregister）在控制面 REST：control_app 全权；
+                // eval_app/notify_app 全零（MCP 注册表不进评估/通知面）
+                .contains("grant select, insert, update, delete on mcp_server_registry to control_app")
+                .contains("revoke all on mcp_server_registry from eval_app")
+                .contains("revoke all on mcp_server_registry from notify_app");
     }
 }

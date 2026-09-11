@@ -14,5 +14,7 @@ public enum ToolControlReason {
     STALE_GENERATION,
     RESULT_OVERSIZE,
     /** EX-B2：日志源对良构查询回 4xx（LogQL 拒收/版本语义差）——工具侧缺陷，不进重试循环 */
-    QUERY_FAILED
+    QUERY_FAILED,
+    /** EN-06 M06：MCP server 已禁用（disable 先提交则无新资格）——明确终止，不无限重试 */
+    CAPABILITY_REVOKED
 }

@@ -23,6 +23,21 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- EN-06 spike：MCP SDK 2.0.0 声明 reactor-core 3.7.0（本地仓无此精确版），
+                 钉到本地在库 3.7.x 同线补丁版——偏差记执行日志 spike 记录 -->
+            <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-core</artifactId>
+                <version>3.7.5</version>
+            </dependency>
+            <!-- EN-06 spike：mcp-json-jackson3（Jackson 3）运行期要求 annotations 2.20
+                 新方法（JsonProperty.isRequired()）；Boot 3.4.5 管理版本过低 → 钉 2.20
+                 （annotations 对 2.x databind 向后兼容） -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.20</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -30,6 +45,14 @@
         <dependency>
             <groupId>com.objwww.pr</groupId>
             <artifactId>shared-kernel</artifactId>
+        </dependency>
+
+        <!-- EN-06：MCP 官方 Java SDK（io.modelcontextprotocol.sdk:mcp 2.0.0，
+             聚合 mcp-core + mcp-json-jackson3；spike 记录见 EN 执行日志 §十） -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp</artifactId>
+            <version>2.0.0</version>
         </dependency>
 
         <dependency>

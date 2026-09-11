@@ -265,6 +265,7 @@ public class SingleToolEvidenceAgent {
             case POLICY_DENIED -> ToolReasonCode.POLICY_DENIED;
             case INVALID_ARGS, UNKNOWN_TOOL -> ToolReasonCode.INVALID_INPUT;
             case AUTH_FAILED -> ToolReasonCode.AUTH_FAILED;
+            case CAPABILITY_REVOKED -> ToolReasonCode.POLICY_DENIED;
             case BUDGET_EXHAUSTED, RESULT_OVERSIZE, STALE_GENERATION, QUERY_FAILED ->
                     ToolReasonCode.TRANSPORT_UNKNOWN;
         };

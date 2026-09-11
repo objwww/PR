@@ -88,6 +88,8 @@ public abstract class PostgresITBase {
             "release_asset", "release_qualification",
             // V63（EN-04 配置代际史）——BA-41 同律：En04ConfigEpochIT 起成为真 PG 消费者
             "rca_run_config_epoch",
+            // V64（EN-06 MCP server 注册表）——BA-41 同律：En06McpRegistryIT 起成为真 PG 消费者
+            "mcp_server_registry",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
             "duty_override", "duty_channel", "duty_member", "duty_schedule");
