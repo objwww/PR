@@ -152,6 +152,10 @@ services:
       # 真窗经 .env 显式指向 litellm-am3（alert-net 内网 http://litellm-am3:4000/v1）。
       APP_ALERT_R7_PRIMARY_ENABLED: ${APP_ALERT_R7_PRIMARY_ENABLED:-false}
       APP_ALERT_R7_PRIMARY_RELEASE_DIGEST: ${APP_ALERT_R7_PRIMARY_RELEASE_DIGEST:-}
+      # 主模式策略 prompt 透传（执行者 2026-09-11 增补）：缺省=代码内置默认
+      # （"直接受限取证，按需委派专家"——195 真窗实证该默认过保守，qwen/glm 均
+      #  零委派致 RX02/RD09/armC 前提不成立）；覆写文本只描述调查策略，不携带场景答案
+      APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}
       AGENT_MODEL: ${AGENT_MODEL:-glm-5}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       # M6-07 Holmes 退场：HOLMES_BASE_URL/HOLMES_API_KEY/APP_ALERT_HOLMES_MODEL、

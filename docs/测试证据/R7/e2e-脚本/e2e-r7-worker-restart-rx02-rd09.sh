@@ -54,9 +54,12 @@ EOF
 DR="$(r7_publish_bundle "$RUNS/bundle-restart.content" restart)"
 r7_activate "$DR" "$RUNS"
 T0="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-r7_log "phase1 注入 ${AN}@$SVC（多信号 summary 诱导委派）"
+r7_log "phase1 注入 ${AN}@$SVC（复杂多域 summary 诱导委派；attempt-1 简版 summary
+    实证简案面不触发委派——案面重调即本脚本头登记的路径）"
+# 委派诱导 fixture：真实复杂事故形态（跨三域+疑似变更源+明示范围超出单次调查覆盖），
+# 只描述案面复杂度，不注入任何结论/答案（phase3 断言口径不变）
 _code="$(r7_inject_alert "$AN" "$SVC" firing "$RUNS" \
-    "multi-signal: latency + errors + suspected configuration change")"
+    "SEV2 复合事故：checkout p99 延迟 1.8s（阈值 0.5s）+ 支付回调错误率 4.2% + 网关 5xx 抖动；deploy-2431 后疑配置漂移；涉及 payment/inventory/gateway 三域，需变更面 diff 取证与日志面深挖等并行专项子调查，单次调查覆盖不足")"
 [ "$_code" = "202" ] || r7_fail "phase1 注入期望 202 实得 $_code"
 _key="${_key_l}:${_key_l}"
 r7_db_poll_ge "phase1 WHITELISTED 原子对" 120 R7_PG_URL \
