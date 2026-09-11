@@ -4,6 +4,12 @@
       <router-link to="/eval/runs">实验</router-link>
       <span class="sep">/</span>
       <b class="mono">{{ runId }}</b>
+      <!-- R8 取消接线：仅执行中可点；受理=CANCELLING 非终态（L 模式恢复核验后才收口） -->
+      <el-button
+        v-if="pageState === 'ok' && (run?.facets?.executionState ?? run?.state) === 'RUNNING'"
+        class="crumb-cancel" type="danger" plain size="small"
+        :loading="cancelling" @click="confirmCancel"
+      >取消实验</el-button>
     </div>
 
     <template v-if="pageState === 'ok'">
@@ -665,6 +671,42 @@ function copyText(text, tip) {
   )
 }
 
+// R8 取消接线：POST /api/eval/runs/{runId}/cancel；幂等键固定 cancel-<runId>
+// （重复点击=同键重放 200，不产生第二条取消命令）；受理≠已取消——推进归
+// worker 案例边界检查点，L 模式强制恢复核验后才到终态（后端契约原义）
+const cancelling = ref(false)
+
+async function confirmCancel() {
+  try {
+    await ElMessageBox.confirm(
+      '取消受理后实验进入「取消中」：worker 在案例边界停止新增案例；L 模式须恢复核验通过才到终态。确认取消？',
+      '取消实验',
+      { confirmButtonText: '确认取消', cancelButtonText: '再想想', type: 'warning' },
+    )
+  } catch {
+    return // 用户放弃
+  }
+  cancelling.value = true
+  try {
+    const d = await api(`/eval/runs/${encodeURIComponent(runId.value)}/cancel`, {
+      method: 'POST',
+      body: { idempotencyKey: `cancel-${runId.value}`, reason: '页面手动取消' },
+    })
+    ElMessage.success(d.replayed
+      ? '取消此前已受理（幂等重放），实验处于「取消中」'
+      : '取消已受理（CANCELLING）；推进与恢复核验归 worker，请以页面刷新为准')
+    loadRun()
+  } catch (e) {
+    const st = e?.response?.status
+    const msg = e?.response?.data?.error
+    if (st === 409) ElMessage.warning(msg || 'run 已终态，取消非法迁移')
+    else if (st === 404) ElMessage.error('实验不存在（可能尚未被 worker 领取落库）')
+    else ElMessage.error(msg || '取消请求失败，请重试')
+  } finally {
+    cancelling.value = false
+  }
+}
+
 // 浏览器前进/后退：query 回灌（EU05）
 watch(() => route.query, q => {
   const nextTab = normalizeTab(str(q.tab))
@@ -714,6 +756,7 @@ onMounted(() => {
 .run-detail { display: flex; flex-direction: column; gap: var(--section-gap); }
 
 .crumb { font-size: 13px; color: var(--ink-2); }
+.crumb-cancel { margin-left: auto; }
 .crumb a { color: var(--brand); }
 .crumb .sep { margin: 0 6px; color: var(--line-strong); }
 .mono { font-family: var(--mono, monospace); }
