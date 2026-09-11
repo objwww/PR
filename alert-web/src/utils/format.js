@@ -73,6 +73,16 @@ export function fmtClock(iso) {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
+// DR-02 秒数时长（预检 computed：duration/ttl/total 等后端计算值）：'x 秒' / 'x 分 x 秒' / 'x 小时 x 分'；null/非法 → '—'
+export function fmtSeconds(total) {
+  if (total == null || Number.isNaN(Number(total)) || Number(total) < 0) return '—'
+  const s = Math.floor(Number(total))
+  if (s < 60) return `${s} 秒`
+  const m = Math.floor(s / 60)
+  if (m < 60) return s % 60 ? `${m} 分 ${s % 60} 秒` : `${m} 分钟`
+  return `${Math.floor(m / 60)} 小时 ${m % 60} 分`
+}
+
 // EV-03 分子/分母计数对：'12/20'；两侧皆缺席 → '未统计'；单侧缺席该侧 '—'（不填 0 冒充）
 export function fmtPair(numerator, denominator) {
   if (numerator == null && denominator == null) return '未统计'
