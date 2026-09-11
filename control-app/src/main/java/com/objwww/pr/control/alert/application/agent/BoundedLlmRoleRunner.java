@@ -48,6 +48,24 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     /** 单步 max_tokens（有界输出；Decision 是小对象，不允许长文） */
     static final int MAX_TOKENS_PER_STEP = 1_000;
 
+    /**
+     * 输出协议后缀（BA-110：runner 拥有的硬契约，不依赖可配置 prompt 记得携带——
+     * 195 真窗实证：缺省 prompt 零协议描述时 glm-5 全程自然语言作答，8 步
+     * JsonParseException 耗尽）。协议随信封逐步下发，prompt 版本只管调查策略。
+     */
+    static final String PROTOCOL_SUFFIX = "\n【输出协议（硬性）】回复必须且只能是一个 JSON"
+            + " 对象：不要 markdown 围栏、不要解释文字、不要思考过程。三种形状恰选一：\n"
+            + "1. 取证：{\"tool_call\":{\"tool_id\":\"<tool_allowlist 之一>\",\"args\":{...}}}\n"
+            + "2. 委派（仅确需专业能力且 delegation_batches_remaining>0）："
+            + "{\"delegate\":{\"requests\":[{\"gap_id\":\"g1\",\"role_id\":\"metrics|logs|change\","
+            + "\"question\":\"...\",\"input_refs\":[],\"scope\":{},\"requested_budget\":4}]}}\n"
+            + "3. 收敛：{\"final\":{\"claims\":[{\"claim_key\":\"c1\","
+            + "\"kind\":\"ROOT_CAUSE|HYPOTHESIS|SYMPTOM|EXCLUSION\",\"statement\":\"...\","
+            + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"]}],"
+            + "\"missing_information\":[\"...\"]}}\n"
+            + "规则：evidence_refs 只允许引用 valid_artifact_refs 中的 id；证据不足时用"
+            + " HYPOTHESIS 并在 missing_information 写明缺口；每步只输出一个决策对象。";
+
     /** 主 Agent 受限直接取证口（§六 工具路径归既有受控面，X6 装配 ToolGateway 实现） */
     @FunctionalInterface
     public interface PrimaryToolPort {
@@ -112,7 +130,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         PrimaryDecision decision;
         try {
             decision = PrimaryDecision.parse(
-                    mapper.readValue(outcome.content(),
+                    mapper.readValue(jsonOf(outcome.content()),
                             new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
         } catch (Exception e) {
             advanceStep(request, checkpoint, null);
@@ -254,10 +272,27 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted()
                     .toList());
             return request.profile().prompt() + "\n"
-                    + mapper.writeValueAsString(envelope);
+                    + mapper.writeValueAsString(envelope) + PROTOCOL_SUFFIX;
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException("任务信封序列化失败", e);
         }
+    }
+
+    /**
+     * 真实模型输出整形（BA-110）：去前后空白与 markdown 围栏（```json … ```）。
+     * 不提取任意文本中的 JSON 片段——解析容忍面越宽注入面越大，围栏整形是上限。
+     */
+    static String jsonOf(String content) {
+        String s = content == null ? "" : content.strip();
+        if (s.startsWith("```")) {
+            s = s.replaceFirst("^```[a-zA-Z0-9]*\\s*", "");
+            int tail = s.lastIndexOf("```");
+            if (tail >= 0) {
+                s = s.substring(0, tail);
+            }
+            s = s.strip();
+        }
+        return s;
     }
 
     /** 本 run 合法引用全集（X5 准入面）：已准入证据行 id + 绑定编译期 artifact 键 */

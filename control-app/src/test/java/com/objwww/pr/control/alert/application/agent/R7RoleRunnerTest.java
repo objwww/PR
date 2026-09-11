@@ -307,6 +307,45 @@ class R7RoleRunnerTest {
                 .isEqualTo(1);
     }
 
+    // ------------------------------------------------- BA-110 真模型协议面
+
+    @Test
+    void ba110围栏包装决策_整形后正常解析取证() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "```json\n{\"tool_call\":{\"tool_id\":\"logs.query\","
+                        + "\"args\":{\"query\":\"error\"}}}\n```",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-b1",
+                Duration.ofMillis(5)));
+
+        RoleRunner.RoleDriveResult result = boundedRunner.drive(
+                request(primaryId, primaryProfile()));
+
+        assertThat(result.outcome()).as("markdown 围栏整形后按 TOOL_CALL 驱动")
+                .isEqualTo(RoleRunner.RoleDriveOutcome.EVIDENCE_PRODUCED);
+        assertThat(toolPort.invocations).hasSize(1);
+        assertThat(toolPort.invocations.get(0).toolId()).isEqualTo("logs.query");
+    }
+
+    @Test
+    void ba110提示词携带runner拥有的输出协议后缀() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"final\":{\"claims\":[],\"missing_information\":[\"x\"]}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-b2",
+                Duration.ofMillis(5)));
+
+        boundedRunner.drive(request(primaryId, primaryProfile()));
+
+        assertThat(client.prompts).hasSize(1);
+        assertThat(client.prompts.get(0))
+                .as("协议后缀随信封逐步下发，不依赖可配置 prompt 记得携带")
+                .contains("【输出协议（硬性）】")
+                .contains("\"tool_call\"")
+                .contains("\"final\"")
+                .contains("valid_artifact_refs");
+    }
+
     // ------------------------------------------------- 夹具
 
     /** 主模式启动（PlanCompiler 编译事务写绑定+检查点），返回主任务 id */
@@ -483,6 +522,7 @@ class R7RoleRunnerTest {
     /** 脚本化路由客户端（零真网） */
     private static final class ScriptedRouteClient implements RouteClientPort {
         private final Queue<RouteCallOutcome> script = new ArrayDeque<>();
+        private final List<String> prompts = new ArrayList<>();
         private int calls;
 
         void enqueue(RouteCallOutcome outcome) {
@@ -496,6 +536,7 @@ class R7RoleRunnerTest {
         @Override
         public RouteCallOutcome complete(ModelRequest request, Duration timeout) {
             calls++;
+            prompts.add(request.prompt());
             return script.poll();
         }
     }
