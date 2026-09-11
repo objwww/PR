@@ -44,11 +44,13 @@ import com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecut
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.persistence.PostgresClaimStore;
 import com.objwww.pr.control.infrastructure.persistence.PostgresConfigBundleRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresDelegationDecisionRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresEvidenceRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresEvidenceSnapshotRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresInvestigationResultRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresNotifyOutboxRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresPrimaryCheckpointRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaEventAppender;
 import com.objwww.pr.control.infrastructure.persistence.PostgresRcaReportRepository;
@@ -59,6 +61,7 @@ import com.objwww.pr.control.infrastructure.persistence.PostgresRcaToolInvocatio
 import com.objwww.pr.control.infrastructure.persistence.PostgresReportPublicationRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository;
 import com.objwww.pr.control.infrastructure.persistence.PostgresTaskEdgeRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresTaskExecutionBindingRepository;
 import com.objwww.pr.control.infrastructure.tool.ReplayToolExecutor;
 import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.shared.Digest;
@@ -139,22 +142,31 @@ class Am6NativeFullChainIT extends PostgresITBase {
 
         DeterministicSupervisor supervisor = new DeterministicSupervisor(
                 new PlanCompiler(agentRegistry(), tasks,
-                        new PostgresTaskEdgeRepository(jdbc), controlTx),
+                        new PostgresTaskEdgeRepository(jdbc),
+                        new PostgresTaskExecutionBindingRepository(jdbc, MAPPER), controlTx),
                 new DagExecutionService(new PostgresTaskEdgeRepository(jdbc), tasks),
-                runs, tasks, controlTx, AlertClock.system());
+                runs, tasks,
+                new PostgresTaskExecutionBindingRepository(jdbc, MAPPER),
+                new PostgresPrimaryCheckpointRepository(jdbc, MAPPER),
+                new PostgresDelegationDecisionRepository(jdbc),
+                agentRegistry(), controlTx, AlertClock.system());
 
         executor = new NativeInvestigationExecutor(bundles, supervisor, tasks, runs,
                 evidence, new PostgresEvidenceSnapshotRepository(jdbc, controlTx),
-                metrics, logs, change, nativeRcaAgent, claims,
+                nativeRcaAgent, claims,
                 new EvidencePackageValidator(65_536, 32, 4_096),
-                "oa_duplicate_orders_current{job=\"order-arena\"}", TOOL_REGISTRY_DIGEST,
+                TOOL_REGISTRY_DIGEST,
                 AlertClock.system(), AlertMetrics.NOOP,
                 new RunBudgetGate(new InMemoryRunBudgetLedger()),
                 // EX-A1：本件焦点非预算面，宽限额只保证 openRun/TOOL_CALL 硬闸不误伤全链
                 Map.of(BudgetKind.STEP, 256L, BudgetKind.TOOL_CALL, 256L,
                         BudgetKind.EVIDENCE, 256L, BudgetKind.SUBTASK, 64L),
                 // EX-A3：恢复 checkpoint 读面（真 PG 账本）
-                ledger);
+                ledger,
+                // R7-X2：分派面 = 持久绑定 + 兼容适配运行器目录
+                new PostgresTaskExecutionBindingRepository(jdbc, MAPPER), agentRegistry(),
+                compatRunners(metrics, logs, change),
+                new PostgresPrimaryCheckpointRepository(jdbc, MAPPER), null);
         orchestrator = new RcaRunOrchestrator(tasks, runs, attempts,
                 new PostgresRcaReportRepository(jdbc), incidents,
                 new PostgresSchedulerSlotRepository(jdbc),
@@ -363,6 +375,24 @@ class Am6NativeFullChainIT extends PostgresITBase {
                         Map.of(BudgetKind.STEP, 8L), Map.of("type", "object")),
                 new AgentProfile("change", "1", "prompt-c", POLICY_VERSION, Set.of(),
                         Map.of(BudgetKind.STEP, 8L), Map.of("type", "object"))));
+    }
+
+    /** R7-X2：兼容适配运行器目录（role→Agent 映射，与生产装配 AlertFlowConfig 同形） */
+    private static com.objwww.pr.control.alert.application.agent.RunnerDirectory compatRunners(
+            MetricsAgent metrics, LogsAgent logs, ChangeAgent change) {
+        Map<String, com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner.RoleQueryHandler>
+                handlers = new java.util.LinkedHashMap<>();
+        handlers.put("metrics", (ctx, start, end) -> metrics.investigate(ctx,
+                new MetricsAgent.MetricsQuery(
+                        "oa_duplicate_orders_current{job=\"order-arena\"}", start, end,
+                        com.objwww.pr.control.alert.domain.identity.InvestigationInputs.STEP)));
+        handlers.put("logs", (ctx, start, end) -> logs.investigate(ctx,
+                new LogsAgent.LogsQuery(start, end)));
+        handlers.put("change", (ctx, start, end) -> change.investigate(ctx,
+                new ChangeAgent.ChangeQuery(start, end)));
+        return new com.objwww.pr.control.alert.application.agent.RunnerDirectory(List.of(
+                new com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner(
+                        handlers)));
     }
 
     private static ToolRegistry replayRegistry() {

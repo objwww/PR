@@ -1,5 +1,7 @@
 # alert-web 现状盘点 × 业界对照改进建议
 
+> 2026-09-11审查注：原文“准确度已达标”“数据全有，只缺读面”的判断撤回为待证。V5模型账本review_run_id是PR域，不能当evalRunId；现有评测列表11列也不宜继续默认叠加token列。新方案已明确列表减列、案例唯一键/null/请求竞态修复、实验启动、对比与资产版本评测，见[详细执行审查方案](../../docs/告警-评测中心与能力版本演进-审查及详细改造方案-v1.md)。
+
 > 2026-09-11。基于对 alert-web 全部页面的代码走读 + 业界调研（Grafana / PagerDuty / Robusta-HolmesGPT / BigPanda / incident.io / Langfuse / Datadog LLM Obs，截图见本目录 `screenshots/`，调研结论见 `README.md`）。
 
 ## 总判断

@@ -100,6 +100,33 @@ public class M3ModelGatewayConfig {
             @Value("${app.review.model-provider:openai-compatible}") String provider,
             @Value("${app.review.model-version:configured}") String contractVersion,
             @Value("${app.worker.max-lease-seconds:600}") int maxLeaseSeconds) {
+        return buildModelGateway(props, ledgerRepository, executionLedger, pricingService,
+                objectMapper, env, primaryModel, fallbackModel, primaryBaseUrl,
+                fallbackBaseUrl, primaryApiKey, fallbackApiKey, provider, contractVersion,
+                maxLeaseSeconds);
+    }
+
+    /**
+     * 网关构建工厂（R7-X6 提取复用）：平台 bean 与 RCA 侧实例（事件汇 = RcaModelEventSink，
+     * rca_event 无 pr_revision FK 面）共用同一构造纪律——路由/客户端/参数面单点维护，
+     * 只有事件汇按消费域分叉。
+     */
+    public ModelGateway buildModelGateway(
+            ModelGatewayProperties props,
+            ModelCallLedgerRepository ledgerRepository,
+            ExecutionLedger executionLedger,
+            PricingService pricingService,
+            ObjectMapper objectMapper,
+            Environment env,
+            String primaryModel,
+            String fallbackModel,
+            String primaryBaseUrl,
+            String fallbackBaseUrl,
+            String primaryApiKey,
+            String fallbackApiKey,
+            String provider,
+            String contractVersion,
+            int maxLeaseSeconds) {
 
         // ---- 启动校验（§4.9 清单；全部不回显密钥本体，EX-45） ----
         assertHiddenRetryDisabled(env);

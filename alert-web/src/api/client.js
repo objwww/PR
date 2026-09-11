@@ -19,8 +19,8 @@ http.interceptors.response.use(
   },
 )
 
-export async function api(path, { params, method = 'GET', body } = {}) {
-  const { data } = await http.request({ url: path, method, params, data: body })
+export async function api(path, { params, method = 'GET', body, signal } = {}) {
+  const { data } = await http.request({ url: path, method, params, data: body, signal })
   return data
 }
 

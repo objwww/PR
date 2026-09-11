@@ -273,24 +273,68 @@ public class AlertFlowConfig {
             ObjectProvider<com.objwww.pr.control.alert.application.RunBudgetGate> budgetGate,
             ObjectProvider<Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long>> budgetLimits,
             com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+            ObjectProvider<com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository> taskBindings,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.AgentRegistry> agents,
+            ObjectProvider<com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository>
+                    checkpoints,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner>
+                    boundedLlmRunner,
+            ObjectProvider<com.objwww.pr.control.alert.domain.agent.AgentProfile> primaryProfile,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
             return null;
         }
+        // R7-X2：兼容适配运行器（旧三角色 role→Agent 映射归装配面，执行器不认角色名）
+        var metricsInstance = java.util.Objects.requireNonNull(metricsAgent.getIfAvailable(),
+                "MetricsAgent 缺件（兼容适配必要件）");
+        var logsInstance = java.util.Objects.requireNonNull(logsAgent.getIfAvailable(),
+                "LogsAgent 缺件（兼容适配必要件）");
+        var changeInstance = java.util.Objects.requireNonNull(changeAgent.getIfAvailable(),
+                "ChangeAgent 缺件（兼容适配必要件）");
+        var agentRegistry = java.util.Objects.requireNonNull(agents.getIfAvailable(),
+                "AgentRegistry 缺件（R7-X2 分派面必要件）");
+        var bindingRepository = java.util.Objects.requireNonNull(taskBindings.getIfAvailable(),
+                "任务绑定仓储缺件（R7-X1 分派面必要件）");
+        Map<String, com.objwww.pr.control.alert.application.agent.SingleToolRoleRunner.RoleQueryHandler>
+                handlers = new java.util.LinkedHashMap<>();
+        handlers.put("metrics", (ctx, start, end) -> metricsInstance.investigate(ctx,
+                new com.objwww.pr.control.alert.application.agent.MetricsAgent.MetricsQuery(
+                        metricsExpr, start, end,
+                        com.objwww.pr.control.alert.domain.identity.InvestigationInputs.STEP)));
+        handlers.put("logs", (ctx, start, end) -> logsInstance.investigate(ctx,
+                new com.objwww.pr.control.alert.application.agent.LogsAgent.LogsQuery(
+                        start, end)));
+        handlers.put("change", (ctx, start, end) -> changeInstance.investigate(ctx,
+                new com.objwww.pr.control.alert.application.agent.ChangeAgent.ChangeQuery(
+                        start, end)));
+        // R7-X6：主模式运行器（BOUNDED_LLM）在册时目录双运行器；否则纯兼容面
+        var boundedRunner = boundedLlmRunner.getIfAvailable();
+        java.util.List<com.objwww.pr.control.alert.application.agent.RoleRunner> runnerList =
+                boundedRunner == null
+                        ? List.of(new com.objwww.pr.control.alert.application.agent
+                                .SingleToolRoleRunner(handlers))
+                        : List.of(new com.objwww.pr.control.alert.application.agent
+                                        .SingleToolRoleRunner(handlers),
+                                boundedRunner);
+        com.objwww.pr.control.alert.application.agent.RunnerDirectory runners =
+                new com.objwww.pr.control.alert.application.agent.RunnerDirectory(runnerList);
         return new NativeInvestigationExecutor(bundles.getIfAvailable(),
                 supervisor.getIfAvailable(), tasks.getIfAvailable(), runs.getIfAvailable(),
                 evidence.getIfAvailable(), snapshots.getIfAvailable(),
-                metricsAgent.getIfAvailable(), logsAgent.getIfAvailable(),
-                changeAgent.getIfAvailable(), nativeRcaAgent.getIfAvailable(),
+                nativeRcaAgent.getIfAvailable(),
                 claims.getIfAvailable(), validator.getIfAvailable(),
-                metricsExpr, toolRegistryDigest, AlertClock.system(), alertMetrics,
+                toolRegistryDigest, AlertClock.system(), alertMetrics,
                 java.util.Objects.requireNonNull(budgetGate.getIfAvailable(),
                         "RunBudgetGate 缺件（EX-A1 预算面为 NATIVE 必要件）"),
                 java.util.Objects.requireNonNull(budgetLimits.getIfAvailable(),
                         "预算限额面缺件（EX-A1 am4BudgetLimits）"),
                 java.util.Objects.requireNonNull(toolLedger,
-                        "工具调用账本缺件（EX-A3 恢复 checkpoint 面）"));
+                        "工具调用账本缺件（EX-A3 恢复 checkpoint 面）"),
+                bindingRepository, agentRegistry, runners,
+                java.util.Objects.requireNonNull(checkpoints.getIfAvailable(),
+                        "主任务检查点仓储缺件（R7-X6 主模式 FINAL 投影面）"),
+                primaryProfile.getIfAvailable());
     }
 
     /** 状态观察面（C-64）的能力快照：装配时定格，interfaces 不触探针类型（分层缝） */

@@ -944,3 +944,39 @@
 3. 值班快照/环境徽章等边缘项：VITE_ENV_LABEL 未注入（显"未标记"）；test/12345678 弱口令待换。
 
 **次日动作**（无用户新指令时）：①等用户对样板页审美反馈并迭代；②用户审过增强线方案后启动编码线（动北极星指标）；③kill-9 D1 部署文档补写。
+
+---
+
+## 2026-09-11（凌晨自主推进段，用户裁定"直接开发，中间不要问我"）
+
+**本段进展**：
+- **EX 线代码收口入库**：main 从 aedf1dd 推进至 63f8972 并全部推上 origin/main（GitHub 凌晨约 01:20~02:07 断连，02:19 恢复后推送成功）。提交序列：dec01f2 前 5 提交（EX 后端 V36~V45/前端 13 页/deploy/duty-adapter/docs 证据）+ e64ccc9 中文化清扫 + db262b9 侧边栏（加大加粗+64px 收起）+ 63f8972 EV 一批。**R7 编码残留（V46 迁移/AgentPhase/RoleRuntimeKind 及三文件 R7 段，v2.0 时代半成品）未入库**，备份在 var/r7-residue-20260911/，待 R7 执行者按 v2.1 重做参考。
+- **Kill9DrillProbe 00~10 共 11 条演练残留**走真链路（webhook→inbox→投影）补发 resolved 全部收口；Arena 48 条混沌告警按用户裁定保留。
+- **隧道/部署**：localhost:8090 隧道存活可用；195 web 容器三轮重建部署（中文化/侧边栏/EV 一批），control-app 未动（R7/EN 在场作业）。
+- **EV 一批（EV-01 基础真实性 + EV-02 布局导航）交付并部署 195**：七列实验列表+三态过滤+上下文比较条、/eval/new 四步向导与 /eval/compare 骨架（后端未就绪入口禁用+诚实标注依赖卡号）、null/0/未统计三态、复合 rowKey、runId watch+请求序号防旧数据、queryKey 竞态防护。EU01~08 八例 195 真环境自测全 PASS（19 张截图 docs/测试证据/UI-EV一批-20260911/，CDP 脚本可复跑）。
+- **方案族对齐**：增强线 v1.1 增 §6.1（与 R7 并行：依赖自检即时开工规约+worktree 隔离 en/enhance-line + Flyway 号段 R7=V46+/EN=V60+/EV-DR=V80+ + 195 验收窗串行）；评测中心 EV 方案（12 卡 48 例）与前端方案第七章 DR-01~07 故障演练已读核，边界干净（EV-09/10 复用 EN manifest 不造第二注册表；仿真机器人后端归 control 认证域不进 duty-adapter）。
+
+**线状态**：R7 执行中（用户自派，日志 docs/告警-R7执行日志-20260911.md 已见）；EN 已派工（§6.1 自检规约生效）；EV 前端线由主会话驱动（一批已收口，DR-01 骨架下一单）；UX-01 分类/UX-02 机器人随 EV 后续批次排。
+
+**风险与待办**：①eval datasets 端点恒空（数据生产面未接）仍在；②VITE_ENV_LABEL 未注入显"未标记"；③test/12345678 弱口令仍挂；④GitHub 断连期间本地提交曾积压，已清零；⑤EV 二批（EV-03/04/05 动 control-app）必须与 R7/EN 部署窗错开，走 ev/eval-center 隔离分支。
+
+## 2026-09-11 凌晨自主推进段（续）
+
+- **DR-01 故障演练三页骨架交付并核验通过**（提交 3a05f9a，本地）：/drills、/drills/new、/drills/:drillId 三路由 + 导航"故障演练"项；后端 /api/drills* 未交付，列表/摘要卡/启动按钮全部诚实态（注明"实测 403/404，依赖 DR-02~04"，绝不渲染成"暂无数据"）；新建三步全禁用防误发起；详情页八阶段时间线骨架。已部署 195 web（curl 200，SPA 深链 /drills 200）。证据 6 图+可复跑脚本：`docs/测试证据/UI-DR01-20260911/`。偏差：未实现路由实测由 Spring Security 返回 403 而非 404，前端两类统一归类"接口未就绪"，DR-02 落地后 classify 收窄回 404。
+- **GitHub 推送再度失败**（01M269TCTHTVWDH1RJ4GYWD90H 每时 17 分重试 cron 已挂）：本地 main=3a05f9a 领先 origin/main（63f8972）一提交。GitHub 凌晨断连反复，非代码问题。
+- R7 侧观察：执行日志显示 R7ModelGateway 账本 8 案绿（撞键零触网/UNKNOWN/配额 DEFERRED 等），状态健康；EN 在 E:\kimiCode-en @79ce974 作业中。
+- 进行中：EV-03 评测投影契约（agent-82，隔离 worktree E:\kimiCode-ev，分支 ev/eval-center，Flyway V80+，RV08 红线）。
+- **EV-03 评测投影契约核验通过**（ev/eval-center 分支 @5607fd2，未 merge 未 push）：V80 迁移在号段内（46~79 无占用）、RV08 红线核验（model_call_ledger 字面量仅存在于仓储+SelfCheck 封闭集允许处）、EvalQueryServiceTest 独立重跑 14/14 绿。EU09/10/13/14/15 按方案划出至 EV-04；EU11/12/16 IT 已写但本机无 Docker 标 NOT_RUN（留 195 窗真值）。dev 文档：`docs/告警-EV03-评测投影契约-v1.md`（在 ev 分支）。
+- **EV-03 字段前端接线交付并核验通过**（提交 38ff2ac，本地；GitHub 仍不通，重试 cron 在跑）：EvalRunsView 消费 displayName/mode/计数对/阶段中文化；详情页六状态分面描述列表+asOf+错误确认率；RatioStat 三件套统一渲染（OK→百分比/UNKNOWN→未统计/NOT_APPLICABLE→不适用）。旧契约探针实测：195 旧后端下新键全缺席→全部"未统计"降级、无 0 冒充、页面不崩。已部署 195 web（curl 200）。证据 3 图+可复跑脚本：`docs/测试证据/UI-EV03接线-20260911/`。
+- 进行中：EV-04 发起与生命周期（agent-83，ev/eval-center 分支，已运行约 20 分钟）。
+- **EV-04 评测发起与生命周期核验通过**（ev/eval-center @3e1c013，未 merge 未 push）：V81 eval_run_command 命令账本（幂等锚+异payload409）、POST /api/eval/runs(202)/cancel 写面、EvalRunWorker 常驻领取（SKIP LOCKED CAS）复用 EvalBatchRunner、阶段事件真落库、E取消案例边界检查点、L取消强制 RECOVERING+核验后才终态（recoveryState 真值）、terminalReason 卡因、孤儿清扫。独立核验：核心 23 例重跑全绿、V80/V81 号段无撞、RV08 红线守住（字面量仍仅 2 处封闭集允许）。EU09/14 PASS（单测）；EU10/13/15 部分 PASS+IT NOT_RUN（本机无 Docker，留 195 窗）。文档 docs/告警-EV04-发起与生命周期-v1.md（在 ev 分支）。偏差如实记录：预算只持久化不强制（EV-06 前置）、leaseHeartbeatAt 恒 null。
+- **EV-05 对比工作台前端打磨交付并核验通过**（提交 3b97176）：基线固定/交换/互斥 + 真实 run 下拉 + query 深链回灌 + 非法 query 引导空态；改善/退化/持平分组计数"—"不伪造 0；EvalNew 数据集加载失败显式提示不静态兜底。主会话修正一处卡号口径（页面"依赖 EV-05"→方案实际卡号 EV-07 配对工作台，5 处文案），修正后重新部署 195 web（/eval/compare curl 200）。证据 6 图+可复跑脚本：`docs/测试证据/UI-EV05前端-20260911/`。
+- **GitHub 恢复**：3a05f9a/38ff2ac/3b97176 三提交已随本次一并推上 origin/main，本地与远端一致（## main 无 ahead），重试 cron 已删。
+- 进行中：UX-01 告警分类后端（agent-86，ev/eval-center 分支，V82 起）。
+- **UX-01 告警分类后端核验通过**（ev/eval-center @61a9a83）：V82 两族列分离（rule_*/override_* + 生成列生效面，DB 结构保证 override 优先、无置信度列）+ incident_category_override insert-only 审计；规则优先确定性分类器（7 业务类+PLATFORM/UNCLASSIFIED 独立、17 条冻结规则、无概率）；POST category-override/revoke（幂等重放/expectedRevision CAS 409/理由必填）；读面 category 过滤+详情命中依据+facet 分桶。独立核验：核心 28 例重跑全绿、V82 号段无撞、RV08 守住。IT 6 例 NOT_RUN（无 Docker，留 195 窗）。存量行不回填（显示 UNCLASSIFIED，批量回填另立任务）。文档 docs/告警-UX01-告警分类-v1.md（在 ev 分支）。
+- R7/EN 侧观察：R7 日志至 BoundedLlmRoleRunner 契约+X6 装配待接线（NativeInvestigationExecutorTest 8/8 绿）；EN @068e49c（EN-03 Run 固定版本、EN-09 评分器版本入身份面，全量 1163 绿）。
+- **UX-01 分类前端接线交付并核验通过**（提交 b67d38e，已推 origin/main）：CategoryBadge（词表中文+OVERRIDE"人工"标记）、列表分类列+过滤下拉（facets 缺席时禁用并注明"依赖后端 UX-01 未部署"）、详情命中依据/override 快照、人工修正对话框（幂等键+expectedRevision，404/403 显式弹窗不静默）。旧契约探针实测降级零报错。已部署 195 web。证据 4 图+可复跑脚本：`docs/测试证据/UI-UX01前端-20260911/`。偏差：修正目标剔除 UNCLASSIFIED（回未分类走撤销路径）。
+- 进行中：UX-02 仿真机器人后端（agent-87，ev/eval-center 分支，V83 起）。
+- **UX-02 仿真机器人后端核验通过**（ev/eval-center @01b9c84）：V83 chat_session/chat_message（insert-only、seq 游标、uq 幂等锚、intent 同生同灭 CHECK）；确定性意图识别（值班/告警/通知/帮助/兜底，零 LLM、只引真实查询、无数据如实"查询无结果"）；一问一答同事务落库+owner 隔离越权 404+边界（400字符/200条/30条每分钟）；duty-adapter 零触点。独立核验：25 例重跑全绿、V83 号段无撞、RV08 守住。IT 5 例 NOT_RUN。偏差：认领/升级/静默仿真命令收窄未做（另立 simulation 状态面）；频率限制进程内固定窗口。文档 docs/告警-UX02-仿真机器人-v1.md（在 ev 分支）。
+- **UX-02 机器人前端对话窗交付并核验通过**（提交 2cb0ab0，本地；GitHub 又断连，重试 cron 01M26FW1090705AB23HB2QJKDF 每小时 41 分补推）：DutyBotPanel（会话列表/消息流气泡/400 字计数/发送中禁用+同一 clientMessageId 幂等重发/references_json incidentId 跳告警详情）、值班页 480px 抽屉入口+"仿真"标记默认收起零挤压；404/403→"依赖后端 UX-02 未部署"横幅+输入禁用，409/429/400 分态提示，无任何伪造回复路径。已部署 195 web（实测 GET sessions=403 正确降级）。证据 3 图+脚本：`docs/测试证据/UI-UX02前端-20260911/`。**证据偏差**：s02/s03 两张截图 md5 相同（同一帧，但单帧同时含横幅与输入禁用两态，主张可由该帧证实；已在案）。
+- **ev/eval-center 分支现状**：@01b9c84（EV-03/EV-04/UX-01/UX-02 四卡，V80~V83），未 merge 未部署，待 R7/EN 汇合后的合并窗。

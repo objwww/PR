@@ -64,12 +64,12 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                     id, run_id, task_key, state, priority,
                     available_at, ready_since, deadline_at,
                     lease_owner, lease_until, lease_epoch,
-                    attempt_count, max_attempts, created_at, updated_at
+                    attempt_count, max_attempts, created_at, updated_at, round_id
                 ) VALUES (
                     :id, :runId, :taskKey, :state, :priority,
                     :availableAt, :readySince, CAST(:deadlineAt AS timestamptz),
                     :leaseOwner, :leaseUntil, :leaseEpoch,
-                    :attemptCount, :maxAttempts, :createdAt, :updatedAt
+                    :attemptCount, :maxAttempts, :createdAt, :updatedAt, :roundId
                 )
                 """)
                 .param("id", task.id())
@@ -87,6 +87,7 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 .param("maxAttempts", task.maxAttempts())
                 .param("createdAt", Timestamp.from(task.createdAt()))
                 .param("updatedAt", Timestamp.from(task.updatedAt()))
+                .param("roundId", task.roundId())
                 .update();
     }
 
@@ -250,6 +251,7 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 rs.getInt("attempt_count"),
                 rs.getInt("max_attempts"),
                 rs.getTimestamp("created_at").toInstant(),
-                rs.getTimestamp("updated_at").toInstant());
+                rs.getTimestamp("updated_at").toInstant(),
+                rs.getInt("round_id"));
     }
 }

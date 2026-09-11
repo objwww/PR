@@ -255,14 +255,24 @@ public class AlertAm4Config {
 
     // ------------------------------------------------------------------ Agent 面
 
-    /** Agent 注册表（M4-24）：三固定 Agent，启动期 fail-fast，运行期不可生 */
+    /**
+     * Agent 注册表（M4-24）：三固定 Agent，启动期 fail-fast，运行期不可生。
+     * R7-X6 主模式（{@code app.alert.r7.primary.enabled=true}）注册表升级为
+     * <b>release 快照</b>（{@link AgentRegistry#forRelease}）：三兼容角色 + primary
+     * （BOUNDED_LLM/PRIMARY 相位）——新 Run 可启主模式，在途 Run 恢复按持久绑定
+     * (name,version,digest) requireExact 精确解析不漂移；回滚（摘除 primary）后
+     * 在途主模式 Run 解析拒绝 = CAPABILITY_UNAVAILABLE 显式 DEAD（§11.5 首期拒绝
+     * 热迁移），不猜 latest。
+     */
     @Bean
     public AgentRegistry am4AgentRegistry(
             @Value(PROMPT_VERSION_KEY) String promptVersion,
             @Value(BUDGET_STEP_KEY) long budgetStep,
             @Value(BUDGET_TOOL_CALLS_KEY) long budgetToolCalls,
             @Value(BUDGET_EVIDENCES_KEY) long budgetEvidences,
-            @Value(BUDGET_SUBTASKS_KEY) long budgetSubtasks) {
+            @Value(BUDGET_SUBTASKS_KEY) long budgetSubtasks,
+            org.springframework.beans.factory.ObjectProvider<AgentProfile> primaryProfile,
+            @Value("${app.alert.r7.primary.release-digest:}") String releaseDigest) {
         Map<BudgetKind, Long> budgetLimits = new LinkedHashMap<>();
         budgetLimits.put(BudgetKind.STEP, budgetStep);
         budgetLimits.put(BudgetKind.TOOL_CALL, budgetToolCalls);
@@ -278,7 +288,15 @@ public class AlertAm4Config {
         AgentProfile change = new AgentProfile("change", AGENT_VERSION,
                 "native-change", promptVersion,
                 Set.of(ChangeAgent.TOOL_NAME), budgetLimits, outputSchema);
-        return new AgentRegistry(List.of(metrics, logs, change));
+        AgentProfile primary = primaryProfile.getIfAvailable();
+        if (primary == null) {
+            return new AgentRegistry(List.of(metrics, logs, change));
+        }
+        if (releaseDigest == null || releaseDigest.isBlank()) {
+            throw new IllegalStateException(
+                    "主模式启用必须提供 app.alert.r7.primary.release-digest（release 快照身份面）");
+        }
+        return AgentRegistry.forRelease(releaseDigest, List.of(metrics, logs, change, primary));
     }
 
     /** Metrics Agent（在线影子形态：工具出口 = 影子面；EX-A1 全参=预算门+熔断门） */
@@ -340,19 +358,159 @@ public class AlertAm4Config {
 
     // ------------------------------------------------------------------ DAG 面
 
-    /** 确定性 Supervisor（M4-25/26）：模型无调度权，恢复入口只有 advance */
+    /** 确定性 Supervisor（M4-25/26 + R7-X4/X11）：模型无调度权，恢复入口只有 advance */
     @Bean
     public DeterministicSupervisor am4DeterministicSupervisor(
             AgentRegistry am4AgentRegistry,
             RcaTaskRepository rcaTaskRepository,
             TaskEdgeRepository taskEdgeRepository,
+            com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository
+                    taskExecutionBindingRepository,
+            com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository
+                    primaryCheckpointRepository,
+            com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository
+                    delegationDecisionRepository,
             RcaRunRepository rcaRunRepository,
             TransactionOperations tx,
             DagExecutionService dagExecutionService) {
         PlanCompiler compiler = new PlanCompiler(am4AgentRegistry, rcaTaskRepository,
-                taskEdgeRepository, tx);
+                taskEdgeRepository, taskExecutionBindingRepository, tx);
         return new DeterministicSupervisor(compiler, dagExecutionService,
-                rcaRunRepository, rcaTaskRepository, tx, AlertClock.system());
+                rcaRunRepository, rcaTaskRepository, taskExecutionBindingRepository,
+                primaryCheckpointRepository, delegationDecisionRepository,
+                am4AgentRegistry, tx, AlertClock.system());
+    }
+
+    // ------------------------------------------------------------------ R7-X6 主模式
+
+    /**
+     * 主 Agent Profile（R7-X6，BOUNDED_LLM/PRIMARY 相位）：enabled=false 返回 null
+     * （NullBean——注册表/运行器目录/执行器全部走旧兼容路由，行为零变化）。预算
+     * STEP=MaxSteps、TOOL_CALL=兼容上限、TOKEN=主模式新增维（R7a-1 账本计费面对齐）。
+     */
+    @Bean
+    public AgentProfile am4PrimaryProfile(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            @Value("${app.alert.r7.primary.prompt:你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}")
+            String prompt,
+            @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query}")
+            String toolAllowlist,
+            @Value("${app.alert.r7.primary.max-steps:8}") int maxSteps,
+            @Value(BUDGET_TOOL_CALLS_KEY) long toolCallBudget,
+            @Value("${app.alert.r7.primary.budget-tokens:60000}") long tokenBudget,
+            @Value(PROMPT_VERSION_KEY) String promptVersion) {
+        if (!enabled) {
+            return null;
+        }
+        Map<BudgetKind, Long> budget = new LinkedHashMap<>();
+        budget.put(BudgetKind.STEP, (long) maxSteps);
+        budget.put(BudgetKind.TOOL_CALL, toolCallBudget);
+        budget.put(BudgetKind.TOKEN, tokenBudget);
+        return new AgentProfile("primary", AGENT_VERSION, prompt, promptVersion,
+                Set.of(toolAllowlist.split(",")), budget,
+                Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT), Map.of(),
+                com.objwww.pr.control.alert.domain.agent.AgentPhase.PRIMARY,
+                com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind.BOUNDED_LLM,
+                Set.of(), maxSteps, "deterministic-final-on-exhaustion");
+    }
+
+    /**
+     * RCA 侧模型网关（R7-X6）：复用 M3 构建工厂（路由/客户端/参数单点），唯一分叉 =
+     * 事件汇挂 {@code rcaModelEventSink}（rca_event，绕开 pr_revision FK 面——
+     * R7a-1 §二装配要求）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.RcaModelGateway am4RcaModelGateway(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            M3ModelGatewayConfig m3ModelGatewayConfig,
+            M3ModelGatewayConfig.ModelGatewayProperties props,
+            com.objwww.pr.control.domain.ai.ModelCallLedgerRepository platformModelLedger,
+            com.objwww.pr.control.domain.service.ExecutionEventRepository rcaModelEventSink,
+            com.objwww.pr.control.domain.ai.PricingService pricingService,
+            ObjectMapper objectMapper,
+            org.springframework.core.env.Environment env,
+            @Value("${AGENT_MODEL:glm-5}") String primaryModel,
+            @Value("${AGENT_MODEL_FALLBACK:}") String fallbackModel,
+            @Value("${OPENAI_COMPAT_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}")
+            String primaryBaseUrl,
+            @Value("${OPENAI_COMPAT_BASE_URL_FALLBACK:}") String fallbackBaseUrl,
+            @Value("${AGENT_MODEL_API_KEY:placeholder-not-configured}") String primaryApiKey,
+            @Value("${AGENT_MODEL_API_KEY_FALLBACK:}") String fallbackApiKey,
+            @Value("${app.review.model-provider:openai-compatible}") String provider,
+            @Value("${app.review.model-version:configured}") String contractVersion,
+            @Value("${app.worker.max-lease-seconds:600}") int maxLeaseSeconds,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger) {
+        if (!enabled) {
+            return null;
+        }
+        com.objwww.pr.control.application.ModelGateway rcaFace =
+                m3ModelGatewayConfig.buildModelGateway(props, platformModelLedger,
+                        new com.objwww.pr.control.domain.service.ExecutionLedger(
+                                rcaModelEventSink),
+                        pricingService, objectMapper, env, primaryModel, fallbackModel,
+                        primaryBaseUrl, fallbackBaseUrl, primaryApiKey, fallbackApiKey,
+                        provider, contractVersion, maxLeaseSeconds);
+        return new com.objwww.pr.control.alert.application.agent.RcaModelGateway(rcaFace,
+                rcaModelCallLedger, pricingService, Clock.systemUTC());
+    }
+
+    /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面 */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort
+            am4PrimaryToolPort(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent,
+            ChangeAgent am4ChangeAgent,
+            RcaToolInvocationLedger toolLedger) {
+        if (!enabled) {
+            return null;
+        }
+        Map<String, com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent>
+                delegates = new LinkedHashMap<>();
+        delegates.put(MetricsAgent.TOOL_NAME, am4MetricsAgent);
+        delegates.put(LogsAgent.TOOL_NAME, am4LogsAgent);
+        delegates.put(ChangeAgent.TOOL_NAME, am4ChangeAgent);
+        return new com.objwww.pr.control.alert.application.agent.PrimaryGatewayToolPort(
+                delegates, toolLedger);
+    }
+
+    /**
+     * 受控 LLM 运行器（R7-X6）：守卫（§六固定顺序，ActionGuard 组装点）+ 主 Runner
+     * + 取证口三位一体；enabled=false 返回 null（运行器目录只含兼容单工具面）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner
+            am4BoundedLlmRoleRunner(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            AgentRegistry am4AgentRegistry,
+            RcaRunRepository rcaRunRepository,
+            RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent.RcaModelGateway>
+                    rcaModelGateway,
+            EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository
+                    primaryCheckpointRepository,
+            DeterministicSupervisor am4DeterministicSupervisor,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort>
+                    primaryToolPort,
+            ObjectMapper objectMapper) {
+        if (!enabled) {
+            return null;
+        }
+        var gateway = java.util.Objects.requireNonNull(rcaModelGateway.getIfAvailable(),
+                "RCA 模型网关缺件（主模式必要件）");
+        var port = java.util.Objects.requireNonNull(primaryToolPort.getIfAvailable(),
+                "主 Agent 取证口缺件（主模式必要件）");
+        com.objwww.pr.control.alert.application.agent.RcaActionGuard guard =
+                new com.objwww.pr.control.alert.application.agent.RcaActionGuard(
+                        rcaRunRepository, rcaTaskRepository, am4AgentRegistry,
+                        runBudgetGate, gateway, Clock.systemUTC());
+        return new com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner(
+                guard, am4DeterministicSupervisor, primaryCheckpointRepository,
+                evidenceRepository, port, objectMapper, Clock.systemUTC());
     }
 
     // ------------------------------------------------------------------ 内部

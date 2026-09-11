@@ -15,7 +15,12 @@ import EvalRunsView from '../views/EvalRunsView.vue'
 import EvalRunDetailView from '../views/EvalRunDetailView.vue'
 import EvalDatasetsView from '../views/EvalDatasetsView.vue'
 import EvalReviewView from '../views/EvalReviewView.vue'
+import EvalNewView from '../views/EvalNewView.vue'
+import EvalCompareView from '../views/EvalCompareView.vue'
 import MonitorView from '../views/MonitorView.vue'
+import DrillsView from '../views/DrillsView.vue'
+import DrillCreateView from '../views/DrillCreateView.vue'
+import DrillDetailView from '../views/DrillDetailView.vue'
 
 import { useSessionStore } from '../stores/session.js'
 
@@ -39,10 +44,16 @@ const routes = [
       { path: '', redirect: '/eval/runs' },
       { path: 'runs', name: 'eval-runs', component: EvalRunsView, meta: { title: '实验 · 评测中心' } },
       { path: 'runs/:runId', name: 'eval-run', component: EvalRunDetailView, meta: { title: '实验详情 · 评测中心' } },
+      { path: 'new', name: 'eval-new', component: EvalNewView, meta: { title: '新建实验 · 评测中心' } },
+      { path: 'compare', name: 'eval-compare', component: EvalCompareView, meta: { title: '对比工作台 · 评测中心' } },
       { path: 'datasets', name: 'eval-datasets', component: EvalDatasetsView, meta: { title: '数据集 · 评测中心' } },
       { path: 'review', name: 'eval-review', component: EvalReviewView, meta: { title: '评审 · 评测中心' } },
     ],
   },
+  // DR-01 故障演练：列表 / 三步新建 / 详情，均可浏览器直达刷新（浏览器 history 模式 + nginx SPA 回退）
+  { path: '/drills', name: 'drills', component: DrillsView, meta: { title: '故障演练' } },
+  { path: '/drills/new', name: 'drill-new', component: DrillCreateView, meta: { title: '新建演练' } },
+  { path: '/drills/:drillId', name: 'drill', component: DrillDetailView, meta: { title: '演练详情' } },
   { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: '监控' } },
 ]
 

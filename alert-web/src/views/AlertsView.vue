@@ -47,6 +47,19 @@
       >
         <el-option v-for="s in serviceOptions" :key="s" :value="s" :label="s" />
       </el-select>
+      <!-- UX-01 分类过滤：词表静态；后端 UX-01 未部署（facets 无 category 维）时禁用并注明，
+           启用后选中带 category 参数请求，失败显式提示不静默 -->
+      <el-tooltip :disabled="categorySupported" content="分类过滤依赖后端 UX-01，当前未部署" placement="top">
+        <span>
+          <el-select
+            v-model="filters.category" class="w-category" placeholder="全部分类" clearable
+            :disabled="!categorySupported" @change="applyFilters"
+          >
+            <el-option v-for="c in categoryOptions" :key="c.value" :value="c.value" :label="c.label" />
+          </el-select>
+        </span>
+      </el-tooltip>
+      <span v-if="!categorySupported" class="cat-note">分类过滤依赖后端 UX-01（未部署）</span>
       <el-popover placement="bottom-start" trigger="click" width="260">
         <template #reference>
           <el-button>
@@ -121,6 +134,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import IncidentTable from '../components/IncidentTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtMttr } from '../utils/format'
+import { CATEGORY_OPTIONS, mapCategory } from '../utils/category'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,6 +147,7 @@ const filters = reactive({
   status: str(route.query.status),
   severity: str(route.query.severity),
   service: str(route.query.service),
+  category: str(route.query.category),
   q: str(route.query.q),
 })
 
@@ -146,7 +161,11 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const facetOpen = ref(true)
 
-const hasFilter = computed(() => !!(filters.status || filters.severity || filters.service || filters.q))
+const hasFilter = computed(() => !!(filters.status || filters.severity || filters.service || filters.category || filters.q))
+
+// UX-01：facets 响应含 category 维分桶 = 后端 UX-01 已部署；缺席 = 旧契约，分类过滤禁用
+const categorySupported = computed(() => facets.value?.category != null && typeof facets.value.category === 'object')
+const categoryOptions = CATEGORY_OPTIONS
 
 const sevCards = computed(() => {
   const by = summary.value?.bySeverity ?? {}
@@ -172,6 +191,11 @@ const facetGroups = computed(() => [
     key: 'service', title: '服务',
     items: Object.entries(facets.value?.service ?? {}).map(([v, c]) => ({ value: v, label: v, count: c })),
   },
+  // UX-01 category 维分桶：缺席（旧契约后端）时整组不渲染
+  ...(facets.value?.category ? [{
+    key: 'category', title: '分类',
+    items: Object.entries(facets.value.category).map(([v, c]) => ({ value: v, label: mapCategory(v)?.label ?? v, count: c })),
+  }] : []),
 ])
 const serviceOptions = computed(() => Object.keys(facets.value?.service ?? {}))
 const severityOptions = computed(() => {
@@ -185,6 +209,7 @@ function listParams(cursor) {
   if (filters.status) p.status = filters.status
   if (filters.severity) p.severity = filters.severity
   if (filters.service) p.service = filters.service
+  if (filters.category) p.category = filters.category
   if (filters.q) p.q = filters.q
   if (cursor) p.cursor = cursor
   return p
@@ -199,7 +224,15 @@ async function loadList() {
     total.value = d.total ?? items.value.length
     nextCursor.value = d.nextCursor ?? null
     listState.value = 'ok'
+    // UX-01：URL 带 category 但后端未部署（旧契约会静默忽略未知参数）→ 显式提示条件未生效，不伪造过滤效果
+    if (filters.category && !categorySupported.value) {
+      ElMessage.warning('分类过滤依赖后端 UX-01，当前未部署，该条件未生效')
+    }
   } catch (e) {
+    // UX-01：分类过滤被后端 400 拒绝 → 显式提示，不归入通用错误态
+    if (filters.category && e?.response?.status === 400) {
+      ElMessage.error('分类过滤依赖后端 UX-01，当前未部署')
+    }
     listState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
   } finally {
     loading.value = false
@@ -239,7 +272,7 @@ function loadAll() { loadList(); loadSummary(); loadFacets() }
 function applyFilters() {
   filters.q = kw.value.trim()
   const query = {}
-  for (const k of ['status', 'severity', 'service', 'q']) if (filters[k]) query[k] = filters[k]
+  for (const k of ['status', 'severity', 'service', 'category', 'q']) if (filters[k]) query[k] = filters[k]
   router.replace({ query })
   loadAll()
 }
@@ -251,7 +284,7 @@ function toggleFilter(key, value) {
 
 function resetFilters() {
   kw.value = ''
-  Object.assign(filters, { status: '', severity: '', service: '', q: '' })
+  Object.assign(filters, { status: '', severity: '', service: '', category: '', q: '' })
   applyFilters()
 }
 
@@ -259,8 +292,8 @@ function openDetail(row) { router.push(`/alerts/${row.incidentId}`) }
 
 // 浏览器前进/后退：query 变化回灌过滤条件并重载
 watch(() => route.query, q => {
-  const next = { status: str(q.status), severity: str(q.severity), service: str(q.service), q: str(q.q) }
-  if (['status', 'severity', 'service', 'q'].every(k => next[k] === filters[k])) return
+  const next = { status: str(q.status), severity: str(q.severity), service: str(q.service), category: str(q.category), q: str(q.q) }
+  if (['status', 'severity', 'service', 'category', 'q'].every(k => next[k] === filters[k])) return
   Object.assign(filters, next)
   kw.value = next.q
   loadAll()
@@ -286,6 +319,8 @@ onMounted(loadAll)
 .toolbar .kw { width: 260px; }
 .toolbar .w-status { width: 120px; }
 .toolbar .w-service { width: 200px; }
+.toolbar .w-category { width: 150px; }
+.cat-note { font-size: var(--fs-aux); color: var(--ink-2); }
 .flex-spacer { flex: 1; }
 .more-filter .mf-label { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 6px; }
 

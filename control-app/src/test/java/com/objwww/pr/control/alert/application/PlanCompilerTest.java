@@ -50,7 +50,8 @@ class PlanCompilerTest {
                 profile("logs-agent", "1.0.0"),
                 profile("change-agent", "1.0.0"),
                 profile("verify", "1.0.0")));
-        compiler = new PlanCompiler(registry, tasks, edges, inPlaceTx());
+        compiler = new PlanCompiler(registry, tasks, edges,
+                new AlertInMemoryStores.Bindings(), inPlaceTx());
     }
 
     private static Map<String, Object> task(String key, String type) {

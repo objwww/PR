@@ -79,7 +79,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
-  ChatDotSquare, Message, Aim, Monitor, Fold, Expand,
+  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
 import { useSseStore } from '../stores/sseStatus.js'
@@ -117,6 +117,7 @@ const navGroups = [
         ],
       },
       { label: '通知', to: '/notifications', match: ['/notifications'], icon: Message },
+      { label: '故障演练', to: '/drills', match: ['/drills'], icon: Warning },
     ],
   },
   {

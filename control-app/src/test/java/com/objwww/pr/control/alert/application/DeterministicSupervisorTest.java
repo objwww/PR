@@ -48,9 +48,10 @@ class DeterministicSupervisorTest {
 
     private DeterministicSupervisor supervisor() {
         return new DeterministicSupervisor(
-                new PlanCompiler(agents, stores.tasks, edges, inPlaceTx()),
+                new PlanCompiler(agents, stores.tasks, edges, stores.bindings, inPlaceTx()),
                 new DagExecutionService(edges, stores.tasks),
-                stores.runs, stores.tasks, inPlaceTx(), clock);
+                stores.runs, stores.tasks, stores.bindings, stores.checkpoints,
+                stores.delegationDecisions, agents, inPlaceTx(), clock);
     }
 
     // ------------------------------------------------------------------ 验收① 相同提案相同任务图
