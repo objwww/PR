@@ -13,6 +13,7 @@ import com.objwww.pr.control.alert.application.agent.LogsAgent;
 import com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
+import com.objwww.pr.control.alert.application.rag.RunbookCorpusStore;
 import com.objwww.pr.control.alert.application.replay.AgentReplayRunner;
 import com.objwww.pr.control.alert.application.replay.ReadOnlyToolFace;
 import com.objwww.pr.control.alert.application.replay.SnapshotShadowRouter;
@@ -31,6 +32,9 @@ import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
 import com.objwww.pr.control.alert.domain.tool.ToolPolicy;
 import com.objwww.pr.control.infrastructure.persistence.PostgresToolReplayStore;
+import com.objwww.pr.control.infrastructure.rag.FetchRunbookExecutor;
+import com.objwww.pr.control.infrastructure.rag.HistoryRcaSearchExecutor;
+import com.objwww.pr.control.infrastructure.rag.RunbookCatalogSearchExecutor;
 import com.objwww.pr.control.infrastructure.tool.AlertHistoryExecutor;
 import com.objwww.pr.control.infrastructure.tool.ChangeDiffExecutor;
 import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
@@ -40,6 +44,7 @@ import com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutor;
 import com.objwww.pr.control.infrastructure.tool.PrometheusApiExecutor;
 import com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor;
 import com.objwww.pr.control.infrastructure.tool.TcpDockerEngineTransport;
+import com.objwww.pr.shared.Digest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -95,6 +100,13 @@ public class AlertAm4Config {
     /** EN-05 P0 四个 Prometheus 工具的服务范围面（selector 正向匹配器值必须落 allowlist） */
     private static final String PROM_SERVICE_ALLOWLIST_KEY =
             "${app.alert.am4.prometheus.service-allowlist:control-app}";
+    /** EN-07 RAG 固定语料目录 digest（§三阶段 1）：空 = runbook 双工具不注册
+     * （fail-closed：语料未固定即无 RAG 面，docker 同律）；语料更新走新快照（R07） */
+    private static final String RAG_RUNBOOK_CATALOG_DIGEST_KEY =
+            "${app.alert.rag.runbook-catalog-digest:}";
+    /** EN-07 history_rca_search 服务范围（R10 先行过滤；独立键，缺省仅自身 fail-closed） */
+    private static final String RAG_SERVICE_ALLOWLIST_KEY =
+            "${app.alert.rag.service-allowlist:control-app}";
     /** EN-05 docker 双工具条件注册件：两项均非空才注册（未配置不注册，fail-closed） */
     private static final String DOCKER_BASE_URL_KEY = "${app.alert.am4.docker.base-url:}";
     private static final String DOCKER_CONTAINER_ALLOWLIST_KEY =
@@ -102,7 +114,8 @@ public class AlertAm4Config {
     private static final String ALLOWED_TOOLS_KEY =
             "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query,"
                     + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
-                    + "prometheus.rules,logs.aggregate,change.diff,alert.history}";
+                    + "prometheus.rules,logs.aggregate,change.diff,alert.history,"
+                    + "runbook.catalog,runbook.fetch,rca_history.search}";
     private static final String SHADOW_MAX_CALLS_KEY =
             "${app.alert.am4.shadow.max-calls-per-window:60}";
     private static final String SHADOW_WINDOW_MILLIS_KEY =
@@ -196,7 +209,10 @@ public class AlertAm4Config {
             @Value(CHANGE_SERVICE_ALLOWLIST_KEY) String changeServiceAllowlist,
             @Value(PROM_SERVICE_ALLOWLIST_KEY) String prometheusServiceAllowlist,
             @Value(DOCKER_BASE_URL_KEY) String dockerBaseUrl,
-            @Value(DOCKER_CONTAINER_ALLOWLIST_KEY) String dockerContainerAllowlist) {
+            @Value(DOCKER_CONTAINER_ALLOWLIST_KEY) String dockerContainerAllowlist,
+            RunbookCorpusStore runbookCorpusStore,
+            @Value(RAG_RUNBOOK_CATALOG_DIGEST_KEY) String runbookCatalogDigest,
+            @Value(RAG_SERVICE_ALLOWLIST_KEY) String ragServiceAllowlist) {
         PrometheusApiExecutor prometheusApi = new PrometheusApiExecutor(prometheusBaseUrl,
                 Set.of(prometheusServiceAllowlist.split(",")));
         List<ToolRegistry.Registration> registrations = new ArrayList<>(List.of(
@@ -247,7 +263,33 @@ public class AlertAm4Config {
                     DirectReadToolCatalog.dockerInspect(timeoutMillis, resultLimitBytes),
                     docker::inspectContainer));
         }
+        // EN-07 RAG（§三阶段 1）：runbook 双工具——语料目录 digest 配置才注册
+        // （digest 非法在构造期 Digest 校验即 startup fail-fast）；history_rca_search
+        // 走真 V7 表无语料依赖，allowlist 缺省仅自身（fail-closed）
+        if (!runbookCatalogDigest.isBlank()) {
+            Digest corpusDigest = new Digest(runbookCatalogDigest.trim());
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.runbookCatalogSearch(timeoutMillis, resultLimitBytes),
+                    new RunbookCatalogSearchExecutor(runbookCorpusStore, corpusDigest,
+                            Clock.systemUTC())));
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.runbookFetch(timeoutMillis, resultLimitBytes),
+                    new FetchRunbookExecutor(runbookCorpusStore, corpusDigest,
+                            Clock.systemUTC())));
+        }
+        registrations.add(new ToolRegistry.Registration(
+                DirectReadToolCatalog.rcaHistorySearch(timeoutMillis, resultLimitBytes),
+                new HistoryRcaSearchExecutor(jdbc,
+                        Set.of(ragServiceAllowlist.split(",")))));
         return new ToolRegistry(registrations);
+    }
+
+    /** EN-07 固定语料库读面（release_asset 复用；RAG 工具执行器共用单实例） */
+    @Bean
+    public RunbookCorpusStore runbookCorpusStore(
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
+        return new RunbookCorpusStore(releaseAssetRepository);
     }
 
     /** 工具策略（M4-16）：空策略硬失败在 ToolPolicy 构造期兜底 */
@@ -651,6 +693,12 @@ public class AlertAm4Config {
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_DOCKER_INSPECT,
                         "docker.inspect", "docker"),
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_ALERT_HISTORY,
-                        "alert.history", "alert_event"));
+                        "alert.history", "alert_event"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RUNBOOK_CATALOG,
+                        "runbook.catalog", "rag"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RUNBOOK_FETCH,
+                        "runbook.reference", "rag"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RCA_HISTORY,
+                        "rca_history.reference", "rca_history"));
     }
 }

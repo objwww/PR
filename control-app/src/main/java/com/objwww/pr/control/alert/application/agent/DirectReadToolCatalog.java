@@ -32,6 +32,10 @@ public final class DirectReadToolCatalog {
     public static final String TOOL_DOCKER_PS = "docker.ps";
     public static final String TOOL_DOCKER_INSPECT = "docker.inspect";
     public static final String TOOL_ALERT_HISTORY = "alert.history";
+    /** EN-07 RAG（§三阶段 1）：runbook_catalog_search/fetch_runbook/history_rca_search */
+    public static final String TOOL_RUNBOOK_CATALOG = "runbook.catalog";
+    public static final String TOOL_RUNBOOK_FETCH = "runbook.fetch";
+    public static final String TOOL_RCA_HISTORY = "rca_history.search";
 
     private DirectReadToolCatalog() {
     }
@@ -121,6 +125,38 @@ public final class DirectReadToolCatalog {
         properties.put("since", Map.of("type", "string"));
         properties.put("until", Map.of("type", "string"));
         return definition(TOOL_ALERT_HISTORY, properties, List.of("since", "until"),
+                timeoutMillis, resultLimitBytes);
+    }
+
+    /** runbook_catalog_search：match/tag → 登记条目元数据（模型按 description 语义匹配，
+     * EN-07 R01 链首；列表零正文，正文归 fetch_runbook） */
+    public static ToolDefinition runbookCatalogSearch(long timeoutMillis,
+            long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("match", Map.of("type", "string", "maxLength", 128));
+        properties.put("tag", Map.of("type", "string",
+                "pattern", "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$", "maxLength", 64));
+        return definition(TOOL_RUNBOOK_CATALOG, properties, List.of(),
+                timeoutMillis, resultLimitBytes);
+    }
+
+    /** fetch_runbook：runbook_id → 正文 + 双 digest 版本面（R04 只收登记 id：
+     * pattern 形状面天然拒绝路径分隔符与 URL 语法） */
+    public static ToolDefinition runbookFetch(long timeoutMillis, long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("runbook_id", Map.of("type", "string",
+                "pattern", "^[a-z0-9][a-z0-9._-]{0,63}$", "maxLength", 64));
+        return definition(TOOL_RUNBOOK_FETCH, properties, List.of("runbook_id"),
+                timeoutMillis, resultLimitBytes);
+    }
+
+    /** history_rca_search：service+窗 → 结构化过滤召回的历史判例（R06/R10，非语义相似） */
+    public static ToolDefinition rcaHistorySearch(long timeoutMillis, long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("service", Map.of("type", "string", "maxLength", 128));
+        properties.put("since", Map.of("type", "string"));
+        properties.put("until", Map.of("type", "string"));
+        return definition(TOOL_RCA_HISTORY, properties, List.of("service", "since", "until"),
                 timeoutMillis, resultLimitBytes);
     }
 

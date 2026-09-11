@@ -36,9 +36,14 @@ public record ReleaseAsset(String kind,
     public static final String KIND_PROMPT = "PROMPT";
     public static final String KIND_SKILL = "SKILL";
     public static final String KIND_TOOL_SCHEMA = "TOOL_SCHEMA";
+    /** EN-07 固定语料：runbook 文档正文（加法扩 kind，EN-01 三类同律） */
+    public static final String KIND_RUNBOOK_DOC = "RUNBOOK_DOC";
+    /** EN-07 固定语料：目录快照——登记 runbook_id→doc_digest + 有效期窗（R07 固定锚） */
+    public static final String KIND_RUNBOOK_CATALOG = "RUNBOOK_CATALOG";
 
     private static final Set<String> KINDS =
-            Set.of(KIND_PROMPT, KIND_SKILL, KIND_TOOL_SCHEMA);
+            Set.of(KIND_PROMPT, KIND_SKILL, KIND_TOOL_SCHEMA,
+                    KIND_RUNBOOK_DOC, KIND_RUNBOOK_CATALOG);
 
     private static final Pattern ASSET_DIGEST = Pattern.compile("[0-9a-f]{64}");
 
@@ -121,7 +126,42 @@ public record ReleaseAsset(String kind,
             case KIND_PROMPT -> validatePrompt(content);
             case KIND_SKILL -> validateSkill(content);
             case KIND_TOOL_SCHEMA -> validateToolSchema(content);
+            case KIND_RUNBOOK_DOC -> validateRunbookDoc(content);
+            case KIND_RUNBOOK_CATALOG -> validateRunbookCatalog(content);
             default -> throw new IllegalArgumentException("未知资产 kind: " + kind);
+        }
+    }
+
+    /** EN-07：runbook 文档最小形状 = runbook_id + title/description（模型匹配面）+ text */
+    private static void validateRunbookDoc(Map<String, Object> content) {
+        nonBlankString(content.get("runbook_id"), "runbook_id");
+        nonBlankString(content.get("title"), "title");
+        nonBlankString(content.get("description"), "description");
+        nonBlankString(content.get("text"), "text");
+    }
+
+    /** EN-07：目录快照 = 非空 documents 列表，每条 runbook_id + 64 位 hex doc_digest
+     * （R12 完整性锚：取文按登记 digest 精确解析，不存在 latest 可回退） */
+    private static void validateRunbookCatalog(Map<String, Object> content) {
+        if (!(content.get("documents") instanceof List<?> documents) || documents.isEmpty()) {
+            throw new IllegalArgumentException("RUNBOOK_CATALOG documents 必须为非空列表");
+        }
+        for (Object item : documents) {
+            if (!(item instanceof Map<?, ?> entry) || entry.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "RUNBOOK_CATALOG documents 元素必须为非空映射");
+            }
+            Object runbookId = entry.get("runbook_id");
+            if (!(runbookId instanceof String id) || id.isBlank()) {
+                throw new IllegalArgumentException(
+                        "RUNBOOK_CATALOG 条目 runbook_id 必须为非 blank 字符串");
+            }
+            Object docDigest = entry.get("doc_digest");
+            if (!(docDigest instanceof String digest
+                    && ASSET_DIGEST.matcher(digest).matches())) {
+                throw new IllegalArgumentException(
+                        "RUNBOOK_CATALOG 条目 doc_digest 必须为 64 位小写 hex: " + docDigest);
+            }
         }
     }
 
