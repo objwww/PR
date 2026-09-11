@@ -206,6 +206,12 @@ class En07RagChainTest {
                 String kind, Digest digest) {
             return Optional.ofNullable(rows.get(kind + "|" + digest.hex()));
         }
+
+        @Override
+        public java.util.List<com.objwww.pr.control.release.domain.model.ReleaseAsset> listRecent(
+                String kind, int limit) {
+            return java.util.List.of();
+        }
     }
 
     /** 调用账本内存件（En05DirectToolChainTest 同形） */

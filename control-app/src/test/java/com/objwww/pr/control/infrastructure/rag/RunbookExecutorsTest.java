@@ -62,6 +62,11 @@ class RunbookExecutorsTest {
             loads++;
             return Optional.ofNullable(rows.get(kind + "|" + digest.hex()));
         }
+
+        @Override
+        public List<ReleaseAsset> listRecent(String kind, int limit) {
+            return List.of();
+        }
     }
 
     private MemAssets assets;

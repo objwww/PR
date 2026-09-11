@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -159,6 +160,29 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
                         new Digest(rs.getString("bundle_digest")), rs.getLong("revision"),
                         rs.getTimestamp("activated_at").toInstant()))
                 .optional();
+    }
+
+    /** EN-10 版本中心列表：revision 倒序；LEFT JOIN 当前指针 → activatedAt 非 null = active */
+    @Override
+    public List<BundleSummary> listRecent(int limit) {
+        return jdbc.sql("""
+                SELECT b.bundle_digest, b.revision, b.created_by, b.created_at,
+                       a.activated_at
+                  FROM config_bundle b
+                  LEFT JOIN config_bundle_active a ON a.bundle_digest = b.bundle_digest
+                 ORDER BY b.revision DESC, b.bundle_digest
+                 LIMIT :limit
+                """)
+                .param("limit", limit)
+                .query((rs, i) -> {
+                    java.sql.Timestamp activatedAt = rs.getTimestamp("activated_at");
+                    return new BundleSummary(
+                            new Digest(rs.getString("bundle_digest")), rs.getLong("revision"),
+                            rs.getString("created_by"),
+                            rs.getTimestamp("created_at").toInstant(),
+                            activatedAt == null ? null : activatedAt.toInstant());
+                })
+                .list();
     }
 
     /**

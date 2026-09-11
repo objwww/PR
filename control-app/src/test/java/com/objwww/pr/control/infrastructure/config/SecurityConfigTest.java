@@ -175,6 +175,21 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden());
     }
 
+    /** EN-10 版本中心：资产/版本列表查询面进 OPERATOR 浏览器矩阵（只读；发布/激活
+     * 仍在 RELEASE 机器线），未认证 401、deny-by-default 不变 */
+    @Test
+    @DisplayName("EN-10：operator 线 /api/release-assets/** 放行（404 无处理器）；未认证 401")
+    void releaseAssetsFaceOperatorMatrix() throws Exception {
+        mvc.perform(get("/api/release-assets")
+                        .header("Authorization", "Bearer op-line-token"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/release-assets/bundles")
+                        .header("Authorization", "Bearer op-line-token"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/release-assets"))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     @DisplayName("release 线：/api/config-bundles/** POST 放行且 CSRF 豁免；operator 面 403")
     void releaseLineRoleMatrix() throws Exception {

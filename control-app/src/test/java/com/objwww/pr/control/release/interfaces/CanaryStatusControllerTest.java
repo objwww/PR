@@ -169,6 +169,11 @@ class CanaryStatusControllerTest {
         }
 
         @Override
+        public List<ConfigBundleRepository.BundleSummary> listRecent(int limit) {
+            return List.of();
+        }
+
+        @Override
         public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
                 String by, Instant at) {
             active = toDigest;

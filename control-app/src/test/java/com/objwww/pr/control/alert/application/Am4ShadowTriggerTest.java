@@ -552,6 +552,12 @@ class Am4ShadowTriggerTest {
         }
 
         @Override
+        public java.util.List<com.objwww.pr.control.release.domain.repository.ConfigBundleRepository.BundleSummary>
+                listRecent(int limit) {
+            return java.util.List.of();
+        }
+
+        @Override
         public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
                 String by, Instant at) {
             return true;

@@ -74,6 +74,11 @@ class ConfigBundleControllerTest {
         public Optional<ReleaseAsset> findByDigest(String kind, Digest digest) {
             return Optional.empty();
         }
+
+        @Override
+        public java.util.List<ReleaseAsset> listRecent(String kind, int limit) {
+            return java.util.List.of();
+        }
     }
 
     /** 测试内存认账面（与 ConfigBundleServiceTest 同构 + CAS 恒败开关供 409 面） */
@@ -114,6 +119,11 @@ class ConfigBundleControllerTest {
             return active == null ? Optional.empty()
                     : Optional.of(new ConfigBundleRepository.ActivePointer(
                             active, activeRevision, activatedAt));
+        }
+
+        @Override
+        public List<ConfigBundleRepository.BundleSummary> listRecent(int limit) {
+            return List.of();
         }
 
         @Override

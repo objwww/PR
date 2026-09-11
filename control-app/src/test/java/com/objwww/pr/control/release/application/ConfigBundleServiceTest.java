@@ -86,6 +86,11 @@ class ConfigBundleServiceTest {
         }
 
         @Override
+        public List<ConfigBundleRepository.BundleSummary> listRecent(int limit) {
+            return List.of();
+        }
+
+        @Override
         public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
                 String by, Instant at) {
             return activateQualified(toDigest, expectedActiveRevision, by, at, null);
@@ -131,6 +136,11 @@ class ConfigBundleServiceTest {
             return rows.stream()
                     .filter(a -> a.kind().equals(kind) && a.assetDigest().equals(digest))
                     .findFirst();
+        }
+
+        @Override
+        public java.util.List<ReleaseAsset> listRecent(String kind, int limit) {
+            return java.util.List.of();
         }
     }
 

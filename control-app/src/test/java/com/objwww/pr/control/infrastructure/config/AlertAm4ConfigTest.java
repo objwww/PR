@@ -36,6 +36,12 @@ class AlertAm4ConfigTest {
                             findByDigest(String kind, com.objwww.pr.shared.Digest digest) {
                         return java.util.Optional.empty();
                     }
+
+                    @Override
+                    public java.util.List<com.objwww.pr.control.release.domain.model.ReleaseAsset>
+                            listRecent(String kind, int limit) {
+                        return java.util.List.of();
+                    }
                 });
     }
 

@@ -66,6 +66,11 @@ public record ReleaseAsset(String kind,
         validateShape(kind, content);
     }
 
+    /** EN-10 版本中心查询面：kind 白名单判定（400 就地解释锚） */
+    public static boolean isKnownKind(String kind) {
+        return kind != null && KINDS.contains(kind);
+    }
+
     /** 注册面构造：digest 由 canonical content 派生（唯一幂等锚） */
     public static ReleaseAsset of(String kind, Map<String, Object> content,
             String createdBy, Instant createdAt) {

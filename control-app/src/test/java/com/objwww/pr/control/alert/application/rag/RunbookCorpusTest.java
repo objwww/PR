@@ -52,6 +52,11 @@ class RunbookCorpusTest {
             loads++;
             return Optional.ofNullable(rows.get(key(kind, digest)));
         }
+
+        @Override
+        public java.util.List<ReleaseAsset> listRecent(String kind, int limit) {
+            return java.util.List.of();
+        }
     }
 
     private static RunbookCorpusPublisher.DocInput doc(String id, String description,

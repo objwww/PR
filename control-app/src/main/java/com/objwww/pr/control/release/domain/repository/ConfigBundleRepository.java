@@ -4,6 +4,7 @@ import com.objwww.pr.control.release.domain.model.ConfigBundle;
 import com.objwww.pr.shared.Digest;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -28,6 +29,17 @@ public interface ConfigBundleRepository {
     }
 
     Optional<ActivePointer> findActivePointer();
+
+    /**
+     * 版本中心列表（EN-10，O06/O07）：revision 倒序的 bundle 摘要投影；
+     * {@code activatedAt 非 null = 该行是当前指针}（历史激活时刻不落库，见
+     * config_bundle_active 单行指针设计——V24），由展示面如实标注。
+     */
+    record BundleSummary(Digest digest, long revision, String createdBy, Instant createdAt,
+            Instant activatedAt) {
+    }
+
+    List<BundleSummary> listRecent(int limit);
 
     /**
      * 单事务原子激活（EN-02 资格化，无半激活态）：expectedActiveRevision = 客户端

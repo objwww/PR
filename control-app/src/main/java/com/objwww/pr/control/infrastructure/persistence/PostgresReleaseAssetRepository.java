@@ -13,6 +13,7 @@ import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -74,6 +75,28 @@ public class PostgresReleaseAssetRepository implements ReleaseAssetRepository {
                         rs.getString("created_by"),
                         rs.getTimestamp("created_at").toInstant()))
                 .optional();
+    }
+
+    /** EN-10 版本中心列表：created_at 倒序（同刻按 digest 定序保证稳定） */
+    @Override
+    public List<ReleaseAsset> listRecent(String kind, int limit) {
+        boolean filtered = kind != null && !kind.isBlank();
+        String sql = (filtered
+                ? "SELECT asset_kind, asset_digest, content, created_by, created_at"
+                        + " FROM release_asset WHERE asset_kind = :kind"
+                : "SELECT asset_kind, asset_digest, content, created_by, created_at"
+                        + " FROM release_asset")
+                + " ORDER BY created_at DESC, asset_digest LIMIT :limit";
+        var spec = jdbc.sql(sql).param("limit", limit);
+        if (filtered) {
+            spec = spec.param("kind", kind);
+        }
+        return spec.query((rs, i) -> new ReleaseAsset(rs.getString("asset_kind"),
+                        new Digest(rs.getString("asset_digest")),
+                        readJson(rs.getString("content")),
+                        rs.getString("created_by"),
+                        rs.getTimestamp("created_at").toInstant()))
+                .list();
     }
 
     // ------------------------------------------------------------------ 内部
