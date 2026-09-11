@@ -8,7 +8,10 @@
             <template #default="{ row }">{{ row.source ?? '—' }}</template>
           </el-table-column>
           <el-table-column label="案例数" width="90" align="right">
-            <template #default="{ row }">{{ row.caseCount ?? 0 }}</template>
+            <template #default="{ row }">{{ row.caseCount ?? '未统计' }}</template>
+          </el-table-column>
+          <el-table-column label="评分细则（rubric）" width="150">
+            <template #default="{ row }">{{ row.rubricVersion ?? '未统计' }}</template>
           </el-table-column>
           <el-table-column label="故障族" min-width="220">
             <template #default="{ row }">
