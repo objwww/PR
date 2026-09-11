@@ -372,13 +372,16 @@ public class AlertAm4Config {
                     delegationDecisionRepository,
             RcaRunRepository rcaRunRepository,
             TransactionOperations tx,
-            DagExecutionService dagExecutionService) {
+            DagExecutionService dagExecutionService,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+                    runConfigEpochRepository) {
         PlanCompiler compiler = new PlanCompiler(am4AgentRegistry, rcaTaskRepository,
-                taskEdgeRepository, taskExecutionBindingRepository, tx);
+                taskEdgeRepository, taskExecutionBindingRepository, tx,
+                runConfigEpochRepository);
         return new DeterministicSupervisor(compiler, dagExecutionService,
                 rcaRunRepository, rcaTaskRepository, taskExecutionBindingRepository,
                 primaryCheckpointRepository, delegationDecisionRepository,
-                am4AgentRegistry, tx, AlertClock.system());
+                am4AgentRegistry, tx, AlertClock.system(), runConfigEpochRepository);
     }
 
     // ------------------------------------------------------------------ R7-X6 主模式

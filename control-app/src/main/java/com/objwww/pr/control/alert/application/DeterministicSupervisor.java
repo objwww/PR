@@ -99,6 +99,9 @@ public class DeterministicSupervisor {
     private final AgentRegistry agents;
     private final TransactionOperations tx;
     private final AlertClock clock;
+    /** EN-04 代际史源（桥构造 = NO_OP：委托绑定 epoch 留白，存量行为零改动） */
+    private final com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+            epochs;
 
     public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
             RcaRunRepository runs, RcaTaskRepository tasks,
@@ -107,6 +110,19 @@ public class DeterministicSupervisor {
             DelegationDecisionRepository delegationDecisions,
             AgentRegistry agents,
             TransactionOperations tx, AlertClock clock) {
+        this(compiler, dag, runs, tasks, bindings, checkpoints, delegationDecisions,
+                agents, tx, clock,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP);
+    }
+
+    public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
+            RcaRunRepository runs, RcaTaskRepository tasks,
+            TaskExecutionBindingRepository bindings,
+            PrimaryCheckpointRepository checkpoints,
+            DelegationDecisionRepository delegationDecisions,
+            AgentRegistry agents,
+            TransactionOperations tx, AlertClock clock,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository epochs) {
         this.compiler = Objects.requireNonNull(compiler);
         this.dag = Objects.requireNonNull(dag);
         this.runs = Objects.requireNonNull(runs);
@@ -117,6 +133,7 @@ public class DeterministicSupervisor {
         this.agents = Objects.requireNonNull(agents, "agents");
         this.tx = Objects.requireNonNull(tx);
         this.clock = Objects.requireNonNull(clock);
+        this.epochs = Objects.requireNonNull(epochs, "epochs");
     }
 
     /**
@@ -288,9 +305,10 @@ public class DeterministicSupervisor {
                         profile.name(), profile.version(), request.question(),
                         DelegationDecision.Status.APPROVED, null, childTaskId, now);
                 delegationDecisions.insert(approved);
+                var stamp = epochStamp(runId);
                 bindings.insert(new TaskExecutionBinding(childTaskId, runId, newRound,
                         childKey, profile.name(), profile.version(), profile.digest(),
-                        agents.releaseDigest().orElse(null), null,
+                        stamp.releaseDigest(), stamp.configEpoch(),
                         request.inputRefs(), profile.outputSchema(),
                         approved.id(), true,
                         TaskExecutionBinding.FailurePolicy.DEAD_ON_FAILURE, now));
@@ -347,8 +365,7 @@ public class DeterministicSupervisor {
     }
 
     /** 裁决产物（观测/测试断言）：台账行 + 是否有获批（批被接受） */
-    public record Adjudication(List<DelegationDecision> decisions, boolean batchAccepted) {
-    }
+    public record Adjudication(List<DelegationDecision> decisions, boolean batchAccepted) {    }
 
     /** 唤醒结果 */
     public enum WakeOutcome {WOKEN, STILL_WAITING, NOT_WAITING}
@@ -435,6 +452,17 @@ public class DeterministicSupervisor {
         StructuredLog.event(log, "am4_plan_rejected",
                 Map.of("run_id", runId.toString(), "reason", String.valueOf(reason)));
         log.warn("run {} 提案被确定性拒绝 → FAILED（{}）", runId, reason);
+    }
+
+    /** EN-04 绑定代际戳：当前史行在场 → (digest, epoch)；无史（NO_OP/存量 run）→ 旧行为 */
+    private record EpochStamp(String releaseDigest, Long configEpoch) {
+    }
+
+    private EpochStamp epochStamp(UUID runId) {
+        var current = epochs.findCurrent(runId).orElse(null);
+        return current != null
+                ? new EpochStamp(current.releaseDigest(), current.configEpoch())
+                : new EpochStamp(agents.releaseDigest().orElse(null), null);
     }
 
     private RcaRun requireRun(UUID runId) {

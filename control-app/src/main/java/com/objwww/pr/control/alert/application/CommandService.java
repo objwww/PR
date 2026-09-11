@@ -122,6 +122,8 @@ public class CommandService {
             case FEEDBACK -> appender.appendIndependent(cmd.runId(), new RcaEventAppender.EventDraft(
                     UUID.randomUUID(), "OPERATOR_COMMAND_APPLIED",
                     eventJson("operator feedback recorded", null)));
+            case CONFIG_SWITCH -> throw new IllegalStateException(
+                    "CONFIG_SWITCH 走 RunConfigSwitchService（EN-04：本类依赖面零膨胀）");
         }
         return markApplied(cmd, replayed);
     }

@@ -86,6 +86,8 @@ public abstract class PostgresITBase {
             // V60（EN-01 发布资产）+ V61（EN-02 发布资格）——BA-41 同律：
             // 两表无种子行，入清单统一清场（qualification 的 FK 由单语句 CASCADE 消化）
             "release_asset", "release_qualification",
+            // V63（EN-04 配置代际史）——BA-41 同律：En04ConfigEpochIT 起成为真 PG 消费者
+            "rca_run_config_epoch",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
             "duty_override", "duty_channel", "duty_member", "duty_schedule");

@@ -115,6 +115,24 @@ class R7ModelGatewayTest {
         assertThat(platformLedger.rows).as("平台账本零行").hasSize(platformRowsBefore);
     }
 
+    @Test
+    void epoch栅栏_旧代际动作零触网拒绝发送资格() {
+        // EN-04 H04：切换生效（run 现行代际=2）后，携带旧 epoch=1 的新动作领取
+        // 发送资格 = EPOCH_FENCE（零触网、非重试、不入账）
+        stores.modelCalls.currentEpochView.put(runId, 2L);
+        RcaModelCallContext fenced = new RcaModelCallContext(runId, taskId,
+                attemptId, 0, 0, "primary", "1", "a".repeat(64), 3L, 1L,
+                "d".repeat(64), null, null,
+                NOW.plusSeconds(600), NOW.plusSeconds(60), () -> true);
+
+        assertThatThrownBy(() -> rcaGateway.call(fenced, "prompt", 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "EPOCH_FENCE");
+
+        assertThat(client.calls()).as("零触网").isZero();
+        assertThat(stores.modelCalls.all()).as("旧代际动作不入账").isEmpty();
+    }
+
     // ------------------------------------------------------- 成功：账实两落
 
     @Test

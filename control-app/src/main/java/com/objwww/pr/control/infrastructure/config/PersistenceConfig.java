@@ -102,8 +102,20 @@ public class PersistenceConfig {
     }
 
     @Bean
-    public com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository(JdbcClient jdbc) {
-        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository(jdbc);
+    public com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository(
+            JdbcClient jdbc,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+                    runConfigEpochRepository) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository(
+                jdbc, runConfigEpochRepository);
+    }
+
+    /** EN-04：配置代际追加史（V63；UNIQUE(run_id, config_epoch) 唯一键守卫） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+    runConfigEpochRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRunConfigEpochRepository(
+                jdbc);
     }
 
     @Bean
@@ -141,12 +153,16 @@ public class PersistenceConfig {
                 jdbc);
     }
 
-    /** R7a-1：RCA 模型调用账本（V48；PENDING 先行=发送资格，终态 CAS） */
+    /**
+     * R7a-1：RCA 模型调用账本（V48；PENDING 先行=发送资格，终态 CAS）。
+     * EN-04：open 在 run 行锁内验 epoch 栅栏（H04 调度闸，与切换应用同锁序）。
+     */
     @Bean
     public com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger(
-            JdbcClient jdbc, ObjectMapper objectMapper) {
+            JdbcClient jdbc, ObjectMapper objectMapper,
+            org.springframework.transaction.support.TransactionOperations tx) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelCallLedger(
-                jdbc, objectMapper);
+                jdbc, objectMapper, tx);
     }
 
     /** R7a-1：RCA 侧网关事件汇（MODEL_* 决策事件 → rca_event，绕开 pr_revision FK 面） */
@@ -487,6 +503,30 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.alert.application.CommandService(
                 operatorCommandRepository, rcaRunRepository, rcaEventAppender,
                 java.time.Instant::now);
+    }
+
+    /**
+     * EN-04：运行中热更新服务（§227 既有命令账本扩容复用；§229 应用事务在
+     * TransactionOperations 内按统一锁序执行）。发布域 bundle/资格仓储来自
+     * release 侧既有 bean。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.RunConfigSwitchService runConfigSwitchService(
+            com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository operatorCommandRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository runConfigEpochRepository,
+            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository configBundleRepository,
+            com.objwww.pr.control.release.domain.repository.ReleaseQualificationRepository releaseQualificationRepository,
+            com.objwww.pr.control.alert.application.agent.AgentRegistry am4AgentRegistry,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.RunConfigSwitchService(
+                operatorCommandRepository, rcaRunRepository, rcaTaskRepository,
+                runConfigEpochRepository, configBundleRepository,
+                releaseQualificationRepository, am4AgentRegistry, rcaModelCallLedger,
+                rcaEventAppender, tx, java.time.Instant::now);
     }
 
     // ---------------- AM5 保留域（V28/V29，M5-18 装配；归档执行面 = M5-19 ArchiveService） ----------------

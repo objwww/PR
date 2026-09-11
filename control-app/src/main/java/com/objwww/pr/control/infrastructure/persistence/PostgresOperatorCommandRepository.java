@@ -10,6 +10,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -83,6 +84,44 @@ public class PostgresOperatorCommandRepository implements OperatorCommandReposit
                         Types.TIMESTAMP)
                 .param("id", id)
                 .update() > 0;
+    }
+
+    /**
+     * EN-04 状态机推进（from-guard CAS）：现态非 from = 0 行（并发已收敛/漂移）。
+     * WAITING_SAFE_POINT 是非终态中转——PERSISTED 谓词的 updateState 覆盖不到
+     * WAITING 起点的迁移，本面显式锚 from 防回退（advance-only）。
+     */
+    @Override
+    public boolean advanceState(UUID id, OperatorCommand.State from,
+                                OperatorCommand.State to, Instant appliedAt) {
+        return jdbc.sql("""
+                UPDATE operator_command SET state = :to, applied_at = :appliedAt
+                 WHERE id = :id AND state = :from
+                """)
+                .param("to", to.name())
+                .param("appliedAt", appliedAt == null ? null : Timestamp.from(appliedAt),
+                        Types.TIMESTAMP)
+                .param("id", id)
+                .param("from", from.name())
+                .update() > 0;
+    }
+
+    /**
+     * EN-04 H14 巡回面：WAITING_SAFE_POINT 且 payload->>'deadline' 已过的命令行
+     * （created_at 稳定序）——expireOverdue 翻 EXPIRED 的行源。
+     */
+    @Override
+    public List<OperatorCommand> findWaitingOverdue(Instant now) {
+        return jdbc.sql("""
+                SELECT * FROM operator_command
+                 WHERE command_type = 'CONFIG_SWITCH'
+                   AND state = 'WAITING_SAFE_POINT'
+                   AND (payload->>'deadline')::timestamptz < :now
+                 ORDER BY created_at, id
+                """)
+                .param("now", Timestamp.from(now))
+                .query(this::mapRow)
+                .list();
     }
 
     private OperatorCommand mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {

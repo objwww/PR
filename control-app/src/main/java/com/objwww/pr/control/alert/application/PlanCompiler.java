@@ -60,15 +60,27 @@ public class PlanCompiler {
     private final TaskEdgeRepository edges;
     private final TaskExecutionBindingRepository bindings;
     private final TransactionOperations tx;
+    /** EN-04 代际史源（桥构造 = NO_OP：绑定 epoch 留白，存量行为零改动） */
+    private final com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+            epochs;
 
     public PlanCompiler(AgentRegistry agents, RcaTaskRepository tasks,
             TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
             TransactionOperations tx) {
+        this(agents, tasks, edges, bindings, tx,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP);
+    }
+
+    public PlanCompiler(AgentRegistry agents, RcaTaskRepository tasks,
+            TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+            TransactionOperations tx,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository epochs) {
         this.agents = Objects.requireNonNull(agents);
         this.tasks = Objects.requireNonNull(tasks);
         this.edges = Objects.requireNonNull(edges);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.tx = Objects.requireNonNull(tx);
+        this.epochs = Objects.requireNonNull(epochs, "epochs");
     }
 
     /**
@@ -172,14 +184,22 @@ public class PlanCompiler {
                         List.of()).digest());
     }
 
-    /** 冻结绑定铸造（编译事务内；role 身份三 元组来自注册表 require 的 Profile） */
+    /**
+     * 冻结绑定铸造（编译事务内；role 身份三元组来自注册表 require 的 Profile）。
+     * EN-04（§231 新调用绑新 epoch）：releaseDigest/configEpoch 取 run 当前代际
+     * 史行（编译时冻结面）；无史行（NO_OP 桥/存量 run）回退注册表 digest + epoch
+     * 留白——账本栅栏对 null 放行，诚实可区分。
+     */
     private TaskExecutionBinding bindingOf(UUID runId, UUID taskId, String taskKey,
             String type, List<String> inputRefs, Instant now) {
         int at = type.indexOf('@');
         AgentProfile profile = agents.require(type.substring(0, at), type.substring(at + 1));
+        var currentEpoch = epochs.findCurrent(runId).orElse(null);
         return new TaskExecutionBinding(taskId, runId, 0, taskKey,
                 profile.name(), profile.version(), profile.digest(),
-                agents.releaseDigest().orElse(null), null,
+                currentEpoch != null ? currentEpoch.releaseDigest()
+                        : agents.releaseDigest().orElse(null),
+                currentEpoch != null ? currentEpoch.configEpoch() : null,
                 inputRefs, profile.outputSchema(), null, true,
                 TaskExecutionBinding.FailurePolicy.DEAD_ON_FAILURE, now);
     }

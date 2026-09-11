@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.dag.DependencyType;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
@@ -21,6 +22,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -96,6 +98,49 @@ class PlanCompilerTest {
         assertThat(edges.rows).hasSize(1);
         assertThat(edges.rows.get(0).dependencyType()).isEqualTo(DependencyType.REQUIRED);
         assertThat(r.proposalDigest()).hasSize(64);
+    }
+
+    @Test
+    void 热更新后编译绑定钉当前代际_NO_OP桥保持存量留白() {
+        // EN-04 §231：新调用绑新 epoch——编译期把 run 当前代际冻结进绑定，
+        // 切换生效后（findCurrent=epoch1/v2）新编译任务不许再拿 v1；
+        // NO_OP 桥（EN-04 前装配/存量测试）绑定 epoch 留白、digest 走注册表面，行为零改动。
+        String v2 = "b".repeat(64);
+        UUID runId = UUID.randomUUID();
+        RunConfigEpochRepository epochs = new RunConfigEpochRepository() {
+            @Override
+            public boolean append(UUID r, long e, String d, UUID c, String a, String x) {
+                return false;
+            }
+
+            @Override
+            public Optional<EpochRow> findCurrent(UUID r) {
+                return r.equals(runId) ? Optional.of(new EpochRow(
+                        r, 1L, v2, null, "op-x", "热更新轮换", NOW)) : Optional.empty();
+            }
+
+            @Override
+            public List<EpochRow> history(UUID r) {
+                return List.of();
+            }
+        };
+        AgentRegistry registry = new AgentRegistry(List.of(
+                profile("metrics-agent", "1.0.0"), profile("verify", "1.0.0")));
+        AlertInMemoryStores.Bindings switched = new AlertInMemoryStores.Bindings();
+        new PlanCompiler(registry, tasks, edges, switched, inPlaceTx(), epochs)
+                .compile(runId, plan(task("metrics", "metrics-agent@1.0.0")), Set.of("alert"));
+        assertThat(switched.findByRun(runId)).hasSize(1);
+        assertThat(switched.findByRun(runId).get(0).configEpoch()).isEqualTo(1L);
+        assertThat(switched.findByRun(runId).get(0).releaseDigest()).isEqualTo(v2);
+
+        AlertInMemoryStores.Bindings legacy = new AlertInMemoryStores.Bindings();
+        UUID legacyRun = UUID.randomUUID();
+        new PlanCompiler(registry, tasks, edges, legacy, inPlaceTx())
+                .compile(legacyRun, plan(task("metrics", "metrics-agent@1.0.0")), Set.of("alert"));
+        assertThat(legacy.findByRun(legacyRun)).hasSize(1);
+        assertThat(legacy.findByRun(legacyRun).get(0).configEpoch()).isNull();
+        assertThat(legacy.findByRun(legacyRun).get(0).releaseDigest())
+                .isEqualTo(registry.releaseDigest().orElse(null));
     }
 
     @Test

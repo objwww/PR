@@ -26,6 +26,9 @@ class EnMigrationContractTest {
     private static final Path V62 = Path.of(
             "src/main/resources/db/migration/V62__en09_eval_grader_version.sql");
 
+    private static final Path V63 = Path.of(
+            "src/main/resources/db/migration/V63__en04_run_config_epoch.sql");
+
     private static String normalized(Path migration) throws IOException {
         return Files.readString(migration).toLowerCase().replaceAll("\\s+", " ");
     }
@@ -75,5 +78,25 @@ class EnMigrationContractTest {
                 .contains("alter table eval_run add column grader_version text")
                 // 历史批次留空 = EN-09 前评分器版本未入账（E11 归属面：null 可区分）
                 .contains("comment on column eval_run.grader_version");
+    }
+
+    @Test
+    void v63RunConfigEpochHistoryPinsAppendOnlyUniqueFace() throws IOException {
+        String sql = normalized(V63);
+
+        assertThat(sql)
+                .contains("create table rca_run_config_epoch")
+                // §185/§207：config_epoch→release_digest 追加历史；UNIQUE(run_id, config_epoch)
+                .contains("constraint pk_rca_run_config_epoch primary key (run_id, config_epoch)")
+                .contains("release_digest char(64) not null")
+                .contains("references rca_run (id)")
+                // 追加史 immutable：control_app 只 select,insert
+                .contains("grant select, insert on rca_run_config_epoch to control_app")
+                .contains("revoke update, delete on rca_run_config_epoch from control_app")
+                // §227：既有命令账本扩容复用——CONFIG_SWITCH 命令 + WAITING_SAFE_POINT/EXPIRED 态
+                .contains("alter table operator_command alter column state type varchar(24)")
+                .contains("'config_switch'")
+                .contains("'waiting_safe_point'")
+                .contains("'expired'");
     }
 }
