@@ -66,7 +66,13 @@ public class DeterministicSupervisor {
 
     // ---------------------------------------------------------------- R7-X4/X11
 
-    /** 委派批上限（§三 max_delegation_batches=2）与单批请求上限（一批 ≤2 个请求） */
+    /**
+     * 委派批上限缺省值（§三 max_delegation_batches=2）与单批请求上限（一批 ≤2 个请求）。
+     * 批上限已旋钮化（臂A 前置债清偿，R7）：运行时值 = 构造注入
+     * {@link #maxDelegationBatches()}（装配键 app.alert.r7.primary.max-delegation-batches），
+     * 本常量仅为缺省与防御性迭代上限的引用点；0 = 零委派合法姿态（臂A：DELEGATE
+     * 决策确定性全拒）。
+     */
     public static final int MAX_DELEGATION_BATCHES = 2;
     public static final int MAX_REQUESTS_PER_BATCH = 2;
 
@@ -102,7 +108,9 @@ public class DeterministicSupervisor {
     /** EN-04 代际史源（桥构造 = NO_OP：委托绑定 epoch 留白，存量行为零改动） */
     private final com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
             epochs;
+    private final int maxDelegationBatches;
 
+    /** 缺省批上限（=2，行为与旋钮化前字节级一致） */
     public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
             RcaRunRepository runs, RcaTaskRepository tasks,
             TaskExecutionBindingRepository bindings,
@@ -111,10 +119,28 @@ public class DeterministicSupervisor {
             AgentRegistry agents,
             TransactionOperations tx, AlertClock clock) {
         this(compiler, dag, runs, tasks, bindings, checkpoints, delegationDecisions,
-                agents, tx, clock,
-                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP);
+                agents, tx, clock, MAX_DELEGATION_BATCHES);
     }
 
+    /**
+     * 旋钮装配构造（臂A 前置债清偿）：批上限运行时注入，fail-fast 校验 ≥0。
+     * BoundedLlmRoleRunner 信封 delegation_batches_remaining 经
+     * {@link #maxDelegationBatches()} 读同一注入值（同源，禁止两处各自读配置漂移）。
+     */
+    public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
+            RcaRunRepository runs, RcaTaskRepository tasks,
+            TaskExecutionBindingRepository bindings,
+            PrimaryCheckpointRepository checkpoints,
+            DelegationDecisionRepository delegationDecisions,
+            AgentRegistry agents,
+            TransactionOperations tx, AlertClock clock, int maxDelegationBatches) {
+        this(compiler, dag, runs, tasks, bindings, checkpoints, delegationDecisions,
+                agents, tx, clock,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+                        .NO_OP, maxDelegationBatches);
+    }
+
+    /** 全参构造（EN-04 代际史 + 臂A 委派批旋钮并集） */
     public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
             RcaRunRepository runs, RcaTaskRepository tasks,
             TaskExecutionBindingRepository bindings,
@@ -122,7 +148,8 @@ public class DeterministicSupervisor {
             DelegationDecisionRepository delegationDecisions,
             AgentRegistry agents,
             TransactionOperations tx, AlertClock clock,
-            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository epochs) {
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository epochs,
+            int maxDelegationBatches) {
         this.compiler = Objects.requireNonNull(compiler);
         this.dag = Objects.requireNonNull(dag);
         this.runs = Objects.requireNonNull(runs);
@@ -134,6 +161,17 @@ public class DeterministicSupervisor {
         this.tx = Objects.requireNonNull(tx);
         this.clock = Objects.requireNonNull(clock);
         this.epochs = Objects.requireNonNull(epochs, "epochs");
+        if (maxDelegationBatches < 0) {
+            throw new IllegalArgumentException(
+                    "maxDelegationBatches 必须 ≥0（0=零委派臂A 姿态），实际: "
+                            + maxDelegationBatches);
+        }
+        this.maxDelegationBatches = maxDelegationBatches;
+    }
+
+    /** 委派批上限运行时值（裁决与信封余量的唯一来源） */
+    public int maxDelegationBatches() {
+        return maxDelegationBatches;
     }
 
     /**
@@ -251,7 +289,7 @@ public class DeterministicSupervisor {
                         request -> REJ_BATCH_SHAPE, now, recorded, persistedGaps);
                 return false;
             }
-            if (checkpoint.batchesUsed() >= MAX_DELEGATION_BATCHES) {
+            if (checkpoint.batchesUsed() >= maxDelegationBatches) {
                 recordRejections(runId, primaryTaskId, checkpoint, requests,
                         request -> REJ_DELEGATION_BUDGET_EXHAUSTED, now, recorded,
                         persistedGaps);

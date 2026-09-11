@@ -143,6 +143,9 @@ public class AlertAm4Config {
             "${app.alert.am4.reducer.readonly-allowlist:holmes,prometheus}";
     private static final String REDUCER_POLICY_VERSION_KEY =
             "${app.alert.am4.reducer.policy-version:am4-g2-policy}";
+    /** 臂A 前置债清偿（R7）：委派批上限运行时旋钮，缺省 2=现行为不变；0=零委派臂A 姿态 */
+    private static final String R7_PRIMARY_MAX_DELEGATION_BATCHES_KEY =
+            "${app.alert.r7.primary.max-delegation-batches:2}";
 
     private static final String OUTPUT_SCHEMA_TYPE = "type";
     private static final String OUTPUT_SCHEMA_OBJECT = "object";
@@ -502,7 +505,8 @@ public class AlertAm4Config {
 
     // ------------------------------------------------------------------ DAG 面
 
-    /** 确定性 Supervisor（M4-25/26 + R7-X4/X11）：模型无调度权，恢复入口只有 advance */
+    /** 确定性 Supervisor（M4-25/26 + R7-X4/X11）：模型无调度权，恢复入口只有 advance；
+     *  委派批上限 = 运行时旋钮（臂A 零委派姿态部署期可配，信封余量与此同源） */
     @Bean
     public DeterministicSupervisor am4DeterministicSupervisor(
             AgentRegistry am4AgentRegistry,
@@ -518,14 +522,16 @@ public class AlertAm4Config {
             TransactionOperations tx,
             DagExecutionService dagExecutionService,
             com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
-                    runConfigEpochRepository) {
+                    runConfigEpochRepository,
+            @Value(R7_PRIMARY_MAX_DELEGATION_BATCHES_KEY) int maxDelegationBatches) {
         PlanCompiler compiler = new PlanCompiler(am4AgentRegistry, rcaTaskRepository,
                 taskEdgeRepository, taskExecutionBindingRepository, tx,
                 runConfigEpochRepository);
         return new DeterministicSupervisor(compiler, dagExecutionService,
                 rcaRunRepository, rcaTaskRepository, taskExecutionBindingRepository,
                 primaryCheckpointRepository, delegationDecisionRepository,
-                am4AgentRegistry, tx, AlertClock.system(), runConfigEpochRepository);
+                am4AgentRegistry, tx, AlertClock.system(), runConfigEpochRepository,
+                maxDelegationBatches);
     }
 
     // ------------------------------------------------------------------ R7-X6 主模式
