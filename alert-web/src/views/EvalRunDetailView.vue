@@ -147,6 +147,68 @@
 
       <!-- 案例：verdict 筛选 + 游标分页 + 失败样本展开；复合 row-key 防同场景多轮串行 -->
       <div v-if="tab === 'cases'" class="card panel">
+        <!-- EV-05 证据汇总：run 级引用分桶；接口未部署（403/404）整区诚实空态，不伪造计数 -->
+        <div class="ev-summary">
+          <div class="es-head">
+            <span class="es-title">证据汇总</span>
+            <span class="muted es-note">来源 GET /eval/runs/{runId}/evidence-summary（EV-05）</span>
+            <el-button size="small" :loading="summaryLoading" @click="loadEvidenceSummary">刷新</el-button>
+          </div>
+          <template v-if="summaryState === 'ok'">
+            <div class="es-strip">
+              <div class="es-item">
+                <div class="es-label">案例数</div>
+                <div class="es-value">{{ fmtCount(summary?.caseCount) }}</div>
+              </div>
+              <div class="es-item">
+                <div class="es-label">有报告案例</div>
+                <div class="es-value">{{ fmtCount(summary?.casesWithReport) }}</div>
+              </div>
+              <div class="es-item">
+                <div class="es-label">引用总数</div>
+                <div class="es-value">{{ fmtCount(summary?.totalRefs) }}</div>
+              </div>
+              <div class="es-item">
+                <div class="es-label">引用类型分桶（已解析）</div>
+                <div class="es-value">
+                  <template v-if="typeBuckets.length">
+                    <el-tag v-for="b in typeBuckets" :key="b.type" size="small" class="es-tag" disable-transitions>{{ b.type }} × {{ b.count }}</el-tag>
+                  </template>
+                  <span v-else class="muted">未统计</span>
+                </div>
+              </div>
+            </div>
+            <el-table :data="summary?.cases ?? []" size="small" class="es-table">
+              <el-table-column prop="scenarioId" label="场景" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="roundNo" label="轮次" width="60" align="right" />
+              <el-table-column label="判定" width="130">
+                <template #default="{ row }"><StatusBadge :status="row.verdict" /></template>
+              </el-table-column>
+              <el-table-column label="证据状态" width="110">
+                <template #default="{ row }">
+                  <el-tag v-if="row.status === 'NO_REPORT'" type="info" size="small" disable-transitions>无报告</el-tag>
+                  <el-tag v-else-if="row.status === 'NO_REFS'" type="warning" size="small" disable-transitions>无证据引用</el-tag>
+                  <span v-else-if="row.status === 'OK'">OK</span>
+                  <span v-else class="muted">未统计</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="引用 总/已解析/未解析" width="170" align="right">
+                <template #default="{ row }">{{ refTriple(row) }}</template>
+              </el-table-column>
+              <el-table-column label="支持/反对/未决" width="140" align="right">
+                <template #default="{ row }">{{ sruTriple(row) }}</template>
+              </el-table-column>
+              <template #empty>
+                <EmptyState kind="empty" description="该实验暂无案例证据汇总" />
+              </template>
+            </el-table>
+          </template>
+          <EmptyState v-else-if="summaryState === 'unavailable'" kind="empty"
+            description="证据汇总依赖后端 EV-05（evidence-summary 接口），当前未部署；不展示推测计数。" />
+          <EmptyState v-else-if="summaryState === 'error'" kind="error" @retry="loadEvidenceSummary" />
+          <div v-else v-loading="true" class="es-loading" />
+        </div>
+
         <div class="case-filter">
           <el-select v-model="verdict" class="w-verdict" placeholder="全部判定" clearable @change="applyVerdict">
             <el-option value="DECIDABLE" label="可判定（DECIDABLE）" />
@@ -190,6 +252,13 @@
             <el-table-column label="耗时" width="110" align="right">
               <template #default="{ row }">{{ row.latencyMs == null ? '未统计' : `${row.latencyMs} ms` }}</template>
             </el-table-column>
+            <el-table-column label="操作" width="80" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" text type="primary" :disabled="!row.caseExecutionId"
+                  :title="row.caseExecutionId ? '查看案例详情（判定 / 场景身份 / 证据 / 关联链）' : '该案例缺少 caseExecutionId，无法定位案例详情'"
+                  @click="openCaseDetail(row)">详情</el-button>
+              </template>
+            </el-table-column>
             <template #empty>
               <EmptyState kind="empty" :description="verdict ? '当前判定筛选无案例' : '暂无案例'" />
             </template>
@@ -213,6 +282,123 @@
     <EmptyState v-else-if="pageState === 'forbidden'" kind="forbidden" />
     <EmptyState v-else-if="pageState === 'error'" kind="error" @retry="loadRun" />
     <div v-else v-loading="true" class="loading-box card" />
+
+    <!-- EV-05 案例详情抽屉：判定 / 场景身份 / 证据三分组 / 关联链；接口未部署（403/404）显式降级提示，不伪造证据 -->
+    <DetailDrawer v-model="detailOpen" title="案例详情" :size="560">
+      <div v-if="detailState === 'loading'" v-loading="true" class="cd-loading" />
+      <EmptyState v-else-if="detailState === 'unavailable'" kind="empty"
+        description="案例详情依赖后端 EV-05（案例详情接口），当前未部署；证据与关联链数据不可用，不展示推测内容。" />
+      <EmptyState v-else-if="detailState === 'error'" kind="error" @retry="loadCaseDetail" />
+      <div v-else-if="detail" class="case-detail">
+        <!-- 判定 -->
+        <div class="cd-head">
+          <div class="cd-title">
+            <StatusBadge :status="detail.verdict" />
+            <span class="mono break">{{ detail.scenarioId ?? '未统计' }}</span>
+            <span class="muted">第 {{ detail.roundNo }} 轮</span>
+          </div>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="根因命中">
+              <el-tag v-if="detail.rootCauseHit === false" type="danger" disable-transitions>未命中</el-tag>
+              <span v-else-if="detail.rootCauseHit === true">命中</span>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="耗时">{{ detail.latencyMs == null ? '未统计' : `${detail.latencyMs} ms` }}</el-descriptions-item>
+            <el-descriptions-item label="期望根因">{{ detail.expectedRootCause ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="实际根因">{{ detail.actualRootCause ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="症状 TP / FP / FN">{{ fmtTff(detail) }}</el-descriptions-item>
+            <el-descriptions-item label="选择策略版本">{{ detail.selectionPolicyVersion ?? '未统计' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <!-- 场景身份：resolved=false 三路（无匹配/歧义/HOLDOUT 不可见）接口不区分具体成因，如实并列说明 -->
+        <div class="cd-section">
+          <div class="cd-sec-title">场景身份</div>
+          <el-descriptions v-if="detail.scenarioIdentity?.resolved" :column="1" border size="small">
+            <el-descriptions-item label="案例键（caseKey）">{{ detail.scenarioIdentity.caseKey ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="数据集">
+              {{ detail.scenarioIdentity.datasetName ?? '未统计' }}
+              <span class="muted">（版本 {{ detail.scenarioIdentity.datasetVersion ?? '未统计' }}）</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="场景族（scenarioFamilyId）">{{ detail.scenarioIdentity.scenarioFamilyId ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="分区（partitionClass）">{{ detail.scenarioIdentity.partitionClass ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="来源类别（sourceClass）">{{ detail.scenarioIdentity.sourceClass ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="有效期">
+              {{ detail.scenarioIdentity.validFrom ? fmtTime(detail.scenarioIdentity.validFrom) : '未统计' }}
+              ~
+              {{ detail.scenarioIdentity.validTo ? fmtTime(detail.scenarioIdentity.validTo) : '未统计' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="内容摘要（contentDigest）">
+              <span class="mono break">{{ detail.scenarioIdentity.contentDigest ?? '未统计' }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <template v-else>
+            <el-alert type="warning" :closable="false" show-icon
+              title="场景身份未解析：可能为精确键无匹配、归属存在歧义或 HOLDOUT 不可见（接口不区分具体成因）；身份字段一律不展示，不做猜测。" />
+            <div class="si-dv muted">数据集版本（run 直读）：{{ detail.scenarioIdentity?.datasetVersion ?? '未统计' }}</div>
+          </template>
+        </div>
+
+        <!-- 关联链：rcaRunId 可点跳调查页、incidentId 可点跳告警详情；scoredReportId 无独立页面，如实展示文本 -->
+        <div class="cd-section">
+          <div class="cd-sec-title">关联链</div>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="调查（rcaRunId）">
+              <template v-if="detail.linkage?.rcaRunId">
+                <router-link :to="`/runs/${detail.linkage.rcaRunId}`" class="mono break">{{ detail.linkage.rcaRunId }}</router-link>
+                <span v-if="detail.linkage.rcaRunState" class="lk-sub muted">（状态 {{ detail.linkage.rcaRunState }}）</span>
+              </template>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="告警事件（incidentId）">
+              <router-link v-if="detail.linkage?.incidentId" :to="`/alerts/${detail.linkage.incidentId}`" class="mono break">{{ detail.linkage.incidentId }}</router-link>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="评分报告（scoredReportId）">
+              <span v-if="detail.linkage?.scoredReportId" class="mono break">{{ detail.linkage.scoredReportId }}</span>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="报告校验状态">{{ detail.linkage?.reportValidationStatus ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="报告模型">{{ detail.linkage?.reportModel ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="报告生成时间">{{ detail.linkage?.reportCreatedAt ? fmtTime(detail.linkage.reportCreatedAt) : '未统计' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <!-- 证据三分组：ReportClaim 三态直分；跨对象未解析引用灰态"引用未解析"，不跨对象读取 -->
+        <div class="cd-section">
+          <div class="cd-sec-title">证据（支持 / 反对 / 未决）</div>
+          <template v-if="detail.evidence?.status === 'OK'">
+            <div v-for="g in evidenceGroups" :key="g.key" class="ev-group">
+              <div class="evg-title" :class="`evg-${g.key}`">{{ g.label }}（{{ g.items.length }}）</div>
+              <template v-if="g.items.length">
+                <div v-for="(c, i) in g.items" :key="i" class="claim">
+                  <div class="claim-head">
+                    <el-tag size="small" :type="g.tagType" disable-transitions>{{ c.claimType ?? '未统计' }}</el-tag>
+                    <span class="claim-title">{{ claimTitle(c) }}</span>
+                  </div>
+                  <div v-if="c.refs?.length" class="ref-list">
+                    <div v-for="(r, j) in c.refs" :key="j" class="ref-row" :class="{ unresolved: !r.resolved }">
+                      <span class="mono break">{{ r.ref ?? '未统计' }}</span>
+                      <span v-if="r.resolved" class="ref-meta">
+                        {{ [r.evidenceType, r.source].filter(Boolean).join(' · ') || '未统计' }}
+                        <span v-if="r.timeStart || r.timeEnd" class="muted">（{{ fmtTime(r.timeStart) }} ~ {{ fmtTime(r.timeEnd) }}）</span>
+                      </span>
+                      <span v-else class="ref-unresolved">引用未解析</span>
+                    </div>
+                  </div>
+                  <div v-else class="ref-none muted">无证据引用</div>
+                </div>
+              </template>
+              <div v-else class="evg-none muted">无</div>
+            </div>
+          </template>
+          <el-alert v-else type="info" :closable="false" show-icon
+            :title="evidenceStatusText(detail.evidence?.status)" />
+        </div>
+
+        <div class="asof muted">数据截至 {{ detail.asOf ? fmtClock(detail.asOf) : '未统计' }}</div>
+      </div>
+    </DetailDrawer>
   </div>
 </template>
 
@@ -222,9 +408,12 @@
 // 清空案例缓存、请求序号防旧响应覆盖；null 显示“未统计”；“已加载 N 条”。
 // EV-03 接线：displayName/mode/totalScenarios/quality（比率三件套，旧契约回退旧数值字段）/
 // facets 六分面（UNKNOWN→未统计并注明归属）/asOf 数据截至。
+// EV-05 接线：案例 tab 顶部证据汇总区 + 行内“详情”抽屉（判定/场景身份/证据三分组/关联链）；
+// 两端点 403/404（后端未部署）→ 显式降级空态，不伪造证据/计数；NO_REPORT/NO_REFS 如实区分。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import DetailDrawer from '../components/common/DetailDrawer.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
@@ -267,11 +456,25 @@ const casesLoading = ref(false)
 const casesLoadingMore = ref(false)
 let casesLoaded = false
 
+// EV-05 证据汇总 / 案例详情：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
+const summary = ref(null)
+const summaryState = ref('loading') // loading | ok | unavailable | error
+const summaryLoading = ref(false)
+let summaryLoaded = false
+
+const detailOpen = ref(false)
+const detail = ref(null)
+const detailState = ref('loading') // loading | ok | unavailable | error
+let detailCaseId = null
+
 // RV04：每类请求一个 AbortController + 单调序号；runId 变化即取消/丢弃旧请求
 let runSeq = 0
 let casesSeq = 0
+let summarySeq = 0
+let detailSeq = 0
 let runCtl = null
 let casesCtl = null
+let summaryCtl = null
 
 async function loadRun() {
   const id = runId.value
@@ -346,8 +549,100 @@ function switchTab(key) {
   else query.tab = key
   if (key !== 'cases') delete query.verdict
   router.replace({ query })
-  if (key === 'cases' && !casesLoaded) loadCases()
+  if (key === 'cases') ensureCasesTabLoaded()
 }
+
+function ensureCasesTabLoaded() {
+  if (!casesLoaded) loadCases()
+  if (!summaryLoaded) loadEvidenceSummary()
+}
+
+// EV-05 run 证据汇总：按案例分桶；403/404（接口未部署）→ unavailable 诚实空态
+async function loadEvidenceSummary() {
+  const id = runId.value
+  const seq = ++summarySeq
+  summaryCtl?.abort()
+  const ctl = new AbortController()
+  summaryCtl = ctl
+  summaryState.value = 'loading'
+  summaryLoading.value = true
+  try {
+    const d = await api(`/eval/runs/${encodeURIComponent(id)}/evidence-summary`, { signal: ctl.signal })
+    if (seq !== summarySeq || id !== runId.value) return
+    summary.value = d
+    summaryState.value = 'ok'
+    summaryLoaded = true
+  } catch (e) {
+    if (ctl.signal.aborted || seq !== summarySeq) return
+    const st = e?.response?.status
+    summaryState.value = st === 403 || st === 404 ? 'unavailable' : 'error'
+  } finally {
+    if (seq === summarySeq) summaryLoading.value = false
+  }
+}
+
+// EV-05 案例详情：双键定位；行无 caseExecutionId 不入（按钮已禁用）；403/404 → 降级提示
+function openCaseDetail(row) {
+  if (!row.caseExecutionId) return
+  detailCaseId = row.caseExecutionId
+  detailOpen.value = true
+  loadCaseDetail()
+}
+
+async function loadCaseDetail() {
+  const id = runId.value
+  const cid = detailCaseId
+  if (!cid) return
+  const seq = ++detailSeq
+  detailState.value = 'loading'
+  try {
+    const d = await api(`/eval/runs/${encodeURIComponent(id)}/cases/${encodeURIComponent(cid)}`)
+    if (seq !== detailSeq || cid !== detailCaseId) return
+    detail.value = d
+    detailState.value = 'ok'
+  } catch (e) {
+    if (seq !== detailSeq) return
+    const st = e?.response?.status
+    detailState.value = st === 403 || st === 404 ? 'unavailable' : 'error'
+  }
+}
+
+// 汇总分桶/三态计数：NO_REPORT = 无统计对象 → 计数一律“未统计”，不拿 0 冒充
+const typeBuckets = computed(() =>
+  Object.entries(summary.value?.byType ?? {}).map(([type, count]) => ({ type, count })))
+
+function refTriple(row) {
+  if (row.status === 'NO_REPORT') return '未统计'
+  return `${fmtCount(row.totalRefs)} / ${fmtCount(row.resolvedRefs)} / ${fmtCount(row.unresolvedRefs)}`
+}
+
+function sruTriple(row) {
+  if (row.status === 'NO_REPORT') return '未统计'
+  return `${fmtCount(row.supportingRefs)} / ${fmtCount(row.refutingRefs)} / ${fmtCount(row.undeterminedRefs)}`
+}
+
+// 证据块非 OK 三态如实文案（EV-05 契约：不猜结构、不当空吞）
+function evidenceStatusText(status) {
+  return {
+    NO_REPORT: '无评分报告：该判定形态（结构失败 / 超时缺席）不产生评分报告，无证据可列。',
+    UNSUPPORTED_SCHEMA_VERSION: '报告包结构版本不受支持，不猜测其内容。',
+    PACKAGE_UNPARSEABLE: '报告包读回形状校验失败，已显式标记（不当空数据处理）。',
+  }[status] ?? '证据状态未统计'
+}
+
+// claim 摘要：组件 / 故障类型组合，缺则回退 claimType
+function claimTitle(c) {
+  return [c?.component, c?.faultType].filter(Boolean).join(' / ') || c?.claimType || '未统计'
+}
+
+const evidenceGroups = computed(() => {
+  const ev = detail.value?.evidence ?? {}
+  return [
+    { key: 'supporting', label: '支持证据', tagType: 'success', items: ev.supporting ?? [] },
+    { key: 'refuting', label: '反对证据', tagType: 'danger', items: ev.refuting ?? [] },
+    { key: 'undetermined', label: '未决证据', tagType: 'info', items: ev.undetermined ?? [] },
+  ]
+})
 
 function applyVerdict() {
   const query = { ...route.query, tab: 'cases' }
@@ -375,7 +670,7 @@ watch(() => route.query, q => {
   const nextTab = normalizeTab(str(q.tab))
   if (nextTab !== tab.value) {
     tab.value = nextTab
-    if (nextTab === 'cases' && !casesLoaded) loadCases()
+    if (nextTab === 'cases') ensureCasesTabLoaded()
   }
   const nextVerdict = str(q.verdict)
   if (nextVerdict !== verdict.value) {
@@ -389,20 +684,29 @@ watch(runId, (id, old) => {
   if (!id || id === old) return
   runCtl?.abort()
   casesCtl?.abort()
+  summaryCtl?.abort()
   runSeq++
   casesSeq++
+  summarySeq++
+  detailSeq++
   casesLoaded = false
+  summaryLoaded = false
   cases.value = []
   casesCursor.value = null
   casesState.value = 'loading'
+  summary.value = null
+  summaryState.value = 'loading'
+  detailOpen.value = false
+  detail.value = null
+  detailCaseId = null
   run.value = null
   loadRun()
-  if (tab.value === 'cases') loadCases()
+  if (tab.value === 'cases') ensureCasesTabLoaded()
 })
 
 onMounted(() => {
   loadRun()
-  if (tab.value === 'cases') loadCases()
+  if (tab.value === 'cases') ensureCasesTabLoaded()
 })
 </script>
 
@@ -454,6 +758,42 @@ onMounted(() => {
 
 .case-filter { display: flex; gap: 8px; margin-bottom: 12px; }
 .case-filter .w-verdict { width: 260px; }
+
+/* EV-05 证据汇总 */
+.ev-summary { border: 1px solid var(--line); border-radius: var(--radius-ctl); padding: 12px 14px; margin-bottom: 14px; }
+.es-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.es-head .el-button { margin-left: auto; }
+.es-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); }
+.es-note { font-size: var(--fs-aux); }
+.es-strip { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 10px; }
+.es-label { font-size: var(--fs-aux); color: var(--ink-2); }
+.es-value { font-size: 16px; font-weight: 600; color: var(--head); }
+.es-tag { margin-right: 6px; }
+.es-table { width: 100%; }
+.es-loading { height: 120px; }
+
+/* EV-05 案例详情抽屉 */
+.cd-loading { height: 240px; }
+.case-detail { display: flex; flex-direction: column; gap: 18px; }
+.cd-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; }
+.cd-sec-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); margin-bottom: 8px; }
+.si-dv { margin-top: 8px; font-size: var(--fs-aux); }
+.lk-sub { margin-left: 6px; font-size: var(--fs-aux); }
+.ev-group { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+.ev-group:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+.evg-title { font-size: var(--fs-aux); font-weight: 600; margin-bottom: 6px; }
+.evg-supporting { color: var(--el-color-success); }
+.evg-refuting { color: var(--el-color-danger); }
+.evg-undetermined { color: var(--ink-2); }
+.claim { padding: 6px 0 6px 10px; border-left: 2px solid var(--line); margin-bottom: 8px; }
+.claim-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.claim-title { font-size: var(--fs-body); }
+.ref-list { display: flex; flex-direction: column; gap: 4px; }
+.ref-row { display: flex; flex-direction: column; font-size: 12px; padding: 4px 8px; background: var(--bg); border-radius: var(--radius-ctl); }
+.ref-row.unresolved { opacity: 0.65; }
+.ref-meta { color: var(--ink-2); }
+.ref-unresolved { color: var(--ink-2); font-style: italic; }
+.ref-none, .evg-none { font-size: var(--fs-aux); padding-left: 10px; }
 
 .fail-sample { padding: 8px 16px; }
 .fs-label { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 4px; }
