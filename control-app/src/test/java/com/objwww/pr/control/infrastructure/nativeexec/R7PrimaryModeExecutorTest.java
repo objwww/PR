@@ -25,6 +25,7 @@ import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.agent.PrimaryDecision;
 import com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind;
 import com.objwww.pr.control.alert.domain.budget.BudgetKind;
+import com.objwww.pr.control.alert.domain.budget.ReservationKey;
 import com.objwww.pr.control.alert.domain.claim.ClaimKind;
 import com.objwww.pr.control.alert.domain.claim.ClaimReducer;
 import com.objwww.pr.control.alert.domain.claim.ClaimStatus;
@@ -200,6 +201,50 @@ class R7PrimaryModeExecutorTest {
         assertThat(stores.reports.all()).hasSize(1);
     }
 
+    // ------------------------------------------------- openRun 限额并集（195 真窗回归）
+
+    @Test
+    @DisplayName("openRun 限额并集：生产形四维（无 TOKEN）下主 Profile TOKEN 维并入——195 真窗缺陷回归")
+    void openRunMergesPrimaryTokenBudgetFromProfile() {
+        // 生产装配面（AlertAm4Config）：executor 开局限额 = 旧四维 budget.* 键，无 TOKEN。
+        // 修复前真 PG 缺行 fail-closed → 全量 BudgetExhaustedException(TOKEN 余额=0)；
+        // CI 全绿根因 = 本类夹具 generousLimits() 自带 TOKEN + InMemory 缺行放行（与 PG
+        // 缺行拒绝的语义分叉）。本例改用生产形限额驱动，修复后 TOKEN 行必须来自主 Profile。
+        executor = buildExecutor(supervisor, primaryProfile,
+                Map.of(BudgetKind.STEP, 256L, BudgetKind.TOOL_CALL, 256L,
+                        BudgetKind.EVIDENCE, 256L, BudgetKind.SUBTASK, 64L));
+        UUID runId = castNativeRun();
+        RcaTask driver = driverOf(runId);
+
+        client.enqueue(ok("{\"tool_call\":{\"tool_id\":\"prometheus.query\","
+                + "\"args\":{\"query\":\"oa_error_rate\"}}}"));
+        toolPort.afterFirstToolCall = () -> client.enqueue(ok("{\"final\":{\"claims\":["
+                + "{\"claim_key\":\"c1\",\"kind\":\"ROOT_CAUSE\","
+                + "\"statement\":\"checkout 错误率饱和\",\"evidence_refs\":[\""
+                + toolPort.lastEvidenceId + "\"]}],\"missing_information\":[]}}"));
+
+        RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
+                stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+        assertThat(result.outcome())
+                .isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED);
+
+        // TOKEN 限额行在场且 = 主 Profile 值 1_000_000（两次调用实扣 60）：超限预留必须
+        // 拒绝——无行的 InMemory 旧语义会放行，此断言对修复前后有区分力。
+        assertThat(budgetLedger.reserve(new ReservationKey(runId,
+                        primaryTaskOf(runId).id(), UUID.randomUUID(), 999L,
+                        BudgetKind.TOKEN), 1_000_000L).allowed())
+                .as("TOKEN 限额已由 primaryProfile 并入（限 1_000_000，实扣 60）")
+                .isFalse();
+        // putIfAbsent 语义：旧四维值不覆盖——STEP 仍是 executor 侧 256 而非主 Profile 的 4。
+        assertThat(budgetLedger.reserve(new ReservationKey(runId,
+                        primaryTaskOf(runId).id(), UUID.randomUUID(), 1000L,
+                        BudgetKind.STEP), 100L).allowed())
+                .as("旧四维限额值逐字节不变（STEP=256 未被主 Profile 的 4 覆盖）")
+                .isTrue();
+    }
+
     // ------------------------------------------------- 委派批中途生长子任务
 
     @Test
@@ -370,6 +415,11 @@ class R7PrimaryModeExecutorTest {
 
     private NativeInvestigationExecutor buildExecutor(DeterministicSupervisor supervisor,
             AgentProfile primary) {
+        return buildExecutor(supervisor, primary, generousLimits());
+    }
+
+    private NativeInvestigationExecutor buildExecutor(DeterministicSupervisor supervisor,
+            AgentProfile primary, Map<BudgetKind, Long> openRunLimits) {
         AgentRegistry agents = primary == null ? buildRegistry(false) : buildRegistry(true);
         ExecutionLedger rcaSinkLedger = new ExecutionLedger(
                 new RcaModelEventSink(stores.rcaEvents, new ObjectMapper()));
@@ -394,7 +444,7 @@ class R7PrimaryModeExecutorTest {
                 new com.objwww.pr.control.alert.application.agent.NativeRcaAgent(evidence,
                         snapshots, claims, new ClaimReducer(Set.of(), "r7-policy")),
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
-                TOOL_REGISTRY_DIGEST, clock, AlertMetrics.NOOP, gate, generousLimits(),
+                TOOL_REGISTRY_DIGEST, clock, AlertMetrics.NOOP, gate, openRunLimits,
                 stores.toolLedger, stores.bindings, agents, directory,
                 stores.checkpoints, primary);
     }

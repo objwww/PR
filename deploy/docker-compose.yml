@@ -146,6 +146,14 @@ services:
       # fail-closed，无默认值 @Value 均带 : 空缺省，不阻断启动；BA-48 同 commit 补映射纪律）
       APP_ALERT_NATIVE_METRICS_EXPR: ${APP_ALERT_NATIVE_METRICS_EXPR:-}
       APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST: ${APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST:-}
+      # R7-X6 主模式旋钮（195 真窗引入）：enabled 缺省 false=行为与 legacy 字节级一致；
+      # 启用时 release-digest 必填（AgentRegistry.forRelease 快照身份面，启动期 fail-fast）。
+      # 模型路由缺省保持代码内置值（AGENT_MODEL=glm-5 / dashscope 直连），
+      # 真窗经 .env 显式指向 litellm-am3（alert-net 内网 http://litellm-am3:4000/v1）。
+      APP_ALERT_R7_PRIMARY_ENABLED: ${APP_ALERT_R7_PRIMARY_ENABLED:-false}
+      APP_ALERT_R7_PRIMARY_RELEASE_DIGEST: ${APP_ALERT_R7_PRIMARY_RELEASE_DIGEST:-}
+      AGENT_MODEL: ${AGENT_MODEL:-glm-5}
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       # M6-07 Holmes 退场：HOLMES_BASE_URL/HOLMES_API_KEY/APP_ALERT_HOLMES_MODEL、
       # APP_ALERT_FALLBACK_*（M6-04 铸造面已拆）、APP_ALERT_SHADOW_HOLMES_*（M6-05
       # 观察面 bean 已拆）九映射随退场摘除——密钥回收以 .env 摘键 + 全库扫描零命中收口。

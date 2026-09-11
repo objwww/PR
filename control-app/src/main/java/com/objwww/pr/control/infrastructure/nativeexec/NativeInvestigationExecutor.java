@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -183,7 +184,16 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         }
 
         // EX-A1 F15：run 开局限额一次落账（幂等；消费点=agent 的 TOOL_CALL 硬闸）
-        budgetGate.openRun(run.id(), budgetLimits);
+        // R7-X6 真窗修复（195 实证 BA 卡）：主模式模型调用走 TOKEN 维预留，限额面必须
+        // 并入 primaryProfile.budgetLimits（TOKEN=主模式新增维）。putIfAbsent 语义 =
+        // 旧四维限额值逐字节不变，只补主模式新增维；InMemory 账本缺行放行 / PG 缺行
+        // fail-closed 的假件语义分叉已登记（CI 绿掩盖本面根因）。
+        Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> openLimits = budgetLimits;
+        if (primaryProfile != null) {
+            openLimits = new LinkedHashMap<>(budgetLimits);
+            primaryProfile.budgetLimits().forEach(openLimits::putIfAbsent);
+        }
+        budgetGate.openRun(run.id(), openLimits);
         // ② 启动（幂等）：R7-X6 主模式（primaryProfile 在场）只编译主节点——提案段
         // 非主模式编译源；旧兼容路由 = active bundle native.proposal 段三角色 DAG
         DeterministicSupervisor.StartResult started;
