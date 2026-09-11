@@ -114,7 +114,9 @@ if [ "$ARM" = "armB" ] || [ "$ARM" = "armC" ]; then
     run_arm "$ARM"
 
     # 姿态行为面核验（不信任部署证词）
-    _runlist="$(cut -d'|' -f3 "$RUNS/${ARM}-runs.txt" | tr '\n' ',' | sed -E 's/,$//')"
+    # run_id 列表必须带单引号（attempt-1 实证：裸 UUID 进 IN () 被 PG 当数字字面量，
+    # trailing junk after numeric literal ——四案全 SUCCEEDED 后聚合面崩）
+    _runlist="$(cut -d'|' -f3 "$RUNS/${ARM}-runs.txt" | sed "s/.*/'&'/" | tr '\n' ',' | sed "s/,$//")"
     if [ "$ARM" = "armB" ]; then
         _primary="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_task
             WHERE run_id IN ($_runlist) AND task_key='PRIMARY_INVESTIGATE'" '-At')"

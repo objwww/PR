@@ -1,0 +1,12 @@
+[R7] arm=armB session=20260911 runs=./runs/r7bgate-20260911 service=checkout
+[R7] [armB] digest=534cfd2bba79e9af1b536345169a47e304e93e7c9a6f27ee2bc34e5c11ceccbc
+[R7] [armB] case c1 注入（BGateC1Isolated@checkout）
+[R7] [armB] c1 run=926f795c-a235-4042-81d0-f29f9291087f state=SUCCEEDED
+[R7] [armB] case c2 注入（BGateC2DeployCorr@checkout）
+[R7] [armB] c2 run=f1bae406-94a0-4880-b7ef-0d757c0a7082 state=SUCCEEDED
+[R7] [armB] case c3 注入（BGateC3MultiSignal@checkout）
+[R7] [armB] c3 run=e17c38b5-62b6-4121-8d0f-9811e8382a50 state=SUCCEEDED
+[R7] [armB] case c4 注入（BGateC4Intermittent@checkout）
+[R7] [armB] c4 run=ddf36ab7-06a0-4cfc-97a8-e4ab2bf6f7e2 state=SUCCEEDED
+[R7] [armB] 姿态行为面 PASS（legacy 三角色：零主模式任务 + 4 驱动任务 DONE）
+[R7] [armB] 完成（证据=./runs/r7bgate-20260911/armB-runs.txt）
