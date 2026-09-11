@@ -83,10 +83,10 @@ class R7RoleRunnerTest {
     private final UUID runId = UUID.randomUUID();
     private final UUID attemptId = UUID.randomUUID();
 
-    /** 注册表含第四个同运行器角色（纯配置；RX01 证明主体） */
+    /** 注册表含第四个同运行器角色（纯配置；RX01 证明主体）+ BA-112 schema 钉版面角色 */
     private final AgentRegistry agents = new AgentRegistry(List.of(
             primaryProfile(), expertProfile("metrics-expert"), expertProfile("logs-expert"),
-            fourthRoleProfile()));
+            fourthRoleProfile(), schemaProfile()));
 
     private DeterministicSupervisor supervisor;
     private BoundedLlmRoleRunner boundedRunner;
@@ -346,6 +346,47 @@ class R7RoleRunnerTest {
                 .contains("valid_artifact_refs");
     }
 
+    // ------------------------------------------------- BA-112 参数形状面
+
+    @Test
+    void ba112工具参数形状拒绝_计步重驱而非DEAD() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"bad\":1}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-b3",
+                Duration.ofMillis(5)));
+        toolPort.failWith = new com.objwww.pr.control.alert.domain.tool
+                .ToolControlPlaneException(com.objwww.pr.control.alert.domain.tool
+                        .ToolControlReason.INVALID_ARGS, "INVALID_ARGS: 形状不符");
+
+        RoleRunner.RoleDriveResult result = boundedRunner.drive(
+                request(primaryId, primaryProfile()));
+
+        assertThat(result.outcome()).as("INVALID_ARGS 对模型驱动环=计步重驱")
+                .isEqualTo(RoleRunner.RoleDriveOutcome.FAILED);
+        assertThat(result.reason()).isEqualTo("TOOL_INVALID_ARGS");
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().stepsUsed())
+                .isEqualTo(1);
+        toolPort.failWith = null;
+    }
+
+    @Test
+    void ba112工具schema钉版随信封下发() {
+        AgentProfile withSchemas = schemaProfile();
+        UUID taskId = seedBoundPrimaryTask(withSchemas);
+        seedCheckpoint(taskId, 0);
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"final\":{\"claims\":[],\"missing_information\":[\"x\"]}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-b4",
+                Duration.ofMillis(5)));
+
+        boundedRunner.drive(request(taskId, withSchemas));
+
+        assertThat(client.prompts.get(0))
+                .as("tool_schemas 钉版随信封下发（BA-112 模型取参依据）")
+                .contains("tool_schemas").contains("\"since\"");
+    }
+
     // ------------------------------------------------- 夹具
 
     /** 主模式启动（PlanCompiler 编译事务写绑定+检查点），返回主任务 id */
@@ -433,6 +474,16 @@ class R7RoleRunnerTest {
                 RoleRuntimeKind.BOUNDED_LLM, Set.of(), 4, "single-pass");
     }
 
+    /** BA-112 schema 钉版面：inputSchema 携带工具 args JSON Schema（进 digest 钉版） */
+    private static AgentProfile schemaProfile() {
+        return new AgentProfile("schema-primary", "1", "prompt-schema", "pv",
+                Set.of("logs.query"), Map.of(BudgetKind.STEP, 4L),
+                Map.of("type", "object"),
+                Map.of("logs.query", Map.of("type", "object",
+                        "properties", Map.of("since", Map.of("type", "string")))),
+                AgentPhase.PRIMARY, RoleRuntimeKind.BOUNDED_LLM, Set.of(), 4, "single-pass");
+    }
+
     private static ModelGatewayParams params() {
         return new ModelGatewayParams(
                 0, 4, 1_000, 1_000, 100_000,
@@ -504,17 +555,21 @@ class R7RoleRunnerTest {
         }
     }
 
-    /** 受控口存根：记录越权面与取证调用 */
+    /** 受控口存根：记录越权面与取证调用；failWith 在场时抛出（INVALID_ARGS 面） */
     private static final class ToolPortStub implements BoundedLlmRoleRunner.PrimaryToolPort {
         record Invocation(UUID taskId, String toolId, Map<String, Object> args) {
         }
 
         final List<Invocation> invocations = new ArrayList<>();
+        RuntimeException failWith;
 
         @Override
         public UUID invoke(SingleToolEvidenceAgent.CallContext ctx, String toolId,
                 Map<String, Object> args) {
             invocations.add(new Invocation(ctx.taskId(), toolId, args));
+            if (failWith != null) {
+                throw failWith;
+            }
             return UUID.randomUUID();
         }
     }

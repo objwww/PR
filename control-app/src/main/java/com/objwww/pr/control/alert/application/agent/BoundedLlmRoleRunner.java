@@ -63,7 +63,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             + "\"kind\":\"ROOT_CAUSE|HYPOTHESIS|SYMPTOM|EXCLUSION\",\"statement\":\"...\","
             + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"]}],"
             + "\"missing_information\":[\"...\"]}}\n"
-            + "规则：evidence_refs 只允许引用 valid_artifact_refs 中的 id；证据不足时用"
+            + "规则：args 形状严格遵守 tool_schemas 的 properties/required；evidence_refs"
+            + " 只允许引用 valid_artifact_refs 中的 id；证据不足时用"
             + " HYPOTHESIS 并在 missing_information 写明缺口；每步只输出一个决策对象。";
 
     /** 主 Agent 受限直接取证口（§六 工具路径归既有受控面，X6 装配 ToolGateway 实现） */
@@ -166,6 +167,18 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                     e.reason(), request.task().id(), tool.toolId());
             return RoleRunner.RoleDriveResult.failed(
                     "TOOL_RETRYABLE:" + e.reason().name());
+        } catch (com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException e) {
+            // BA-112：参数形状拒绝（INVALID_ARGS）对模型驱动环等同越权拒绝——计步重驱
+            // 给模型按 tool_schemas 修正的机会（schema 已随信封钉版下发）；其余控制面
+            // 终止族（POLICY_DENIED/QUERY_FAILED 等工具侧缺陷）原样上抛降级 DEAD
+            if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
+                    .INVALID_ARGS) {
+                advanceStep(request, checkpoint, null);
+                log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={}",
+                        request.task().id(), tool.toolId());
+                return RoleRunner.RoleDriveResult.failed("TOOL_INVALID_ARGS");
+            }
+            throw e;
         }
         advanceStep(request, checkpoint, null);
         return new RoleRunner.RoleDriveResult(
@@ -269,6 +282,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             envelope.put("time_window", request.startEpoch() + "/" + request.endEpoch());
             envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
                     .sorted().toList());
+            // BA-112：allowlist 工具的 args JSON Schema 钉版下发（Profile inputSchema
+            // 进 digest，模型首发的参数形状依据；空=旧 Profile 无 schema 面）
+            envelope.put("tool_schemas", request.profile().inputSchema());
             envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted()
                     .toList());
             return request.profile().prompt() + "\n"

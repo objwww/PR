@@ -398,7 +398,8 @@ public class AlertAm4Config {
             @Value("${app.alert.r7.primary.max-steps:8}") int maxSteps,
             @Value(BUDGET_TOOL_CALLS_KEY) long toolCallBudget,
             @Value("${app.alert.r7.primary.budget-tokens:60000}") long tokenBudget,
-            @Value(PROMPT_VERSION_KEY) String promptVersion) {
+            @Value(PROMPT_VERSION_KEY) String promptVersion,
+            com.objwww.pr.control.alert.application.tool.ToolRegistry toolRegistry) {
         if (!enabled) {
             return null;
         }
@@ -406,9 +407,22 @@ public class AlertAm4Config {
         budget.put(BudgetKind.STEP, (long) maxSteps);
         budget.put(BudgetKind.TOOL_CALL, toolCallBudget);
         budget.put(BudgetKind.TOKEN, tokenBudget);
+        // BA-112：allowlist 工具的 args JSON Schema 钉进 Profile inputSchema（进 digest
+        // 钉版），信封 tool_schemas 面供模型首发取参——allowlist 与注册表不一致=启动期
+        // fail-fast（配置缺件优于运行期步步 INVALID_ARGS）
+        Map<String, Object> toolSchemas = new LinkedHashMap<>();
+        for (String toolId : toolAllowlist.split(",")) {
+            com.objwww.pr.control.alert.application.tool.ToolRegistry.Registration reg =
+                    toolRegistry.all().stream()
+                            .filter(r -> r.definition().name().equals(toolId))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "主模式 allowlist 工具未注册（启动期 fail-fast）: " + toolId));
+            toolSchemas.put(toolId, reg.definition().schema());
+        }
         return new AgentProfile("primary", AGENT_VERSION, prompt, promptVersion,
                 Set.of(toolAllowlist.split(",")), budget,
-                Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT), Map.of(),
+                Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT), toolSchemas,
                 com.objwww.pr.control.alert.domain.agent.AgentPhase.PRIMARY,
                 com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind.BOUNDED_LLM,
                 Set.of(), maxSteps, "deterministic-final-on-exhaustion");
