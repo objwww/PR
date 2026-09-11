@@ -26,23 +26,32 @@ public final class EvalRunnerMain implements ApplicationRunner {
     private final UsageLedgerService ledger;
     private final ConfigurableApplicationContext context;
     private final EvalRunWorker worker;
+    private final com.objwww.pr.control.drill.application.DrillWorker drillWorker;
     private final String mode;
 
     public EvalRunnerMain(EvalBatchRunner runner,
                           UsageLedgerService ledger,
                           ConfigurableApplicationContext context,
                           EvalRunWorker worker,
+                          com.objwww.pr.control.drill.application.DrillWorker drillWorker,
                           String mode) {
         this.runner = runner;
         this.ledger = ledger;
         this.context = context;
         this.worker = worker;
+        this.drillWorker = drillWorker;
         this.mode = mode;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         if ("worker".equals(mode)) {
+            // DR-02：演练 worker 与 eval worker 同进程（§7.3 同一执行身份）——
+            // 独立守护线程跑 drill 轮询，主线程保持 eval 轮询；两 worker 各扫
+            // 各的表，SKIP LOCKED 互不相撞
+            Thread drillLoop = new Thread(drillWorker::runLoop, "drill-worker");
+            drillLoop.setDaemon(true);
+            drillLoop.start();
             worker.runLoop();
             return;
         }

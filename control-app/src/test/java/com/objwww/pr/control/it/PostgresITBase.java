@@ -93,7 +93,9 @@ public abstract class PostgresITBase {
             // V83（UX-02 仿真机器人两表）——BA-41 同律
             "chat_message", "chat_session",
             // V85（EV-07 对比结论落档）——BA-41 同律
-            "eval_comparison");
+            "eval_comparison",
+            // V86（DR-02 演练作业链两表）——BA-41 同律（事件表引用作业表，序敏感）
+            "drill_event", "drill_job");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

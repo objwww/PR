@@ -327,9 +327,89 @@ public class EvalRunnerConfig {
                                          UsageLedgerService ledger,
                                          ConfigurableApplicationContext context,
                                          EvalRunWorker worker,
+                                         com.objwww.pr.control.drill.application.DrillWorker
+                                                 drillWorker,
                                          @Value("${app.alert.eval.worker.mode:worker}")
                                          String workerMode) {
-        return new EvalRunnerMain(runner, ledger, context, worker, workerMode);
+        return new EvalRunnerMain(runner, ledger, context, worker, drillWorker,
+                workerMode);
+    }
+
+    // ---------------- DR-02 演练 worker（§7.3：由已有评测执行身份所在的 worker 领取；
+    //   eval_app 授权面 V86；注入接线未交付——NotImplemented 端口如实 FAILED） ----------------
+
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillTemplateCatalog
+            drillTemplateCatalog(
+            ResourceLoader loader,
+            @Value("${app.drill.template-path:classpath:drill/drill-templates.yml}")
+            String path) throws java.io.IOException {
+        try (var in = loader.getResource(path).getInputStream()) {
+            return com.objwww.pr.control.drill.application.DrillTemplateCatalog.load(in);
+        }
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+            drillJobRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillJobRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+            drillEventRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillEventRepository(jdbc);
+    }
+
+    /** DR-02 本批唯一注入实现：接线未交付（DR-03/DR-04），确定零副作用如实卡因 */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillInjectionPort drillInjectionPort() {
+        return new com.objwww.pr.control.drill.application.DrillInjectionPort
+                .NotImplemented();
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillWorker drillWorker(
+            com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+                    drillJobRepository,
+            com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+                    drillEventRepository,
+            com.objwww.pr.control.drill.application.DrillTemplateCatalog
+                    drillTemplateCatalog,
+            com.objwww.pr.control.drill.application.DrillInjectionPort
+                    drillInjectionPort,
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
+            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
+            @Value("${app.drill.worker.poll-seconds:5}") long pollSeconds,
+            @Value("${app.drill.worker.stale-claim-seconds:900}")
+            long staleClaimSeconds) {
+        return new com.objwww.pr.control.drill.application.DrillWorker(
+                drillJobRepository, drillEventRepository, drillTemplateCatalog,
+                drillInjectionPort, drillClock(),
+                java.util.Arrays.stream(targetEnvs.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList(),
+                workerId + "-drill", pollSeconds, staleClaimSeconds);
+    }
+
+    private static com.objwww.pr.control.drill.application.DrillWorker.DrillClock
+            drillClock() {
+        return new com.objwww.pr.control.drill.application.DrillWorker.DrillClock() {
+            @Override
+            public java.time.Instant now() {
+                return java.time.Instant.now();
+            }
+
+            @Override
+            public void sleepSeconds(long seconds) {
+                try {
+                    Thread.sleep(seconds * 1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
     }
 
     /** 元数据来源（十项可复现元数据；M3-24/25 的对账输入在 provider 侧另行回填） */

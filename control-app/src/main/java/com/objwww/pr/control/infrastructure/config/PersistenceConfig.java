@@ -448,6 +448,51 @@ public class PersistenceConfig {
                 evalQueryReader, evalComparisonRepository, objectMapper);
     }
 
+    // ---------------- DR-02 故障演练作业链（/api/drills 读写面；V86 授权面——control_app 对 drill_job 只增 + 停止两列，状态机推进零开口） ----------------
+
+    /** 场景模板目录（发布展示 DTO 面；drill-templates.yml 随 jar 封装，GT 零携带） */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillTemplateCatalog
+            drillTemplateCatalog(
+            org.springframework.core.io.ResourceLoader loader,
+            @Value("${app.drill.template-path:classpath:drill/drill-templates.yml}")
+            String path) throws java.io.IOException {
+        try (var in = loader.getResource(path).getInputStream()) {
+            return com.objwww.pr.control.drill.application.DrillTemplateCatalog.load(in);
+        }
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+            drillJobRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillJobRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+            drillEventRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillEventRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillJobService drillJobService(
+            com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+                    drillJobRepository,
+            com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+                    drillEventRepository,
+            com.objwww.pr.control.drill.application.DrillTemplateCatalog
+                    drillTemplateCatalog,
+            ObjectMapper objectMapper,
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
+        return new com.objwww.pr.control.drill.application.DrillJobService(
+                drillJobRepository, drillEventRepository, drillTemplateCatalog,
+                objectMapper,
+                java.util.Arrays.stream(targetEnvs.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList());
+    }
+
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------
 
     @Bean

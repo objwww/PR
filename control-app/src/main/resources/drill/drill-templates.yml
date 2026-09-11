@@ -1,0 +1,118 @@
+# =====================================================================================
+# DR-02 故障演练场景模板目录（发布展示 DTO 面；方案 §7.1"复用版本化场景模板；发布展示
+#   DTO，不把完整答案注册表交给调查 Agent"）
+# 派生自 deploy/alert/eval/eval-scenarios.yml（registry v2）：只含公开面——id/名称/
+#   类型/故障源/驱动/症状（可观测面）/影响范围/时间参数/参数白名单。
+# GT 纪律：expected_root_cause / 注入控制细节 / labels_frozen 指纹面不属于本文件，
+#   禁止回填（§7.3：GT 仅评测执行域可读；调查 Agent 不得经任何面拿到标准答案）。
+# 同步纪律：eval-scenarios.yml 升 registry_version 时本文件必须同步修订并更新上方
+#   绑定标注（registry_version 字段 = 派生锚，漂移可核对）。
+# =====================================================================================
+registry_version: 2
+templates:
+
+  - scenario_id: S1
+    name: paymentFailure=50%
+    scenario_type: 业务链路错误率
+    fault_source: AM0 flagd
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment
+    symptom_codes: [checkout]
+    symptom_display: checkout 烧损率告警（page/ticket）
+    impact: checkout 支付失败比例抬升，烧损率越预算；仅作用于 flagd 评测配置面
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 1500,
+             max_resolved_wait_seconds: 2100, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: false
+      reason: >-
+        Flagd 恢复所有权未交付（DR-05 卡：原值保存/条件恢复/冲突不覆盖未达标），
+        且注入执行接线未交付（DR-03 卡）——受理后执行器将在注入相位如实 FAILED
+        （INJECTION_NOT_IMPLEMENTED），故本批不开放启动
+
+  - scenario_id: S2
+    name: flagd paymentUnreachable
+    scenario_type: 依赖不可达
+    fault_source: AM0 flagd
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment
+    symptom_codes: [checkout]
+    symptom_display: checkout 烧损率告警（page/ticket）
+    impact: payment 整体不可达 → checkout RPC 错误率抬升；仅作用于 flagd 评测配置面
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 1500,
+             max_resolved_wait_seconds: 2100, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: false
+      reason: 同 S1（DR-05 Flagd 恢复所有权未交付 + DR-03 注入接线未交付）
+
+  - scenario_id: S3
+    name: F1 幂等失效
+    scenario_type: 业务完整性
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F1
+    target: order-arena chaos- 前缀评测流量
+    symptom_codes: [ArenaDuplicateOrders]
+    symptom_display: ArenaDuplicateOrders（page）
+    impact: chaos- 前缀测试流量同 intent 产生重复未废订单；live 流量零污染（M2-18 面）
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: false
+      reason: >-
+        注入执行接线未交付（DR-03/DR-04 卡：activate 回执先持久化/中断即退出
+        settleSwitchboard 等源码债务未清）——受理后执行器将在注入相位如实 FAILED
+        （INJECTION_NOT_IMPLEMENTED），故本批不开放启动
+
+  - scenario_id: S4
+    name: F2 状态回跳
+    scenario_type: 状态机非法迁移
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F2
+    target: order-arena 指定目标订单（精确目标、非目标不变）
+    symptom_codes: [ArenaIllegalTransitions]
+    symptom_display: ArenaIllegalTransitions（page）
+    impact: 目标订单状态回跳（setter 直改状态事故源）；精确目标、非目标不变（M2-19 面）
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: false
+      reason: 同 S3（DR-03/DR-04 注入接线未交付）
+
+  - scenario_id: S5
+    name: F3 超时结果未知
+    scenario_type: 中间态悬挂
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F3
+    target: order-arena chaos- 前缀评测流量的支付路径
+    symptom_codes: [ArenaOrderStuck]
+    symptom_display: ArenaOrderStuck（page）
+    impact: chaos- 前缀流量 pay 路径超时挂起、订单停留 CREATED、资源悬挂
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: false
+      reason: 同 S3（DR-03/DR-04 注入接线未交付）
