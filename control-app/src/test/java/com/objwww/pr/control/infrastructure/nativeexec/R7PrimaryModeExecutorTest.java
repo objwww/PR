@@ -289,6 +289,69 @@ class R7PrimaryModeExecutorTest {
                 .containsExactly("loki");
     }
 
+    // ------------------------------------------------- BA-118 恢复分诊分流
+
+    @Test
+    @DisplayName("BA-118：主任务孤儿带直查成功回执——不吃阶段③零触网收尾，检查点相位续驱出结论")
+    void primaryOrphanWithDirectQueryReceiptResumesViaCheckpointNotZeroTouchSettle() {
+        UUID runId = castNativeRun();
+        RcaTask driver = driverOf(runId);
+        supervisor.startPrimary(runId, primaryProfile, Set.of("snapshot:r0"));
+        UUID primaryId = primaryTaskOf(runId).id();
+        // 崩溃前现场重建：直查一笔成功（SUCCESS + result_ref 在库）→ 委派获批
+        // （checkpoint WAITING_CHILDREN、子任务已 DONE）→ SIGKILL 孤儿（RUNNING）
+        UUID directEvidenceId = UUID.randomUUID();
+        evidence.insert(new EvidenceEnvelope(directEvidenceId, runId, primaryId,
+                "prometheus.query", EvidenceEnvelope.SCHEMA_VERSION, GENERATION,
+                "prometheus", Map.of("time_range", "1/2"), NOW, NOW, "{}",
+                Digest.sha256Of("{}").hex()));
+        UUID opId = UUID.randomUUID();
+        stores.toolLedger.open(new com.objwww.pr.control.alert.domain.tool
+                .RcaToolInvocationLedger.InvocationIdentity(opId, runId, primaryId,
+                UUID.randomUUID(), 1L, "prometheus.query", "1", "digest-1"));
+        stores.toolLedger.markResultRef(opId, directEvidenceId);
+        stores.toolLedger.succeed(opId);
+        stores.tasks.transitionState(primaryId, RcaTaskState.READY, RcaTaskState.LEASED);
+        stores.tasks.transitionState(primaryId, RcaTaskState.LEASED, RcaTaskState.RUNNING);
+        supervisor.adjudicateDelegation(runId, primaryId, PrimaryDecision.parse(
+                Map.of("delegate", Map.of("requests", List.of(Map.of(
+                        "gap_id", "gap-1", "role_id", "logs",
+                        "question", "错误日志是否聚集", "input_refs", List.of(),
+                        "scope", Map.of(), "requested_budget", 4))))));
+        RcaTask child = stores.tasks.findByRunId(runId).stream()
+                .filter(t -> t.taskKey().equals("DELEGATE-gap-1")).findFirst().orElseThrow();
+        stores.tasks.transitionState(child.id(), RcaTaskState.READY, RcaTaskState.LEASED);
+        stores.tasks.transitionState(child.id(), RcaTaskState.LEASED, RcaTaskState.RUNNING);
+        stores.tasks.transitionState(child.id(), RcaTaskState.RUNNING, RcaTaskState.DONE);
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().phase())
+                .isEqualTo(PrimaryCheckpoint.Phase.WAITING_CHILDREN);
+
+        client.enqueue(ok("{\"final\":{\"claims\":["
+                + "{\"claim_key\":\"c9\",\"kind\":\"ROOT_CAUSE\","
+                + "\"statement\":\"直查证据支撑根因\",\"evidence_refs\":[\""
+                + directEvidenceId + "\"]}],\"missing_information\":[]}}"));
+
+        RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
+                stores.runs.findById(runId).orElseThrow(),
+                stores.incidents.findById(incidentId).orElseThrow(),
+                newAttempt(driver), () -> { });
+
+        // 修复前：阶段③把主任务当单工具任务 RUNNING→DONE 零触网收尾——零模型调用、
+        // final_claims 空、run 无结论 SUCCEEDED。修复后：检查点相位续驱出真实结论
+        assertThat(result.outcome())
+                .isEqualTo(RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED);
+        assertThat(client.calls()).as("恢复=检查点续驱（唤醒→FINAL），非零触网冒充收尾")
+                .isEqualTo(1);
+        PrimaryCheckpoint checkpoint =
+                stores.checkpoints.findByTask(primaryId).orElseThrow();
+        assertThat(checkpoint.finalClaims()).as("结论来自 FINAL 提案而非空收尾").hasSize(1);
+        assertThat(claims.appended).hasSize(1);
+        assertThat(claims.appended.get(0).evidenceRefs())
+                .containsExactly(directEvidenceId.toString());
+        assertThat(stores.tasks.findByRunId(runId))
+                .as("零重复委派/零新任务行（driver+primary+child）").hasSize(3);
+    }
+
     // ------------------------------------------------- 委派目标守卫 + 动作序单调
 
     @Test

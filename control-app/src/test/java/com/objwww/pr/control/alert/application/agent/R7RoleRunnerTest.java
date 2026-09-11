@@ -390,6 +390,34 @@ class R7RoleRunnerTest {
                 .contains("tool_schemas").contains("\"since\"");
     }
 
+    // ------------------------------------------------- BA-119 委派全拒反馈环
+
+    @Test
+    void ba119委派全拒_拒绝码与修正指引写lastError回喂() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"delegate\":{\"requests\":[{\"gap_id\":\"g-x\","
+                        + "\"role_id\":\"nonexistent-role\",\"question\":\"q\","
+                        + "\"input_refs\":[],\"scope\":{},\"requested_budget\":4}]}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-d1",
+                Duration.ofMillis(5)));
+
+        RoleRunner.RoleDriveResult result = boundedRunner.drive(
+                request(primaryId, primaryProfile()));
+
+        assertThat(result.outcome())
+                .isEqualTo(RoleRunner.RoleDriveOutcome.DELEGATE_REJECTED);
+        assertThat(result.reason()).contains("ROLE_UNKNOWN");
+        var checkpoint = stores.checkpoints.findByTask(primaryId).orElseThrow();
+        assertThat(checkpoint.stepsUsed()).as("全拒不耗步（X4 状态不动）").isEqualTo(0);
+        assertThat(checkpoint.decisionSeq()).as("决策序仍单调推进").isEqualTo(1);
+        assertThat(checkpoint.lastError())
+                .as("BA-119：全拒原因+修正指引落检查点，下步信封 last_error 面回喂"
+                        + "（修复前盲重提同一 gap 烧尽驱动上限）")
+                .contains("DELEGATE_REJECTED").contains("ROLE_UNKNOWN")
+                .contains("final");
+    }
+
     // ------------------------------------------------- 夹具
 
     /** 主模式启动（PlanCompiler 编译事务写绑定+检查点），返回主任务 id */

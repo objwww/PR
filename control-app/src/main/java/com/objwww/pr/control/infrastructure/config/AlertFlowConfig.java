@@ -311,12 +311,17 @@ public class AlertFlowConfig {
                 new com.objwww.pr.control.alert.application.agent.MetricsAgent.MetricsQuery(
                         metricsExpr, start, end,
                         com.objwww.pr.control.alert.domain.identity.InvestigationInputs.STEP)));
+        // BA-117：RoleQueryHandler 契约是纪元秒串，而 logs/change 工具执行器域内只收
+        // ISO-8601（B-32 良构面）——纪元秒原样透传会在触网前 INVALID_ARGS，确定性
+        // 单工具子任务无模型修 args = 秒死（真窗 qwen/deepseek 四子任务全灭实证）。
+        // 裁定为装配面单点转换：工具边界保持单一 ISO 契约（与模型侧 schema 一致），
+        // metrics 契约本就是纪元秒，不动。
         handlers.put("logs", (ctx, start, end) -> logsInstance.investigate(ctx,
                 new com.objwww.pr.control.alert.application.agent.LogsAgent.LogsQuery(
-                        start, end)));
+                        epochSecondsToIso(start), epochSecondsToIso(end))));
         handlers.put("change", (ctx, start, end) -> changeInstance.investigate(ctx,
                 new com.objwww.pr.control.alert.application.agent.ChangeAgent.ChangeQuery(
-                        start, end)));
+                        epochSecondsToIso(start), epochSecondsToIso(end))));
         // R7-X6：主模式运行器（BOUNDED_LLM）在册时目录双运行器；否则纯兼容面
         var boundedRunner = boundedLlmRunner.getIfAvailable();
         java.util.List<com.objwww.pr.control.alert.application.agent.RoleRunner> runnerList =
@@ -344,6 +349,20 @@ public class AlertFlowConfig {
                 java.util.Objects.requireNonNull(checkpoints.getIfAvailable(),
                         "主任务检查点仓储缺件（R7-X6 主模式 FINAL 投影面）"),
                 primaryProfile.getIfAvailable());
+    }
+
+    /**
+     * BA-117 装配缝转换：RoleQueryHandler 契约的纪元秒串 → 工具执行器域内契约的
+     * ISO-8601 Instant 串（logs/change 用；metrics 工具契约即纪元秒，不过本缝）。
+     * 非数字 = 上游契约破坏，fail-fast 不静默透传。
+     */
+    static String epochSecondsToIso(String epochSeconds) {
+        try {
+            return Instant.ofEpochSecond(Long.parseLong(epochSeconds)).toString();
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "RoleQueryHandler 窗界契约破坏：非纪元秒串 " + epochSeconds, e);
+        }
     }
 
     /** 状态观察面（C-64）的能力快照：装配时定格，interfaces 不触探针类型（分层缝） */

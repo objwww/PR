@@ -381,12 +381,15 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
      * <ul>
      *   <li>阶段④ 已提交（DONE）——跳过，结论重放读取既有 Claim/报告面；</li>
      *   <li>阶段③ 结果已落库（SUCCESS 行 + result_ref 在库证据）——幂等收尾
-     *       RUNNING→DONE，零触网零新行零新证据；</li>
+     *       RUNNING→DONE，零触网零新行零新证据；<b>仅兼容单工具任务</b>
+     *       （BA-118：主任务的直查回执是步级证据不是结论，主任务由检查点相位续驱）；</li>
      *   <li>阶段② 发送后结果未知（PENDING 悬挂）——先 UNKNOWN 诚实归档（预算占用
      *       不动，PROVISIONAL 留对账），再以新 call_seq/新预算重驱一次物理请求
-     *       （只读工具：同冻结窗、留新观察记录）；既有 UNKNOWN/悬空 SUCCESS 同走重驱；</li>
+     *       （只读工具：同冻结窗、留新观察记录；主任务=按检查点重决策续驱）；
+     *       既有 UNKNOWN/悬空 SUCCESS 同走重驱；</li>
      *   <li>阶段① 未取得发送资格（无在途/未知行）——常规驱动；FAILED 回执孤儿=
-     *       已知失败 → DEAD（缺源降级），不重复调用。</li>
+     *       已知失败 → DEAD（缺源降级，仅兼容单工具任务；主任务 FAILED 行是模型
+     *       可见步级失败，恢复面不代判终态），不重复调用。</li>
      * </ul>
      * 不变量：恢复一遍后无永久 RUNNING；恢复不重复调用（账本行可证）。
      *
@@ -400,20 +403,50 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         var prior = toolLedger.findRecoveryByTask(ctx.runId(), dagTask.id()).stream()
                 .toList();
 
-        // 阶段③：结果已落库 → result_ref 幂等收尾，零触网
-        var recovered = prior.stream().filter(r ->
-                        r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.SUCCESS
-                                && r.resultRef() != null
-                                && evidence.findById(r.resultRef()).isPresent())
-                .findFirst();
-        if (recovered.isPresent()) {
-            boolean settled = tasks.transitionState(dagTask.id(),
-                    RcaTaskState.RUNNING, RcaTaskState.DONE);
-            if (settled) {
-                log.info("DAG 任务 {} 阶段③恢复：result_ref 幂等收尾（零触网）key={}",
-                        dagTask.id(), dagTask.taskKey());
+        // BA-118：恢复分诊需要任务种类，绑定/角色/运行器解析前移到分诊前——主任务
+        // （BOUNDED_LLM）的直查成功回执只是步级证据，不是任务结论；修复前阶段③把它
+        // 误当单工具任务零触网 RUNNING→DONE 收尾，checkpoint 冻结 WAITING_CHILDREN、
+        // final_claims 空，run 无收敛结论即 SUCCEEDED（SIGKILL 打进委派等待窗实证）。
+        // 阶段③幂等收尾与"已知失败回执孤儿 → DEAD"自此仅适用 DETERMINISTIC_SINGLE_TOOL；
+        // 主任务领养后直进 drivePrimary（检查点相位续驱，V88 信封反馈不丢）。
+        TaskExecutionBinding binding = bindings.findByTask(dagTask.id()).orElse(null);
+        if (binding == null) {
+            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            log.warn("DAG 任务 {} 绑定缺席（不猜角色）→ DEAD key={}",
+                    dagTask.id(), dagTask.taskKey());
+            return true;
+        }
+        AgentProfile profile;
+        RoleRunner runner;
+        try {
+            profile = agents.requireExact(binding.roleId(), binding.roleVersion(),
+                    binding.roleDigest());
+            runner = runners.requireFor(profile);
+        } catch (IllegalArgumentException
+                | RunnerDirectory.CapabilityUnavailableException e) {
+            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            log.warn("DAG 任务 {} 角色/运行器解析拒绝 → DEAD key={} 原因: {}",
+                    dagTask.id(), dagTask.taskKey(), e.getMessage());
+            return true;
+        }
+        boolean primaryMode = RoleRuntimeKind.BOUNDED_LLM.equals(profile.runtimeKind());
+
+        // 阶段③：结果已落库 → result_ref 幂等收尾，零触网（仅兼容单工具任务）
+        if (!primaryMode) {
+            var recovered = prior.stream().filter(r ->
+                            r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.SUCCESS
+                                    && r.resultRef() != null
+                                    && evidence.findById(r.resultRef()).isPresent())
+                    .findFirst();
+            if (recovered.isPresent()) {
+                boolean settled = tasks.transitionState(dagTask.id(),
+                        RcaTaskState.RUNNING, RcaTaskState.DONE);
+                if (settled) {
+                    log.info("DAG 任务 {} 阶段③恢复：result_ref 幂等收尾（零触网）key={}",
+                            dagTask.id(), dagTask.taskKey());
+                }
+                return settled;
             }
-            return settled;
         }
 
         // 领养准入：READY 走正常迁移；LEASED/RUNNING 孤儿接管（driver 独占保证单驱动）
@@ -439,45 +472,29 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                 ledgerMarkUnknown(row);
             }
         }
-        boolean knownFailed = prior.stream().allMatch(r ->
-                r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.FAILED);
-        if (!prior.isEmpty() && knownFailed) {
-            // 已知失败回执孤儿：降级 DEAD，不重复调用
-            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
-            log.warn("DAG 任务 {} FAILED 回执孤儿 → DEAD（不重复调用）key={}",
-                    dagTask.id(), dagTask.taskKey());
-            return true;
+        // "已知失败回执孤儿 → DEAD"仅适用兼容单工具任务（一次物理查询结局即终态）；
+        // 主任务的 FAILED 行是模型可见的步级失败（TOOL_RETRYABLE:* 族），是否重试
+        // 由 drivePrimary 的决策循环按检查点判定，恢复面不得代判终态（BA-118）
+        if (!primaryMode) {
+            boolean knownFailed = prior.stream().allMatch(r ->
+                    r.state() == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.FAILED);
+            if (!prior.isEmpty() && knownFailed) {
+                // 已知失败回执孤儿：降级 DEAD，不重复调用
+                tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+                log.warn("DAG 任务 {} FAILED 回执孤儿 → DEAD（不重复调用）key={}",
+                        dagTask.id(), dagTask.taskKey());
+                return true;
+            }
         }
 
         // R7-X2：分派面 = 持久绑定.roleId + Profile.runtime_kind（业务 taskKey 不再
-        // 承担角色身份）；绑定缺席/角色漂移/运行器未部署 → 显式拒绝降级 DEAD，
-        // 不猜 latest、不选"最接近"的 Agent 顶替（CAPABILITY_UNAVAILABLE 同码）
-        TaskExecutionBinding binding = bindings.findByTask(dagTask.id()).orElse(null);
-        if (binding == null) {
-            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
-            log.warn("DAG 任务 {} 绑定缺席（不猜角色）→ DEAD key={}",
-                    dagTask.id(), dagTask.taskKey());
-            return true;
-        }
-        AgentProfile profile;
-        RoleRunner runner;
-        try {
-            profile = agents.requireExact(binding.roleId(), binding.roleVersion(),
-                    binding.roleDigest());
-            runner = runners.requireFor(profile);
-        } catch (IllegalArgumentException
-                | RunnerDirectory.CapabilityUnavailableException e) {
-            tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
-            log.warn("DAG 任务 {} 角色/运行器解析拒绝 → DEAD key={} 原因: {}",
-                    dagTask.id(), dagTask.taskKey(), e.getMessage());
-            return true;
-        }
-
+        // 承担角色身份）；绑定/角色/运行器解析已前移至恢复分诊前（BA-118），
+        // 此处直接进入分派
         RoleRunner.RoleDriveRequest request = new RoleRunner.RoleDriveRequest(dagTask,
                 binding, profile, ctx, startEpoch, endEpoch);
         // R7-X6：主 Runner 面走不动点循环（一步一决策，直到委派等待/FINAL/耗尽）；
         // 兼容单工具面保持单驱语义（一次物理查询，结局即终态）
-        if (RoleRuntimeKind.BOUNDED_LLM.equals(profile.runtimeKind())) {
+        if (primaryMode) {
             return drivePrimary(dagTask, runner, request);
         }
         RoleRunner.RoleDriveResult result;

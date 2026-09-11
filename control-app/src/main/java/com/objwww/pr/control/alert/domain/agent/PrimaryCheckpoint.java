@@ -80,8 +80,13 @@ public record PrimaryCheckpoint(
                 finalClaims, finalMissingInformation, lastError, now);
     }
 
-    /** 决策序推进（DELEGATE 批全拒：决策已出但零请求获批——动作序仍须单调） */
-    public PrimaryCheckpoint withDecisionAdvanced(Instant now) {
+    /**
+     * 决策序推进（DELEGATE 批全拒：决策已出但零请求获批——动作序仍须单调）。
+     * lastError 为留给下一步的裁决反馈（BA-119：全拒不回喂 = 模型盲重提同一 gap
+     * 烧步数——qwen 真窗 15 连撞实证）；null = 无反馈（保留旧值语义无此入口，
+     * 全拒必有拒绝码，故本入口强制携带）。
+     */
+    public PrimaryCheckpoint withDecisionAdvanced(String lastError, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq + 1,
                 stepsUsed, batchesUsed, inputSnapshotDigest, finalClaims,
                 finalMissingInformation, lastError, now);

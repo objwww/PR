@@ -33,7 +33,7 @@ import java.util.UUID;
  *   <li>TOOL_CALL：allowlist 校验（越权=结构化拒绝留痕）→ 受控工具口取证 →
  *       steps+1 仍 PRIMARY_READY；</li>
  *   <li>DELEGATE：Supervisor 确定性裁决（唯一建子任务路径）；获批 → WAITING_CHILDREN，
- *       全拒 → 有界继续；</li>
+ *       全拒 → 拒绝码+修正指引写检查点 lastError 回喂（BA-119），有界继续；</li>
  *   <li>FINAL：{@link PrimaryClaimAdmission} 代码准入（RD05/RX20）→ 提案落检查点
  *       （phase 就地固化，报告相位消费）。</li>
  * </ul>
@@ -214,8 +214,16 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 .distinct()
                 .reduce((a, b) -> a + "," + b)
                 .orElse("REJECTED");
-        // 全拒不消耗步数（X4"状态不动"），但决策已出——决策序必须推进（动作身份单调）
-        checkpoints.upsert(checkpoint.withDecisionAdvanced(clock.instant()));
+        // 全拒不消耗步数（X4"状态不动"），但决策已出——决策序必须推进（动作身份单调）；
+        // BA-119 反馈环扩面：全拒原因+修正指引写 lastError 随下步信封回喂（否则模型
+        // 拿不到"该 gap 已有台账/配额耗尽"的裁决事实，盲重提同一 gap 烧尽驱动上限）
+        checkpoints.upsert(checkpoint.withDecisionAdvanced(
+                "DELEGATE_REJECTED: 委派批全拒（" + codes + "）。"
+                        + "GAP_ALREADY_ADJUDICATED=该 gap 已有台账行，勿换汤不换药重提同一 gap；"
+                        + "DELEGATION_BUDGET_EXHAUSTED=委派配额耗尽，不可再委派。"
+                        + "改用 tool_allowlist 内工具直查补证，或基于已有证据走 final"
+                        + "（缺口如实写 missing_information）。",
+                clock.instant()));
         return new RoleRunner.RoleDriveResult(
                 RoleRunner.RoleDriveOutcome.DELEGATE_REJECTED, List.of(), codes);
     }
