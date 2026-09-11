@@ -277,7 +277,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             envelope.put("steps_remaining",
                     Math.max(0, request.profile().maxSteps() - checkpoint.stepsUsed()));
             envelope.put("delegation_batches_remaining",
-                    Math.max(0, DeterministicSupervisor.MAX_DELEGATION_BATCHES
+                    // 与裁决同源：读 Supervisor 注入的运行时旋钮值（臂A 前置债清偿），
+                    // 禁止各自读配置导致漂移；0=零委派姿态时余量恒 0
+                    Math.max(0, supervisor.maxDelegationBatches()
                             - checkpoint.batchesUsed()));
             envelope.put("time_window", request.startEpoch() + "/" + request.endEpoch());
             envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
