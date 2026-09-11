@@ -67,6 +67,11 @@ public class SingleToolEvidenceAgent {
         }
     }
 
+    /** 本 Agent 的工具 id（EN-05 装配面：allowlist 工具对位 delegates 映射键） */
+    public String toolName() {
+        return spec.toolName();
+    }
+
     private final ToolSpec spec;
     private final ToolRegistry registry;
     private final ToolInvoker gateway;
