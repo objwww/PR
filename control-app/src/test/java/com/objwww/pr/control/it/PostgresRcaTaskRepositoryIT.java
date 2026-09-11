@@ -241,9 +241,15 @@ class PostgresRcaTaskRepositoryIT extends PostgresITBase {
                             }
 
                             @Override
-                            public boolean activate(com.objwww.pr.shared.Digest toDigest,
-                                    com.objwww.pr.shared.Digest expectedCurrent, String by,
-                                    Instant at) {
+                            public java.util.List<com.objwww.pr.control.release.domain.repository.ConfigBundleRepository.BundleSummary>
+                            listRecent(int limit) {
+                                return java.util.List.of();
+                            }
+
+                            @Override
+                            public boolean activateQualified(
+                                    com.objwww.pr.shared.Digest toDigest,
+                                    long expectedActiveRevision, String by, Instant at) {
                                 return true;
                             }
                         },

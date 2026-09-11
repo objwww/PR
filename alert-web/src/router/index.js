@@ -21,6 +21,7 @@ import MonitorView from '../views/MonitorView.vue'
 import DrillsView from '../views/DrillsView.vue'
 import DrillCreateView from '../views/DrillCreateView.vue'
 import DrillDetailView from '../views/DrillDetailView.vue'
+import VersionsView from '../views/VersionsView.vue'
 
 import { useSessionStore } from '../stores/session.js'
 
@@ -55,6 +56,8 @@ const routes = [
   { path: '/drills/new', name: 'drill-new', component: DrillCreateView, meta: { title: '新建演练' } },
   { path: '/drills/:drillId', name: 'drill', component: DrillDetailView, meta: { title: '演练详情' } },
   { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: '监控' } },
+  // EN-10 版本中心：发布资产/配置包只读清单 + 运行配置切换状态（发布/激活仍走机器线，不在页面）
+  { path: '/versions', name: 'versions', component: VersionsView, meta: { title: '版本中心' } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })

@@ -7,9 +7,13 @@ import com.objwww.pr.control.alert.application.DeterministicSupervisor;
 import com.objwww.pr.control.alert.application.PlanCompiler;
 import com.objwww.pr.control.alert.application.agent.AgentRegistry;
 import com.objwww.pr.control.alert.application.agent.ChangeAgent;
+import com.objwww.pr.control.alert.application.agent.DirectReadToolAgent;
+import com.objwww.pr.control.alert.application.agent.DirectReadToolCatalog;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
+import com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.agent.NativeRcaAgent;
+import com.objwww.pr.control.alert.application.rag.RunbookCorpusStore;
 import com.objwww.pr.control.alert.application.replay.AgentReplayRunner;
 import com.objwww.pr.control.alert.application.replay.ReadOnlyToolFace;
 import com.objwww.pr.control.alert.application.replay.SnapshotShadowRouter;
@@ -28,9 +32,19 @@ import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
 import com.objwww.pr.control.alert.domain.tool.ToolPolicy;
 import com.objwww.pr.control.infrastructure.persistence.PostgresToolReplayStore;
+import com.objwww.pr.control.infrastructure.rag.FetchRunbookExecutor;
+import com.objwww.pr.control.infrastructure.rag.HistoryRcaSearchExecutor;
+import com.objwww.pr.control.infrastructure.rag.RunbookCatalogSearchExecutor;
+import com.objwww.pr.control.infrastructure.tool.AlertHistoryExecutor;
+import com.objwww.pr.control.infrastructure.tool.ChangeDiffExecutor;
 import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
-import com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor;
+import com.objwww.pr.control.infrastructure.tool.DockerInspectExecutor;
 import com.objwww.pr.control.infrastructure.tool.LogQueryExecutor;
+import com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutor;
+import com.objwww.pr.control.infrastructure.tool.PrometheusApiExecutor;
+import com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor;
+import com.objwww.pr.control.infrastructure.tool.TcpDockerEngineTransport;
+import com.objwww.pr.shared.Digest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +53,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,8 +97,25 @@ public class AlertAm4Config {
     /** EX-B1 change.query 服务白名单（越出 = INVALID_ARGS；缺省仅自身，fail-closed） */
     private static final String CHANGE_SERVICE_ALLOWLIST_KEY =
             "${app.alert.am4.change.service-allowlist:control-app}";
+    /** EN-05 P0 四个 Prometheus 工具的服务范围面（selector 正向匹配器值必须落 allowlist） */
+    private static final String PROM_SERVICE_ALLOWLIST_KEY =
+            "${app.alert.am4.prometheus.service-allowlist:control-app}";
+    /** EN-07 RAG 固定语料目录 digest（§三阶段 1）：空 = runbook 双工具不注册
+     * （fail-closed：语料未固定即无 RAG 面，docker 同律）；语料更新走新快照（R07） */
+    private static final String RAG_RUNBOOK_CATALOG_DIGEST_KEY =
+            "${app.alert.rag.runbook-catalog-digest:}";
+    /** EN-07 history_rca_search 服务范围（R10 先行过滤；独立键，缺省仅自身 fail-closed） */
+    private static final String RAG_SERVICE_ALLOWLIST_KEY =
+            "${app.alert.rag.service-allowlist:control-app}";
+    /** EN-05 docker 双工具条件注册件：两项均非空才注册（未配置不注册，fail-closed） */
+    private static final String DOCKER_BASE_URL_KEY = "${app.alert.am4.docker.base-url:}";
+    private static final String DOCKER_CONTAINER_ALLOWLIST_KEY =
+            "${app.alert.am4.docker.container-allowlist:}";
     private static final String ALLOWED_TOOLS_KEY =
-            "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query}";
+            "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query,"
+                    + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.rules,logs.aggregate,change.diff,alert.history,"
+                    + "runbook.catalog,runbook.fetch,rca_history.search}";
     private static final String SHADOW_MAX_CALLS_KEY =
             "${app.alert.am4.shadow.max-calls-per-window:60}";
     private static final String SHADOW_WINDOW_MILLIS_KEY =
@@ -161,9 +193,10 @@ public class AlertAm4Config {
     }
 
     /**
-     * 生产工具注册面（EX-B2 后全真源，Phase 3 门第 1 条达成）：prometheus.query 真查 +
-     * logs.query 真 Loki（试验资源，盘点门签字后换绑）+ change.query 真实变更源
-     * （EX-B1 换绑：V40 change_event 只读查询）——零 ReplayToolExecutor 挂点。
+     * 生产工具注册面（EX-B2 后全真源，Phase 3 门第 1 条达成）：三兼容工具真源 +
+     * EN-05 §一 P0 九工具族（prom×4 单执行器实例方法引用复用 / logs.aggregate 真 Loki
+     * 聚合 / change.diff 真变更窗 / docker 双工具条件注册 / alert.history 真时间线）
+     * ——零 ReplayToolExecutor 挂点，全部经同一 Gateway 咽喉（策略/预算/限长不旁路）。
      */
     @Bean
     public ToolRegistry am4ToolRegistry(
@@ -173,8 +206,16 @@ public class AlertAm4Config {
             JdbcClient jdbc,
             @Value(LOGS_LOKI_BASE_URL_KEY) String lokiBaseUrl,
             @Value(LOGS_SERVICE_ALLOWLIST_KEY) String logsServiceAllowlist,
-            @Value(CHANGE_SERVICE_ALLOWLIST_KEY) String changeServiceAllowlist) {
-        return new ToolRegistry(List.of(
+            @Value(CHANGE_SERVICE_ALLOWLIST_KEY) String changeServiceAllowlist,
+            @Value(PROM_SERVICE_ALLOWLIST_KEY) String prometheusServiceAllowlist,
+            @Value(DOCKER_BASE_URL_KEY) String dockerBaseUrl,
+            @Value(DOCKER_CONTAINER_ALLOWLIST_KEY) String dockerContainerAllowlist,
+            RunbookCorpusStore runbookCorpusStore,
+            @Value(RAG_RUNBOOK_CATALOG_DIGEST_KEY) String runbookCatalogDigest,
+            @Value(RAG_SERVICE_ALLOWLIST_KEY) String ragServiceAllowlist) {
+        PrometheusApiExecutor prometheusApi = new PrometheusApiExecutor(prometheusBaseUrl,
+                Set.of(prometheusServiceAllowlist.split(",")));
+        List<ToolRegistry.Registration> registrations = new ArrayList<>(List.of(
                 new ToolRegistry.Registration(
                         MetricsAgent.toolDefinition(timeoutMillis, resultLimitBytes),
                         new PrometheusQueryExecutor(prometheusBaseUrl)),
@@ -185,7 +226,70 @@ public class AlertAm4Config {
                 new ToolRegistry.Registration(
                         ChangeAgent.toolDefinition(timeoutMillis, resultLimitBytes),
                         new ChangeQueryExecutor(jdbc,
-                                Set.of(changeServiceAllowlist.split(","))))));
+                                Set.of(changeServiceAllowlist.split(",")))),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.prometheusInstant(timeoutMillis, resultLimitBytes),
+                        prometheusApi::instantQuery),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.prometheusCatalog(timeoutMillis, resultLimitBytes),
+                        prometheusApi::catalogSearch),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.prometheusLabelValues(timeoutMillis,
+                                resultLimitBytes),
+                        prometheusApi::labelValues),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.prometheusRules(timeoutMillis, resultLimitBytes),
+                        prometheusApi::ruleLookup),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.logsAggregate(timeoutMillis, resultLimitBytes),
+                        new LokiAggregateExecutor(lokiBaseUrl,
+                                Set.of(logsServiceAllowlist.split(",")))),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.changeDiff(timeoutMillis, resultLimitBytes),
+                        new ChangeDiffExecutor(jdbc,
+                                Set.of(changeServiceAllowlist.split(",")))),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.alertHistory(timeoutMillis, resultLimitBytes),
+                        new AlertHistoryExecutor(jdbc))));
+        // docker 双工具：base-url 与容器 allowlist 均配置才注册（未配置不注册，fail-closed）
+        if (!dockerBaseUrl.isBlank() && !dockerContainerAllowlist.isBlank()) {
+            DockerInspectExecutor docker = new DockerInspectExecutor(
+                    new TcpDockerEngineTransport(dockerBaseUrl),
+                    Set.of(dockerContainerAllowlist.split(",")));
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.dockerPs(timeoutMillis, resultLimitBytes),
+                    docker::listContainers));
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.dockerInspect(timeoutMillis, resultLimitBytes),
+                    docker::inspectContainer));
+        }
+        // EN-07 RAG（§三阶段 1）：runbook 双工具——语料目录 digest 配置才注册
+        // （digest 非法在构造期 Digest 校验即 startup fail-fast）；history_rca_search
+        // 走真 V7 表无语料依赖，allowlist 缺省仅自身（fail-closed）
+        if (!runbookCatalogDigest.isBlank()) {
+            Digest corpusDigest = new Digest(runbookCatalogDigest.trim());
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.runbookCatalogSearch(timeoutMillis, resultLimitBytes),
+                    new RunbookCatalogSearchExecutor(runbookCorpusStore, corpusDigest,
+                            Clock.systemUTC())));
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.runbookFetch(timeoutMillis, resultLimitBytes),
+                    new FetchRunbookExecutor(runbookCorpusStore, corpusDigest,
+                            Clock.systemUTC())));
+        }
+        registrations.add(new ToolRegistry.Registration(
+                DirectReadToolCatalog.rcaHistorySearch(timeoutMillis, resultLimitBytes),
+                new HistoryRcaSearchExecutor(jdbc,
+                        Set.of(ragServiceAllowlist.split(",")))));
+        return new ToolRegistry(registrations);
+    }
+
+    /** EN-07 固定语料库读面（release_asset 复用；RAG 工具执行器共用单实例） */
+    @Bean
+    public RunbookCorpusStore runbookCorpusStore(
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
+        return new RunbookCorpusStore(releaseAssetRepository);
     }
 
     /** 工具策略（M4-16）：空策略硬失败在 ToolPolicy 构造期兜底 */
@@ -338,6 +442,46 @@ public class AlertAm4Config {
                 runBudgetGate, am4DoomLoopGuard);
     }
 
+    /**
+     * EN-05 P0 直查 Agent 族（§一 九工具同构面）：每实例恰一工具（基座构造期单工具
+     * 校验不破），装配形态镜像三 Agent 在线影子面（工具出口 = 影子只读面 + 预算门
+     * + 熔断门）；docker 双工具未注册（base-url/容器 allowlist 未配置）时跳过
+     * ——fail-closed，不为缺件工具建 Agent。delegates 合并见 am4PrimaryToolPort。
+     */
+    @Bean
+    public List<DirectReadToolAgent> am4DirectReadAgents(
+            ToolRegistry am4ToolRegistry, ReadOnlyToolFace am4ShadowToolFace,
+            EvidenceRepository evidenceRepository,
+            RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard,
+            @Value(PROMPT_VERSION_KEY) String promptVersion,
+            @Value(BUDGET_STEP_KEY) long budgetStep,
+            @Value(BUDGET_TOOL_CALLS_KEY) long budgetToolCalls,
+            @Value(BUDGET_EVIDENCES_KEY) long budgetEvidences,
+            @Value(BUDGET_SUBTASKS_KEY) long budgetSubtasks) {
+        Map<BudgetKind, Long> budgetLimits = new LinkedHashMap<>();
+        budgetLimits.put(BudgetKind.STEP, budgetStep);
+        budgetLimits.put(BudgetKind.TOOL_CALL, budgetToolCalls);
+        budgetLimits.put(BudgetKind.EVIDENCE, budgetEvidences);
+        budgetLimits.put(BudgetKind.SUBTASK, budgetSubtasks);
+        Map<String, Object> outputSchema = Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT);
+        List<DirectReadToolAgent> agents = new ArrayList<>();
+        for (SingleToolEvidenceAgent.ToolSpec spec : directReadSpecs()) {
+            // 未注册 = 条件件未配置（docker）——不建 Agent；注册校验留给基座构造期
+            if (am4ToolRegistry.find(spec.toolName(), spec.toolVersion()).isEmpty()) {
+                continue;
+            }
+            AgentProfile profile = new AgentProfile(spec.toolName(), AGENT_VERSION,
+                    "direct-read", promptVersion, Set.of(spec.toolName()), budgetLimits,
+                    outputSchema);
+            agents.add(new DirectReadToolAgent(profile, spec,
+                    am4ShadowToolFace.readOnlyView(), am4ShadowToolFace, evidenceRepository,
+                    rcaToolInvocationLedger, objectMapper, runBudgetGate, am4DoomLoopGuard));
+        }
+        return List.copyOf(agents);
+    }
+
     /** Native RCA Agent（M4-30）：消费结构化黑板出 Claim，不直接发布报告；EX-A4a（F05）黑板=冻结快照成员 */
     @Bean
     public NativeRcaAgent am4NativeRcaAgent(EvidenceRepository evidenceRepository,
@@ -372,13 +516,16 @@ public class AlertAm4Config {
                     delegationDecisionRepository,
             RcaRunRepository rcaRunRepository,
             TransactionOperations tx,
-            DagExecutionService dagExecutionService) {
+            DagExecutionService dagExecutionService,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+                    runConfigEpochRepository) {
         PlanCompiler compiler = new PlanCompiler(am4AgentRegistry, rcaTaskRepository,
-                taskEdgeRepository, taskExecutionBindingRepository, tx);
+                taskEdgeRepository, taskExecutionBindingRepository, tx,
+                runConfigEpochRepository);
         return new DeterministicSupervisor(compiler, dagExecutionService,
                 rcaRunRepository, rcaTaskRepository, taskExecutionBindingRepository,
                 primaryCheckpointRepository, delegationDecisionRepository,
-                am4AgentRegistry, tx, AlertClock.system());
+                am4AgentRegistry, tx, AlertClock.system(), runConfigEpochRepository);
     }
 
     // ------------------------------------------------------------------ R7-X6 主模式
@@ -393,7 +540,9 @@ public class AlertAm4Config {
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
             @Value("${app.alert.r7.primary.prompt:你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}")
             String prompt,
-            @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query}")
+            @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
+                    + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.rules,logs.aggregate}")
             String toolAllowlist,
             @Value("${app.alert.r7.primary.max-steps:8}") int maxSteps,
             @Value(BUDGET_TOOL_CALLS_KEY) long toolCallBudget,
@@ -472,13 +621,16 @@ public class AlertAm4Config {
                 rcaModelCallLedger, pricingService, Clock.systemUTC());
     }
 
-    /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面 */
+    /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面；
+     * EN-05 后 delegates 合并 P0 直查 Agent 族（按 toolName 对位，同键不覆盖兼容面） */
     @Bean
     public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort
             am4PrimaryToolPort(
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
             MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent,
             ChangeAgent am4ChangeAgent,
+            @org.springframework.beans.factory.annotation.Qualifier("am4DirectReadAgents")
+            List<DirectReadToolAgent> am4DirectReadAgents,
             RcaToolInvocationLedger toolLedger) {
         if (!enabled) {
             return null;
@@ -488,6 +640,9 @@ public class AlertAm4Config {
         delegates.put(MetricsAgent.TOOL_NAME, am4MetricsAgent);
         delegates.put(LogsAgent.TOOL_NAME, am4LogsAgent);
         delegates.put(ChangeAgent.TOOL_NAME, am4ChangeAgent);
+        for (DirectReadToolAgent agent : am4DirectReadAgents) {
+            delegates.put(agent.toolName(), agent);
+        }
         return new com.objwww.pr.control.alert.application.agent.PrimaryGatewayToolPort(
                 delegates, toolLedger);
     }
@@ -532,4 +687,36 @@ public class AlertAm4Config {
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /**
+     * §一 P0 具名清单 → (工具 id, 证据类型, 来源) 三元组（snake 名 ↔ dotted id 映射
+     * 钉在 {@link DirectReadToolCatalog}；证据类型沿"来源面.查询形状"既有命名法）。
+     */
+    private static List<SingleToolEvidenceAgent.ToolSpec> directReadSpecs() {
+        return List.of(
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_INSTANT,
+                        "metrics.instant", "prometheus"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_CATALOG,
+                        "metrics.catalog", "prometheus"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_LABEL_VALUES,
+                        "metrics.label_values", "prometheus"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RULES,
+                        "metrics.rules", "prometheus"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_LOGS_AGGREGATE,
+                        "logs.aggregate", "loki"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_CHANGE_DIFF,
+                        "change.diff", "change_event"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_DOCKER_PS,
+                        "docker.ps", "docker"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_DOCKER_INSPECT,
+                        "docker.inspect", "docker"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_ALERT_HISTORY,
+                        "alert.history", "alert_event"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RUNBOOK_CATALOG,
+                        "runbook.catalog", "rag"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RUNBOOK_FETCH,
+                        "runbook.reference", "rag"),
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RCA_HISTORY,
+                        "rca_history.reference", "rca_history"));
+    }
 }

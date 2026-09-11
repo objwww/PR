@@ -56,7 +56,7 @@ class PostgresEvalLifecycleIT extends PostgresITBase {
                 Digest.sha256Of("tools"), new BigDecimal("0.7"), new BigDecimal("0.9"),
                 null, null, null,
                 "litellm/internal-v1#key-eval", Digest.sha256Of("rules"),
-                "scenario-driver-v1");
+                "scenario-driver-v1", "grader-test-v1");
     }
 
     private EvalRunCommand launchCommand(UUID runId, String key, String planJson) {

@@ -3,6 +3,7 @@ package com.objwww.pr.control.alert.application.agent;
 import com.objwww.pr.control.application.ModelGateway;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallContext;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallException;
+import com.objwww.pr.control.alert.domain.agent.RcaModelCallFenceException;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger;
 import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
 import com.objwww.pr.control.domain.ai.CostCalculation;
@@ -78,6 +79,13 @@ public class RcaModelGateway {
                     ctx.roleId(), ctx.roleVersion(), ctx.roleDigest(), promptDigest,
                     ctx.budgetReservationId(), ctx.inputSnapshotDigest(), ctx.configEpoch(),
                     ctx.releaseDigest(), ctx.leaseEpoch()));
+        } catch (RcaModelCallFenceException e) {
+            // EN-04 H04 调度闸：动作代际落后于切换后现行代际——零触网、非重试
+            // （新调用绑新 epoch，旧绑定任务随 round 终结，§231）
+            log.info("rca_model_call EPOCH_FENCE，零触网（{}）: {}",
+                    ctx.roleId(), e.getMessage());
+            throw new RcaModelCallException(RcaModelCallFenceException.CODE,
+                    "epoch 栅栏：旧代际动作拒绝发送资格（切换已生效）", false, true, e);
         } catch (RuntimeException e) {
             log.warn("rca_model_call PENDING 写失败，零触网（{}）: {}",
                     ctx.roleId(), e.getClass().getSimpleName());

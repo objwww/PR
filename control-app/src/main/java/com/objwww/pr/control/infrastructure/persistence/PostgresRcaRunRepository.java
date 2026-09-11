@@ -21,9 +21,19 @@ import java.util.UUID;
 public class PostgresRcaRunRepository implements RcaRunRepository {
 
     private final JdbcClient jdbc;
+    /** EN-04 准入播种面（桥构造 = NO_OP，存量装配零改动） */
+    private final com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+            epochs;
 
     public PostgresRcaRunRepository(JdbcClient jdbc) {
+        this(jdbc,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP);
+    }
+
+    public PostgresRcaRunRepository(JdbcClient jdbc,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository epochs) {
         this.jdbc = Objects.requireNonNull(jdbc);
+        this.epochs = Objects.requireNonNull(epochs, "epochs");
     }
 
     @Override
@@ -54,6 +64,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
     /**
      * M5-10：路由四列随铸造落行（V25 engine/config_digest/stickiness_key/
      * canary_bucket）——Run 启动固定不再变，回滚只影响新 Run。
+     * EN-04：携带 configDigest 的铸造同面播种 epoch=0 代际史行（ON CONFLICT DO
+     * NOTHING 幂等；无史行的存量 run 切换面 fail-closed——播种失败不阻断铸造，
+     * 只失去热更新资格，诚实可发现）。
      */
     @Override
     public void insertRouted(RcaRun run, RcaRunRouting routing) {
@@ -85,6 +98,7 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("stickinessKey", routing.stickinessKey())
                 .param("bucket", routing.bucket())
                 .update();
+        seedEpochZero(run, routing);
     }
 
     /**
@@ -127,6 +141,15 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("windowStart", Timestamp.from(inputs.windowStart()))
                 .param("windowEnd", Timestamp.from(inputs.windowEnd()))
                 .update();
+        seedEpochZero(run, routing);
+    }
+
+    /** EN-04 准入播种：epoch=0 行（ON CONFLICT 幂等；失败不阻断铸造——切换面可辨） */
+    private void seedEpochZero(RcaRun run, RcaRunRouting routing) {
+        if (routing.configDigest() != null) {
+            epochs.append(run.id(), 0L, routing.configDigest().hex(), null,
+                    "ADMISSION", null);
+        }
     }
 
     @Override

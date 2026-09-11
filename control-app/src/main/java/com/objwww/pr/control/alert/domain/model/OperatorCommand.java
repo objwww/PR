@@ -28,14 +28,28 @@ public record OperatorCommand(
         Instant appliedAt) {
 
     public enum Type {
-        CANCEL, HINT, FEEDBACK
+        CANCEL, HINT, FEEDBACK,
+
+        /** EN-04 运行中热更新（§227 既有命令账本扩容复用；字段随 payload 携带） */
+        CONFIG_SWITCH
     }
 
     public enum State {
-        PERSISTED, APPLIED, REJECTED_STALE, REJECTED_FORBIDDEN;
+        PERSISTED,
+
+        /** EN-04：已过快败校验、等待 driver 安全点（非终态，可续走/可取消/可过期） */
+        WAITING_SAFE_POINT,
+
+        APPLIED, REJECTED_STALE, REJECTED_FORBIDDEN,
+
+        /** EN-04：命令 deadline 前无安全点（§227；H14 可查询原因） */
+        EXPIRED,
+
+        /** EN-04：WAITING 行被运维撤回（H15；待命令不再应用） */
+        CANCELLED;
 
         public boolean isTerminal() {
-            return this != PERSISTED;
+            return this != PERSISTED && this != WAITING_SAFE_POINT;
         }
     }
 

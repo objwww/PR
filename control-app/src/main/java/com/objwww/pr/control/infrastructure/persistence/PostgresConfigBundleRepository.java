@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -60,12 +61,29 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
              WHERE a.id = 1
             """;
 
-    /** 单语句原子 CAS：null 期望匹配未激活态（IS NOT DISTINCT FROM 语义） */
-    private static final String ACTIVATE_SQL = """
-            UPDATE config_bundle_active
+    /** 单语句原子 CAS：expected revision = 客户端预期的当前激活 revision（0 = 未激活态）；
+     *  EXISTS 复验目标资格未撤销（与资格事务内重验互补的语句级守卫） */
+    private static final String QUALIFIED_ACTIVATE_SQL = """
+            UPDATE config_bundle_active a
                SET bundle_digest = :toDigest, activated_at = :at, activated_by = :by
-             WHERE id = 1
-               AND bundle_digest IS NOT DISTINCT FROM CAST(:expected AS char(64))
+              FROM config_bundle b
+             WHERE a.id = 1
+               AND ( (:expectedRevision = 0 AND a.bundle_digest IS NULL)
+                  OR (a.bundle_digest = b.bundle_digest AND b.revision = :expectedRevision) )
+               AND EXISTS (SELECT 1 FROM release_qualification q
+                            WHERE q.candidate_digest = :toDigest
+                              AND q.quality_verdict = 'PASS'
+                              AND q.revoked_at IS NULL)
+            """;
+
+    /** EN-02：资格行锁——与撤销 UPDATE 同行锁串行化，锁内读到的 revoked_at 即权威
+     *  （P07"事务内重验拒绝陈旧资格"：撤销先提交则本事务零移动） */
+    private static final String LOCK_QUALIFICATION_SQL = """
+            SELECT id FROM release_qualification
+             WHERE candidate_digest = :toDigest
+               AND quality_verdict = 'PASS'
+               AND revoked_at IS NULL
+             FOR UPDATE
             """;
 
     /**
@@ -144,33 +162,53 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
                 .optional();
     }
 
+    /** EN-10 版本中心列表：revision 倒序；LEFT JOIN 当前指针 → activatedAt 非 null = active */
     @Override
-    public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at) {
-        Integer updated = tx.execute(status -> jdbc.sql(ACTIVATE_SQL)
-                .param("toDigest", toDigest.hex())
-                .param("expected", expectedCurrent == null ? null : expectedCurrent.hex())
-                .param("at", Timestamp.from(at))
-                .param("by", by)
-                .update());
-        return updated != null && updated == 1;
+    public List<BundleSummary> listRecent(int limit) {
+        return jdbc.sql("""
+                SELECT b.bundle_digest, b.revision, b.created_by, b.created_at,
+                       a.activated_at
+                  FROM config_bundle b
+                  LEFT JOIN config_bundle_active a ON a.bundle_digest = b.bundle_digest
+                 ORDER BY b.revision DESC, b.bundle_digest
+                 LIMIT :limit
+                """)
+                .param("limit", limit)
+                .query((rs, i) -> {
+                    java.sql.Timestamp activatedAt = rs.getTimestamp("activated_at");
+                    return new BundleSummary(
+                            new Digest(rs.getString("bundle_digest")), rs.getLong("revision"),
+                            rs.getString("created_by"),
+                            rs.getTimestamp("created_at").toInstant(),
+                            activatedAt == null ? null : activatedAt.toInstant());
+                })
+                .list();
     }
 
-    /** EX-B1：CAS 与 change_event 行同事务（评审 B1"与生效同事务"的落地面） */
+    /**
+     * EN-02 资格化激活：单事务内 ①资格行 FOR UPDATE 锁定（与撤销串行化，P07）
+     * → ②expected revision CAS（P06，0 = 未激活态）→ ③change_event 同事务（EX-B1）。
+     * 返回 false = 预期陈旧/竞争败者/资格在事务内被撤销（零移动零事实）。
+     */
     @Override
-    public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at,
-            ActivationFact fact) {
+    public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+            String by, Instant at, ActivationFact fact) {
         if (fact == null) {
-            return activate(toDigest, expectedCurrent, by, at);
+            return activateQualified(toDigest, expectedActiveRevision, by, at);
         }
         Integer updated = tx.execute(status -> {
-            int moved = jdbc.sql(ACTIVATE_SQL)
+            jdbc.sql(LOCK_QUALIFICATION_SQL)
                     .param("toDigest", toDigest.hex())
-                    .param("expected", expectedCurrent == null ? null : expectedCurrent.hex())
+                    .query((rs, i) -> rs.getString("id"))
+                    .list();
+            int moved = jdbc.sql(QUALIFIED_ACTIVATE_SQL)
+                    .param("toDigest", toDigest.hex())
+                    .param("expectedRevision", expectedActiveRevision)
                     .param("at", Timestamp.from(at))
                     .param("by", by)
                     .update();
             if (moved != 1) {
-                return 0; // CAS 败者：事务内零 INSERT（同事务面自动成立）
+                return 0; // 预期陈旧/竞争败者/资格撤销：事务内零 INSERT（同事务面自动成立）
             }
             jdbc.sql(INSERT_CHANGE_EVENT_SQL)
                     .param("id", java.util.UUID.randomUUID())
@@ -186,6 +224,19 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
                     .update();
             return 1;
         });
+        return updated != null && updated == 1;
+    }
+
+    /** 资格化激活（无事实面） */
+    @Override
+    public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+            String by, Instant at) {
+        Integer updated = tx.execute(status -> jdbc.sql(QUALIFIED_ACTIVATE_SQL)
+                .param("toDigest", toDigest.hex())
+                .param("expectedRevision", expectedActiveRevision)
+                .param("at", Timestamp.from(at))
+                .param("by", by)
+                .update());
         return updated != null && updated == 1;
     }
 

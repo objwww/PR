@@ -384,7 +384,13 @@ class NativeEngineWiringTest {
         }
 
         @Override
-        public boolean activate(Digest toDigest, Digest expectedCurrent, String by, Instant at) {
+        public java.util.List<ConfigBundleRepository.BundleSummary> listRecent(int limit) {
+            return java.util.List.of();
+        }
+
+        @Override
+        public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+                String by, Instant at) {
             active = toDigest;
             return true;
         }

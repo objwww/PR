@@ -7,6 +7,8 @@ import com.objwww.pr.control.alert.domain.tool.ToolControlReason;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleReason;
 import com.objwww.pr.control.infrastructure.persistence.PostgresConfigBundleRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresReleaseAssetRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresReleaseQualificationRepository;
 import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
 import com.objwww.pr.control.release.application.ConfigBundleService;
 import com.objwww.pr.control.release.domain.repository.ConfigBundleRepository;
@@ -47,7 +49,15 @@ class ExB1ChangeEventIT extends PostgresITBase {
         adminJdbc.sql("INSERT INTO config_bundle_active (id) VALUES (1)").update();
 
         repo = new PostgresConfigBundleRepository(controlDataSource());
-        service = new ConfigBundleService(repo);
+        service = new ConfigBundleService(repo,
+                new PostgresReleaseAssetRepository(controlDataSource()),
+                new PostgresReleaseQualificationRepository(controlDataSource()));
+    }
+
+    /** EN-02：为候选授予 PASS 资格（激活门的测试前置） */
+    private void grantPass(Digest candidate) {
+        service.grantQualification(candidate, null, "ef".repeat(32), "runner-it",
+                "grader-it", "PASS", "MATCHED", "scope:it", "it-grader");
     }
 
     private static Map<String, Object> content(String promptVersion) {
@@ -110,23 +120,25 @@ class ExB1ChangeEventIT extends PostgresITBase {
     void activationFactsFollowMovedPointerOnly() {
         Digest d1 = service.publish(content("v7"), "it-op").bundleDigest();
         Digest d2 = service.publish(content("v8"), "it-op").bundleDigest();
+        grantPass(d1);
+        grantPass(d2);
 
-        assertThat(service.activate(d1, "it-op").moved()).isTrue();
+        assertThat(service.activate(d1, 0L, "it-op").moved()).isTrue();
         assertThat(count("change_event")).isEqualTo(1L);
 
         // 幂等重放（重复激活当前）：零新事件（评审 B1 裁定）
-        assertThat(service.activate(d1, "it-op").moved()).isFalse();
+        assertThat(service.activate(d1, 0L, "it-op").moved()).isFalse();
         assertThat(count("change_event")).isEqualTo(1L);
 
-        // CAS 败者（expected 漂移）：5 参事务内零 INSERT
-        assertThat(repo.activate(d2, Digest.sha256Of("stale"), "racer",
+        // CAS 败者（expected revision 漂移：0=未激活约定 vs 实际 1）：事务内零 INSERT
+        assertThat(repo.activateQualified(d2, 0L, "racer",
                 Instant.now(), new ConfigBundleRepository.ActivationFact(
                         "ACTIVATE", "control-app", "production", null))).isFalse();
         assertThat(count("change_event")).isEqualTo(1L);
 
         // 换目标激活 + 回滚：各自一新事实；ROLLBACK 行 rollback_of = 回滚前生效 digest
-        assertThat(service.activate(d2, "it-op").moved()).isTrue();
-        assertThat(service.rollback(d1, "it-op").moved()).isTrue();
+        assertThat(service.activate(d2, 1L, "it-op").moved()).isTrue();
+        assertThat(service.rollback(d1, 2L, "it-op").moved()).isTrue();
         assertThat(count("change_event")).isEqualTo(3L);
 
         // 顺序无关断言（时间戳可能并列，deploy_id 是随机 UUID 不可作序锚）

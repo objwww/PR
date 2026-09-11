@@ -424,14 +424,21 @@ public class EvalRunnerConfig {
             @Value("${app.alert.eval.scenario-driver-version:scenario-driver-v1}")
             String driverVersion,
             @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
+            @Value("${app.alert.eval.grader-version:}") String graderVersion,
             GoldenScenarioRegistry registry,
             SynonymLexicon lexicon) {
+        // EN-09：评分器版本必填（发布前必须完成——无评分器版本的评测批次不得存在，
+        // 历史分数归属 E11 面无锚即拒批）
+        if (graderVersion == null || graderVersion.isBlank()) {
+            throw new IllegalArgumentException(
+                    "app.alert.eval.grader-version 必填（EN-09：评分器版本入批次身份面）");
+        }
         return new EvalRunMetadata(1, datasetVersion, registry.contentDigest(),
                 lexicon.lexiconVersion(), model, promptVersion,
                 new com.objwww.pr.shared.Digest(promptDigest),
                 new com.objwww.pr.shared.Digest(toolRegistryDigest),
                 null, null, null, null, null,
                 providerFingerprint, new com.objwww.pr.shared.Digest(alertRuleDigest),
-                driverVersion);
+                driverVersion, graderVersion);
     }
 }

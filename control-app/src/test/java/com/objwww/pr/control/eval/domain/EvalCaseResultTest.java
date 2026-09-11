@@ -106,7 +106,8 @@ class EvalCaseResultTest {
         UUID id = UUID.randomUUID();
         EvalRunMetadata metadata = new EvalRunMetadata(1, "d", Digest.sha256Of("r"), 1,
                 "m", "p", Digest.sha256Of("pd"), Digest.sha256Of("td"),
-                null, null, null, null, null, "pf", Digest.sha256Of("ar"), "sd");
+                null, null, null, null, null, "pf", Digest.sha256Of("ar"), "sd",
+                "grader-test-v1");
 
         assertThat(EvalRun.running(id, metadata, Instant.now()).state())
                 .isEqualTo(EvalRun.EvalRunState.RUNNING);

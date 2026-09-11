@@ -67,20 +67,36 @@ public class ConfigBundleController {
         }
     }
 
-    /** 原子激活（CAS）：409 = 指针已被并发移走（败者面，零状态改写） */
+    /**
+     * 原子激活（EN-02 资格化 CAS）：body 必带 expectedActiveRevision（客户端预期的
+     * 当前激活 revision，0 = 从未激活约定；服务端不替用户推算预期——P06）。
+     * 409 = 预期陈旧（竞争败者，零状态改写）；422 = 资格门拒绝（QUALIFICATION_* 原因码）；
+     * 404 = 未知 digest。
+     */
     @PostMapping(path = "/api/config-bundles/{digest}/activate", consumes = "application/json")
     public ResponseEntity<Map<String, Object>> activate(
             @PathVariable String digest,
             @RequestBody(required = false) Map<String, Object> body) {
         audit("activate", digest, body);
+        Long expected = expectedRevisionOf(body);
+        if (expected == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "expectedActiveRevision 必填（0 = 从未激活）"));
+        }
         try {
-            return respond(digest, service.activate(new Digest(digest), AuthenticatedActor.name()));
+            return respond(digest,
+                    service.activate(new Digest(digest), expected, AuthenticatedActor.name()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(422).body(Map.of("error", e.getMessage()));
         }
     }
 
-    /** 回滚：pointer 指回 toDigest（历史行零改写；INV-AM5-5） */
+    /**
+     * 回滚（EN-02）：pointer 指回 toDigest（历史行零改写；INV-AM5-5）。回滚目标
+     * <b>同样过资格门</b>（P11：不能因"回滚"绕过有效性）；expectedActiveRevision 必带。
+     */
     @PostMapping(path = "/api/config-bundles/rollback", consumes = "application/json")
     public ResponseEntity<Map<String, Object>> rollback(
             @RequestBody(required = false) Map<String, Object> body) {
@@ -89,11 +105,19 @@ public class ConfigBundleController {
         if (toDigest == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "toDigest 必填"));
         }
+        Long expected = expectedRevisionOf(body);
+        if (expected == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "expectedActiveRevision 必填（0 = 从未激活）"));
+        }
         String digestHex = String.valueOf(toDigest);
         try {
-            return respond(digestHex, service.rollback(new Digest(digestHex), AuthenticatedActor.name()));
+            return respond(digestHex,
+                    service.rollback(new Digest(digestHex), expected, AuthenticatedActor.name()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(422).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -109,6 +133,25 @@ public class ConfigBundleController {
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /** EN-02：expectedActiveRevision 解析（数字面；缺失/非法 → null = 400） */
+    private static Long expectedRevisionOf(Map<String, Object> body) {
+        if (body == null) {
+            return null;
+        }
+        Object raw = body.get("expectedActiveRevision");
+        if (raw instanceof Number n) {
+            return n.longValue();
+        }
+        if (raw instanceof String s && !s.isBlank()) {
+            try {
+                return Long.parseLong(s.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
 
     /**
      * moved=true → 200 新激活；moved=false 且指针已在目标 → 200 replayed（幂等重放）；

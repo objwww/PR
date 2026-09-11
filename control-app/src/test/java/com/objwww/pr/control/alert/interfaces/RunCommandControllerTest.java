@@ -49,8 +49,27 @@ class RunCommandControllerTest {
                 NOW.minus(Duration.ofMinutes(5)), NOW, NOW, null, null));
         CommandService service = new CommandService(
                 stores.commands, stores.runs, stores.rcaEvents, CLOCK);
+        // EN-04：CONFIG_SWITCH 分流面（代理件空史 = 一切切换快败，本类只测 HTTP 面）
+        com.objwww.pr.control.alert.application.RunConfigSwitchService switchService =
+                new com.objwww.pr.control.alert.application.RunConfigSwitchService(
+                        stores.commands, stores.runs, stores.tasks,
+                        com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP,
+                        new NoopBundles(), new NoopQualifications(),
+                        new com.objwww.pr.control.alert.application.agent.AgentRegistry(
+                                java.util.List.of(new com.objwww.pr.control.alert.domain.agent.AgentProfile(
+                                        "primary", "1", "p", "pv", java.util.Set.of(),
+                                        java.util.Map.of(), java.util.Map.of()))),
+                        stores.modelCalls, stores.rcaEvents,
+                        new org.springframework.transaction.support.TransactionOperations() {
+                            @Override
+                            @SuppressWarnings("unchecked")
+                            public <T> T execute(
+                                    org.springframework.transaction.support.TransactionCallback<T> action) {
+                                return action.doInTransaction(null);
+                            }
+                        }, CLOCK);
         mvc = MockMvcBuilders.standaloneSetup(
-                        new RunCommandController(service, stores.runs))
+                        new RunCommandController(service, switchService, stores.runs))
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("sre-li", null, java.util.List.of()));
@@ -131,5 +150,67 @@ class RunCommandControllerTest {
                         .content("{\"type\":\"FEEDBACK\",\"idempotencyKey\":\"op-3\",\"expectedRevision\":0}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.state").value("REJECTED_FORBIDDEN"));
+    }
+
+    /** EN-04 代理件：bundle/资格面零可用（本类只钉 CANCEL/HINT/FEEDBACK 的 HTTP 面） */
+    private static final class NoopBundles
+            implements com.objwww.pr.control.release.domain.repository.ConfigBundleRepository {
+        @Override
+        public long nextRevision() {
+            return 1;
+        }
+
+        @Override
+        public boolean insert(com.objwww.pr.control.release.domain.model.ConfigBundle b) {
+            return false;
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.control.release.domain.model.ConfigBundle>
+        findByDigest(com.objwww.pr.shared.Digest digest) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.shared.Digest> activeDigest() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<ActivePointer> findActivePointer() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.List<com.objwww.pr.control.release.domain.repository.ConfigBundleRepository.BundleSummary>
+        listRecent(int limit) {
+            return java.util.List.of();
+        }
+
+        @Override
+        public boolean activateQualified(com.objwww.pr.shared.Digest toDigest,
+                long expectedActiveRevision, String by, Instant at) {
+            return false;
+        }
+    }
+
+    private static final class NoopQualifications
+            implements com.objwww.pr.control.release.domain.repository.ReleaseQualificationRepository {
+        @Override
+        public boolean insert(
+                com.objwww.pr.control.release.domain.model.ReleaseQualification q) {
+            return false;
+        }
+
+        @Override
+        public java.util.Optional<com.objwww.pr.control.release.domain.model.ReleaseQualification>
+        findUnrevokedFor(com.objwww.pr.shared.Digest candidate) {
+            return java.util.Optional.empty();
+        }
+
+        @Override
+        public boolean revoke(UUID id, String by, String reason, Instant at) {
+            return false;
+        }
     }
 }

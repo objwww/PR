@@ -177,7 +177,7 @@ class EvalRunWorkerTest {
         return new EvalRunMetadata(1, "eval-ds-1", Digest.sha256Of("registry"), 1,
                 "deepseek-v3", "am3-rca-v2", Digest.sha256Of("prompt"),
                 Digest.sha256Of("tools"), null, null, null, null, null, "fp-x",
-                Digest.sha256Of("rules"), "scenario-driver-v1");
+                Digest.sha256Of("rules"), "scenario-driver-v1", "grader-test-v1");
     }
 
     private static EvalRunCommand launch(String key, String mode) {

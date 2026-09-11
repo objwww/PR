@@ -111,7 +111,7 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
                 base.promptDigest(), base.toolRegistryDigest(), base.temperature(),
                 base.topP(), base.maxTokens(), base.requestedSeed(), base.effectiveSeed(),
                 base.providerFingerprint(), base.alertRuleDigest(),
-                base.scenarioDriverVersion());
+                base.scenarioDriverVersion(), base.graderVersion());
     }
 
     private static String text(JsonNode node, String field) {

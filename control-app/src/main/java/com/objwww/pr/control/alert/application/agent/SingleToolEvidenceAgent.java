@@ -67,6 +67,11 @@ public class SingleToolEvidenceAgent {
         }
     }
 
+    /** 本 Agent 的工具 id（EN-05 装配面：allowlist 工具对位 delegates 映射键） */
+    public String toolName() {
+        return spec.toolName();
+    }
+
     private final ToolSpec spec;
     private final ToolRegistry registry;
     private final ToolInvoker gateway;
@@ -260,6 +265,7 @@ public class SingleToolEvidenceAgent {
             case POLICY_DENIED -> ToolReasonCode.POLICY_DENIED;
             case INVALID_ARGS, UNKNOWN_TOOL -> ToolReasonCode.INVALID_INPUT;
             case AUTH_FAILED -> ToolReasonCode.AUTH_FAILED;
+            case CAPABILITY_REVOKED -> ToolReasonCode.POLICY_DENIED;
             case BUDGET_EXHAUSTED, RESULT_OVERSIZE, STALE_GENERATION, QUERY_FAILED ->
                     ToolReasonCode.TRANSPORT_UNKNOWN;
         };

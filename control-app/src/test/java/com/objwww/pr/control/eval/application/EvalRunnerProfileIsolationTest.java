@@ -55,7 +55,8 @@ class EvalRunnerProfileIsolationTest {
                         "app.alert.eval.prompt-digest=" + HEX_A,
                         "app.alert.eval.tool-registry-digest=" + HEX_B,
                         "app.alert.eval.provider-fingerprint=fp-test",
-                        "app.alert.eval.alert-rule-digest=" + HEX_C)
+                        "app.alert.eval.alert-rule-digest=" + HEX_C,
+                        "app.alert.eval.grader-version=grader-test-v1")
                 .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
@@ -81,6 +82,25 @@ class EvalRunnerProfileIsolationTest {
                     assertThat(metadata.model()).isEqualTo("glm-5");
                     assertThat(metadata.registryDigest().value())
                             .isEqualTo(registry.contentDigest().value());
+                    assertThat(metadata.graderVersion()).isEqualTo("grader-test-v1");
+                });
+    }
+
+    @Test
+    @DisplayName("EN-09 fail-closed：eval profile 缺 grader-version → 装配拒绝（无评分器版本不批跑）")
+    void evalProfileRejectsMissingGraderVersion() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.profiles.active=eval",
+                        "app.alert.eval.prompt-digest=" + HEX_A,
+                        "app.alert.eval.tool-registry-digest=" + HEX_B,
+                        "app.alert.eval.provider-fingerprint=fp-test",
+                        "app.alert.eval.alert-rule-digest=" + HEX_C)
+                .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure().getMessage())
+                            .contains("grader-version 必填");
                 });
     }
 }

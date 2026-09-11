@@ -121,9 +121,12 @@ public class SecurityConfig {
                         // UI-5/UI-6：/api/eval/** 与 /api/agent-ops/** 同为只读投影面，同权；
                         // DR-02：/api/drills/** 演练读写面同归 operator（写面状态机推进
                         // 在 DB 授权层仍零开口——control_app 只增作业与停止两列）
+                        // EN-06：MCP 挂载管理面（register/disable/enable/deregister/status）
+                        // EN-10：版本中心只读查询面（发布/激活仍在 RELEASE 机器线 /api/config-bundles/**）
                         .requestMatchers("/api/rca-runs/**", "/api/cases/**", "/api/duty/**",
                                 "/api/v1/**", "/api/eval/**", "/api/agent-ops/**",
-                                "/api/drills/**")
+                                "/api/drills/**",
+                                "/api/mcp-servers/**", "/api/release-assets/**")
                         .hasRole("OPERATOR")
                         .anyRequest().denyAll())
                 .formLogin(form -> form

@@ -124,7 +124,8 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         Instant now = Instant.now();
         Digest v1 = publish(Map.of("app", Map.of("model", Map.of("route", "holmes"))), now);
         Digest v2 = publish(Map.of("app", Map.of("model", Map.of("route", "native"))), now);
-        assertThat(bundles.activate(v1, null, "it", now)).isTrue();
+        grantPassQualification(v1);
+        assertThat(bundles.activateQualified(v1, 0L, "it", now)).isTrue();
 
         UUID incidentId = insertIncident("digest-" + UUID.randomUUID());
         RcaRun oldRun = run(incidentId);
@@ -132,8 +133,10 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
                 RcaEngine.NATIVE, v1, "alertname=higherror|service=checkout", 12,
                 CanaryDecision.BUCKETED_NATIVE.name()));
 
-        // 指针移到 v2（发布新版本 = 回滚语义：activate 到旧 digest 同一路径）
-        assertThat(bundles.activate(v2, v1, "it", now)).isTrue();
+        // 指针移到 v2（发布新版本 = 回滚语义：activate 到旧 digest 同一路径）；
+        // expectedActiveRevision = 在位指针（v1，revision 1）的 revision
+        grantPassQualification(v2);
+        assertThat(bundles.activateQualified(v2, 1L, "it", now)).isTrue();
 
         assertThat(adminJdbc.sql(
                         "SELECT config_digest FROM rca_run WHERE id = :id")
@@ -223,7 +226,8 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         // 同 runId）钉死回归。
         Digest digest = publish(Map.of("app", Map.of("model", Map.of("route", "holmes"))),
                 Instant.now());
-        assertThat(bundles.activate(digest, null, "it", Instant.now())).isTrue();
+        grantPassQualification(digest);
+        assertThat(bundles.activateQualified(digest, 0L, "it", Instant.now())).isTrue();
         CanaryRouter router = new CanaryRouter(bundles, decisions, false, Instant::now);
         UUID incidentId = insertIncident("fk-defer-" + UUID.randomUUID());
         String key = "alertname=higherror|service=checkout";
@@ -250,7 +254,8 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
         // 必 23503（幽灵引用，BA-53 同型；本地假件无 FK 面全绿不可见）。修复=V35 摘
         // NOT NULL + 路由器对非 NATIVE 出路落 NULL：照记保留、归属留空、提交无幽灵。
         Digest digest = publish(Map.of("canary", Map.of("percent", 0)), Instant.now());
-        assertThat(bundles.activate(digest, null, "it", Instant.now())).isTrue();
+        grantPassQualification(digest);
+        assertThat(bundles.activateQualified(digest, 0L, "it", Instant.now())).isTrue();
         CanaryRouter router = new CanaryRouter(bundles, decisions, true, Instant::now);
         String key = "alertname=higherror|service=am607-p0";
 

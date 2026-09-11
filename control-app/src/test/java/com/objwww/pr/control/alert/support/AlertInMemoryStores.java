@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 告警域 InMemory fake（L3 场景闭环用；旧线 InMemoryStores 同型）。
@@ -1003,6 +1004,32 @@ public final class AlertInMemoryStores {
             return true;
         }
 
+        /** EN-04：from-guard CAS（现态非 from = 0 行；WAITING 中转迁移防回退） */
+        @Override
+        public synchronized boolean advanceState(UUID id, OperatorCommand.State from,
+                                                 OperatorCommand.State to,
+                                                 Instant appliedAt) {
+            OperatorCommand row = rows.get(id);
+            if (row == null || row.state() != from) {
+                return false;
+            }
+            rows.put(id, row.withState(to, appliedAt));
+            return true;
+        }
+
+        /** EN-04 H14：WAITING 且 deadline 已过的命令行（CONFIG_SWITCH 专用） */
+        @Override
+        public synchronized java.util.List<OperatorCommand> findWaitingOverdue(
+                Instant now) {
+            return rows.values().stream()
+                    .filter(r -> r.type() == OperatorCommand.Type.CONFIG_SWITCH)
+                    .filter(r -> r.state() == OperatorCommand.State.WAITING_SAFE_POINT)
+                    .filter(r -> r.payload().get("deadline") instanceof String deadline
+                            && Instant.parse(deadline).isBefore(now))
+                    .sorted(java.util.Comparator.comparing(OperatorCommand::createdAt))
+                    .toList();
+        }
+
         public synchronized List<OperatorCommand> all() {
             return List.copyOf(rows.values());
         }
@@ -1535,6 +1562,13 @@ public final class AlertInMemoryStores {
 
         private final Map<UUID, CallRow> rows = new LinkedHashMap<>();
 
+        /**
+         * EN-04 H04 epoch 闸测试面（runId→现行代际）：生产栅栏由
+         * PostgresRcaModelCallLedger 的 SQL 子查询承载，假件经此视图镜像同契约；
+         * 不注入 = 无栅栏（存量 R7 测试零感知）。
+         */
+        public final Map<UUID, Long> currentEpochView = new ConcurrentHashMap<>();
+
         public synchronized List<CallRow> all() {
             return List.copyOf(rows.values());
         }
@@ -1545,6 +1579,13 @@ public final class AlertInMemoryStores {
 
         @Override
         public synchronized void open(OpenRow row) {
+            Long currentEpoch = currentEpochView.get(row.runId());
+            if (row.configEpoch() != null && currentEpoch != null
+                    && currentEpoch > row.configEpoch()) {
+                throw new com.objwww.pr.control.alert.domain.agent.RcaModelCallFenceException(
+                        "动作 configEpoch=" + row.configEpoch() + " 已落后于当前代际 "
+                                + currentEpoch + "，零触网拒绝发送");
+            }
             boolean dup = rows.values().stream().anyMatch(r ->
                     r.open().runId().equals(row.runId())
                             && r.open().taskId().equals(row.taskId())

@@ -192,3 +192,40 @@ E2E-34 恢复段（UNKNOWN 不在 drift 扫描集，权限恢复后是否自动�
 2. `keys/github-app-key.pem` 换成真实 App 私钥（PKCS#8 PEM，chmod 444）；
 3. 移除 `github-stub` 服务（并去掉 control/publisher 对它的 depends_on）；
 4. webhook 入口暴露由网关/反代决定——M0 默认只绑 127.0.0.1，不对公网开放。
+
+## 备份与恢复（EN-10 / O09）
+
+`backup.sh` / `restore.sh` 在 deploy/（compose 项目目录）执行，直接经
+`docker compose exec` 进 postgres 容器操作，不触碰 pg-data 卷内部文件。
+**backups/ 已在 .gitignore，永不入库**（含 .sha256 指纹，属运行态产物）。
+
+### 备份
+
+```bash
+cd /opt/build/pr/deploy && bash backup.sh    # 建议 cron：17 */6 * * *（RPO ≤ 6h）
+```
+
+- `pg_dump -Fc`（custom format）→ `backups/pr_agent-<ts>.dump`（chmod 600）；
+- 每档伴生 `.sha256` 指纹；0 字节档 / TOC 不可读档当场删除并 exit 1（不留坏档假象）；
+- `BACKUP_KEEP`（默认 7）滚动保留，超限最老档连同指纹一起删。
+
+### 恢复
+
+```bash
+bash restore.sh backups/pr_agent-<ts>.dump          # sha256 + TOC 校验 → 交互确认 → 恢复
+bash restore.sh backups/pr_agent-<ts>.dump --yes    # 免交互（自动化）
+```
+
+恢复 = `pg_restore --clean --if-exists --no-privileges`（覆盖现库对象，不可逆，
+无 `--yes` 时需键入 RESTORE 确认）；完成后输出 RTO 计时与核验快照：
+flyway 最高版本、`release_asset` 行数 + digest 形状（非 64hex 即 FAIL 退出）、
+`config_bundle` / `config_bundle_active` 指针行数、`rca_run`/`incident`/
+`alert_incident` 对拍行数、备份时点距现在的 RPO 损失参照。
+
+### 诚实边界
+
+- **对拍需人工**：脚本自证不了"恢复后 == 故障前"，上列行数快照由值守与故障前
+  基线对拍后宣告恢复成功；
+- **canonical digest 重算不在脚本内**：反算 asset_digest 需应用层 Digest 算法
+  参与，脚本只做文件指纹与行值形状校验（O09 真值以 195 恢复演练记录为准）；
+- 恢复后建议随即跑一次 `bash backup.sh` 固化新基线。

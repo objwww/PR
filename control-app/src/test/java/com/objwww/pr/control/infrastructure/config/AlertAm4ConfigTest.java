@@ -1,24 +1,51 @@
 package com.objwww.pr.control.infrastructure.config;
 
 import com.objwww.pr.control.alert.application.agent.ChangeAgent;
+import com.objwww.pr.control.alert.application.agent.DirectReadToolCatalog;
 import com.objwww.pr.control.alert.application.agent.LogsAgent;
 import com.objwww.pr.control.alert.application.agent.MetricsAgent;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * AM4 装配纪律行为化（AM4 技术方案 §2）：EX-B2 后生产 registry **全真源**——
- * prometheus.query 真查 + logs.query 真 Loki（试验资源）+ change.query 真实变更源，
- * 零 ReplayToolExecutor 挂点（Phase 3 验收门第 1 条；fixtureBytes 已随之退役，
- * 生产镜像零 fixture——P1-03 面收官）。
+ * AM4 装配纪律行为化（AM4 技术方案 §2 + EN-05 §一 + EN-07 §三阶段 1）：EX-B2 后生产
+ * registry **全真源**——三兼容工具 + EN-05 P0 九工具族全部真执行器，零
+ * ReplayToolExecutor 挂点；docker 双工具与 EN-07 runbook 双工具为条件注册件
+ * （未配置不注册，fail-closed）；history_rca_search 无语料依赖恒注册。
  */
 class AlertAm4ConfigTest {
 
-    /** EX-B2 全真源换绑钉：三工具执行器类型 + 生产装配零 Replay 假件 */
+    private static final long TIMEOUT = 4_000L;
+    private static final long LIMIT = 65_536L;
+    private static final String CORPUS_DIGEST = "ab".repeat(32);
+
+    /** 装配面语料库桩（registry 构造不触资产；行为面归 rag 包各测试） */
+    private static com.objwww.pr.control.alert.application.rag.RunbookCorpusStore store() {
+        return new com.objwww.pr.control.alert.application.rag.RunbookCorpusStore(
+                new com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository() {
+                    @Override
+                    public boolean insert(
+                            com.objwww.pr.control.release.domain.model.ReleaseAsset asset) {
+                        return true;
+                    }
+
+                    @Override
+                    public java.util.Optional<com.objwww.pr.control.release.domain.model.ReleaseAsset>
+                            findByDigest(String kind, com.objwww.pr.shared.Digest digest) {
+                        return java.util.Optional.empty();
+                    }
+
+                    @Override
+                    public java.util.List<com.objwww.pr.control.release.domain.model.ReleaseAsset>
+                            listRecent(String kind, int limit) {
+                        return java.util.List.of();
+                    }
+                });
+    }
+
+    /** EX-B2 全真源换绑钉 + EN-05 P0 九工具族：执行器类型 + docker/RAG 未配置不注册 */
     @Test
     void productionRegistryBindsAllRealExecutors() {
         org.springframework.jdbc.core.simple.JdbcClient jdbc =
@@ -28,18 +55,94 @@ class AlertAm4ConfigTest {
                                 "jdbc:postgresql://127.0.0.1:1/unused", "u", "p"));
 
         ToolRegistry registry = new AlertAm4Config().am4ToolRegistry(
-                "http://prometheus:9090", 4_000L, 65_536L, jdbc,
-                "http://loki:3100", "control-app,checkout", "control-app");
+                "http://prometheus:9090", TIMEOUT, LIMIT, jdbc,
+                "http://loki:3100", "control-app,checkout", "control-app",
+                "control-app,checkout", "", "",
+                store(), "", "control-app");
 
-        assertThat(registry.find(LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION).orElseThrow()
-                .executor()).isInstanceOf(
-                com.objwww.pr.control.infrastructure.tool.LogQueryExecutor.class);
-        assertThat(registry.find(ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION).orElseThrow()
-                .executor()).isInstanceOf(
-                com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor.class);
-        assertThat(registry.find(MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION).orElseThrow()
-                .executor()).isInstanceOf(
-                com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor.class);
+        assertThat(registry.find(MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION)
+                .orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.PrometheusQueryExecutor.class);
+        assertThat(registry.find(LogsAgent.TOOL_NAME, LogsAgent.TOOL_VERSION)
+                .orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.LogQueryExecutor.class);
+        assertThat(registry.find(ChangeAgent.TOOL_NAME, ChangeAgent.TOOL_VERSION)
+                .orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor.class);
+
+        // EN-05：prom×4 经共享单执行器实例方法引用注册（注册表可见面 = lambda，
+        // 类型断言不可达——钉注册存在性，绑定纪律由装配构造直证）
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_INSTANT,
+                DirectReadToolCatalog.VERSION)).as("prometheus.instant 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CATALOG,
+                DirectReadToolCatalog.VERSION)).as("prometheus.catalog 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_LABEL_VALUES,
+                DirectReadToolCatalog.VERSION)).as("prometheus.label_values 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RULES,
+                DirectReadToolCatalog.VERSION)).as("prometheus.rules 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_LOGS_AGGREGATE,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutor.class);
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CHANGE_DIFF,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.ChangeDiffExecutor.class);
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_ALERT_HISTORY,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.tool.AlertHistoryExecutor.class);
+
+        // docker 条件件：未配置不注册（fail-closed，调用即 UNKNOWN_TOOL）
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_DOCKER_PS,
+                DirectReadToolCatalog.VERSION)).isEmpty();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_DOCKER_INSPECT,
+                DirectReadToolCatalog.VERSION)).isEmpty();
+
+        // EN-07：runbook 双工具——语料目录 digest 未配置不注册（fail-closed 同 docker）；
+        // history_rca_search 无语料依赖，恒注册
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RUNBOOK_CATALOG,
+                DirectReadToolCatalog.VERSION)).isEmpty();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RUNBOOK_FETCH,
+                DirectReadToolCatalog.VERSION)).isEmpty();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RCA_HISTORY,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.rag.HistoryRcaSearchExecutor.class);
+    }
+
+    /** docker + EN-07 条件注册正向钉：配置齐 → 双工具注册（runbook 双工具挂真语料执行器） */
+    @Test
+    void dockerToolsRegisterWhenConfigured() {
+        org.springframework.jdbc.core.simple.JdbcClient jdbc =
+                org.springframework.jdbc.core.simple.JdbcClient.create(
+                        new org.springframework.jdbc.datasource.SimpleDriverDataSource(
+                                new org.postgresql.Driver(),
+                                "jdbc:postgresql://127.0.0.1:1/unused", "u", "p"));
+
+        ToolRegistry registry = new AlertAm4Config().am4ToolRegistry(
+                "http://prometheus:9090", TIMEOUT, LIMIT, jdbc,
+                "http://loki:3100", "control-app", "control-app",
+                "control-app", "http://docker-engine:2375", "control-app",
+                store(), CORPUS_DIGEST, "control-app");
+
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_DOCKER_PS,
+                DirectReadToolCatalog.VERSION)).as("docker.ps 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_DOCKER_INSPECT,
+                DirectReadToolCatalog.VERSION)).as("docker.inspect 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RUNBOOK_CATALOG,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .as("runbook.catalog 已注册")
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.rag.RunbookCatalogSearchExecutor.class);
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_RUNBOOK_FETCH,
+                DirectReadToolCatalog.VERSION).orElseThrow().executor())
+                .as("runbook.fetch 已注册")
+                .isInstanceOf(
+                        com.objwww.pr.control.infrastructure.rag.FetchRunbookExecutor.class);
     }
 
     /** P1-03 面收官钉：生产镜像 main 资源零 am4 fixture 文件（logs 全删/change 迁 test） */

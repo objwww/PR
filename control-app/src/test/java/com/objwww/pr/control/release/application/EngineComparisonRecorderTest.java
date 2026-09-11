@@ -379,8 +379,13 @@ class EngineComparisonRecorderTest {
         }
 
         @Override
-        public boolean activate(Digest toDigest, Digest expectedCurrent, String by,
-                Instant at) {
+        public List<ConfigBundleRepository.BundleSummary> listRecent(int limit) {
+            return List.of();
+        }
+
+        @Override
+        public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
+                String by, Instant at) {
             return true;
         }
     }

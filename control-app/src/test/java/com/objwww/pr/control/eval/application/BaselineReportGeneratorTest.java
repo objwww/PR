@@ -32,7 +32,7 @@ class BaselineReportGeneratorTest {
         return new EvalRunMetadata(1, "eval-ds-it", Digest.sha256Of("registry"), 1,
                 "deepseek-v3", "am3-rca-v2", Digest.sha256Of("prompt"),
                 Digest.sha256Of("tools"), null, null, null, null, null, "fp-x",
-                Digest.sha256Of("rules"), "scenario-driver-v1");
+                Digest.sha256Of("rules"), "scenario-driver-v1", "grader-test-v1");
     }
 
     private static GoldenCase golden(String scenarioId) {

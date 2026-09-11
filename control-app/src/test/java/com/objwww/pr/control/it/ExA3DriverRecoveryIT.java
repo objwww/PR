@@ -464,7 +464,8 @@ class ExA3DriverRecoveryIT extends PostgresITBase {
         content.put("native", Map.of("proposal", proposal));
         ConfigBundle bundle = ConfigBundle.of(content, "it-operator", Instant.now());
         assertThat(bundles.insert(bundle)).isTrue();
-        assertThat(bundles.activate(bundle.bundleDigest(), null, "it-operator",
+        grantPassQualification(bundle.bundleDigest());
+        assertThat(bundles.activateQualified(bundle.bundleDigest(), 0L, "it-operator",
                 Instant.now())).isTrue();
         return bundle.bundleDigest();
     }
