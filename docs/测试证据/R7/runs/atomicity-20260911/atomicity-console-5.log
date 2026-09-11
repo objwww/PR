@@ -1,0 +1,16 @@
+[R7] rounds=3 delays=0,1500,4000ms runs=/opt/r7-e2e/runs/atomicity-20260911T082918Z
+[R7] phase1 PASS（digest=1af02a8ff602c4cb44af16b34b357dda10cc8863b79de46987eabc93f6db341e；姿态=主模式部署（行为面逐轮核验））
+[R7] phase2 容器起始 StartedAt=2026-09-11T08:28:52.749735013Z（重启证据面）
+[R7] round 1：注入 r7kill-r1-082918（延迟档 0ms）
+[R7] round 1：SIGKILL（在飞快照=1）
+[R7] round 1：容器已拉起（killed_at=2026-09-11T08:29:24Z），等 run 诚实终态
+[R7] round 1 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] round 2：注入 r7kill-r2-082918（延迟档 1500ms）
+[R7] round 2：SIGKILL（在飞快照=1）
+[R7] round 2：容器已拉起（killed_at=2026-09-11T08:40:41Z），等 run 诚实终态
+[R7] round 2 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] round 3：注入 r7kill-r3-082918（延迟档 4000ms）
+[R7] round 3：SIGKILL（在飞快照=1）
+[R7] round 3：容器已拉起（killed_at=2026-09-11T08:51:48Z），等 run 诚实终态
+[R7] round 3 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] FAIL: phase3 零主模式任务——部署姿态非主模式（r7.primary.enabled）

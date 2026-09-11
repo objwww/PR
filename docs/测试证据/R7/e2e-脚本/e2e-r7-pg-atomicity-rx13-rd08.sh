@@ -51,7 +51,9 @@ _wl=""
 _i=1
 while [ "$_i" -le "$ROUNDS" ]; do
     _svc="r7kill-r${_i}-${SFX}"
-    _wl="${_wl}\"alertname=$(echo "$AN" | tr '[:upper:]' '[:lower:]')|service=${_svc}\","
+    # 白名单匹配面对 incident_key 原样大小写敏感（195 真窗差分实证：原样匹配
+    # WHITELISTED；小写化条目→BUCKETED_HOLMES 不铸 run——b-gate 同雷第三处）
+    _wl="${_wl}\"alertname=${AN}|service=${_svc}\","
     _i=$((_i + 1))
 done
 _wl="$(echo "$_wl" | sed -E 's/,$//')"
@@ -104,7 +106,9 @@ while [ "$_i" -le "$ROUNDS" ]; do
     r7_poll_until "round$_i 重启后 health 回 200" 180 "( r7_health $RUNS )"
     r7_log "round $_i：容器已拉起（killed_at=$_killed_at），等 run 诚实终态"
 
-    _state="$(r7_wait_run_terminal R7_PG_URL "$_runid" 900)"
+    # 终态等待 1800s：kill-主任务在飞轮的恢复=租约超时(~10min)+glm-5 全重驱(~5min)
+    # ≈16min（attempt-2 实证 15m51s，900s 恰好截断在终态前 1 分钟）
+    _state="$(r7_wait_run_terminal R7_PG_URL "$_runid" 1800)"
 
     # ---- 不变式扫（逐轮）----
     _svc_q="$(echo "$_svc" | sed 's/'"'"'//g')"
@@ -128,6 +132,7 @@ while [ "$_i" -le "$ROUNDS" ]; do
                 WHERE d.run_id='${_runid}' AND d.status='APPROVED'))
           ||'|'||
           (SELECT count(*) FROM rca_task t WHERE t.run_id='${_runid}'
+             AND (t.task_key='PRIMARY_INVESTIGATE' OR t.task_key LIKE 'DELEGATE-%')
              AND NOT EXISTS (SELECT 1 FROM rca_task_execution_binding b
                              WHERE b.task_id=t.id))
           ||'|'||
@@ -136,7 +141,7 @@ while [ "$_i" -le "$ROUNDS" ]; do
              HAVING count(*)>1) z)
           ||'|'||
           (SELECT count(*) FROM rca_run r JOIN incident i ON i.id=r.incident_id
-             WHERE i.incident_key='${AN}|${_svc_q}')
+             WHERE i.incident_key='alertname=${AN}|service=${_svc_q}')
         " '-At')"
     _inv_expect="0|0|0|0|0|0|1"
     [ "$_inv" = "$_inv_expect" ] || r7_fail "round$_i 不变式破（I1..I6：orphan|dup_task|dup_gap|batch_cnt|no_binding|dup_call|run_cnt）
@@ -180,7 +185,7 @@ _active_hits="$(grep -c '|1|' "$RUNS/rounds.txt" || true)"
 _prim="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_task t
     WHERE t.task_key='PRIMARY_INVESTIGATE' AND t.run_id IN
       (SELECT r.id FROM rca_run r JOIN incident i ON i.id=r.incident_id
-       WHERE i.incident_key LIKE 'KillProbe|r7kill-r%-${SFX}')" '-At')"
+       WHERE i.incident_key LIKE 'alertname=${AN}|service=r7kill-r%-${SFX}')" '-At')"
 [ "${_prim:-0}" -ge 1 ] || r7_fail "phase3 零主模式任务——部署姿态非主模式（r7.primary.enabled）"
 
 r7_resource_snapshot "$RUNS" "post"

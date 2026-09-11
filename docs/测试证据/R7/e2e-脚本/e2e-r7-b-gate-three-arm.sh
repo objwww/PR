@@ -71,7 +71,9 @@ run_arm() {
     _i=1
     while [ "$_i" -le 4 ]; do
         _an="$(case_alertname "$_i")"
-        _wl="${_wl}\"alertname=$(echo "$_an" | tr '[:upper:]' '[:lower:]')|service=${SVC}\","
+        # 白名单匹配面对 incident_key 原样大小写敏感（195 真窗差分实证：
+        # 原样 E2EA0CheckoutProbe→WHITELISTED；全小写→BUCKETED_HOLMES 不铸 run）
+        _wl="${_wl}\"alertname=${_an}|service=${SVC}\","
         _i=$((_i + 1))
     done
     _wl="$(echo "$_wl" | sed -E 's/,$//')"
@@ -87,7 +89,9 @@ EOF
         _an="$(case_alertname "$_i")"
         _sum="$(case_summary "$_i")"
         r7_log "[$_tag] case c$_i 注入（$_an@$SVC）"
-        _code="$(r7_inject_alert "$_an" "$SVC" firing "$RUNS" "$_sum")"
+        # summary 携带套件唯一后缀（BA-111 同律：同身份同摘要会被产品正确去重，
+        # 跨套件重跑必须换 payloadHash 才能开新 episode）
+        _code="$(r7_inject_alert "$_an" "$SVC" firing "$RUNS" "${_sum} [r7bgate-${SFX}]")"
         [ "$_code" = "202" ] || r7_fail "[$_tag] c$_i 注入期望 202 实得 $_code: $(cat "$RUNS/alert-${SVC}-firing.resp")"
         _wl_l="alertname=$(echo "$_an" | tr '[:upper:]' '[:lower:]')|service=${SVC}"
         _key="${_wl_l}:${_wl_l}"

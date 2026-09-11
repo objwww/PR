@@ -44,9 +44,12 @@ r7_resource_snapshot "$RUNS" "pre"
 # phase1 姿态 + bundle + 注入
 # ---------------------------------------------------------------------------
 r7_health "$RUNS"
+# 白名单匹配面对 incident_key 原样大小写敏感（195 真窗差分实证：原样匹配
+# WHITELISTED；小写化条目→BUCKETED_HOLMES 不铸 run——b-gate/atomicity 同雷第四处）
+_wl_raw="alertname=${AN}|service=${SVC}"
 _key_l="alertname=$(echo "$AN" | tr '[:upper:]' '[:lower:]')|service=${SVC}"
 cat > "$RUNS/bundle-restart.content" <<EOF
-{"policy_version":"r7-e2e-restart-${SESSION}","canary":{"percent":0,"whitelist":["${_key_l}"],"max_native_runs":500},"native":{"proposal":{"schema_version":"am4-plan.v1","tasks":[{"key":"investigate-metrics","type":"metrics@1","inputs":[]},{"key":"investigate-logs","type":"logs@1","inputs":[]},{"key":"investigate-change","type":"change@1","inputs":[]}],"edges":[]}}}
+{"policy_version":"r7-e2e-restart-${SESSION}","canary":{"percent":0,"whitelist":["${_wl_raw}"],"max_native_runs":500},"native":{"proposal":{"schema_version":"am4-plan.v1","tasks":[{"key":"investigate-metrics","type":"metrics@1","inputs":[]},{"key":"investigate-logs","type":"logs@1","inputs":[]},{"key":"investigate-change","type":"change@1","inputs":[]}],"edges":[]}}}
 EOF
 DR="$(r7_publish_bundle "$RUNS/bundle-restart.content" restart)"
 r7_activate "$DR" "$RUNS"
@@ -93,7 +96,8 @@ r7_container_start
 r7_poll_until "phase2 重启后 health 回 200" 180 "( r7_health $RUNS )"
 r7_log "phase2 容器已拉起（killed_at=$_killed_at），等恢复后终态"
 
-STATE="$(r7_wait_run_terminal R7_PG_URL "$RUNID" 900)"
+# 终态等待 1800s：恢复=租约超时(~10min)+glm-5 全重驱(~5min)≈16min（atomicity attempt-2 实证）
+STATE="$(r7_wait_run_terminal R7_PG_URL "$RUNID" 1800)"
 
 # ---------------------------------------------------------------------------
 # phase3 恢复纪律断言

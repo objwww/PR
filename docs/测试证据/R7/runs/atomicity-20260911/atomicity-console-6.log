@@ -1,0 +1,16 @@
+[R7] rounds=3 delays=0,1500,4000ms runs=/opt/r7-e2e/runs/atomicity-20260911T090434Z
+[R7] phase1 PASS（digest=f21635838b5f0d872c5dc646afd402db10fbb836a81b677f5f9614c4f199e627；姿态=主模式部署（行为面逐轮核验））
+[R7] phase2 容器起始 StartedAt=2026-09-11T08:51:48.934627306Z（重启证据面）
+[R7] round 1：注入 r7kill-r1-090434（延迟档 0ms）
+[R7] round 1：SIGKILL（在飞快照=1）
+[R7] round 1：容器已拉起（killed_at=2026-09-11T09:04:40Z），等 run 诚实终态
+[R7] round 1 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] round 2：注入 r7kill-r2-090434（延迟档 1500ms）
+[R7] round 2：SIGKILL（在飞快照=1）
+[R7] round 2：容器已拉起（killed_at=2026-09-11T09:15:57Z），等 run 诚实终态
+[R7] round 2 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] round 3：注入 r7kill-r3-090434（延迟档 4000ms）
+[R7] round 3：SIGKILL（在飞快照=1）
+[R7] round 3：容器已拉起（killed_at=2026-09-11T09:27:07Z），等 run 诚实终态
+[R7] round 3 PASS：state=SUCCEEDED bracket=PRE_COMMIT（零残留面） 委派子任务=0
+[R7] SUITE PASS：轮次账=/opt/r7-e2e/runs/atomicity-20260911T090434Z/rounds.txt（bracket 分布见档位列）
