@@ -364,7 +364,7 @@ class R7RoleRunnerTest {
 
         assertThat(result.outcome()).as("INVALID_ARGS 对模型驱动环=计步重驱")
                 .isEqualTo(RoleRunner.RoleDriveOutcome.FAILED);
-        assertThat(result.reason()).isEqualTo("TOOL_INVALID_ARGS");
+        assertThat(result.reason()).isEqualTo("TOOL_RETRYABLE:INVALID_ARGS");
         assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().stepsUsed())
                 .isEqualTo(1);
         toolPort.failWith = null;

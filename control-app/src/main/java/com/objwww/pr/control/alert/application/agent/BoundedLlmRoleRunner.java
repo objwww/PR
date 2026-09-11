@@ -168,15 +168,16 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             return RoleRunner.RoleDriveResult.failed(
                     "TOOL_RETRYABLE:" + e.reason().name());
         } catch (com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException e) {
-            // BA-112：参数形状拒绝（INVALID_ARGS）对模型驱动环等同越权拒绝——计步重驱
-            // 给模型按 tool_schemas 修正的机会（schema 已随信封钉版下发）；其余控制面
-            // 终止族（POLICY_DENIED/QUERY_FAILED 等工具侧缺陷）原样上抛降级 DEAD
+            // BA-112/BA-113：参数形状拒绝（INVALID_ARGS）对模型驱动环=计步重驱，reason
+            // 归 TOOL_RETRYABLE:* 前缀族（NativeInvestigationExecutor 可重试封闭集只认
+            // DECISION_UNPARSEABLE/TOOL_NOT_ALLOWED/TOOL_RETRYABLE:*，裸 TOOL_INVALID_ARGS
+            // 会被当不可重试 → DEAD）；其余控制面终止族原样上抛降级 DEAD
             if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
                     .INVALID_ARGS) {
                 advanceStep(request, checkpoint, null);
                 log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={}",
                         request.task().id(), tool.toolId());
-                return RoleRunner.RoleDriveResult.failed("TOOL_INVALID_ARGS");
+                return RoleRunner.RoleDriveResult.failed("TOOL_RETRYABLE:INVALID_ARGS");
             }
             throw e;
         }
