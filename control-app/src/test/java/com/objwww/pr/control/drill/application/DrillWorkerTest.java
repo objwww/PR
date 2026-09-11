@@ -101,9 +101,11 @@ class DrillWorkerTest {
             Optional<DrillJob> head = byId.values().stream()
                     .filter(j -> j.state() == DrillJob.State.QUEUED)
                     .findFirst();
+            // BA-114：领取即迁移 QUEUED→PRECHECK（与真 PG 单语句 CAS 同语义）
             head.ifPresent(j -> byId.put(j.id(), new DrillJob(j.id(), j.scenarioId(),
                     j.scenarioName(), j.templateDigest(), j.targetEnv(), j.operator(),
-                    j.state(), j.outcome(), j.terminalReason(), j.paramsJson(),
+                    DrillJob.State.PRECHECK, j.outcome(), j.terminalReason(),
+                    j.paramsJson(),
                     j.payloadHash(), j.idempotencyKey(), j.stopIdempotencyKey(),
                     j.stopRequestedAt(), workerId, claimedAt, j.revision() + 1,
                     j.relatedIncidentId(), j.relatedRunId(), j.createdAt(), claimedAt,
@@ -274,7 +276,7 @@ class DrillWorkerTest {
     }
 
     @Test
-    @DisplayName("停止必先进恢复路径的零副作用面：受理即取消 → QUEUED→CANCELLED 直接收口")
+    @DisplayName("停止必先进恢复路径的零副作用面：受理即取消 → 领取落 PRECHECK 后取消收口")
     void stopBeforeInjectionCancels() {
         DrillJob job = enqueue(true);
         worker(new DrillInjectionPort.NotImplemented(), true).tick();

@@ -213,7 +213,7 @@ class PostgresDrillIT extends PostgresITBase {
     }
 
     @Test
-    @DisplayName("领取 CAS：SKIP LOCKED 单语句领取后第二领取空手（多 worker 恰一人领到）")
+    @DisplayName("领取 CAS：SKIP LOCKED 单语句领取即迁移 PRECHECK，第二领取空手（多 worker 恰一人领到）")
     void claimSkipLocked() {
         DrillJob job = job("arena-195", "it-w1");
         controlJobs.insert(job);
@@ -221,9 +221,13 @@ class PostgresDrillIT extends PostgresITBase {
         assertThat(claimed).isPresent();
         assertThat(claimed.get().workerId()).isEqualTo("worker-a");
         assertThat(claimed.get().revision()).isEqualTo(1);
-        // 已 CLAIMED（非 QUEUED）→ 下一领取空手
+        // BA-114：领取语句提交时行已落 PRECHECK（领取即迁移，与 EVAL 同律）
+        assertThat(claimed.get().state()).isEqualTo(DrillJob.State.PRECHECK);
+        assertThat(evalJobs.findById(job.id()).orElseThrow().state())
+                .isEqualTo(DrillJob.State.PRECHECK);
+        // 已离开 QUEUED 可见集 → 下一领取空手（修复前此处被重复领取，revision 1→2）
         assertThat(evalJobs.claimNext("worker-b", Instant.now())).isEmpty();
-        // revision 对账：旧 revision 推进失败（租约过期 ≠ 可重做）
+        // revision 对账：旧 revision/旧相位推进失败（租约过期 ≠ 可重做）
         assertThat(evalJobs.advance(job.id(), 0, DrillJob.State.QUEUED,
                 DrillJob.State.PRECHECK, Instant.now())).isFalse();
     }

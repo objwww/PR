@@ -24,7 +24,9 @@ import java.util.UUID;
  *   <li>eval_app（worker）：claimNext/advance/finalize/requeue/findOrphanedClaims——
  *       列级 update 授权内，正文列零开口。</li>
  * </ul>
- * claim/推进全部单语句 CAS（FOR UPDATE SKIP LOCKED + state/revision 双对账）。
+ * claim/推进全部单语句 CAS（FOR UPDATE SKIP LOCKED + state/revision 双对账）；
+ * 领取即相位迁移 QUEUED→PRECHECK（BA-114），「先标记租约、后迁移状态」的
+ * 两语句形已禁用（窗口期双领实证）。
  */
 public class PostgresDrillJobRepository implements DrillJobRepository {
 
@@ -52,10 +54,16 @@ public class PostgresDrillJobRepository implements DrillJobRepository {
             )
             """;
 
-    /** 领取 = 单语句 CAS：锁定并标记最老 QUEUED；SKIP LOCKED 防多 worker 撞同一行 */
+    /**
+     * 领取 = 单语句 CAS 且领取即相位迁移 QUEUED→PRECHECK（BA-114，与 EVAL
+     * claimNextLaunch「领取即 CLAIMED」同律）：行在领取提交的同一语句内离开
+     * QUEUED 可见集，第二领取必然空手——不得退回「先标记租约、后迁移状态」的
+     * 两语句形（窗口期内行保持 QUEUED 可被重复领取，195 探针实证 revision 1→2）。
+     * SKIP LOCKED 防多 worker 撞同一行；租约 = worker_id/claimed_at/revision。
+     */
     private static final String CLAIM_SQL = """
-            UPDATE drill_job SET worker_id = :worker, claimed_at = :at,
-                revision = revision + 1, updated_at = :at
+            UPDATE drill_job SET state = 'PRECHECK', worker_id = :worker,
+                claimed_at = :at, revision = revision + 1, updated_at = :at
             WHERE id = (
                 SELECT id FROM drill_job
                 WHERE state = 'QUEUED'
