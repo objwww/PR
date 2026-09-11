@@ -88,7 +88,9 @@ class PublicationWinnerGateTest {
                 new IncidentProjector(stores.events, stores.incidents, stores.runs,
                         stores.tasks, new com.objwww.pr.control.alert.domain.service.AlertIdentityFactory(),
                         new com.objwww.pr.control.alert.domain.service.DeferredPolicy(1000),
-                        SlaPolicy.defaults(), clock, nativeRouter),
+                        SlaPolicy.defaults(), clock, nativeRouter,
+                        new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                        stores.categories),
                 org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
                 clock, "intake-owner", Duration.ofMinutes(2), Duration.ofSeconds(30),
                 Duration.ofSeconds(10), Duration.ofSeconds(1));

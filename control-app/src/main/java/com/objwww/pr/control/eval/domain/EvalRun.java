@@ -20,7 +20,8 @@ public record EvalRun(UUID id,
                       Instant finishedAt,
                       ScenarioMetrics.Snapshot summary,
                       SymptomCounts symptomCounts,
-                      Digest baselineReportDigest) {
+                      Digest baselineReportDigest,
+                      String terminalReason) {
 
     public enum EvalRunState {RUNNING, SUCCEEDED, FAILED}
 
@@ -43,21 +44,37 @@ public record EvalRun(UUID id,
     /** 开跑行：仅 RUNNING 形态可插入（聚合列全空，DB 生命周期约束兜底） */
     public static EvalRun running(UUID id, EvalRunMetadata metadata, Instant startedAt) {
         return new EvalRun(id, metadata, EvalRunState.RUNNING, startedAt, null,
-                null, null, null);
+                null, null, null, null);
     }
 
-    /** 终态行：SUCCEEDED 必带全套快照；FAILED 允许无快照（中途夭折） */
+    /** 终态行（无卡因形态，兼容旧调用面）：SUCCEEDED 必带全套快照；FAILED 允许无快照 */
     public static EvalRun terminal(UUID id, EvalRunMetadata metadata, EvalRunState state,
                                    Instant startedAt, Instant finishedAt,
                                    ScenarioMetrics.Snapshot summary,
                                    SymptomCounts counts, Digest baselineReportDigest) {
+        return terminal(id, metadata, state, startedAt, finishedAt,
+                summary, counts, baselineReportDigest, null);
+    }
+
+    /**
+     * 终态行（EV-04 卡因面）：SUCCEEDED 必带全套快照；FAILED 允许无快照（中途夭折）。
+     * terminalReason = FAILED 的失败/取消原因（EU13 可读面）；SUCCEEDED 不得带卡因。
+     */
+    public static EvalRun terminal(UUID id, EvalRunMetadata metadata, EvalRunState state,
+                                   Instant startedAt, Instant finishedAt,
+                                   ScenarioMetrics.Snapshot summary,
+                                   SymptomCounts counts, Digest baselineReportDigest,
+                                   String terminalReason) {
         if (state == EvalRunState.RUNNING) {
             throw new IllegalArgumentException("terminal 不接受 RUNNING");
         }
         if (state == EvalRunState.SUCCEEDED && (summary == null || counts == null)) {
             throw new IllegalArgumentException("SUCCEEDED 必带指标快照与症状计数");
         }
+        if (state == EvalRunState.SUCCEEDED && terminalReason != null) {
+            throw new IllegalArgumentException("SUCCEEDED 不得携带 terminal_reason");
+        }
         return new EvalRun(id, metadata, state, startedAt, finishedAt,
-                summary, counts, baselineReportDigest);
+                summary, counts, baselineReportDigest, terminalReason);
     }
 }

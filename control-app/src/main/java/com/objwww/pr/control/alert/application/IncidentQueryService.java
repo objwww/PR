@@ -66,13 +66,15 @@ public class IncidentQueryService {
                                          long distinctEventCount, long notificationCount,
                                          UUID currentRcaRunId, String runState,
                                          String waitingReason,
+                                         String category, String categorySource,
+                                         IncidentQueryReader.CategoryDetail categoryDetail,
                                          Map<String, Object> labels,
                                          Map<String, Object> annotations,
                                          List<TimelineEvent> timeline, RunBadge run) {
     }
 
     public record FacetsResponse(Map<String, Long> status, Map<String, Long> severity,
-                                 Map<String, Long> service) {
+                                 Map<String, Long> service, Map<String, Long> category) {
     }
 
     public record CasesStats(long open, long unassigned, long overdue) {
@@ -91,11 +93,12 @@ public class IncidentQueryService {
 
     // ------------------------------------------------------------------ 列表 / 详情 / facet / 统计条
 
-    /** status 非法或 cursor 无法解析 → IllegalArgumentException（controller 400 面） */
+    /** status/category 非法或 cursor 无法解析 → IllegalArgumentException（controller 400 面） */
     public IncidentListResponse list(String status, String severity, String service,
-                                     String q, String cursor, int limit) {
+                                     String q, String category, String cursor, int limit) {
         validateStatus(status);
-        IncidentPage page = reader.listIncidents(status, severity, service, q,
+        validateCategory(category);
+        IncidentPage page = reader.listIncidents(status, severity, service, q, category,
                 parseCursor(cursor), limit);
         String nextCursor = null;
         if (page.hasMore() && !page.items().isEmpty()) {
@@ -109,7 +112,7 @@ public class IncidentQueryService {
         return reader.detail(incidentId).map(IncidentQueryService::flatten);
     }
 
-    /** status 维度种子 FIRING/RESOLVED=0（契约示例双键恒在）；severity/service 只出现实测键 */
+    /** status 维度种子 FIRING/RESOLVED=0（契约示例双键恒在）；severity/service/category 只出现实测键 */
     public FacetsResponse facets(String status, String service, String q) {
         validateStatus(status);
         Facets facets = reader.facets(status, service, q);
@@ -117,7 +120,8 @@ public class IncidentQueryService {
         statusFacet.put("FIRING", 0L);
         statusFacet.put("RESOLVED", 0L);
         statusFacet.putAll(facets.status());
-        return new FacetsResponse(statusFacet, facets.severity(), facets.service());
+        return new FacetsResponse(statusFacet, facets.severity(), facets.service(),
+                facets.category());
     }
 
     public IncidentSummary summary() {
@@ -174,7 +178,8 @@ public class IncidentQueryService {
                 row.service(), row.severity(), row.status(), row.episodeStartedAt(),
                 row.lastEventAt(), row.resolvedAt(), row.receivedCount(),
                 row.distinctEventCount(), row.notificationCount(), row.currentRcaRunId(),
-                row.runState(), row.waitingReason(), detail.labels(), detail.annotations(),
+                row.runState(), row.waitingReason(), row.category(), row.categorySource(),
+                detail.categoryDetail(), detail.labels(), detail.annotations(),
                 detail.timeline(), detail.run());
     }
 
@@ -183,6 +188,16 @@ public class IncidentQueryService {
                 && !"FIRING".equals(status) && !"RESOLVED".equals(status)) {
             throw new IllegalArgumentException("status 必为 FIRING/RESOLVED: " + status);
         }
+    }
+
+    /** UX-01：category 过滤词表校验（与 V82 CHECK / IncidentCategory 枚举同词表） */
+    private static void validateCategory(String category) {
+        if (category == null || category.isBlank()) {
+            return;
+        }
+        com.objwww.pr.control.alert.domain.classification.IncidentCategory.parse(category)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "category 非法（词表见 IncidentCategory）: " + category));
     }
 
     private static KeysetCursor parseCursor(String cursor) {

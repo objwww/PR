@@ -62,6 +62,8 @@ public abstract class PostgresITBase {
             "rca_report", "external_invocation_ledger", "scheduler_slot", "rca_task_edge",
             "rca_investigation_result", "rca_tool_call", "report_publication", "notify_outbox",
             "eval_case_result", "eval_run",
+            // V80（EV-03 阶段事件）+ V81（EV-04 生命周期命令）——BA-41 同律
+            "eval_phase_event", "eval_run_command",
             // V20~V29（AM5）：rca_event 为 V28 分区父表，TRUNCATE 级联全部分区
             "dataset_version", "case_version", "case_family_partition",
             "golden_candidate", "golden_review_event",
@@ -85,7 +87,15 @@ public abstract class PostgresITBase {
             "change_event",
             // V43（AM7 值班八表）——BA-41 同律：PostgresDutyStoreIT 起成为真 PG 消费者
             "duty_delivery", "duty_notification", "duty_layer_member", "duty_layer",
-            "duty_override", "duty_channel", "duty_member", "duty_schedule");
+            "duty_override", "duty_channel", "duty_member", "duty_schedule",
+            // V82（UX-01 分类 override 审计）——BA-41 同律
+            "incident_category_override",
+            // V83（UX-02 仿真机器人两表）——BA-41 同律
+            "chat_message", "chat_session",
+            // V85（EV-07 对比结论落档）——BA-41 同律
+            "eval_comparison",
+            // V86（DR-02 演练作业链两表）——BA-41 同律（事件表引用作业表，序敏感）
+            "drill_event", "drill_job");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

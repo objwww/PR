@@ -118,9 +118,12 @@ public class SecurityConfig {
                         // M7-15：值班面归 operator（浏览器会话与 machine:operator-line 同权；
                         // 195 窄反代只放行 snapshot/notifications 两条到 127 adapter）
                         // UI-1：只读查询投影面 /api/v1/** 同归 operator（全 GET 零写面）；
-                        // UI-5/UI-6：/api/eval/** 与 /api/agent-ops/** 同为只读投影面，同权
+                        // UI-5/UI-6：/api/eval/** 与 /api/agent-ops/** 同为只读投影面，同权；
+                        // DR-02：/api/drills/** 演练读写面同归 operator（写面状态机推进
+                        // 在 DB 授权层仍零开口——control_app 只增作业与停止两列）
                         .requestMatchers("/api/rca-runs/**", "/api/cases/**", "/api/duty/**",
-                                "/api/v1/**", "/api/eval/**", "/api/agent-ops/**")
+                                "/api/v1/**", "/api/eval/**", "/api/agent-ops/**",
+                                "/api/drills/**")
                         .hasRole("OPERATOR")
                         .anyRequest().denyAll())
                 .formLogin(form -> form

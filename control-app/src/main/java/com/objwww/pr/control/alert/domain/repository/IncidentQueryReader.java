@@ -22,12 +22,15 @@ public interface IncidentQueryReader {
     record KeysetCursor(Instant at, UUID id) {
     }
 
-    /** 列表/详情共用的 incident 投影行（labels 三值 + 当前 run 态已展开） */
+    /** 列表/详情共用的 incident 投影行（labels 三值 + 当前 run 态已展开）；
+     *  UX-01：category/categorySource = V82 生成列生效面（UNCLASSIFIED 如实返回，
+     *  前端按三态惯例显示"未分类"） */
     record IncidentRow(UUID incidentId, String incidentKey, String alertname, String service,
                        String severity, String status, Instant episodeStartedAt,
                        Instant lastEventAt, Instant resolvedAt, long receivedCount,
                        long distinctEventCount, long notificationCount,
-                       UUID currentRcaRunId, String runState, String waitingReason) {
+                       UUID currentRcaRunId, String runState, String waitingReason,
+                       String category, String categorySource) {
     }
 
     /** 一页 + 过滤后总数；hasMore = 取到 limit+1 行（调用方据此发 nextCursor） */
@@ -44,15 +47,24 @@ public interface IncidentQueryReader {
     record RunBadge(UUID runId, String state, Instant startedAt, Instant finishedAt) {
     }
 
-    /** 详情投影：行 + 最新事件 labels/annotations 全文 + 全量时间线 + 当前 run */
-    record IncidentDetail(IncidentRow row, Map<String, Object> labels,
-                          Map<String, Object> annotations, List<TimelineEvent> timeline,
-                          RunBadge run) {
+    /** UX-01 分类详情面：规则命中依据（ruleId/ruleVersion/classifiedAt，无概率字段）
+     *  + override 审计快照（无 override 时四列全 null） */
+    record CategoryDetail(String ruleId, String ruleVersion, Instant classifiedAt,
+                          String overrideActor, String overrideReason, Instant overrideAt,
+                          Integer overrideRevision) {
     }
 
-    /** facet 计数（键=原始 label 值；labels 无键的行不进桶） */
+    /** 详情投影：行 + 最新事件 labels/annotations 全文 + 全量时间线 + 当前 run
+     *  + UX-01 分类详情（categoryDetail 恒非 null，列可 null） */
+    record IncidentDetail(IncidentRow row, Map<String, Object> labels,
+                          Map<String, Object> annotations, List<TimelineEvent> timeline,
+                          RunBadge run, CategoryDetail categoryDetail) {
+    }
+
+    /** facet 计数（键=原始 label 值；labels 无键的行不进桶）；
+     *  UX-01：category 维按生效面分桶（当前 status/service/q 过滤口径下计数） */
     record Facets(Map<String, Long> status, Map<String, Long> severity,
-                  Map<String, Long> service) {
+                  Map<String, Long> service, Map<String, Long> category) {
     }
 
     /**
@@ -83,10 +95,11 @@ public interface IncidentQueryReader {
 
     /**
      * 列表页（cursor=null 首页；各过滤参数 null=不过滤；q 对 incident_key 与最新
-     * 事件 alertname 做 ILIKE）。实现方内部取 limit+1 判 hasMore。
+     * 事件 alertname 做 ILIKE；UX-01：category 按生效面等值过滤）。
+     * 实现方内部取 limit+1 判 hasMore。
      */
     IncidentPage listIncidents(String status, String severity, String service, String q,
-                               KeysetCursor cursor, int limit);
+                               String category, KeysetCursor cursor, int limit);
 
     /** 详情；未知 id → empty（controller 404 面） */
     Optional<IncidentDetail> detail(UUID incidentId);

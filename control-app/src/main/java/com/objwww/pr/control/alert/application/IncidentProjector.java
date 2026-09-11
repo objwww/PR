@@ -10,7 +10,10 @@ import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
+import com.objwww.pr.control.alert.domain.classification.Classification;
+import com.objwww.pr.control.alert.domain.classification.IncidentClassifier;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
+import com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository;
 import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
@@ -66,10 +69,14 @@ public class IncidentProjector {
     private final SlaPolicy sla;
     private final AlertClock clock;
     private final CanaryRouter canaryRouter;
+    private final IncidentClassifier classifier;
+    private final IncidentCategoryRepository categories;
 
     /** M5-10：CanaryRouter 注入构造（新 run 铸造点路由决策 + 路由四列落行）。
      * M6-07：无 router 便捷构造（默认 holmesOnly）已删——HOLMES 投影不铸 run 后
-     * 该默认等价"永不铸 run"陷阱（C-77）；路由依赖显式必填（fail-closed 装配律）。 */
+     * 该默认等价"永不铸 run"陷阱（C-77）；路由依赖显式必填（fail-closed 装配律）。
+     * UX-01：classifier/categories 显式必填（同律）——分类是投影内事务的一部分，
+     * 只写 rule_* 列（override_* 不在其 SQL 内，人工值不可能被规则覆盖）。 */
     public IncidentProjector(AlertEventRepository events,
                              IncidentRepository incidents,
                              RcaRunRepository runs,
@@ -78,7 +85,9 @@ public class IncidentProjector {
                              DeferredPolicy deferredPolicy,
                              SlaPolicy sla,
                              AlertClock clock,
-                             CanaryRouter canaryRouter) {
+                             CanaryRouter canaryRouter,
+                             IncidentClassifier classifier,
+                             IncidentCategoryRepository categories) {
         this.events = Objects.requireNonNull(events);
         this.incidents = Objects.requireNonNull(incidents);
         this.runs = Objects.requireNonNull(runs);
@@ -88,6 +97,8 @@ public class IncidentProjector {
         this.sla = Objects.requireNonNull(sla);
         this.clock = Objects.requireNonNull(clock);
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
+        this.classifier = Objects.requireNonNull(classifier);
+        this.categories = Objects.requireNonNull(categories);
     }
 
     /**
@@ -151,10 +162,20 @@ public class IncidentProjector {
 
         // 去重预判（incident 行锁串行化同 key 投影，预判与追加之间无竞态；uq 为最终防线）
         boolean duplicate = events.existsByDedup(alert.fingerprint(), payloadHash, alert.startsAt());
+        // UX-01：规则重分类时机 = 非重复且未迟出 episode 水印（晚到事件只计数，
+        // 不从旧材料刷新分类面；重复通知 labels 与已处理事件相同，重分类无意义）
+        boolean reclassify = !duplicate
+                && (firstSeen || !alert.startsAt().isBefore(incident.episodeStartedAt()));
 
         MergeResult merged = merge(incident, alert, invHash, duplicate, firstSeen, now,
                 activeIncidents, queuedTasks);
         incidents.update(merged.incident());
+
+        if (reclassify) {
+            Classification classification = classifier.classify(alert.labels());
+            categories.applyRuleClassification(incident.id(), classification.category(),
+                    classification.ruleId(), classification.ruleVersion(), now);
+        }
 
         if (!duplicate) {
             // generation 取 merge 后的 episode 归属（RESOLVED→FIRING 再现事件属于新 episode）

@@ -187,6 +187,17 @@ class EvalBatchRunnerTest {
         }
 
         @Override
+        public boolean applyLaunchIdentity(UUID runId, String displayName, String mode,
+                                           String launchPlanJson) {
+            return true;
+        }
+
+        @Override
+        public boolean updateRecoveryState(UUID runId, String recoveryState) {
+            return true;
+        }
+
+        @Override
         public boolean insertCaseResult(EvalCaseResult result) {
             String key = result.evalRunId() + "/" + result.scenarioId() + "/"
                     + result.roundNo();

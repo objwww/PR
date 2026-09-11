@@ -41,7 +41,9 @@ class ExA4bIncidentProjectorTest {
     private IncidentProjector projector(boolean canaryWilling) {
         return new IncidentProjector(stores.events, stores.incidents, stores.runs,
                 stores.tasks, identity, new DeferredPolicy(1), SlaPolicy.defaults(),
-                () -> now, router(canaryWilling));
+                () -> now, router(canaryWilling),
+                new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                stores.categories);
     }
 
     /** 路由假件：willing=NATIVE（BUCKETED_NATIVE），否则 HOLMES 意愿（不铸 run） */

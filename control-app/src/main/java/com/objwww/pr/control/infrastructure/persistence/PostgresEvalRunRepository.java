@@ -64,7 +64,8 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 conditional_accuracy = :conditionalAccuracy,
                 end_to_end_hit_rate = :endToEndHitRate,
                 unresolved_rate = :unresolvedRate,
-                baseline_report_digest = :baselineReportDigest
+                baseline_report_digest = :baselineReportDigest,
+                terminal_reason = :terminalReason
             WHERE id = :id AND state = 'RUNNING'
             """;
 
@@ -158,7 +159,31 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 .param("endToEndHitRate", s == null ? null : s.endToEndHitRate())
                 .param("unresolvedRate", s == null ? null : s.unresolvedRate())
                 .param("baselineReportDigest", hash(terminal.baselineReportDigest()))
+                .param("terminalReason", terminal.terminalReason())
                 .param("id", terminal.id())
+                .update() > 0;
+    }
+
+    @Override
+    public boolean applyLaunchIdentity(UUID runId, String displayName, String mode,
+                                       String launchPlanJson) {
+        return jdbc.sql("""
+                        UPDATE eval_run SET display_name = :displayName, mode = :mode,
+                            launch_plan = CAST(:launchPlan AS jsonb)
+                        WHERE id = :id
+                        """)
+                .param("displayName", displayName)
+                .param("mode", mode)
+                .param("launchPlan", launchPlanJson)
+                .param("id", runId)
+                .update() > 0;
+    }
+
+    @Override
+    public boolean updateRecoveryState(UUID runId, String recoveryState) {
+        return jdbc.sql("UPDATE eval_run SET recovery_state = :state WHERE id = :id")
+                .param("state", recoveryState)
+                .param("id", runId)
                 .update() > 0;
     }
 
@@ -254,7 +279,8 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 finishedAt == null ? null : finishedAt.toInstant(),
                 summary,
                 counts,
-                digest(rs.getString("baseline_report_digest")));
+                digest(rs.getString("baseline_report_digest")),
+                rs.getString("terminal_reason"));
     }
 
     private EvalCaseResult mapCase(ResultSet rs, int rowNum) throws SQLException {

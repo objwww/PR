@@ -403,6 +403,22 @@ public class PersistenceConfig {
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
 
+    /** UX-01：分类写面端口（incident 规则列/override 列 + incident_category_override 审计表） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresIncidentCategoryRepository(jdbc);
+    }
+
+    /** UX-01：人工 override 命令服务（审计同事务；HTTP 面 = IncidentCategoryCommandController） */
+    @Bean
+    public com.objwww.pr.control.alert.application.CategoryOverrideService categoryOverrideService(
+            com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.CategoryOverrideService(
+                incidentCategoryRepository, tx, java.time.Instant::now);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader(
             JdbcClient jdbc, ObjectMapper objectMapper) {
@@ -436,6 +452,89 @@ public class PersistenceConfig {
                 evalQueryReader, objectMapper);
     }
 
+    // ---------------- EV-04 评测发起/取消命令面（POST /api/eval/**；V81 授权面——control_app 对 eval_run_command 只增不查改，eval_run 仍零写） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
+            evalRunCommandRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalRunCommandRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalCommandService evalCommandService(
+            com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
+                    evalRunCommandRepository,
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalCommandService(
+                evalRunCommandRepository, evalQueryReader, objectMapper);
+    }
+
+    // ---------------- EV-07 配对工作台（GET /api/eval/compare 读面 + POST /api/eval/comparisons 落档；V85 授权面——control_app 对 eval_comparison 只增读） ----------------
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+            evalComparisonRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalComparisonRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalCompareService evalCompareService(
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+                    evalComparisonRepository,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalCompareService(
+                evalQueryReader, evalComparisonRepository, objectMapper);
+    }
+
+    // ---------------- DR-02 故障演练作业链（/api/drills 读写面；V86 授权面——control_app 对 drill_job 只增 + 停止两列，状态机推进零开口） ----------------
+
+    /** 场景模板目录（发布展示 DTO 面；drill-templates.yml 随 jar 封装，GT 零携带） */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillTemplateCatalog
+            drillTemplateCatalog(
+            org.springframework.core.io.ResourceLoader loader,
+            @Value("${app.drill.template-path:classpath:drill/drill-templates.yml}")
+            String path) throws java.io.IOException {
+        try (var in = loader.getResource(path).getInputStream()) {
+            return com.objwww.pr.control.drill.application.DrillTemplateCatalog.load(in);
+        }
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+            drillJobRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillJobRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+            drillEventRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillEventRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillJobService drillJobService(
+            com.objwww.pr.control.drill.domain.repository.DrillJobRepository
+                    drillJobRepository,
+            com.objwww.pr.control.drill.domain.repository.DrillEventRepository
+                    drillEventRepository,
+            com.objwww.pr.control.drill.application.DrillTemplateCatalog
+                    drillTemplateCatalog,
+            ObjectMapper objectMapper,
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
+        return new com.objwww.pr.control.drill.application.DrillJobService(
+                drillJobRepository, drillEventRepository, drillTemplateCatalog,
+                objectMapper,
+                java.util.Arrays.stream(targetEnvs.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList());
+    }
+
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------
 
     @Bean
@@ -449,6 +548,37 @@ public class PersistenceConfig {
             com.objwww.pr.control.ops.domain.repository.AgentOpsReader agentOpsReader) {
         return new com.objwww.pr.control.ops.application.AgentOpsSummaryService(
                 agentOpsReader, java.time.Instant::now);
+    }
+
+    // ---------------- UX-02 值班仿真机器人（/api/v1/duty-bot/**；V83 授权面——control_app 只增读） ----------------
+
+    /** 仿真会话/消息存储（V83 chat_session/chat_message，insert-only） */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.domain.DutyBotStore dutyBotStore(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresDutyBotStore(
+                jdbc, objectMapper);
+    }
+
+    /** 通知 outbox 只读状态面（V9 既有 SELECT 授权，零新授权） */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.domain.NotifyStatusReader notifyStatusReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifyStatusReader(jdbc);
+    }
+
+    /** 对话服务：DutyStore（值班快照）+ IncidentQueryReader（告警投影）复用既有口径，不新造 */
+    @Bean
+    public com.objwww.pr.control.ops.dutybot.application.DutyBotService dutyBotService(
+            com.objwww.pr.control.ops.dutybot.domain.DutyBotStore dutyBotStore,
+            com.objwww.pr.control.ops.duty.domain.DutyStore dutyStore,
+            com.objwww.pr.control.alert.domain.repository.IncidentQueryReader incidentQueryReader,
+            com.objwww.pr.control.ops.dutybot.domain.NotifyStatusReader notifyStatusReader,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.duty-bot.ops-zone:Asia/Shanghai}") String opsZone) {
+        return new com.objwww.pr.control.ops.dutybot.application.DutyBotService(
+                dutyBotStore, dutyStore, incidentQueryReader, notifyStatusReader, tx,
+                java.time.Instant::now, java.time.ZoneId.of(opsZone));
     }
 
     // ---------------- AM5 命令域（V27，M5-14 装配；HTTP 面 = alert/interfaces RunCommandController） ----------------

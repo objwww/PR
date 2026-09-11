@@ -60,7 +60,7 @@ class IncidentQueryServiceTest {
                 7, true);
 
         IncidentQueryService.IncidentListResponse out =
-                service.list("FIRING", "critical", "order-arena", "oom", null, 50);
+                service.list("FIRING", "critical", "order-arena", "oom", "INFRA", null, 50);
 
         assertThat(out.total()).isEqualTo(7);
         assertThat(out.nextCursor()).isEqualTo(lastEvent + "/" + id);
@@ -69,6 +69,7 @@ class IncidentQueryServiceTest {
         assertThat(reader.lastSeverity).isEqualTo("critical");
         assertThat(reader.lastService).isEqualTo("order-arena");
         assertThat(reader.lastQ).isEqualTo("oom");
+        assertThat(reader.lastCategory).isEqualTo("INFRA");
         assertThat(reader.lastLimit).isEqualTo(50);
         assertThat(reader.lastCursor).isNull();
     }
@@ -76,7 +77,7 @@ class IncidentQueryServiceTest {
     @Test
     void listWithoutMorePagesEmitsNullCursor() {
         reader.page = new IncidentPage(List.of(row(UUID.randomUUID(), NOW)), 1, false);
-        assertThat(service.list(null, null, null, null, null, 50).nextCursor()).isNull();
+        assertThat(service.list(null, null, null, null, null, null, 50).nextCursor()).isNull();
     }
 
     @Test
@@ -85,36 +86,55 @@ class IncidentQueryServiceTest {
         UUID id = UUID.randomUUID();
         reader.page = new IncidentPage(List.of(), 0, false);
 
-        service.list(null, null, null, null, at + "/" + id, 50);
+        service.list(null, null, null, null, null, at + "/" + id, 50);
 
         assertThat(reader.lastCursor).isEqualTo(new KeysetCursor(at, id));
     }
 
     @Test
     void malformedCursorAndBadStatusAreRejected() {
-        assertThatThrownBy(() -> service.list(null, null, null, null, "garbage", 50))
+        assertThatThrownBy(() -> service.list(null, null, null, null, null, "garbage", 50))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.list(null, null, null, null,
+        assertThatThrownBy(() -> service.list(null, null, null, null, null,
                 "2026-09-08T01:02:03Z/not-a-uuid", 50))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.list("firing", null, null, null, null, 50))
+        assertThatThrownBy(() -> service.list("firing", null, null, null, null, null, 50))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("FIRING/RESOLVED");
+    }
+
+    /** UX-01：category 过滤词表校验（非法词 400 面；合法词透传端口） */
+    @Test
+    void categoryFilterIsValidatedAgainstVocabulary() {
+        reader.page = new IncidentPage(List.of(), 0, false);
+        assertThatThrownBy(() -> service.list(null, null, null, null, "NOT_A_CATEGORY",
+                null, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("category 非法");
+        service.list(null, null, null, null, "UNCLASSIFIED", null, 50);
+        assertThat(reader.lastCategory).isEqualTo("UNCLASSIFIED");
     }
 
     // ------------------------------------------------------------------ facet / 统计条
 
     @Test
     void facetsSeedStatusBucketsAndPassThroughLabelFacets() {
+        Map<String, Long> categoryFacet = new LinkedHashMap<>();
+        categoryFacet.put("INFRA", 2L);
+        categoryFacet.put("UNCLASSIFIED", 1L);
         reader.facets = new Facets(Map.of("FIRING", 3L),
                 new LinkedHashMap<>(Map.of("critical", 2L)),
-                new LinkedHashMap<>(Map.of("order-arena", 3L)));
+                new LinkedHashMap<>(Map.of("order-arena", 3L)),
+                categoryFacet);
 
         IncidentQueryService.FacetsResponse out = service.facets(null, null, null);
 
         assertThat(out.status()).containsEntry("FIRING", 3L).containsEntry("RESOLVED", 0L);
         assertThat(out.severity()).containsExactly(Map.entry("critical", 2L));
         assertThat(out.service()).containsExactly(Map.entry("order-arena", 3L));
+        // UX-01：category 维原样透传（生效面分桶，含 UNCLASSIFIED）
+        assertThat(out.category()).containsExactly(Map.entry("INFRA", 2L),
+                Map.entry("UNCLASSIFIED", 1L));
     }
 
     @Test
@@ -175,7 +195,7 @@ class IncidentQueryServiceTest {
     private static IncidentRow row(UUID id, Instant lastEventAt) {
         return new IncidentRow(id, "key-" + id, "HighCpu", "order-arena", "critical",
                 "FIRING", NOW.minusSeconds(3600), lastEventAt, null, 10, 2, 1,
-                UUID.randomUUID(), "RUNNING", null);
+                UUID.randomUUID(), "RUNNING", null, "INFRA", "RULE");
     }
 
     private static OperatorCase operatorCase(String owner, Instant resolveDue) {
@@ -191,7 +211,7 @@ class IncidentQueryServiceTest {
 
     private static final class FakeReader implements IncidentQueryReader {
         IncidentPage page = new IncidentPage(List.of(), 0, false);
-        Facets facets = new Facets(Map.of(), Map.of(), Map.of());
+        Facets facets = new Facets(Map.of(), Map.of(), Map.of(), Map.of());
         IncidentSummary summary = new IncidentSummary(0, Map.of(), 0, 0, 0, null);
         AlertOverview overview = new AlertOverview(0, new RunsStats(0, 0, 0, 0, null),
                 List.of());
@@ -199,17 +219,20 @@ class IncidentQueryServiceTest {
         String lastSeverity;
         String lastService;
         String lastQ;
+        String lastCategory;
         KeysetCursor lastCursor;
         int lastLimit;
         Instant lastSince;
 
         @Override
         public IncidentPage listIncidents(String status, String severity, String service,
-                                          String q, KeysetCursor cursor, int limit) {
+                                          String q, String category, KeysetCursor cursor,
+                                          int limit) {
             this.lastStatus = status;
             this.lastSeverity = severity;
             this.lastService = service;
             this.lastQ = q;
+            this.lastCategory = category;
             this.lastCursor = cursor;
             this.lastLimit = limit;
             return page;
