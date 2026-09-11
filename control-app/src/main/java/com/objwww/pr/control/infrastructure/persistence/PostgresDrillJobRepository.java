@@ -52,7 +52,9 @@ public class PostgresDrillJobRepository implements DrillJobRepository {
             )
             """;
 
-    /** 领取 = 单语句 CAS：锁定并标记最老 QUEUED；SKIP LOCKED 防多 worker 撞同一行 */
+    /** 领取 = 单语句 CAS：锁定并标记最老 QUEUED；SKIP LOCKED 防多 worker 撞同一行。
+     *  RETURNING 后的空格不能写在 text block 行尾（编译期剥离，BA-123：拼成 RETURNINGid），
+     *  由块外 " " 显式补齐。 */
     private static final String CLAIM_SQL = """
             UPDATE drill_job SET worker_id = :worker, claimed_at = :at,
                 revision = revision + 1, updated_at = :at
@@ -62,7 +64,7 @@ public class PostgresDrillJobRepository implements DrillJobRepository {
                 ORDER BY created_at, id LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING """ + COLS;
+            RETURNING""" + " " + COLS;
 
     private final JdbcClient jdbc;
 

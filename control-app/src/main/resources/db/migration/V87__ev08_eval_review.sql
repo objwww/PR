@@ -73,8 +73,7 @@ create table review_assignment (
 );
 
 comment on table review_assignment is
-    'EV-08 评审任务：PENDING/IN_PROGRESS/SUBMITTED 三态 + 有界租约（超时惰性回收）'
-    || ' + revision CAS 锚（EU29 双人同领/同提交显式冲突）';
+    'EV-08 评审任务：PENDING/IN_PROGRESS/SUBMITTED 三态 + 有界租约（超时僵性回收） + revision CAS 锚（EU29 双人同领/同提交显式冲突）';
 comment on column review_assignment.revision is
     'CAS 锚：每次状态推进 +1；提交携带 expectedRevision 不符 = 409（租约被回收重领后旧持有者提交必撞）';
 
@@ -117,8 +116,7 @@ create table review_verdict (
 );
 
 comment on table review_verdict is
-    'EV-08 评审结果（insert-only）：评分/标签/理由 + 冻结 rubric 版本；'
-    || '重评分 = 新行不覆盖旧行（审计闭环；不覆盖原机器评分）';
+    'EV-08 评审结果（insert-only）：评分/标签/理由 + 冻结 rubric 版本；重评分 = 新行不覆盖旧行（审计闭环；不覆盖原机器评分）';
 
 create index ix_review_verdict_run_case on review_verdict(run_id, case_execution_id);
 
@@ -135,8 +133,7 @@ as $$
 $$;
 
 comment on function case_version_partition_counts() is
-    'EV-08 数据集读面 HOLDOUT 计数针孔：RLS 封存下只出 (版本,分区,计数) 聚合，'
-    || 'GT 原文与案例行内容永不进投影（函数 owner = 迁移身份，RLS BYPASS）';
+    'EV-08 数据集读面 HOLDOUT 计数针孔：RLS 封存下只出 (版本,分区,计数) 聚合，GT 原文与案例行内容永不进投影（函数 owner = 迁移身份，RLS BYPASS）';
 
 revoke all on function case_version_partition_counts() from public;
 grant execute on function case_version_partition_counts() to control_app;

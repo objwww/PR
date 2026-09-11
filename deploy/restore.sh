@@ -67,7 +67,8 @@ echo "[restore] 恢复完成，RTO=${RTO}s"
 # 5) 依赖完整性核验（每项独立打印，缺表即 FAIL 行——诚实输出而非吞错）
 q() { docker compose exec -T postgres psql -U postgres -d "$DB_NAME" -tA -c "$1"; }
 
-MIG_MAX="$(q "select coalesce(max(version),'(空)') from flyway_schema_history")" \
+# max(version) 对 varchar 是字典序（'9'>'88'）——cast 整数取真最高版（O09 实测纠正）
+MIG_MAX="$(q "select coalesce(max(version::bigint)::text,'(空)') from flyway_schema_history")" \
   || { echo "[restore] FAIL：flyway_schema_history 不可读"; exit 1; }
 echo "[restore] 迁移历史：最高版本 $MIG_MAX"
 

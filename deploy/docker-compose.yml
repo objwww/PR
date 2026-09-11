@@ -93,7 +93,9 @@ services:
     volumes:
       # 直挂 control-app 资源目录（单一事实源）：V1~V7 改动只改一处，杜绝部署副本漂移
       - ../control-app/src/main/resources/db/migration:/flyway/sql:ro
-    command: ["-connectRetries=30", "migrate"]
+    # outOfOrder（20260911 合并窗）：V88 已由 r7fix7 先行落库，合并版 V60~V64（EN）+V87（EV-08）
+    # 版本号低于当前 88——flyway 默认校验拒绝 resolved-not-applied，须显式放行乱序补齐
+    command: ["-connectRetries=30", "-outOfOrder=true", "migrate"]
     networks:
       - internal
     logging: *logging
