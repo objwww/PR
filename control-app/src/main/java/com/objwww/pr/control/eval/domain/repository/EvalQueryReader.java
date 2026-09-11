@@ -68,9 +68,19 @@ public interface EvalQueryReader {
     }
 
     /** 数据集版本投影（caseCount=case_version 行数；families=去重 scenario_family_id，
-     *  RLS 面下只计 control_app 可见的非 HOLDOUT 行） */
-    record DatasetRow(String version, String source, long caseCount, List<String> families,
-                      Instant createdAt) {
+     *  RLS 面下只计 control_app 可见的非 HOLDOUT 行；EV-08 起携带 name/sourceClass/
+     *  partitionClass 数据集头身份列——dataset_version 无 RLS，元数据面全可见） */
+    record DatasetRow(UUID datasetVersionId, String name, String version, String source,
+                      String sourceClass, String partitionClass, long caseCount,
+                      List<String> families, Instant createdAt) {
+    }
+
+    /**
+     * 分区计数行（EV-08；case_version_partition_counts() security definer 针孔）：
+     * 含 HOLDOUT 的真实计数——EV-08 卡"HOLDOUT 分区只出计数与元数据"的唯一来源；
+     * 只出 (版本,分区,计数) 聚合，GT 原文与案例行内容永不进投影。
+     */
+    record PartitionCountRow(UUID datasetVersionId, String partitionClass, long caseCount) {
     }
 
     /** runs 列表页（state=null 不过滤；cursor=null 首页）。实现方内部取 limit+1 判 hasMore */
@@ -86,6 +96,9 @@ public interface EvalQueryReader {
 
     /** 数据集版本全量（created_at DESC；数据集版本数为导入次数量级，不分页） */
     List<DatasetRow> listDatasets();
+
+    /** 全数据集分区计数（EV-08 HOLDOUT 计数针孔；单查询，不 N+1） */
+    List<PartitionCountRow> listPartitionCounts();
 
     // ------------------------------------------------------------------ EV-05 案例与证据
 

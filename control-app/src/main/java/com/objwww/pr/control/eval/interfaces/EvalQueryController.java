@@ -97,6 +97,16 @@ public class EvalQueryController {
         return query.datasets();
     }
 
+    /** EV-08 数据集详情（name+version 精确键；分区计数含 HOLDOUT 计数针孔 + rubric 版本表） */
+    @GetMapping("/datasets/{name}/{version}")
+    public ResponseEntity<?> datasetDetail(@PathVariable String name,
+                                           @PathVariable String version) {
+        return query.datasetDetail(name, version)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "数据集版本不存在")));
+    }
+
     /** EV-05 案例详情（双键定位；未知 run 或 case → 404） */
     @GetMapping("/runs/{runId}/cases/{caseExecutionId}")
     public ResponseEntity<?> caseDetail(@PathVariable String runId,

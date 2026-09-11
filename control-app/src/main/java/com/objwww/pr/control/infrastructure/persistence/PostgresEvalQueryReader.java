@@ -170,15 +170,18 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
 
     @Override
     public List<DatasetRow> listDatasets() {
-        // families = 该版本 case_version 去重族键（RLS 面下仅非 HOLDOUT 可见行入桶）
+        // families = 该版本 case_version 去重族键（RLS 面下仅非 HOLDOUT 可见行入桶）；
+        // name/source_class/partition_class = dataset_version 头身份列（无 RLS 全可见）
         return jdbc.sql("""
-                select d.version, d.source, d.created_at,
+                select d.id as dataset_version_id, d.name, d.version, d.source,
+                       d.source_class, d.partition_class, d.created_at,
                        count(c.id) as case_count,
                        array_agg(distinct c.scenario_family_id)
                            filter (where c.id is not null) as families
                 from dataset_version d
                 left join case_version c on c.dataset_version_id = d.id
-                group by d.id, d.version, d.source, d.created_at
+                group by d.id, d.name, d.version, d.source, d.source_class,
+                         d.partition_class, d.created_at
                 order by d.created_at desc, d.id desc
                 """)
                 .query((rs, i) -> {
@@ -190,10 +193,27 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         }
                     }
                     java.util.Collections.sort(families);
-                    return new DatasetRow(rs.getString("version"), rs.getString("source"),
+                    return new DatasetRow(
+                            rs.getObject("dataset_version_id", UUID.class),
+                            rs.getString("name"), rs.getString("version"),
+                            rs.getString("source"), rs.getString("source_class"),
+                            rs.getString("partition_class"),
                             rs.getLong("case_count"), List.copyOf(families),
                             rs.getTimestamp("created_at").toInstant());
                 }).list();
+    }
+
+    /** EV-08 HOLDOUT 计数针孔（security definer 函数；只出聚合计数三列） */
+    @Override
+    public List<PartitionCountRow> listPartitionCounts() {
+        return jdbc.sql("""
+                select dataset_version_id, partition_class, case_count
+                from case_version_partition_counts()
+                """)
+                .query((rs, i) -> new PartitionCountRow(
+                        rs.getObject("dataset_version_id", UUID.class),
+                        rs.getString("partition_class"), rs.getLong("case_count")))
+                .list();
     }
 
     // ------------------------------------------------------------------ EV-05 案例与证据

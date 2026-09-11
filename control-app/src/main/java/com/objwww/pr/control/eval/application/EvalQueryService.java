@@ -85,10 +85,13 @@ public class EvalQueryService {
 
     private final EvalQueryReader reader;
     private final ObjectMapper mapper;
+    private final EvalRubricRegistry rubrics;
 
-    public EvalQueryService(EvalQueryReader reader, ObjectMapper mapper) {
+    public EvalQueryService(EvalQueryReader reader, ObjectMapper mapper,
+                            EvalRubricRegistry rubrics) {
         this.reader = Objects.requireNonNull(reader, "reader");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.rubrics = Objects.requireNonNull(rubrics, "rubrics");
     }
 
     // ------------------------------------------------------------------ DTO（record，字段名即 JSON 契约）
@@ -156,7 +159,27 @@ public class EvalQueryService {
     public record EvalCaseListResponse(List<EvalCaseItem> items, String nextCursor) {
     }
 
-    public record DatasetListResponse(List<DatasetRow> items) {
+    /**
+     * 数据集列表项（EV-08 增强；§3.6 数据集列表）：名称/版本/来源/分区身份 +
+     * 案例计数。caseCount = RLS 可见行计数（非 HOLDOUT）；partitionCounts =
+     * 全分区真实计数（HOLDOUT 只出计数，security definer 针孔，GT 原文永不进
+     * 投影——EV-05 裁定同律）；rubricVersion = 当前生效评分细则版本（EV-08 卡
+     * "rubric 版本随数据集版本透出"）。旧字段（version/source/caseCount/families/
+     * createdAt）原样保留，存量序列化契约只增不改。
+     */
+    public record DatasetItem(String name, String version, String source,
+                              String sourceClass, String partitionClass,
+                              long caseCount, Map<String, Long> partitionCounts,
+                              List<String> families, String rubricVersion,
+                              Instant createdAt) {
+    }
+
+    public record DatasetListResponse(List<DatasetItem> items, Instant asOf) {
+    }
+
+    /** 数据集详情（EV-08）：列表项全量 + 已知 rubric 版本全表（冻结版本历史） */
+    public record DatasetDetailResponse(DatasetItem dataset,
+                                        List<String> knownRubricVersions, Instant asOf) {
     }
 
     // ------------------------------------------------------------------ EV-05 DTO（案例详情 / Run 证据汇总 / 受限日志比较）
@@ -326,10 +349,43 @@ public class EvalQueryService {
         return Optional.of(new EvalCaseListResponse(List.copyOf(items), nextCursor));
     }
 
-    // ------------------------------------------------------------------ datasets
+    // ------------------------------------------------------------------ datasets（EV-08 增强）
 
+    /** 数据集列表：RLS 可见计数 + 分区真实计数（HOLDOUT 只出计数）+ 当前 rubric 版本 */
     public DatasetListResponse datasets() {
-        return new DatasetListResponse(reader.listDatasets());
+        Map<UUID, Map<String, Long>> counts = partitionCounts();
+        List<DatasetItem> items = new ArrayList<>();
+        for (DatasetRow row : reader.listDatasets()) {
+            items.add(datasetItem(row, counts));
+        }
+        return new DatasetListResponse(List.copyOf(items), Instant.now());
+    }
+
+    /** 数据集详情（name+version 精确键——uq(name,version) 天然唯一）；未知 → empty（404 面） */
+    public Optional<DatasetDetailResponse> datasetDetail(String name, String version) {
+        Map<UUID, Map<String, Long>> counts = partitionCounts();
+        return reader.listDatasets().stream()
+                .filter(row -> row.name().equals(name) && row.version().equals(version))
+                .findFirst()
+                .map(row -> new DatasetDetailResponse(datasetItem(row, counts),
+                        rubrics.knownVersions(), Instant.now()));
+    }
+
+    /** 分区计数针孔单查询 → datasetVersionId 分桶（不 N+1） */
+    private Map<UUID, Map<String, Long>> partitionCounts() {
+        Map<UUID, Map<String, Long>> out = new LinkedHashMap<>();
+        for (EvalQueryReader.PartitionCountRow row : reader.listPartitionCounts()) {
+            out.computeIfAbsent(row.datasetVersionId(), k -> new TreeMap<>())
+                    .put(row.partitionClass(), row.caseCount());
+        }
+        return out;
+    }
+
+    private DatasetItem datasetItem(DatasetRow row, Map<UUID, Map<String, Long>> counts) {
+        return new DatasetItem(row.name(), row.version(), row.source(), row.sourceClass(),
+                row.partitionClass(), row.caseCount(),
+                counts.getOrDefault(row.datasetVersionId(), Map.of()), row.families(),
+                rubrics.currentVersion(), row.createdAt());
     }
 
     // ------------------------------------------------------------------ EV-05 案例详情

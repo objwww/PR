@@ -405,9 +405,10 @@ public class PersistenceConfig {
     @Bean
     public com.objwww.pr.control.eval.application.EvalQueryService evalQueryService(
             com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.objwww.pr.control.eval.application.EvalRubricRegistry evalRubricRegistry) {
         return new com.objwww.pr.control.eval.application.EvalQueryService(
-                evalQueryReader, objectMapper);
+                evalQueryReader, objectMapper, evalRubricRegistry);
     }
 
     // ---------------- EV-04 评测发起/取消命令面（POST /api/eval/**；V81 授权面——control_app 对 eval_run_command 只增不查改，eval_run 仍零写） ----------------
@@ -446,6 +447,47 @@ public class PersistenceConfig {
             ObjectMapper objectMapper) {
         return new com.objwww.pr.control.eval.application.EvalCompareService(
                 evalQueryReader, evalComparisonRepository, objectMapper);
+    }
+
+    // ---------------- EV-08 数据集与人工评审（/api/eval/reviews/** 读写面；V87 授权面——control_app 对 review_assignment 只增 + 状态推进六列、review_verdict insert-only） ----------------
+
+    /** 评审 rubric 注册表（冻结版本锚；eval-rubrics.yml 随 jar 封装） */
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalRubricRegistry evalRubricRegistry(
+            org.springframework.core.io.ResourceLoader loader,
+            @Value("${app.eval.rubric-path:classpath:eval-rubrics.yml}")
+            String path) throws java.io.IOException {
+        try (var in = loader.getResource(path).getInputStream()) {
+            return com.objwww.pr.control.eval.application.EvalRubricRegistry.load(in);
+        }
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.ReviewAssignmentRepository
+            reviewAssignmentRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresReviewAssignmentRepository(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.ReviewVerdictRepository
+            reviewVerdictRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresReviewVerdictRepository(jdbc, objectMapper);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalReviewService evalReviewService(
+            com.objwww.pr.control.eval.domain.repository.ReviewAssignmentRepository
+                    reviewAssignmentRepository,
+            com.objwww.pr.control.eval.domain.repository.ReviewVerdictRepository
+                    reviewVerdictRepository,
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            com.objwww.pr.control.eval.application.EvalRubricRegistry evalRubricRegistry,
+            ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.eval.application.EvalReviewService(
+                reviewAssignmentRepository, reviewVerdictRepository, evalQueryReader,
+                evalRubricRegistry, objectMapper);
     }
 
     // ---------------- DR-02 故障演练作业链（/api/drills 读写面；V86 授权面——control_app 对 drill_job 只增 + 停止两列，状态机推进零开口） ----------------
