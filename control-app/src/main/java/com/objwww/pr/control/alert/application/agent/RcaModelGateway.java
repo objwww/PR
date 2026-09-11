@@ -30,8 +30,10 @@ import java.util.UUID;
  *   <li><b>账本不可写 = 零触网</b>：rca_model_call PENDING 先行落账取得发送资格
  *       （open 抛异常 → 不进 gateway.complete）；</li>
  *   <li>成功终态带 usage/cost 落账；usage 缺失不猜零（SUCCESS + usageMissing，
- *       费用未决走对账，RX19）；供应商回执（provider_request_id）留平台账本，
- *       经 invocation_id 跨账关联，RCA 账本不重复落；</li>
+ *       费用未决走对账，RX19）；BA-109 裁定：平台模型账本（V5）深绑 PR 域
+ *       （V5 三列 NOT NULL+FK），RCA 调用唯一账本山 = rca_model_call，平台账本
+ *       写面由装配点旁路（NoOpModelCallLedgerRepository），供应商回执列本账
+ *       provider_request_id 暂缺（invocation_id 为审计锚，偏差登记 §14）；</li>
  *   <li>DEFERRED/BUDGET/确定性失败 → FAILED+原因码；平台 LEDGER_WRITE_FAILED →
  *       UNKNOWN（是否已执行不确定，保守占预算，恢复对账不盲重发）。</li>
  * </ol>

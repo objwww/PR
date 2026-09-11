@@ -13,18 +13,17 @@
 #      ≥1 SUCCESS；证据 ≥1 行；ACTIVE TRUE Claim 的 evidence_refs 全部可解析到
 #      rca_evidence 行（不预灌答案：结论必须锚在真实取回的证据上）
 #   ⑥ 供应商回执链：rca_model_call 全 SUCCESS 零 UNKNOWN/FAILED；usage 落账
-#      （usage_missing=false，cost/pricing 齐全）；每逻辑动作 invocation_id 在平台
-#      model_call_ledger 有 ≥1 SUCCEEDED 行且 provider_request_id 非空；平台物理重试
-#      合计 tokens ≥ RCA 逻辑行 total_tokens
+#      （usage_missing=false，cost/pricing 齐全）；invocation_id 审计锚非空；
+#      平台 model_call_ledger 对 RCA 调用恒零行（BA-109 裁定：RCA 侧独立账本山，
+#      平台写面装配旁路，跨域污染防栅）
 #   ⑦ 报告生产链：rca_report → report_publication → notify_outbox 全落行
 #   ⑧ 日志取证：容器日志脱敏落盘；供应商密钥词形（sk-…）零回显
 #
-# ⚠ 预期风险面（RUNBOOK §风险登记，非脚本缺陷）：
-#   RCA→平台账本写面（RcaModelGateway 以 rca_run/rca_task/rca_attempt id 填
-#   model_call_ledger.review_run_id/run_step_id/attempt_id，FK 指向 PR 域三表）从未在
-#   真 PG 实证（legacy 三角色路径零模型调用，AM6 真窗未覆盖）。若 phase6 全量
-#   UNKNOWN + 日志「账本 STARTED 写失败」计数 ≥1 → R7 线真缺陷（23503 面），取证后
-#   走 BUGLOG 修复再重跑，不得改脚本口径放行。
+# ⚠ 风险面已实证并裁定（2026-09-11 真窗，BA-109）：
+#   RCA→平台账本写面 23503 FK 违反首跑实证（全量 UNKNOWN + 「账本 STARTED 写失败」）。
+#   裁定=候选形态①RCA 侧独立账本（rca_model_call 唯一账本山，平台写面
+#   NoOpModelCallLedgerRepository 旁路）；phase6 对账断言随之翻面为「平台恒零行」。
+#   同窗另实证 BA-108（openRun 缺 TOKEN 维 → PG fail-closed 全量预算耗尽），均已修复。
 #
 # 操作员前置（部署段，见 RUNBOOK）：主模式部署形态（app.alert.r7.primary.enabled=true
 #   + release-digest + AGENT_MODEL/AGENT_MODEL_API_KEY 注入）；prometheus 可达；
@@ -141,7 +140,7 @@ r7_log "phase5 PASS（直查全落 allowlist；证据 ${_nev} 行；TRUE Claim $
 # ---------------------------------------------------------------------------
 # phase6 供应商回执链（A0 核心面；风险登记见文件头）
 # ---------------------------------------------------------------------------
-r7_log "phase6 回执链：rca_model_call 全 SUCCESS + 平台账本对账"
+r7_log "phase6 回执链：rca_model_call 全 SUCCESS 结清 + 平台账本零交叉（BA-109）"
 r7_psql_ro R7_PG_URL "SELECT state||'|'||action_seq||'|'||coalesce(route_id,'')||'|'||
     coalesce(error_code,'') FROM rca_model_call WHERE run_id='${RUNID}' ORDER BY action_seq" \
     '-At' > "$RUNS/phase6-model-calls.txt"
@@ -154,18 +153,15 @@ _nosettled="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call
       OR cost_micros IS NULL OR pricing_version IS NULL
       OR invocation_id IS NULL OR settled_at IS NULL)" '-At')"
 [ "$_nosettled" = "0" ] || r7_fail "phase6 ${_nosettled} 行 usage/cost/invocation 未结清"
-_noplat="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call m
-    WHERE m.run_id='${RUNID}' AND NOT EXISTS
-      (SELECT 1 FROM model_call_ledger p WHERE p.invocation_id=m.invocation_id
-       AND p.state='SUCCEEDED' AND p.provider_request_id IS NOT NULL)" '-At')"
-[ "$_noplat" = "0" ] || r7_fail "phase6 ${_noplat} 行平台账本缺 SUCCEEDED+provider_request_id 对账行\
-（若伴随日志「账本 STARTED 写失败」≥1 → 文件头风险面实证，走 BUGLOG）"
-_ntok="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call m
-    WHERE m.run_id='${RUNID}' AND COALESCE(
-      (SELECT sum(p.total_tokens) FROM model_call_ledger p
-       WHERE p.invocation_id=m.invocation_id),0) < (m.usage->>'total_tokens')::bigint" '-At')"
-[ "$_ntok" = "0" ] || r7_fail "phase6 ${_ntok} 行平台物理合计 tokens < RCA 逻辑行（回执短缺）"
-r7_log "phase6 PASS（$(wc -l < "$RUNS/phase6-model-calls.txt" | tr -d ' ') 笔调用全链对账）"
+# BA-109 裁定（设计修正，非口径放行；RUNBOOK §四.1 预登记候选形态①RCA 侧独立账本）：
+# 平台 model_call_ledger 深绑 PR 域（V5 三列 NOT NULL+FK），RCA 唯一账本山=rca_model_call，
+# 平台写面装配旁路（NoOpModelCallLedgerRepository）。对账断言翻面=平台账本对 RCA 调用
+# 必须恒零行（跨域污染防栅），invocation_id 审计锚由上行 _nosettled 已钉。
+_platpoll="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM model_call_ledger p
+    WHERE p.invocation_id IN (SELECT invocation_id FROM rca_model_call
+      WHERE run_id='${RUNID}' AND invocation_id IS NOT NULL)" '-At')"
+[ "$_platpoll" = "0" ] || r7_fail "phase6 平台账本出现 RCA 调用行 ${_platpoll} 笔（跨域污染，BA-109 裁定面被破）"
+r7_log "phase6 PASS（$(wc -l < "$RUNS/phase6-model-calls.txt" | tr -d ' ') 笔调用全 SUCCESS 结清；平台账本零交叉）"
 
 # ---------------------------------------------------------------------------
 # phase7 报告生产链

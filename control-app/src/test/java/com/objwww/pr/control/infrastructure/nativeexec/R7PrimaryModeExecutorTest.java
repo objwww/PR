@@ -48,8 +48,6 @@ import com.objwww.pr.control.alert.domain.service.EvidencePackageValidator;
 import com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.application.ModelGateway;
-import com.objwww.pr.control.domain.ai.ModelCallLedgerEntry;
-import com.objwww.pr.control.domain.ai.ModelCallLedgerRepository;
 import com.objwww.pr.control.domain.ai.ModelGatewayParams;
 import com.objwww.pr.control.domain.ai.ModelRequest;
 import com.objwww.pr.control.domain.ai.ModelRoute;
@@ -116,7 +114,11 @@ class R7PrimaryModeExecutorTest {
     private final NativeInvestigationExecutorTest.EdgeStore edges =
             new NativeInvestigationExecutorTest.EdgeStore();
     private final ScriptedRouteClient client = new ScriptedRouteClient();
-    private final PlatformLedgerFake platformLedger = new PlatformLedgerFake();
+    // BA-109：镜像生产装配——RCA 面平台账本旁路（NoOpModelCallLedgerRepository），
+    // 唯一账本山 = rca_model_call（stores.modelCalls）
+    private final com.objwww.pr.control.infrastructure.persistence.NoOpModelCallLedgerRepository
+            platformLedger = new com.objwww.pr.control.infrastructure.persistence
+                    .NoOpModelCallLedgerRepository();
     private final SeedingToolPort toolPort = new SeedingToolPort();
     private final InMemoryRunBudgetLedger budgetLedger = new InMemoryRunBudgetLedger();
 
@@ -613,33 +615,4 @@ class R7PrimaryModeExecutorTest {
         }
     }
 
-    /** 平台账本假件 */
-    private static final class PlatformLedgerFake implements ModelCallLedgerRepository {
-        final List<ModelCallLedgerEntry> rows = new ArrayList<>();
-
-        @Override
-        public void insertStarted(ModelCallLedgerEntry entry) {
-            rows.add(entry);
-        }
-
-        @Override
-        public boolean completeTerminalSuccess(UUID id, TokenUsage usage,
-                boolean usageMissing, String reportedModel, String providerRequestId,
-                Duration latency, Long costMicros, String pricingVersion, String currency,
-                Long inputPriceMicrosPerK, Long outputPriceMicrosPerK) {
-            return true;
-        }
-
-        @Override
-        public boolean completeTerminalFailure(UUID id, String outcome, Integer httpStatus,
-                Duration retryAfter, Duration latency, String errorCode,
-                String errorFingerprint, String sanitizedMessage) {
-            return true;
-        }
-
-        @Override
-        public int markUnknownOlderThan(Instant threshold) {
-            return 0;
-        }
-    }
 }

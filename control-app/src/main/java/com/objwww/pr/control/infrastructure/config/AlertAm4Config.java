@@ -424,7 +424,6 @@ public class AlertAm4Config {
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
             M3ModelGatewayConfig m3ModelGatewayConfig,
             M3ModelGatewayConfig.ModelGatewayProperties props,
-            com.objwww.pr.control.domain.ai.ModelCallLedgerRepository platformModelLedger,
             com.objwww.pr.control.domain.service.ExecutionEventRepository rcaModelEventSink,
             com.objwww.pr.control.domain.ai.PricingService pricingService,
             ObjectMapper objectMapper,
@@ -444,7 +443,12 @@ public class AlertAm4Config {
             return null;
         }
         com.objwww.pr.control.application.ModelGateway rcaFace =
-                m3ModelGatewayConfig.buildModelGateway(props, platformModelLedger,
+                m3ModelGatewayConfig.buildModelGateway(props,
+                        // BA-109 裁定：平台模型账本深绑 PR 域（V5 三列
+                        // NOT NULL+FK），RCA 调用唯一账本山 = rca_model_call（V48，
+                        // D5 等价门在 RcaModelGateway.open）——平台账本写面对 RCA 旁路
+                        new com.objwww.pr.control.infrastructure.persistence
+                                .NoOpModelCallLedgerRepository(),
                         new com.objwww.pr.control.domain.service.ExecutionLedger(
                                 rcaModelEventSink),
                         pricingService, objectMapper, env, primaryModel, fallbackModel,

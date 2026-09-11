@@ -2,9 +2,9 @@
 
 > 交付锚：R7 执行日志（`docs/告警-R7执行日志-20260911.md`）§11 遗留① ——
 > "scripts/e2e 真窗断言包未备"。本包即该遗留的清偿物。
-> **状态（2026-09-11）：备好未执行。包内零执行证据、零 scenario-results 记录；
-> 全部脚本仅经语法校验与静态断言面核对，未触 195。**
-> 约窗规则（用户裁定）：**不抢窗**——待合并窗统一约 195，按本 RUNBOOK §三串行执行。
+> **状态（2026-09-11 更新）：真窗执行中。步骤 0 语法终门 195 侧 sh -n 五件全过；
+> A0 首跑 FAIL（BA-108：openRun 缺 TOKEN 维）→ 修复 → 二跑 FAIL（BA-109：平台账本
+> 23503 FK，风险面实证）→ 均已修复裁定（见 §四.1）→ 三跑待复核。**
 
 ## 一、交付物
 
@@ -61,18 +61,15 @@
 
 ## 四、风险与语义登记（窗口前必读）
 
-1. **⚠ RCA→平台账本 FK 面（静态推演，真窗首验）**：
-   `RcaModelGateway.call` 以 `(ctx.runId(), ctx.runId(), ctx.taskId(), ctx.attemptId())`
-   构造平台上下文（RcaModelGateway.java:87），`ModelGateway` 照抄为
-   `model_call_ledger.review_run_id / run_step_id / attempt_id`（ModelGateway.java:221），
-   而这三列 FK 指向 PR 域 `review_run / run_step / step_attempt`（V5）——rca_run id
-   在 review_run 无行，**23503 面静态上必然违反**。
-   历史未实证原因：legacy 三角色路径是确定性 handler 驱动（SingleToolRoleRunner，
-   零模型调用），AM6 真窗的全链绿不覆盖本面；R7 单测/IT 全在 fake/in-memory 账本上。
-   **预期失败签名**：rca_model_call 全 UNKNOWN + error_code=LEDGER_WRITE_FAILED +
-   control-app 日志「账本 STARTED 写失败，零触网（D5）」计数 ≥1（A0 phase8 已把该
-   计数落证）。若实证成立：这是 R7 线真缺陷（非脚本缺陷），修复责任 R7 线，
-   候选形态（rca 侧独立账本 / FK 豁免裁定）评审后定，修完重跑 A0。
+1. **⚠ RCA→平台账本 FK 面（2026-09-11 真窗已实证+已裁定，BA-109）**：
+   静态推演（rca_run id 填 `model_call_ledger.review_run_id` 等三列 FK 指 PR 域）
+   在 A0 二跑实证：全量 UNKNOWN(TRANSPORT_UNKNOWN) + 「账本 STARTED 写失败，
+   零触网（D5）: DataIntegrityViolationException」。**裁定=候选形态①RCA 侧独立
+   账本山**：rca_model_call 唯一账本，平台写面 NoOpModelCallLedgerRepository
+   装配旁路（放松 FK 裁定为负）；A0 phase6 断言翻面=平台账本对 RCA 恒零行
+   （跨域污染防栅）。同窗另实证 BA-108（openRun 缺 TOKEN 维），两雷连环截获。
+   残留偏差：provider_request_id 列暂缺（RoutedModelResult 不透传，
+   invocation_id 为审计锚，R7 日志 §14 登记）。
 2. **臂A（单主 Agent 零委派）= BLOCKED_EXTERNAL**：零委派需
    `max_delegation_batches=0` 旋钮，当前为 `DeterministicSupervisor.MAX_DELEGATION_
    BATCHES=2` 编译常量（无运行时旋钮）。旋钮化登记为 B 门执行前置债；禁止以臂C
