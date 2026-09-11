@@ -58,8 +58,7 @@ create table eval_comparison (
 );
 
 comment on table eval_comparison is
-    'EV-07 配对工作台对比结论落档（insert-only；同对最新行 = 生效面；'
-    || 'NOT_EVALUABLE = 可比性未过不出配对结论）';
+    'EV-07 配对工作台对比结论落档（insert-only；同对最新行 = 生效面；NOT_EVALUABLE = 可比性未过不出配对结论）';
 
 -- 生效面投影：同对最新一行 / 某 run 作为候选的最新落档（EV-03 qualityVerdict 分面源）
 create index ix_eval_comparison_pair on

@@ -68,8 +68,7 @@ create table eval_run_command (
 );
 
 comment on table eval_run_command is
-    'EV-04 评测发起/取消持久化命令（先持久化再生效；幂等锚 (command_type,idempotency_key)；'
-    || 'LAUNCH 的 eval_run_id 是预定 run 身份故无 FK）';
+    'EV-04 评测发起/取消持久化命令（先持久化再生效；幂等锚 (command_type,idempotency_key)；LAUNCH 的 eval_run_id 是预定 run 身份故无 FK）';
 
 create index ix_eval_run_command_run on eval_run_command(eval_run_id, created_at);
 create index ix_eval_run_command_pending on eval_run_command(state, created_at)

@@ -77,8 +77,7 @@ create table drill_job (
 );
 
 comment on table drill_job is
-    'DR-02 故障演练持久化作业（§7.4 状态机；outcome 另存 CLOSED≠成功；'
-    || '同靶场活动占位=部分唯一索引原子互斥；停止受理只表示恢复中）';
+    'DR-02 故障演练持久化作业（§7.4 状态机；outcome 另存 CLOSED≠成功；同靶场活动占位=部分唯一索引原子互斥；停止受理只表示恢复中）';
 
 -- 环境互斥原子占位（§7.3）：活动集含 RECOVERY_FAILED——恢复未核验前阻止下一场（DU15）
 create unique index uq_drill_job_active_env on drill_job(target_env)
@@ -107,8 +106,7 @@ create table drill_event (
 );
 
 comment on table drill_event is
-    'DR-02 演练事件账本（insert-only：相位迁移/预检结果/停止请求/结论落档/执行注记；'
-    || 'seq 单调序=事件游标锚）';
+    'DR-02 演练事件账本（insert-only：相位迁移/预检结果/停止请求/结论落档/执行注记；seq 单调序=事件游标锚）';
 
 create index ix_drill_event_drill on drill_event(drill_id, seq);
 
