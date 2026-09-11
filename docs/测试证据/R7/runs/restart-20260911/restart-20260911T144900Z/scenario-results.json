@@ -1,0 +1,1 @@
+{"scenario":"R7-RX02-RD09","name":"RX02/RD09 真 worker 重启：WAITING_CHILDREN 硬杀→绑定恒等/检查点续走/零重复执行","fidelity":"real-kill@195","status":"PASS","recorded_at":"2026-09-11T15:00:14Z"}

@@ -168,7 +168,7 @@ arm_metrics() {
             WHERE r.id='${_runid}' LIMIT 1" '-At')"
         _dele="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_task
             WHERE run_id='${_runid}' AND task_key LIKE 'DELEGATE-%'" '-At')"
-        _rdigest="$(r7_psql_ro R7_PG_URL "SELECT COALESCE(encode(sha256(package::text::bytea),'hex'),'')
+        _rdigest="$(r7_psql_ro R7_PG_URL "SELECT COALESCE(encode(sha256(package_json::text::bytea),'hex'),'')
             FROM rca_report WHERE run_id='${_runid}' LIMIT 1" '-At')"
         [ "$_first" = true ] || printf ',\n' >> "$_outfile"
         _first=false

@@ -1,0 +1,11 @@
+[R7] suite=a0-20260911T151742Z runs=/opt/r7-e2e/runs/a0-20260911T151742Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] phase1 PASS（health 200；digest=cf0de67622e091e20b44c42f3f2a83f389444427fe821ef723859658f9bdc2f6）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=2871fb3b-87c7-43af-bf0f-7a75e6b4afee）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定 / 检查点
+[R7] phase4 PASS（零子 Agent/绑定三元组/检查点 final_claims 在场）
+[R7] phase5 受限直查：allowlist=prometheus.query,logs.query；evidence_refs 全可解析
+[R7] FAIL: DB 轮询超时(30s): phase5 至少 1 笔工具 SUCCESS（last=0）

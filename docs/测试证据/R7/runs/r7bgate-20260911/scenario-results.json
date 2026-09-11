@@ -1,1 +1,3 @@
 {"scenario":"R7-BGATE-armB","name":"armB 四案执行面取证（checkout 真实指标四 episode）","fidelity":"deterministic-handler@195","status":"PASS","recorded_at":"2026-09-11T11:10:14Z"}
+{"scenario":"R7-BGATE-armC","name":"armC 四案执行面取证（checkout 真实指标四 episode）","fidelity":"real-provider@195","status":"PASS","recorded_at":"2026-09-11T15:05:13Z"}
+{"scenario":"R7-BGATE-joint","name":"三臂汇总+盲评封存（臂A BLOCKED_EXTERNAL 旋钮缺件如实入账）","fidelity":"mixed@195","status":"PASS","recorded_at":"2026-09-11T15:10:54Z"}

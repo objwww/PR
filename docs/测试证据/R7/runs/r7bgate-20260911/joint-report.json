@@ -1,0 +1,43 @@
+{
+  "session": "20260911",
+  "service": "checkout",
+  "budget_attestation": "joint@195: armB=legacy 姿态 OFF（.env.bak-posture-off-20260911T110337Z）+armC=主模式 ON+r7fix7+qwen3-max-preview — 操作员=R7 执行者 2026-09-11",
+  "armA": {"status": "BLOCKED_EXTERNAL",
+           "reason": "max_delegation_batches=2 为编译常量无运行时旋钮（旋钮化=B 门前置债）"},
+  "armB_semantics_note": "legacy 固定三角色=确定性 handler 面（零模型调用零 token），非 LLM 三角色",
+  "joint_armB": 
+{
+  "arm": "armB",
+  "cases": [
+    {"case":"c1","run":"926f795c-a235-4042-81d0-f29f9291087f","state":"SUCCEEDED","claims_true_false_unknown":"0,0,0",
+     "tokens":0,"latency_s":1,"delegate_tasks":0}
+,
+    {"case":"c2","run":"f1bae406-94a0-4880-b7ef-0d757c0a7082","state":"SUCCEEDED","claims_true_false_unknown":"0,0,0",
+     "tokens":0,"latency_s":1,"delegate_tasks":0}
+,
+    {"case":"c3","run":"e17c38b5-62b6-4121-8d0f-9811e8382a50","state":"SUCCEEDED","claims_true_false_unknown":"0,0,0",
+     "tokens":0,"latency_s":1,"delegate_tasks":0}
+,
+    {"case":"c4","run":"ddf36ab7-06a0-4cfc-97a8-e4ab2bf6f7e2","state":"SUCCEEDED","claims_true_false_unknown":"0,0,0",
+     "tokens":0,"latency_s":1,"delegate_tasks":0}
+  ]
+}
+  ,
+  "joint_armC": 
+{
+  "arm": "armC",
+  "cases": [
+    {"case":"c1","run":"966517ed-075c-42c4-9ffc-fd5aa68dadc7","state":"SUCCEEDED","claims_true_false_unknown":"0,0,1",
+     "tokens":2218,"latency_s":5,"delegate_tasks":1}
+,
+    {"case":"c2","run":"7f8e28b5-721f-40af-8dba-3a881b650513","state":"SUCCEEDED","claims_true_false_unknown":"0,0,1",
+     "tokens":2259,"latency_s":6,"delegate_tasks":1}
+,
+    {"case":"c3","run":"91ae808f-fb01-4cfd-9e05-f7253ffb8c08","state":"SUCCEEDED","claims_true_false_unknown":"0,0,1",
+     "tokens":2280,"latency_s":7,"delegate_tasks":1}
+,
+    {"case":"c4","run":"c14989f7-66a4-4e7a-bc56-213b11fbb196","state":"SUCCEEDED","claims_true_false_unknown":"0,0,1",
+     "tokens":2293,"latency_s":5,"delegate_tasks":1}
+  ]
+}
+}

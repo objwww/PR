@@ -71,12 +71,26 @@ RUNID="$(r7_psql_ro R7_PG_URL "SELECT run_id FROM canary_route_decision
 r7_log "phase1 PASS（run=$RUNID）"
 
 # ---------------------------------------------------------------------------
-# phase2 等 WAITING_CHILDREN + 委派批在场 → 杀前快照 → 硬杀重启
-# ---------------------------------------------------------------------------
-r7_log "phase2 等 WAITING_CHILDREN 检查点 + 子任务在场（${WAIT_TO}s 上限）"
-r7_db_poll_ge "phase2 WAITING_CHILDREN 检查点" "$WAIT_TO" R7_PG_URL \
-    "SELECT count(*) FROM rca_primary_checkpoint
-     WHERE run_id='${RUNID}' AND phase='WAITING_CHILDREN'" 1
+# phase2 触发面适配（r7fix7 后三轮实证登记）：BA-117 修复使子任务 deterministic
+# 秒级完结（7dc6c46d DELEGATE-g1 DONE）/ 源面瞬时抖动时 11ms DEAD（28d7ed4c
+# TRANSPORT_UNKNOWN），WAITING_CHILDREN 窗口塌缩至 ~100ms-1.5s——checkpoint 轮询
+# （公共库 3s cadence 与 1s 紧轮询两轮均 300s last=0 超时）结构性抓不住。触发面
+# 改为委派决策行 APPROVED 落库（与检查点 WAITING_CHILDREN 同事务提交）→ 0.3s
+# 紧轮询 → 快照后立即杀：杀点必落在委派 episode 内（子任务在飞或主任务续驱），
+# 重启恢复机器（租约超时+全重驱+检查点相位续驱）同一套被演习。RD09 严格持久
+# 等待面由单测 R7PrimaryModeExecutorTest ba118 恢复案覆盖；phase3 断言口径不变。
+r7_log "phase2 等委派决策行 APPROVED（0.3s 紧轮询，${WAIT_TO}s 上限）"
+_p2=0
+_i2=0
+while [ "$_i2" -lt $((WAIT_TO * 3)) ]; do
+    _p2="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_delegation_decision
+         WHERE run_id='${RUNID}' AND status='APPROVED'" '-At')"
+    [ "${_p2:-0}" -ge 1 ] && break
+    _i2=$((_i2 + 1))
+    sleep 0.3
+done
+[ "${_p2:-0}" -ge 1 ] || r7_fail "phase2 委派决策行紧轮询超时（last=$_p2）"
+r7_log "phase2 委派决策行命中（第 ${_i2} 刻）"
 r7_db_poll_ge "phase2 DELEGATE 子任务在场" 30 R7_PG_URL \
     "SELECT count(*) FROM rca_task WHERE run_id='${RUNID}'
      AND task_key LIKE 'DELEGATE-%'" 1
@@ -144,10 +158,12 @@ _dup="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM (
     WHERE run_id='${RUNID}' GROUP BY 1,2,3,4 HAVING count(*)>1) x" '-At')"
 [ "$_dup" = "0" ] || r7_fail "phase3 ${_dup} 组重复物理调用（重驱动重复执行/计费面）"
 
-# ⑥ 同 incident 恰 1 run
+# ⑥ 同 incident 恰 1 run（incident_key 原样形态=alertname=X|service=Y——
+# 本脚本头登记的老雷家族第五处：裸 '${AN}|${SVC}' 恒 0 假红，r7fix7 后首达
+# 本断言即暴露；与 atomicity run_cnt/phase3 同律修复）
 _nrun="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_run r
     JOIN incident i ON i.id=r.incident_id
-    WHERE i.incident_key='${AN}|${SVC}'" '-At')"
+    WHERE i.incident_key='alertname=${AN}|service=${SVC}'" '-At')"
 [ "$_nrun" = "1" ] || r7_fail "phase3 同 incident 出现 ${_nrun} 个 run（重启复活面）"
 
 _started_post="$(r7_container_started_at)"

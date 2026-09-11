@@ -1,0 +1,10 @@
+[R7] runs=./runs/restart-20260911T144900Z service=r7restart-144900
+[R7] phase1 注入 RestartProbe@r7restart-144900（复杂多域 summary 诱导委派；attempt-1 简版 summary
+    实证简案面不触发委派——案面重调即本脚本头登记的路径）
+[R7] phase1 PASS（run=4c8ca87e-6943-42f8-8637-d52dc1c2254a）
+[R7] phase2 等委派决策行 APPROVED（0.3s 紧轮询，300s 上限）
+[R7] phase2 委派决策行命中（第 0 刻）
+[R7] phase2 快照齐（StartedAt=2026-09-11T14:32:03.451496779Z；杀）
+[R7] phase2 容器已拉起（killed_at=2026-09-11T14:49:09Z），等恢复后终态
+[R7] phase3 断言（终态=SUCCEEDED）
+[R7] SUITE PASS（重启前 2026-09-11T14:32:03.451496779Z → 重启后 2026-09-11T14:49:09.689207512Z；快照与 diff 见 ./runs/restart-20260911T144900Z）
