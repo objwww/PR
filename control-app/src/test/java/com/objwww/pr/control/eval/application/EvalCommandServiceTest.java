@@ -122,6 +122,11 @@ class EvalCommandServiceTest {
         }
 
         @Override
+        public List<PartitionCountRow> listPartitionCounts() {
+            return List.of();
+        }
+
+        @Override
         public Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId) {
             throw new UnsupportedOperationException();
         }

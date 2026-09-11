@@ -1,0 +1,17 @@
+registry_version: 1
+# EV-08 评审 rubric 注册表（冻结版本锚）：评分细则变更 = 新增一行新版本，
+# 旧版本永不改写（已落档 review_verdict.rubric_version 的可解析性 = 审计闭环）。
+rubrics:
+  - id: rca-eval-review
+    version: eval-review-rubric-v1
+    current: true
+    items:
+      - id: root_cause_correct
+        label: 根因组件与故障类型判定正确
+        required: true
+      - id: evidence_grounded
+        label: 结论有证据引用支撑
+        required: true
+      - id: remediation_actionable
+        label: 处置建议可执行
+        required: false

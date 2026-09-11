@@ -102,7 +102,9 @@ public abstract class PostgresITBase {
             // V85（EV-07 对比结论落档）——BA-41 同律
             "eval_comparison",
             // V86（DR-02 演练作业链两表）——BA-41 同律（事件表引用作业表，序敏感）
-            "drill_event", "drill_job");
+            "drill_event", "drill_job",
+            // V87（EV-08 评审两表）——BA-41 同律（结论表引用任务表，序敏感）
+            "review_verdict", "review_assignment");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

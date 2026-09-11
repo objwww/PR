@@ -292,6 +292,11 @@ class EvalCompareServiceTest {
         }
 
         @Override
+        public List<PartitionCountRow> listPartitionCounts() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId) {
             throw new UnsupportedOperationException();
         }

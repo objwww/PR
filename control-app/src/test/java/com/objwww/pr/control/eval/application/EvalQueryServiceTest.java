@@ -15,6 +15,7 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunPage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvidenceMetaRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.KeysetCursor;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.PartitionCountRow;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -38,7 +39,19 @@ class EvalQueryServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-09T10:30:00Z");
 
     private final FakeReader reader = new FakeReader();
-    private final EvalQueryService service = new EvalQueryService(reader, new ObjectMapper());
+    private final EvalRubricRegistry rubrics = EvalRubricRegistry.load("""
+            registry_version: 1
+            rubrics:
+              - id: rca-eval-review
+                version: eval-review-rubric-v1
+                current: true
+                items:
+                  - id: root_cause_correct
+                    label: 根因判定正确性
+                    required: true
+            """);
+    private final EvalQueryService service =
+            new EvalQueryService(reader, new ObjectMapper(), rubrics);
 
     // ------------------------------------------------------------------ runs 列表 / 游标
 
@@ -324,12 +337,48 @@ class EvalQueryServiceTest {
 
     @Test
     void datasetsPassThroughReaderRows() {
-        reader.datasets = List.of(new DatasetRow("v1.1", "rca100", 30,
-                List.of("redis-oom", "db-lock"), NOW));
+        UUID dvId = UUID.randomUUID();
+        reader.datasets = List.of(new DatasetRow(dvId, "rca100", "v1.1", "rca100",
+                "PUBLIC_BENCHMARK", "TUNING", 30, List.of("redis-oom", "db-lock"), NOW));
+        reader.partitionCounts = List.of(
+                new PartitionCountRow(dvId, "TUNING", 30),
+                new PartitionCountRow(dvId, "HOLDOUT", 12));
         EvalQueryService.DatasetListResponse out = service.datasets();
         assertThat(out.items()).hasSize(1);
         assertThat(out.items().get(0).caseCount()).isEqualTo(30);
         assertThat(out.items().get(0).families()).containsExactly("redis-oom", "db-lock");
+    }
+
+    /** EV-08：名称/分区身份/全分区计数（HOLDOUT 只出计数）/当前 rubric 版本透出 */
+    @Test
+    void datasetsCarryNamePartitionCountsAndRubricVersion() {
+        UUID dvId = UUID.randomUUID();
+        reader.datasets = List.of(new DatasetRow(dvId, "rca100", "v1.1", "rca100",
+                "PRIVATE", "HOLDOUT", 30, List.of("redis-oom"), NOW));
+        reader.partitionCounts = List.of(
+                new PartitionCountRow(dvId, "TUNING", 18),
+                new PartitionCountRow(dvId, "HOLDOUT", 12));
+        EvalQueryService.DatasetItem item = service.datasets().items().get(0);
+        assertThat(item.name()).isEqualTo("rca100");
+        assertThat(item.sourceClass()).isEqualTo("PRIVATE");
+        assertThat(item.partitionClass()).isEqualTo("HOLDOUT");
+        assertThat(item.partitionCounts())
+                .containsEntry("TUNING", 18L).containsEntry("HOLDOUT", 12L);
+        assertThat(item.rubricVersion()).isEqualTo("eval-review-rubric-v1");
+    }
+
+    /** EV-08：详情 = name+version 精确键，未知 404 面；已知 rubric 版本全表透出 */
+    @Test
+    void datasetDetailByNameAndVersion() {
+        UUID dvId = UUID.randomUUID();
+        reader.datasets = List.of(new DatasetRow(dvId, "rca100", "v1.1", "rca100",
+                "PRIVATE", "HOLDOUT", 30, List.of(), NOW));
+        assertThat(service.datasetDetail("rca100", "v9.9")).isEmpty();
+        var detail = service.datasetDetail("rca100", "v1.1");
+        assertThat(detail).isPresent();
+        assertThat(detail.get().dataset().name()).isEqualTo("rca100");
+        assertThat(detail.get().knownRubricVersions())
+                .containsExactly("eval-review-rubric-v1");
     }
 
     // ------------------------------------------------------------------ EV-04 生命周期分面
@@ -802,6 +851,7 @@ class EvalQueryServiceTest {
         EvalRunRow run;
         EvalCasePage casePage = new EvalCasePage(List.of(), false);
         List<DatasetRow> datasets = List.of();
+        List<PartitionCountRow> partitionCounts = List.of();
         String lastState;
         KeysetCursor lastRunCursor;
         int lastRunLimit;
@@ -848,6 +898,11 @@ class EvalQueryServiceTest {
         @Override
         public List<DatasetRow> listDatasets() {
             return datasets;
+        }
+
+        @Override
+        public List<PartitionCountRow> listPartitionCounts() {
+            return partitionCounts;
         }
 
         @Override
