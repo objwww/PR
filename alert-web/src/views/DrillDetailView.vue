@@ -51,6 +51,11 @@
     </el-result>
     <EmptyState v-else-if="detailState === 'error'" kind="error" @retry="loadDetail" />
 
+    <!-- DU10 断网诚实面：轮询失败不翻错误态、不显示假成功，只标最近成功加载时间 -->
+    <div v-if="connIssue" class="card conn-note">
+      连接中断：显示 {{ fmtTime(lastLoadedAt) }} 最近成功加载的数据；作业在服务端继续，恢复连接后自动刷新。
+    </div>
+
     <!-- 时间线：八阶段（§7.2）；详情接口 timeline 有真实相位时高亮当前阶段，enteredAt 只取真实事件 -->
     <div class="card timeline-card">
       <div class="tl-title">作业时间线</div>
@@ -59,7 +64,7 @@
         调查、注入与恢复分别呈现，报告成功不代表故障已解除。
         {{ detailState === 'ok'
           ? '当前为详情接口返回的真实时间线：enteredAt 只取真实事件，无事件如实「—」。'
-          : '事件流接口（/api/drills/{id}/events）依赖 DR-02/DR-06，暂未开放。' }}
+          : '详情未就绪/加载失败时仅展示 §7.2 八阶段骨架（无真实相位）；原始事件账本见下方「事件流」分区。' }}
       </div>
       <ol class="tl-list">
         <li
@@ -75,6 +80,55 @@
           <span class="tl-state" :class="stateCls(s.status)">{{ stateText(s.status) }}</span>
         </li>
       </ol>
+    </div>
+
+    <!-- 事件流：drill_event 原始账本（§7.2/DR-06）。与时间线并存——时间线 = 后端推导的
+         八阶段态，事件流 = insert-only 原始事件账本；seq 游标增量，浏览器重开状态一致（DU10） -->
+    <div class="card events-card">
+      <div class="tl-title">事件流（原始账本）</div>
+      <div class="tl-note">
+        与上方时间线的区别：时间线是后端从事件推导的八阶段态；本区是 drill_event 原始账本
+        （insert-only，按 seq 单调序逐条落账）。作业进行中每 5 秒按游标增量拉取新事件，
+        浏览器关闭重开后从头重拉，状态一致（DU10）。
+      </div>
+      <template v-if="eventsState === 'ok'">
+        <ul v-if="events.length" class="ev-list">
+          <li v-for="ev in events" :key="ev.seq" class="ev-item">
+            <span class="ev-badge" :class="evBadgeCls(ev.eventType)">{{ evTypeText(ev.eventType) }}</span>
+            <div class="ev-body">
+              <div class="ev-meta">
+                <span class="mono">#{{ ev.seq }}</span>
+                <span>{{ fmtTime(ev.createdAt) }}</span>
+                <span>操作者：{{ ev.actor ?? '—' }}</span>
+                <span v-if="ev.fromState || ev.toState" class="mono">{{ ev.fromState ?? '—' }} → {{ ev.toState ?? '—' }}</span>
+              </div>
+              <!-- payload 为 jsonb 原文：文本插值渲染（禁 v-html 防注入），长文本默认折叠 -->
+              <pre class="ev-payload">{{ payloadText(ev) }}</pre>
+              <el-button v-if="payloadLong(ev)" size="small" text @click="togglePayload(ev.seq)">
+                {{ expandedSeqs.has(ev.seq) ? '收起 payload' : '展开 payload' }}
+              </el-button>
+            </div>
+          </li>
+        </ul>
+        <EmptyState v-else kind="empty" description="该演练尚无事件记录：事件由服务端动作与 worker 执行实时落账。" />
+        <div class="pager">
+          <span class="muted">已加载 {{ events.length }} 条</span>
+          <el-button v-if="eventsHasMore" :loading="eventsFetching" @click="loadMoreEvents">加载更多</el-button>
+        </div>
+      </template>
+      <!-- 403/404 = 接口未就绪，与真实错误、真实空账本三态区分，不伪造空态 -->
+      <el-result
+        v-else-if="eventsState === 'not-ready'"
+        icon="warning"
+        title="事件流接口未就绪"
+        sub-title="GET /api/drills/{id}/events 当前被拒绝（接口不存在，实测 403/404）：依赖 DR-02/DR-06 事件投影，接口就绪前不展示任何模拟事件。"
+      >
+        <template #extra>
+          <el-button :loading="eventsLoading" @click="loadEvents">重试</el-button>
+        </template>
+      </el-result>
+      <EmptyState v-else-if="eventsState === 'error'" kind="error" @retry="loadEvents" />
+      <div v-else v-loading="true" class="loading-box" />
     </div>
 
     <!-- 关联与证据分区：找不到关联就显示「尚未关联」 -->
@@ -110,13 +164,15 @@
 // POST /api/drills/{id}/stop（幂等键 crypto.randomUUID）；受理 202 只表示取消中/恢复中
 // （显示「恢复中」而非「已恢复」，核验完成才 CLOSED，§7.4/DU12）；RECOVERY_FAILED 占位 409
 // 如实展示服务端「需处理恢复而非停止」。时间线八阶段取详情接口 timeline：有真实相位高亮
-// 当前阶段（ACTIVE），无事件 enteredAt 如实「—」。接口未就绪（403/404）保持诚实降级。
-import { computed, onMounted, ref } from 'vue'
+// 当前阶段（ACTIVE），无事件 enteredAt 如实「—」。事件流分区取 GET /{id}/events：
+// seq 游标增量（加载更多 + DU10 有界轮询，终态/隐藏/卸载即停），接口未就绪（403/404）/
+// 加载失败/真实空账本三态区分。断网保留旧数据并如实标「连接中断」，不显示假成功（DU10）。
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
-import { ApiNotReadyError, getDrill, newIdempotencyKey, stopDrill } from '../api/drills'
+import { ApiNotReadyError, getDrill, listDrillEvents, newIdempotencyKey, stopDrill } from '../api/drills'
 import { fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -126,6 +182,19 @@ const drill = ref(null)
 const detailState = ref('loading') // loading | ok | not-ready | error
 const loading = ref(false)
 const stopping = ref(false)
+const connIssue = ref(false)      // 轮询失败：保留旧数据，如实标连接中断（DU10）
+const lastLoadedAt = ref(null)
+
+// 事件流（drill_event 原始账本）
+const events = ref([])
+const eventsState = ref('loading') // loading | ok | not-ready | error
+const eventsLoading = ref(false)
+const eventsFetching = ref(false)  // 增量面（加载更多/轮询共用），防并发重入
+const eventsHasMore = ref(false)
+const expandedSeqs = ref(new Set())
+
+// DU10 有界轮询：仅作业非终态时按 seq 游标增量拉取，不把 WebSocket 作为前置（§7.2）
+const POLL_MS = 5000
 
 const shortId = computed(() => {
   const id = String(route.params.drillId ?? '')
@@ -196,15 +265,127 @@ const paramsText = computed(() => {
   return text.length > 160 ? `${text.slice(0, 160)}…` : text
 })
 
-async function loadDetail() {
-  loading.value = true
+// ---------------------------------------------------------------- 事件流
+
+// 事件类型徽章词汇（V86 event_type 枚举；未知类型如实透传原文，不猜译）
+const EVENT_TYPE_TEXT = {
+  PHASE_TRANSITION: '相位迁移',
+  PRECHECK_RESULT: '预检结果',
+  STOP_REQUESTED: '停止请求',
+  OUTCOME_RECORDED: '结论落档',
+  WORKER_NOTE: '执行注记',
+}
+const evTypeText = t => EVENT_TYPE_TEXT[t] ?? t ?? '未知类型'
+const evBadgeCls = t => ({
+  'ev-b-transition': t === 'PHASE_TRANSITION',
+  'ev-b-stop': t === 'STOP_REQUESTED',
+  'ev-b-outcome': t === 'OUTCOME_RECORDED',
+})
+
+// payload = jsonb 原文；默认折叠 160 字符（与 paramsText 同式），展开态按 seq 记录
+const PAYLOAD_COLLAPSE = 160
+const payloadFull = ev => (typeof ev.payload === 'string' ? ev.payload : JSON.stringify(ev.payload)) ?? '—'
+const payloadLong = ev => payloadFull(ev).length > PAYLOAD_COLLAPSE
+function payloadText(ev) {
+  const full = payloadFull(ev)
+  return expandedSeqs.value.has(ev.seq) || full.length <= PAYLOAD_COLLAPSE
+    ? full
+    : `${full.slice(0, PAYLOAD_COLLAPSE)}…`
+}
+function togglePayload(seq) {
+  const next = new Set(expandedSeqs.value)
+  if (next.has(seq)) next.delete(seq)
+  else next.add(seq)
+  expandedSeqs.value = next
+}
+
+const lastSeq = () => (events.value.length ? events.value[events.value.length - 1].seq : 0)
+
+// 增量拉取（加载更多/轮询共用）：afterSeq = 已加载末条 seq；按 seq 去重防竞态重条
+async function fetchEventsAfter(afterSeq, limit) {
+  if (eventsFetching.value) return false
+  eventsFetching.value = true
+  try {
+    const d = await listDrillEvents(route.params.drillId, { afterSeq, limit })
+    const seen = new Set(events.value.map(e => e.seq))
+    events.value = events.value.concat((d.items ?? []).filter(e => !seen.has(e.seq)))
+    eventsHasMore.value = d.nextCursor != null
+    eventsState.value = 'ok'
+    connIssue.value = false
+    return true
+  } catch (e) {
+    if (e instanceof ApiNotReadyError) {
+      eventsState.value = 'not-ready'
+    } else if (eventsState.value === 'ok') {
+      connIssue.value = true // 已有账本时断轮询不翻错误态（DU10：断网不显示假成功）
+    } else {
+      eventsState.value = 'error'
+    }
+    return false
+  } finally {
+    eventsFetching.value = false
+  }
+}
+
+// 首屏/重试：从头（afterSeq=0）整页重拉——重开浏览器状态一致，不依赖客户端记忆（DU10）
+async function loadEvents() {
+  eventsLoading.value = true
+  try {
+    const d = await listDrillEvents(route.params.drillId, { afterSeq: 0, limit: 50 })
+    events.value = d.items ?? []
+    eventsHasMore.value = d.nextCursor != null
+    eventsState.value = 'ok'
+  } catch (e) {
+    eventsState.value = e instanceof ApiNotReadyError ? 'not-ready' : 'error'
+  } finally {
+    eventsLoading.value = false
+  }
+}
+
+async function loadMoreEvents() {
+  const ok = await fetchEventsAfter(lastSeq(), 50)
+  if (!ok && connIssue.value) ElMessage.error('加载更多失败，请重试')
+}
+
+// ---------------------------------------------------------------- 有界轮询（DU10）
+
+let pollTimer = null
+function startPoll() {
+  stopPoll()
+  pollTimer = setInterval(pollTick, POLL_MS)
+}
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+async function pollTick() {
+  if (document.hidden) return // 隐藏页面停止轮询（方案 §7 性能纪律）
+  if (detailState.value !== 'ok' || TERMINAL.has(drill.value?.state)) {
+    stopPoll() // 终态即停：有界
+    return
+  }
+  await loadDetail(true)
+  if (eventsState.value === 'ok') await fetchEventsAfter(lastSeq(), 200)
+}
+
+async function loadDetail(silent = false) {
+  if (!silent) loading.value = true
   try {
     drill.value = await getDrill(route.params.drillId)
     detailState.value = 'ok'
+    lastLoadedAt.value = new Date().toISOString()
+    connIssue.value = false
+    if (TERMINAL.has(drill.value?.state)) stopPoll() // 终态即停：有界轮询（DU10）
   } catch (e) {
+    if (silent) {
+      connIssue.value = true // 轮询失败保留旧数据，如实标连接中断
+      return
+    }
     detailState.value = e instanceof ApiNotReadyError ? 'not-ready' : 'error'
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -232,6 +413,7 @@ async function onStop() {
       ElMessage.success('停止请求已受理（202）：恢复中（RECOVERING）——受理≠恢复完成，核验完成才 CLOSED')
     }
     await loadDetail()
+    if (eventsState.value === 'ok') await fetchEventsAfter(lastSeq(), 50) // STOP_REQUESTED 已同步落账
   } catch (e) {
     if (e instanceof ApiNotReadyError) {
       ElMessage.warning('停止接口未就绪（POST /api/drills/{id}/stop 依赖 DR-02，实测 403/404）')
@@ -247,7 +429,12 @@ async function onStop() {
   }
 }
 
-onMounted(loadDetail)
+onMounted(() => {
+  loadDetail()
+  loadEvents()
+  startPoll()
+})
+onUnmounted(stopPoll)
 </script>
 
 <style scoped>
@@ -259,7 +446,9 @@ onMounted(loadDetail)
 .hd-note { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 2px; }
 .hd-stop { color: var(--warn); }
 
-.timeline-card, .link-card { padding: var(--card-pad); }
+.conn-note { padding: 10px var(--card-pad); font-size: var(--fs-aux); color: var(--warn); }
+
+.timeline-card, .link-card, .events-card { padding: var(--card-pad); }
 .tl-title { font-size: var(--fs-section); font-weight: 600; color: var(--head); margin-bottom: 8px; }
 .tl-note { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 16px; line-height: 1.7; }
 
@@ -291,6 +480,27 @@ onMounted(loadDetail)
 .tl-st-done { color: var(--ok); }
 .tl-st-failed { color: var(--bad); }
 .mono { font-family: var(--mono, monospace); word-break: break-all; }
+
+.ev-list { list-style: none; display: flex; flex-direction: column; }
+.ev-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 8px; border-bottom: 1px dashed var(--line); }
+.ev-item:last-child { border-bottom: none; }
+.ev-badge {
+  flex: none; font-size: var(--fs-aux); border-radius: 999px; padding: 2px 10px;
+  border: 1px solid var(--line-strong); color: var(--ink-2); margin-top: 2px; white-space: nowrap;
+}
+.ev-b-transition { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.ev-b-stop { border-color: var(--warn); color: var(--warn); }
+.ev-b-outcome { border-color: var(--ok); color: var(--ok); }
+.ev-body { flex: 1; min-width: 0; }
+.ev-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--fs-aux); color: var(--ink-2); }
+.ev-payload {
+  margin: 6px 0 0; font-family: var(--mono, monospace); font-size: var(--fs-aux);
+  color: var(--ink-2); background: var(--bg); border-radius: var(--radius-ctl);
+  padding: 6px 8px; white-space: pre-wrap; word-break: break-all;
+}
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0 4px; }
+.muted { color: var(--ink-2); font-size: var(--fs-aux); }
+.loading-box { height: 200px; }
 
 .preview-list { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .pv-row { display: flex; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); }

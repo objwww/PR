@@ -63,6 +63,11 @@
             <EmptyState kind="empty" description="暂无演练记录：后端作业链 DR-02~04 未交付，尚无任何演练作业。" />
           </template>
         </el-table>
+        <!-- 键集游标分页（与 EvalRunsView 同式）：已加载计数 + 加载更多 -->
+        <div class="pager">
+          <span class="muted">已加载 {{ items.length }} 条</span>
+          <el-button v-if="nextCursor" :loading="loadingMore" @click="loadMore">加载更多</el-button>
+        </div>
       </template>
       <!-- 404 = 接口未就绪，不能渲染成「暂无数据」假装正常 -->
       <el-result
@@ -95,16 +100,19 @@ const router = useRouter()
 
 const items = ref([])
 const summary = ref({})
+const nextCursor = ref(null)
 const listState = ref('loading') // loading | ok | not-ready | error
 const loading = ref(false)
+const loadingMore = ref(false)
 const notReady = ref(false)
 
 async function loadList() {
   loading.value = true
   try {
-    const d = await listDrills()
+    const d = await listDrills({ limit: 50 })
     items.value = d.items ?? []
     summary.value = d.summary ?? {}
+    nextCursor.value = d.nextCursor ?? null
     notReady.value = false
     listState.value = 'ok'
   } catch (e) {
@@ -116,6 +124,26 @@ async function loadList() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+// 加载更多：服务端 nextCursor 为唯一翻页依据；summary 真计数以首页为准，不随翻页追加
+async function loadMore() {
+  if (!nextCursor.value) return
+  loadingMore.value = true
+  try {
+    const d = await listDrills({ cursor: nextCursor.value, limit: 50 })
+    items.value = items.value.concat(d.items ?? [])
+    nextCursor.value = d.nextCursor ?? null
+  } catch (e) {
+    if (e instanceof ApiNotReadyError) {
+      notReady.value = true
+      listState.value = 'not-ready'
+    } else {
+      ElMessage.error('加载更多失败，请重试')
+    }
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -136,5 +164,7 @@ onMounted(loadList)
 .cell-main { font-size: var(--fs-body); line-height: 1.4; }
 .cell-sub { font-size: var(--fs-aux); color: var(--ink-2); line-height: 1.4; }
 .mono { font-family: var(--mono, monospace); }
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0 4px; }
+.muted { color: var(--ink-2); font-size: var(--fs-aux); }
 .loading-box { height: 320px; }
 </style>

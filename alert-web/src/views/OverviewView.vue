@@ -26,29 +26,30 @@
         <VChart v-if="hasTrend" :option="trendOption" autoresize class="trend-chart" />
         <EmptyState v-else description="近 24 小时暂无告警趋势数据" />
       </template>
+      <EmptyState v-else-if="trendState === 'forbidden'" kind="forbidden" />
       <EmptyState v-else-if="trendState === 'error'" kind="error" @retry="loadSummary" />
       <div v-else v-loading="true" class="loading-box" />
     </div>
 
-    <!-- 双列：左 2/3 最新告警 Top5，右 1/3 交接摘要 + 系统健康 -->
+    <!-- 双列：左 2/3 按风险待办（§三.1：severity 风险序 Top5，消费 overview/summary.topRisk），右 1/3 交接摘要 + 系统健康 -->
     <div class="grid-2col">
       <div class="card panel">
         <div class="panel-head">
-          <span class="panel-title">最新告警（Top 5）</span>
+          <span class="panel-title">按风险待办（Top 5）</span>
           <router-link class="more-link" to="/alerts?status=FIRING">查看全部</router-link>
         </div>
-        <template v-if="incidentsState === 'ok'">
-          <IncidentTable :rows="topIncidents" :loading="incidentsLoading" @row-click="openIncident">
+        <template v-if="todoState === 'ok'">
+          <IncidentTable :rows="topRisk" :loading="summaryState === 'loading'" @row-click="openIncident">
             <template #actions="{ row }">
               <el-button size="small" @click.stop="openIncident(row)">打开</el-button>
             </template>
             <template #empty>
-              <EmptyState description="当前没有告警中的事故" />
+              <EmptyState description="当前没有待处理的告警" />
             </template>
           </IncidentTable>
         </template>
-        <EmptyState v-else-if="incidentsState === 'forbidden'" kind="forbidden" />
-        <EmptyState v-else-if="incidentsState === 'error'" kind="error" @retry="loadIncidents" />
+        <EmptyState v-else-if="todoState === 'forbidden'" kind="forbidden" />
+        <EmptyState v-else-if="todoState === 'error'" kind="error" @retry="loadSummary" />
         <div v-else v-loading="true" class="loading-box" />
       </div>
 
@@ -69,8 +70,9 @@
 </template>
 
 <script setup>
-// UI-2 总览（/overview）：KPI 卡（可点击深跳）+ 24h 趋势面积图 + 最新告警 Top5 + 交接/健康空态
-// 数据全真：GET /v1/overview/summary（KPI/趋势/值班）、GET /v1/incidents?status=FIRING&limit=5（Top5）
+// UI-2 总览（/overview）：KPI 卡（可点击深跳）+ 24h 趋势面积图 + 按风险待办 Top5 + 交接/健康空态
+// §三.1：首行三行动指标 = 待处理 / 调查异常 / 通知失败 24h；主区待办消费 topRisk（severity 风险序）
+// 数据全真：GET /v1/overview/summary（KPI/趋势/值班/待办 单端点聚合）
 // 字段可 null → 显「—」；交接与健康无真数据源，EmptyState 如实说明
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -83,12 +85,8 @@ import { fmtTime } from '../utils/format'
 const router = useRouter()
 
 const summary = ref(null)
-const summaryState = ref('loading') // loading | ok | error
+const summaryState = ref('loading') // loading | ok | error | forbidden
 const updatedAt = ref(null)
-
-const topIncidents = ref([])
-const incidentsState = ref('loading') // loading | ok | error | forbidden
-const incidentsLoading = ref(false)
 
 let timer = null
 
@@ -120,21 +118,20 @@ const kpis = computed(() => {
       color: abnormal > 0 ? 'var(--sev-p1)' : 'var(--head)',
     },
     {
-      label: '待审查',
-      value: num(s?.runs?.awaitingReview),
-      desc: '等待人工审查的调查结论',
-      to: '/runs',
-      color: s?.runs?.awaitingReview > 0 ? 'var(--sev-p2)' : 'var(--head)',
-    },
-    {
-      label: '通知未读',
-      value: num(s?.notifications?.unread),
-      desc: '尚未阅读的值班通知',
+      // §三.1 通知失败 24h：后端 notifications.failed24h（notify_outbox DEAD 口径）；
+      // 旧契约缺席 → num() 显「—」，不显 0
+      label: '通知失败 24h',
+      value: num(s?.notifications?.failed24h),
+      desc: '近 24 小时投递终败的通知',
       to: '/notifications',
-      color: s?.notifications?.unread > 0 ? 'var(--sev-p3)' : 'var(--head)',
+      color: s?.notifications?.failed24h > 0 ? 'var(--sev-p1)' : 'var(--head)',
     },
   ]
 })
+
+// §三.1 按风险待办：IncidentRow 形状（severity/分类徽章由 IncidentTable 内 StatusBadge/CategoryBadge 渲染）
+const topRisk = computed(() => summary.value?.topRisk ?? [])
+const todoState = computed(() => summaryState.value)
 
 const trend = computed(() => summary.value?.alertTrend24h ?? [])
 const trendState = computed(() => summaryState.value)
@@ -172,28 +169,14 @@ async function loadSummary() {
     summary.value = await api('/v1/overview/summary')
     updatedAt.value = new Date().toISOString()
     summaryState.value = 'ok'
-  } catch {
-    summaryState.value = 'error'
-  }
-}
-
-async function loadIncidents() {
-  incidentsState.value = 'loading'
-  incidentsLoading.value = true
-  try {
-    const d = await api('/v1/incidents', { params: { status: 'FIRING', limit: 5 } })
-    topIncidents.value = d.items ?? []
-    incidentsState.value = 'ok'
   } catch (e) {
-    incidentsState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
-  } finally {
-    incidentsLoading.value = false
+    summaryState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
   }
 }
 
 function openIncident(row) { router.push(`/alerts/${row.incidentId}`) }
 
-function refresh() { loadSummary(); loadIncidents() }
+function refresh() { loadSummary() }
 
 onMounted(() => {
   refresh()

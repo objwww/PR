@@ -1,6 +1,6 @@
 <template>
   <div class="eval-page">
-    <!-- 顶层四入口：实验 / 数据集 / 人工评审 / 能力版本（EV-09 未交付，禁用） -->
+    <!-- 顶层四入口：实验 / 数据集 / 人工评审 / 能力版本（EV-09） -->
     <div class="card tabs">
       <template v-for="t in tabs" :key="t.label">
         <span v-if="t.disabled" class="tab tab-disabled" :title="t.disabledTip">
@@ -31,11 +31,7 @@ const tabs = [
   { label: '实验', to: '/eval/runs', match: '/eval/runs' },
   { label: '数据集', to: '/eval/datasets', match: '/eval/datasets' },
   { label: '人工评审', to: '/eval/review', match: '/eval/review' },
-  {
-    label: '能力版本', disabled: true,
-    disabledNote: '（依赖 EV-09，暂未开放）',
-    disabledTip: '能力版本中心依赖后端 EV-09 资产清单与发布接口，本批未交付',
-  },
+  { label: '能力版本', to: '/eval/assets', match: '/eval/assets' },
 ]
 
 function isCur(t) {

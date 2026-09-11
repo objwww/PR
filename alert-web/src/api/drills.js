@@ -1,7 +1,7 @@
 import { api } from './client'
 
-// 故障演练 API（DR-01 页面骨架）：后端 /api/drills* 整组接口依赖 DR-02 持久化作业，
-// 本批未交付——调用方必须区分「接口未就绪（404）」与「真实错误」，不得把 404 渲染成空数据。
+// 故障演练 API（DR-01/DR-02）：调用方必须区分「接口未就绪（403/404）」与「真实错误」，
+// 不得把未就绪渲染成空数据。
 export class ApiNotReadyError extends Error {
   constructor(path) {
     super(`接口未就绪：${path}`)
@@ -18,9 +18,13 @@ function classify(path, err) {
   return err
 }
 
-export async function listDrills() {
+export async function listDrills({ cursor, limit } = {}) {
+  // 键集游标分页（后端 limit 默认 50 上限 200，满页才给 nextCursor）
+  const params = {}
+  if (cursor) params.cursor = cursor
+  if (limit != null) params.limit = limit
   try {
-    return await api('/drills')
+    return await api('/drills', { params })
   } catch (e) {
     throw classify('/api/drills', e)
   }
@@ -71,6 +75,21 @@ export async function stopDrill(drillId, idempotencyKey) {
   const path = `/api/drills/${encodeURIComponent(drillId)}/stop`
   try {
     return await api(path, { method: 'POST', body: { idempotencyKey } })
+  } catch (e) {
+    throw classify(path, e)
+  }
+}
+
+// DR-02 事件流（§7.2 详情页原始账本视图 / DU10 游标增量轮询）：
+// {items:[{eventId, seq, eventType, fromState, toState, actor, payload, createdAt}], nextCursor, asOf}；
+// 游标 = seq（drill_event identity 单调序），afterSeq 严格大于续页，满页才给 nextCursor
+export async function listDrillEvents(drillId, { afterSeq, limit } = {}) {
+  const path = `/api/drills/${encodeURIComponent(drillId)}/events`
+  const params = {}
+  if (afterSeq != null) params.afterSeq = afterSeq
+  if (limit != null) params.limit = limit
+  try {
+    return await api(path, { params })
   } catch (e) {
     throw classify(path, e)
   }

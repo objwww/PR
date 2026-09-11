@@ -9,7 +9,7 @@
       <span class="crumb-right">数据更新至 {{ fmtTime(loadedAt) }}</span>
     </div>
 
-    <!-- 顶部摘要：告警 / 状态 chip / 耗时 / 已用费用（token×单价无则只显 token）+ 次级操作 -->
+    <!-- 顶部摘要：告警 / 状态 chip / 耗时 / 已用费用（rca_model_call 实账，未定价不冒充 ¥0）+ 次级操作 -->
     <div class="card runhead">
       <router-link v-if="run.incident" class="inc-link" :to="`/alerts/${run.incident}`" :title="run.incident">
         告警 {{ shortId(run.incident) }}
@@ -17,6 +17,7 @@
       <StatusBadge :status="run.status" />
       <span class="mini">耗时 {{ listRow?.duration ?? '—' }}</span>
       <span class="mini">预算 token：{{ run.budget?.token?.used ?? '—' }}</span>
+      <span class="mini" :title="costTitle">费用：{{ costText }}</span>
       <span class="mini">任务 {{ run.progress.done }}/{{ run.progress.total }}</span>
       <span v-if="listRow?.blocker" class="mini blocker" :title="listRow.blocker">卡点：{{ listRow.blocker }}</span>
       <span class="ops">
@@ -144,7 +145,10 @@
           <div class="box">
             <StatusBadge :status="selectedTask.status" />
             <span class="mini">{{ statusStyle[selectedTask.status]?.zh }}</span><br>
-            任务 {{ selectedTask.name }} ｜ 优先级 {{ selectedTask.priority }}<br>
+            任务 {{ selectedTask.name }} ｜ 优先级 {{ selectedTask.priority }}
+            ｜ 轮次 round {{ selectedTask.roundId ?? 0 }}<br>
+            角色：<template v-if="selectedTask.roleId">{{ selectedTask.roleId }}@{{ selectedTask.roleVersion }}</template>
+            <span v-else class="muted">主 Agent / 未绑定</span><br>
             截止时间 {{ fmtTime(selectedTask.deadline) }}
             <template v-if="selectedTask.lease"><br>租约：{{ selectedTask.lease.worker }}（epoch {{ selectedTask.lease.epoch }}）</template>
             <br>尝试次数：{{ selectedTask.attempts }}
@@ -280,6 +284,54 @@
         <div class="lbl">预算分项</div>
         <KvTable v-if="run.budget" :data="run.budget" />
         <div v-else class="muted">预算账本无读面，投影未提供（不回填示意值）</div>
+      </div>
+      <!-- §三.5：费用数据源 = rca_model_call（RV08 红线，非 PR 域账本） -->
+      <div class="card panel">
+        <div class="lbl">模型调用与费用</div>
+        <template v-if="usage">
+          <KvTable :data="usageKv" />
+          <div v-if="usage.usageMissing > 0" class="blocker-box">
+            {{ usage.usageMissing }} 笔调用用量未回报，费用为下限
+          </div>
+        </template>
+        <div v-else class="muted">无模型调用账本记录</div>
+      </div>
+      <!-- §三.5：角色/轮次/依赖透出；旧 run 无 V46 绑定 → 如实降级 -->
+      <div class="card panel">
+        <div class="lbl">角色与轮次</div>
+        <template v-if="hasRoleData">
+          <el-table :data="roleRows" size="small">
+            <el-table-column label="任务" min-width="150">
+              <template #default="{ row }"><b>{{ row.name }}</b></template>
+            </el-table-column>
+            <el-table-column label="轮次" width="90" align="center">
+              <template #default="{ row }">round {{ row.roundId ?? 0 }}</template>
+            </el-table-column>
+            <el-table-column label="角色" min-width="170">
+              <template #default="{ row }">
+                <template v-if="row.roleId">{{ row.roleId }}@{{ row.roleVersion }}</template>
+                <span v-else class="muted">主 Agent / 未绑定</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="120">
+              <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+            </el-table-column>
+            <el-table-column prop="attempts" label="尝试" width="70" align="right" />
+            <el-table-column label="编排" min-width="150">
+              <template #default="{ row }">{{ row.orchestration }}</template>
+            </el-table-column>
+            <el-table-column label="父请求" min-width="100">
+              <template #default="{ row }">
+                <code v-if="row.parentRequestId">{{ shortId(row.parentRequestId) }}</code>
+                <span v-else class="muted">—</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="note">
+            串行/并发为依赖投影（edges）的读面推断：同一上游任务在同一轮次派出多个下游任务 → 并发分支；链式单下游 → 串行
+          </div>
+        </template>
+        <div v-else class="muted">此调查为旧版单角色执行，无角色绑定数据</div>
       </div>
       <div class="card panel">
         <div class="lbl">任务与尝试（rca_task 投影）</div>
@@ -537,6 +589,66 @@ const runHeadKv = computed(() => ({
   '负责人': '认领面未落码',
   '事件游标（revision）': revision.value ?? '—',
 }))
+
+// ===== §三.5 费用（usage 块 = rca_model_call 聚合，RV08 口径；无行 → null 显「无模型调用」）=====
+const usage = computed(() => detail.value?.usage ?? null)
+
+function currencySymbol(currency) {
+  return { CNY: '¥', USD: '$', EUR: '€' }[currency] ?? (currency ? `${currency} ` : '')
+}
+
+function formatCost(u) {
+  if (u?.costMicros == null) return null // 未定价/未结算——不显示 ¥0 冒充
+  return currencySymbol(u.currency) + (u.costMicros / 1_000_000).toFixed(4)
+}
+
+const costText = computed(() => {
+  const u = usage.value
+  if (!u) return '无模型调用'
+  const cost = formatCost(u)
+  if (cost == null) return '未定价'
+  return u.usageMissing > 0 ? `${cost}（下限）` : cost
+})
+
+const costTitle = computed(() => {
+  const u = usage.value
+  if (!u) return '本调查无模型调用账本记录'
+  const base = `模型调用 ${u.callCount} 次｜token 入 ${u.tokensIn} / 出 ${u.tokensOut}`
+  return u.usageMissing > 0 ? `${base}｜${u.usageMissing} 笔调用用量未回报，费用为下限` : base
+})
+
+const usageKv = computed(() => {
+  const u = usage.value
+  if (!u) return {}
+  return {
+    '调用次数': u.callCount,
+    '输入 token': u.tokensIn,
+    '输出 token': u.tokensOut,
+    '费用': formatCost(u) ?? '未定价/未结算',
+    '币种': u.currency ?? '未知',
+    '定价版本': u.pricingVersion ?? '未知',
+    '用量未回报': u.usageMissing > 0 ? `${u.usageMissing} 笔（费用为下限）` : '0',
+  }
+})
+
+// ===== §三.5 角色与轮次（V46 绑定投影；旧 run 全 null → 「旧版单角色执行」降级）=====
+const hasRoleData = computed(() => tasks.value.some(t => t.roleId != null))
+
+// 串行/并发推断依据：同一上游任务在同一轮次的多个下游 = 并发分支；链式单下游 = 串行
+const roleRows = computed(() => {
+  const roundOfKey = key => tasks.value.find(x => x.id === key)?.roundId ?? 0
+  return dagTasks.value.map(t => {
+    const upstreams = edges.value.filter(e => e.target === t.id).map(e => e.source)
+    const siblingCount = edges.value.filter(e =>
+      e.target !== t.id && upstreams.includes(e.source) &&
+      roundOfKey(e.target) === (t.roundId ?? 0)).length
+    let orchestration
+    if (!upstreams.length) orchestration = '入口'
+    else if (siblingCount) orchestration = `并发分支（同上游 ${siblingCount + 1} 路）`
+    else orchestration = '串行'
+    return { ...t, orchestration }
+  })
+})
 
 // ===== 干预命令（真端点：幂等键 + expectedRevision=事件游标） =====
 const cmdPending = ref(false)

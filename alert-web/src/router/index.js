@@ -15,6 +15,7 @@ import EvalRunsView from '../views/EvalRunsView.vue'
 import EvalRunDetailView from '../views/EvalRunDetailView.vue'
 import EvalDatasetsView from '../views/EvalDatasetsView.vue'
 import EvalReviewView from '../views/EvalReviewView.vue'
+import EvalAssetsView from '../views/EvalAssetsView.vue'
 import EvalNewView from '../views/EvalNewView.vue'
 import EvalCompareView from '../views/EvalCompareView.vue'
 import MonitorView from '../views/MonitorView.vue'
@@ -38,7 +39,7 @@ const routes = [
   { path: '/duty', name: 'duty', component: DutyView, meta: { title: '值班管理' } },
   { path: '/duty/chat', name: 'duty-chat', component: DutyChatView, meta: { title: '通知预览' } },
   { path: '/notifications', name: 'notifications', component: NotificationsView, meta: { title: '值班通知' } },
-  // UI-6 评测中心路由化：/eval → /eval/runs；实验 / 数据集 / 评审 三个一级子路由 + 实验详情
+  // UI-6 评测中心路由化：/eval → /eval/runs；实验 / 数据集 / 评审 / 能力版本（EV-09）四个一级子路由 + 实验详情
   {
     path: '/eval', component: EvalView, meta: { title: '评测中心' },
     children: [
@@ -49,6 +50,7 @@ const routes = [
       { path: 'compare', name: 'eval-compare', component: EvalCompareView, meta: { title: '对比工作台 · 评测中心' } },
       { path: 'datasets', name: 'eval-datasets', component: EvalDatasetsView, meta: { title: '数据集 · 评测中心' } },
       { path: 'review', name: 'eval-review', component: EvalReviewView, meta: { title: '评审 · 评测中心' } },
+      { path: 'assets', name: 'eval-assets', component: EvalAssetsView, meta: { title: '能力版本 · 评测中心' } },
     ],
   },
   // DR-01 故障演练：列表 / 三步新建 / 详情，均可浏览器直达刷新（浏览器 history 模式 + nginx SPA 回退）

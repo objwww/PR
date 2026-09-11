@@ -2,32 +2,37 @@
   <div class="alerts-page">
     <PageHeader title="告警中心" subtitle="筛选并找到应调查或处理的事故" />
 
-    <!-- 统计条：firing/P0/P1/P2 可点击=应用对应过滤；未分派/24h/MTTR 契约无对应过滤参数，仅展示 -->
-    <div class="stat-row">
-      <div class="stat card clickable" :class="{ cur: filters.status === 'FIRING' }" @click="toggleFilter('status', 'FIRING')">
-        <span class="stat-label">告警中</span>
-        <span class="stat-num" style="color: var(--sev-p0)">{{ summary?.firingTotal ?? '—' }}</span>
-      </div>
-      <div
+    <!-- §三.2 状态计数行：六张统计卡收成一行；告警中/P0/P1/P2 可点=应用对应过滤
+         （沿用 toggleFilter），未分派/24h/MTTR 契约无对应过滤参数，仅展示；未知显「—」 -->
+    <div class="count-bar card">
+      <button
+        type="button" class="cnt clickable" :class="{ cur: filters.status === 'FIRING' }"
+        @click="toggleFilter('status', 'FIRING')"
+      >
+        <span class="cnt-label">告警中</span>
+        <span class="cnt-num" style="color: var(--sev-p0)">{{ summary?.firingTotal ?? '—' }}</span>
+      </button>
+      <button
         v-for="c in sevCards" :key="c.raw"
-        class="stat card clickable" :class="{ cur: filters.severity === c.raw }"
+        type="button" class="cnt clickable" :class="{ cur: filters.severity === c.raw }"
         @click="toggleFilter('severity', c.raw)"
       >
-        <span class="stat-label">{{ c.label }}</span>
-        <span class="stat-num" :style="{ color: c.color }">{{ c.count }}</span>
-      </div>
-      <div class="stat card">
-        <span class="stat-label">未分派</span>
-        <span class="stat-num">{{ summary?.unassigned ?? '—' }}</span>
-      </div>
-      <div class="stat card">
-        <span class="stat-label">24h 接收</span>
-        <span class="stat-num">{{ summary?.stormReceived24h ?? '—' }}</span>
-      </div>
-      <div class="stat card">
-        <span class="stat-label">平均恢复（24h）</span>
-        <span class="stat-num">{{ fmtMttr(summary?.mttrMinutes24h) }}</span>
-      </div>
+        <span class="cnt-label">{{ c.label }}</span>
+        <span class="cnt-num" :style="{ color: c.color }">{{ c.count }}</span>
+      </button>
+      <span class="sep" />
+      <span class="cnt">
+        <span class="cnt-label">未分派</span>
+        <span class="cnt-num">{{ summary?.unassigned ?? '—' }}</span>
+      </span>
+      <span class="cnt">
+        <span class="cnt-label">24h 接收</span>
+        <span class="cnt-num">{{ summary?.stormReceived24h ?? '—' }}</span>
+      </span>
+      <span class="cnt">
+        <span class="cnt-label">平均恢复（24h）</span>
+        <span class="cnt-num">{{ fmtMttr(summary?.mttrMinutes24h) }}</span>
+      </span>
     </div>
 
     <!-- 工具栏：关键词搜索 + 状态/服务常用筛选，其余收进“更多筛选” -->
@@ -123,7 +128,7 @@
 </template>
 
 <script setup>
-// UI-1 告警中心（/alerts）：统计条 + 搜索工具栏 + 左 facet + el-table，全部真端点
+// UI-1 告警中心（/alerts）：§三.2 状态计数行 + 搜索工具栏 + 左 facet + el-table，全部真端点
 // 端点：/v1/incidents（列表/游标分页）、/v1/incidents/facets（计数）、/v1/incidents/summary（统计条）
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -305,14 +310,23 @@ onMounted(loadAll)
 <style scoped>
 .alerts-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
-/* 统计条 */
-.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.stat { padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }
-.stat.clickable { cursor: pointer; transition: box-shadow .15s; }
-.stat.clickable:hover { box-shadow: 0 0 0 2px var(--brand-soft); }
-.stat.cur { box-shadow: 0 0 0 2px var(--brand); }
-.stat-label { font-size: var(--fs-aux); color: var(--ink-2); }
-.stat-num { font-size: 22px; font-weight: 700; color: var(--head); line-height: 1.3; }
+/* §三.2 状态计数行：单行内联分段（button 键盘可达），可点段选中高亮 */
+.count-bar {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  padding: 6px var(--card-pad);
+}
+.cnt {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 6px 10px; border: none; border-radius: var(--radius-ctl);
+  background: none; font: inherit; color: inherit;
+}
+.cnt.clickable { cursor: pointer; transition: background .15s; }
+.cnt.clickable:hover { background: var(--bg); }
+.cnt.clickable.cur { background: var(--brand-soft); }
+.cnt-label { font-size: var(--fs-aux); color: var(--ink-2); }
+.cnt.clickable.cur .cnt-label { color: var(--brand); font-weight: 600; }
+.cnt-num { font-size: var(--fs-body); font-weight: 700; color: var(--head); }
+.sep { width: 1px; height: 16px; background: var(--bg); margin: 0 4px; }
 
 /* 工具栏 */
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px var(--card-pad); }
