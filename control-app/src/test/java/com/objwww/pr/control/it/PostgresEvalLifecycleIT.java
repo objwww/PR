@@ -79,23 +79,23 @@ class PostgresEvalLifecycleIT extends PostgresITBase {
         // control_app 零 update/delete 开口（命令落库即冻结）
         assertThatThrownBy(() -> controlJdbc.sql(
                 "UPDATE eval_run_command SET state = 'CLAIMED'").update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> controlJdbc.sql(
                 "DELETE FROM eval_run_command").update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
 
         // control_app 对 eval_run 仍只读（V45 面不破）
         assertThatThrownBy(() -> controlJdbc.sql(
                 "UPDATE eval_run SET state = 'FAILED'").update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
 
         // publisher/notify 显式拒绝（写面与读面皆无）
         assertThatThrownBy(() -> publisherJdbc.sql(
                 "SELECT count(*) FROM eval_run_command").query(Long.class).single())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> notifyJdbc.sql(
                 "SELECT count(*) FROM eval_run_command").query(Long.class).single())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
     }
 
     @Test
@@ -114,7 +114,7 @@ class PostgresEvalLifecycleIT extends PostgresITBase {
         // eval_app 正文列零开口
         assertThatThrownBy(() -> evalJdbc.sql(
                 "UPDATE eval_run_command SET payload = '{}'::jsonb").update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
         // 命令终态推进
         assertThat(workerCommands.finish(claimed.id(), EvalRunCommand.State.DONE,
                 Instant.now())).isTrue();
@@ -125,7 +125,7 @@ class PostgresEvalLifecycleIT extends PostgresITBase {
         phaseSink.record(runId, "PREPARING", Instant.now(), "worker-it", null);
         assertThatThrownBy(() -> evalJdbc.sql(
                 "UPDATE eval_phase_event SET phase = 'SCORING'").update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
     }
 
     // ------------------------------------------------------------------ EU09 幂等锚

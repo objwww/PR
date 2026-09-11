@@ -59,16 +59,16 @@ class PostgresDrillIT extends PostgresITBase {
         assertThatThrownBy(() -> controlJdbc.sql("""
                 UPDATE drill_job SET state = 'PRECHECK' WHERE id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         // 正文列零开口
         assertThatThrownBy(() -> controlJdbc.sql("""
                 UPDATE drill_job SET params = '{}'::jsonb WHERE id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> controlJdbc.sql("""
                 DELETE FROM drill_job WHERE id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 
     @Test
@@ -81,18 +81,18 @@ class PostgresDrillIT extends PostgresITBase {
         assertThatThrownBy(() -> evalJdbc.sql("""
                 UPDATE drill_job SET operator = 'hacked' WHERE id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> evalJdbc.sql("""
                 UPDATE drill_job SET idempotency_key = 'hacked' WHERE id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> evalJdbc.sql("""
                 INSERT INTO drill_job (id, scenario_id, scenario_name, template_digest,
                     target_env, operator, params, payload_hash, idempotency_key)
                 VALUES (:id, 'S3', 'n', :dg, 'arena-195', 'op', '{}'::jsonb, :h, 'x')
                 """).param("id", UUID.randomUUID()).param("dg", "2".repeat(64))
                 .param("h", "3".repeat(64)).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 
     @Test
@@ -100,10 +100,10 @@ class PostgresDrillIT extends PostgresITBase {
     void publisherNotifyZeroGrants() {
         assertThatThrownBy(() -> publisherJdbc.sql(
                 "SELECT count(*) FROM drill_job").query(Long.class).single())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> notifyJdbc.sql(
                 "SELECT count(*) FROM drill_event").query(Long.class).single())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 
     // ------------------------------------------------------------------ insert-only
@@ -121,11 +121,11 @@ class PostgresDrillIT extends PostgresITBase {
         assertThatThrownBy(() -> controlJdbc.sql("""
                 UPDATE drill_event SET actor = 'hacked' WHERE drill_id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> evalJdbc.sql("""
                 DELETE FROM drill_event WHERE drill_id = :id
                 """).param("id", job.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 
     // ------------------------------------------------------------------ 约束面
@@ -213,7 +213,8 @@ class PostgresDrillIT extends PostgresITBase {
     }
 
     @Test
-    @DisplayName("领取 CAS：SKIP LOCKED 单语句领取后第二领取空手（多 worker 恰一人领到）")
+    @DisplayName("领取 CAS：领取=身份标记不翻相位（state 留 QUEUED）；顺序双领后"
+            + "恰一人推进（执行权由相位 CAS 兜底）；无 QUEUED 才真空手")
     void claimSkipLocked() {
         DrillJob job = job("arena-195", "it-w1");
         controlJobs.insert(job);
@@ -221,10 +222,22 @@ class PostgresDrillIT extends PostgresITBase {
         assertThat(claimed).isPresent();
         assertThat(claimed.get().workerId()).isEqualTo("worker-a");
         assertThat(claimed.get().revision()).isEqualTo(1);
-        // 已 CLAIMED（非 QUEUED）→ 下一领取空手
-        assertThat(evalJobs.claimNext("worker-b", Instant.now())).isEmpty();
-        // revision 对账：旧 revision 推进失败（租约过期 ≠ 可重做）
-        assertThat(evalJobs.advance(job.id(), 0, DrillJob.State.QUEUED,
+        // 领取契约（V86）：只写 worker_id/claimed_at/revision，state 不翻——
+        // State 枚举无 CLAIMED，worker 首个相位推进就是 QUEUED→PRECHECK；
+        // findOrphanedClaims 按 worker_id+claimed_at 认领超龄（QUEUED 在扫描集内）
+        assertThat(claimed.get().state()).isEqualTo(DrillJob.State.QUEUED);
+        // SKIP LOCKED 只保并发瞬间一人锁到；顺序双领 = 后者覆盖身份（revision+1）。
+        // "恰一人执行"由相位 CAS 兜底：持旧 revision 的 worker-a 推进失败，
+        // 持新 revision 的 worker-b 推进成功（租约过期 ≠ 可重做）
+        Optional<DrillJob> reclaimed = evalJobs.claimNext("worker-b", Instant.now());
+        assertThat(reclaimed).isPresent();
+        assertThat(reclaimed.get().workerId()).isEqualTo("worker-b");
+        assertThat(reclaimed.get().revision()).isEqualTo(2);
+        assertThat(evalJobs.advance(job.id(), 1, DrillJob.State.QUEUED,
                 DrillJob.State.PRECHECK, Instant.now())).isFalse();
+        assertThat(evalJobs.advance(job.id(), 2, DrillJob.State.QUEUED,
+                DrillJob.State.PRECHECK, Instant.now())).isTrue();
+        // 无 QUEUED 行才是真空手（领取子查询只扫 QUEUED）
+        assertThat(evalJobs.claimNext("worker-c", Instant.now())).isEmpty();
     }
 }

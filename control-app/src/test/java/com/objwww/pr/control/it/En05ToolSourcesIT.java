@@ -161,7 +161,7 @@ class En05ToolSourcesIT extends PostgresITBase {
         jdbc.sql("""
                 INSERT INTO incident (id, incident_key, status, generation,
                     episode_started_at, first_seen_at, last_event_at, created_at, updated_at)
-                VALUES (:id, 'HighErrorRate|control-app', 'OPEN', 0,
+                VALUES (:id, 'HighErrorRate|control-app', 'FIRING', 0,
                         now(), now(), now(), now(), now())
                 """)
                 .param("id", incidentId)

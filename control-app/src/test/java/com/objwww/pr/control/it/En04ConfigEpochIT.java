@@ -145,24 +145,28 @@ class En04ConfigEpochIT extends PostgresITBase {
         PostgresRcaModelCallLedger ledger = new PostgresRcaModelCallLedger(
                 jdbc, new ObjectMapper(), controlTx);
 
-        // 切换前：epoch0 动作正常领取发送资格
+        // 切换前：epoch0 动作正常领取发送资格（task/attempt 真种，FK 实在面）
         UUID freshCall = UUID.randomUUID();
-        ledger.open(call(freshCall, runId, 0L));
+        UUID[] ta1 = mintTaskAttempt(runId, jdbc);
+        ledger.open(call(freshCall, runId, ta1[0], ta1[1], 0L));
         assertThat(ledger.findUnsettledByRun(runId)).hasSize(1);
 
         // 切换生效（append epoch1）：旧 epoch0 新动作 = EPOCH_FENCE，零行落账
         assertThat(epochs.append(runId, 1L, "b".repeat(64),
                 UUID.randomUUID(), "op-fence", "热更新")).isTrue();
-        assertThatThrownBy(() -> ledger.open(call(UUID.randomUUID(), runId, 0L)))
+        assertThatThrownBy(() -> ledger.open(call(UUID.randomUUID(), runId,
+                        UUID.randomUUID(), UUID.randomUUID(), 0L)))
                 .isInstanceOf(RcaModelCallFenceException.class);
         assertThat(ledger.findUnsettledByRun(runId)).hasSize(1);
 
-        // 新 epoch 动作放行（新调用绑新 epoch，§231）
+        // 新 epoch 动作放行（新调用绑新 epoch，§231）——台账序按 task_id 排（随机 UUID），
+        // 断言集合在场面而非插入序（findUnsettledByRun ORDER BY task_id,…）
         UUID newEpochCall = UUID.randomUUID();
-        ledger.open(call(newEpochCall, runId, 1L));
+        UUID[] ta2 = mintTaskAttempt(runId, jdbc);
+        ledger.open(call(newEpochCall, runId, ta2[0], ta2[1], 1L));
         assertThat(ledger.findUnsettledByRun(runId))
                 .extracting(RcaModelCallLedger.UnsettledRow::id)
-                .containsExactly(freshCall, newEpochCall);
+                .containsExactlyInAnyOrder(freshCall, newEpochCall);
     }
 
     // --------------------------------------------- 命令面 CAS + 过期巡回（PG 面）
@@ -200,6 +204,10 @@ class En04ConfigEpochIT extends PostgresITBase {
                 OperatorCommand.State.APPLIED, NOW)).isTrue();
 
         // H14 巡回面：只捞 WAITING 且 deadline 已过的行（APPLIED 行与未来 deadline 不入列）
+        // overdue 行先推进到 WAITING_SAFE_POINT——巡回谓词只扫该态（V48 findWaitingOverdue）
+        assertThat(commands.advanceState(overdueId,
+                OperatorCommand.State.PERSISTED,
+                OperatorCommand.State.WAITING_SAFE_POINT, null)).isTrue();
         assertThat(commands.findWaitingOverdue(NOW))
                 .extracting(OperatorCommand::id)
                 .containsExactly(overdueId);
@@ -220,8 +228,7 @@ class En04ConfigEpochIT extends PostgresITBase {
         return false;
     }
 
-    /** 铸一条 NATIVE run（3 参 insertRouted：路由 + 调查输入身份）——准入播种随之发生。 */
-    private RcaRun mintRoutedRun(String tag) {
+    /** 铸一条 NATIVE run（3 参 insertRouted：路由 + 调查输入身份）——准入播种随之发生。 */    private RcaRun mintRoutedRun(String tag) {
         Incident incident = insertIncident(tag);
         UUID id = UUID.randomUUID();
         Instant now = Instant.now();
@@ -245,9 +252,32 @@ class En04ConfigEpochIT extends PostgresITBase {
         return incident;
     }
 
-    private static RcaModelCallLedger.OpenRow call(UUID id, UUID runId, Long configEpoch) {
-        return new RcaModelCallLedger.OpenRow(id, runId, UUID.randomUUID(),
-                UUID.randomUUID(), 1L, 0, 0, "primary", "1",
+    /** 真种 rca_task + rca_attempt（rca_model_call 双 FK 的实在面；返回 [taskId, attemptId]）。 */
+    private UUID[] mintTaskAttempt(UUID runId, JdbcClient jdbc) {
+        UUID taskId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO rca_task (id, run_id, task_key, state,
+                    available_at, ready_since, deadline_at, created_at, updated_at)
+                VALUES (:id, :run, :key, 'DONE', now(), now(), now(), now(), now())
+                """)
+                .param("id", taskId).param("run", runId)
+                .param("key", "EN04_LEDGER_" + taskId.toString().substring(0, 8))
+                .update();
+        jdbc.sql("""
+                INSERT INTO rca_attempt (id, task_id, attempt_no, lease_epoch, worker_id,
+                    status, started_at, finished_at)
+                VALUES (:id, :task, 1, 0, 'en04-it', 'SUCCEEDED', now(), now())
+                """)
+                .param("id", attemptId).param("task", taskId)
+                .update();
+        return new UUID[]{taskId, attemptId};
+    }
+
+    private static RcaModelCallLedger.OpenRow call(UUID id, UUID runId, UUID taskId,
+            UUID attemptId, Long configEpoch) {
+        return new RcaModelCallLedger.OpenRow(id, runId, taskId,
+                attemptId, 1L, 1, 0, "primary", "1",
                 Digest.sha256Of("role").hex(), Digest.sha256Of("prompt").hex(),
                 null, null, configEpoch,
                 configEpoch == null ? null

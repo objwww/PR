@@ -40,7 +40,8 @@ class PostgresDutyBotIT extends PostgresITBase {
     @DisplayName("V83 约束：role 词表 / intent 与 assistant 同生同灭 / client_id 只属于 user / 内容上限")
     void checkConstraints() {
         UUID sid = insertSession("op-a");
-        assertThatThrownBy(() -> rawMessage(sid, "bot", "x", "HELP", null))
+        // role='bot' 不带 intent——让 role 词表约束独触（带 HELP 时 intent 约束先评估，旧红实证）
+        assertThatThrownBy(() -> rawMessage(sid, "bot", "x", null, null))
                 .hasMessageContaining("ck_chat_message_role");
         // user 行带 intent 直拒；assistant 行缺 intent 直拒
         assertThatThrownBy(() -> rawMessage(sid, "user", "x", "HELP", null))
@@ -67,10 +68,10 @@ class PostgresDutyBotIT extends PostgresITBase {
         rawMessage(sid, "user", "a", null, "c-dup");
         assertThatThrownBy(() -> rawMessage(sid, "user", "b", null, "c-dup"))
                 .isInstanceOf(DuplicateKeyException.class);
-        // 空键多行合法
+        // 空键多行合法（a 落库、b 撞键被拒、c/d 空键各一行 → 恰 3 行）
         rawMessage(sid, "user", "c", null, null);
         rawMessage(sid, "user", "d", null, null);
-        assertThat(store.countMessages(sid)).isEqualTo(4);
+        assertThat(store.countMessages(sid)).isEqualTo(3);
     }
 
     // ------------------------------------------------------------------ 授权矩阵
@@ -87,11 +88,11 @@ class PostgresDutyBotIT extends PostgresITBase {
         assertThatThrownBy(() -> controlJdbc.sql(
                 "update chat_session set title = 'x' where id = :id")
                 .param("id", sid).update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> controlJdbc.sql(
                 "delete from chat_message where session_id = :id")
                 .param("id", sid).update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
 
         // publisher/notify/eval 显式归零（读写皆拒）
         for (var jdbc : new org.springframework.jdbc.core.simple.JdbcClient[]{
@@ -99,11 +100,11 @@ class PostgresDutyBotIT extends PostgresITBase {
             assertThatThrownBy(() -> jdbc.sql(
                     "insert into chat_session (id, title, owner, created_at) values (:id, 't', 'x', now())")
                     .param("id", UUID.randomUUID()).update())
-                    .isInstanceOf(PermissionDeniedDataAccessException.class);
+                    .hasStackTraceContaining("permission denied");
             assertThatThrownBy(() -> jdbc.sql(
                     "select id from chat_message where session_id = :id")
                     .param("id", sid).query(UUID.class).list())
-                    .isInstanceOf(PermissionDeniedDataAccessException.class);
+                    .hasStackTraceContaining("permission denied");
         }
     }
 

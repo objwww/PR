@@ -116,7 +116,7 @@ class En10VersionCenterIT extends PostgresITBase {
                 .query((rs, i) -> rs.getString("bundle_digest")).single();
         jdbc.sql("""
                 UPDATE config_bundle_active
-                   SET bundle_digest = :digest, activated_at = :at, revision = 1
+                   SET bundle_digest = :digest, activated_at = :at
                  WHERE id = 1
                 """)
                 .param("digest", digest).param("at", Timestamp.from(at))

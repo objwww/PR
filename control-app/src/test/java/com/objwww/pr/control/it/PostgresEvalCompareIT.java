@@ -193,9 +193,25 @@ class PostgresEvalCompareIT extends PostgresITBase {
         assertThat(s2.scenarioFamilyId()).isNull();
 
         // HOLDOUT 行 RLS 不可见 → 身份列 null（同版本同键但 HOLDOUT 分区，
-        // control_app 策略面与 eval_app 同构 partition_class <> 'HOLDOUT'）
-        UUID holdoutDs = insertDataset("rca100-holdout", "rca100-v1.1");
-        evalJdbc.sql("""
+        // control_app 策略面与 eval_app 同构 partition_class <> 'HOLDOUT'；
+        // 种子走 admin 面——eval_app 的 INSERT 策略本就拒 HOLDOUT 行，RLS 下行级
+        // 拒绝即 RLS 策略生效面（旧红实证），不可用业务角色造 HOLDOUT 数据）。
+        // V21 复合 FK fk_case_version_dataset_partition 保案行分区与版本头一致
+        // → 先落 source_class=PRIVATE 的 HOLDOUT 版本头（INV-AM5-1 触发器禁
+        // PUBLIC_BENCHMARK 冒充 HOLDOUT；V20 词表两约束均容 PRIVATE×HOLDOUT）
+        UUID holdoutDs = UUID.randomUUID();
+        adminJdbc.sql("""
+                INSERT INTO dataset_version(id, source, name, version, source_uri, license,
+                    access_class, content_digest, adapter_version, imported_at,
+                    source_class, partition_class, scenario_family_digest)
+                VALUES (:id, 'rca100', 'rca100-holdout', 'rca100-v1.1', 's3://x', 'MIT',
+                    'internal', :digest, 'adapter-v1', now(), 'PRIVATE', 'HOLDOUT', :fam)
+                """)
+                .param("id", holdoutDs)
+                .param("digest", Digest.sha256Of("ds-rca100-holdout").value())
+                .param("fam", Digest.sha256Of("fam-rca100-holdout").value())
+                .update();
+        adminJdbc.sql("""
                 INSERT INTO case_version(id, dataset_version_id, case_key, scenario_family_id,
                     valid_from, content_digest, payload, partition_class)
                 VALUES (:id, :ds, 'S2', 'secret', now(), :digest,

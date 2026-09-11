@@ -124,4 +124,22 @@ class EnMigrationContractTest {
                 .contains("revoke all on mcp_server_registry from eval_app")
                 .contains("revoke all on mcp_server_registry from notify_app");
     }
+
+    /**
+     * V89（BA-122）：EN-07 固定语料两 kind 的词表扩集——产品域 ReleaseAsset 五 kind
+     * （RUNBOOK_DOC/RUNBOOK_CATALOG，"EN-01 三类同律"）必须有 DB 侧 check 对应面；
+     * 原位扩集（V12 ck_rca_run_finish 同律：drop + add 同名约束），身份/授权面零改动。
+     */
+    @Test
+    void v89ReleaseAssetKindCheckCoversRunbookCorpusKinds() throws IOException {
+        Path v89 = Path.of(
+                "src/main/resources/db/migration/V89__en07_release_asset_kinds.sql");
+        String sql = normalized(v89);
+
+        assertThat(sql)
+                .contains("alter table release_asset drop constraint release_asset_asset_kind_check")
+                .contains("alter table release_asset add constraint release_asset_asset_kind_check")
+                .contains("'prompt', 'skill', 'tool_schema'")
+                .contains("'runbook_doc', 'runbook_catalog'");
+    }
 }

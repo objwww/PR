@@ -140,9 +140,9 @@ class En07RagSourcesIT extends PostgresITBase {
         UUID runId = UUID.randomUUID();
         controlJdbc.sql("""
                 INSERT INTO rca_run (id, incident_id, generation, state,
-                    investigation_hash, created_at, updated_at)
+                    investigation_hash, finished_at, created_at, updated_at)
                 VALUES (:id, :incident, 0, 'SUCCEEDED',
-                    :hash, :at, :at)
+                    :hash, :at, :at, :at)
                 """)
                 .param("id", runId).param("incident", incidentId)
                 .param("hash", "ab".repeat(32))

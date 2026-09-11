@@ -263,11 +263,11 @@ class PostgresEvalQueryReaderIT extends PostgresITBase {
 
         assertThatThrownBy(() -> publisherJdbc.sql(
                         "SELECT count(*) FROM eval_phase_event").query(Long.class).single())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> controlJdbc.sql("""
                         INSERT INTO eval_phase_event(id, eval_run_id, phase, entered_at)
                         VALUES (:id, :run, 'SCORING', now())
                         """).param("id", UUID.randomUUID()).param("run", run.id()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 }

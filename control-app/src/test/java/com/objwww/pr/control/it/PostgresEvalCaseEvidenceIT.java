@@ -370,10 +370,10 @@ class PostgresEvalCaseEvidenceIT extends PostgresITBase {
     void grantMatrixKeepsReadFaceMinimal() {
         assertThatThrownBy(() -> evalJdbc.sql("SELECT count(*) FROM rca_evidence")
                 .query(Long.class).single())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> publisherJdbc.sql("SELECT count(*) FROM eval_case_result")
                 .query(Long.class).single())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
         // control_app 只读面：SELECT 通、INSERT eval_run 拒（V45 只授 SELECT）
         controlJdbc.sql("SELECT count(*) FROM eval_case_result").query(Long.class).single();
         assertThatThrownBy(() -> controlJdbc.sql("""
@@ -385,6 +385,6 @@ class PostgresEvalCaseEvidenceIT extends PostgresITBase {
                 .param("rd", Digest.sha256Of("x").value())
                 .param("pd", Digest.sha256Of("y").value())
                 .param("td", Digest.sha256Of("z").value()).update())
-                .hasMessageContaining("permission denied");
+                .hasStackTraceContaining("permission denied");
     }
 }

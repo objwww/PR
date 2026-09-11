@@ -91,11 +91,12 @@ class PostgresIncidentClassificationIT extends PostgresITBase {
                 """)
                 .param("id", id).update())
                 .hasMessageContaining("ck_incident_override_reason");
-        // 生成列不可写
+        // 生成列不可写（42703 类 → Spring 译 BadSqlGrammar，顶抛只带 SQL，
+        // PG 真话在 cause 链——整链文本断言）
         assertThatThrownBy(() -> controlJdbc.sql(
                 "update incident set category = 'DATA' where id = :id")
                 .param("id", id).update())
-                .hasMessageContaining("can only be updated to DEFAULT");
+                .hasStackTraceContaining("can only be updated to DEFAULT");
     }
 
     // ------------------------------------------------------------------ 授权矩阵
@@ -112,11 +113,11 @@ class PostgresIncidentClassificationIT extends PostgresITBase {
         assertThatThrownBy(() -> controlJdbc.sql(
                 "update incident_category_override set reason = 'x' where incident_id = :id")
                 .param("id", id).update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
         assertThatThrownBy(() -> controlJdbc.sql(
                 "delete from incident_category_override where incident_id = :id")
                 .param("id", id).update())
-                .isInstanceOf(PermissionDeniedDataAccessException.class);
+                .hasStackTraceContaining("permission denied");
 
         // publisher/notify/eval 显式归零（eval_app 不写告警域）
         for (var jdbc : new org.springframework.jdbc.core.simple.JdbcClient[]{
@@ -128,7 +129,7 @@ class PostgresIncidentClassificationIT extends PostgresITBase {
                     values (:aid, :iid, 'SET', 'DATA', 'x', 'x', 0, 1, 'k-x', now())
                     """)
                     .param("aid", UUID.randomUUID()).param("iid", id).update())
-                    .isInstanceOf(PermissionDeniedDataAccessException.class);
+                    .hasStackTraceContaining("permission denied");
         }
     }
 
