@@ -188,7 +188,7 @@ class R7PrimaryStateTest {
         // 模拟已推进 2 步
         stores.checkpoints.upsert(new PrimaryCheckpoint(primary.id(), runId, 0,
                 PrimaryCheckpoint.Phase.PRIMARY_READY, 2, 2, 0, "digest-x",
-                List.of(), List.of(), NOW));
+                List.of(), List.of(), null, NOW));
 
         DeterministicSupervisor.StartResult again =
                 supervisor.startPrimary(runId, primaryProfile(), Set.of("snapshot:r0"));

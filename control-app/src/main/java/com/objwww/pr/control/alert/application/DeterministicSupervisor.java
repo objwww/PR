@@ -302,7 +302,8 @@ public class DeterministicSupervisor {
                         PrimaryCheckpoint.Phase.WAITING_CHILDREN, checkpoint.decisionSeq()
                                 + requests.size(), checkpoint.stepsUsed(),
                         checkpoint.batchesUsed() + 1, checkpoint.inputSnapshotDigest(),
-                        checkpoint.finalClaims(), checkpoint.finalMissingInformation(), now));
+                        checkpoint.finalClaims(), checkpoint.finalMissingInformation(),
+                        checkpoint.lastError(), now));
             }
             return approvedCount > 0;
         }));

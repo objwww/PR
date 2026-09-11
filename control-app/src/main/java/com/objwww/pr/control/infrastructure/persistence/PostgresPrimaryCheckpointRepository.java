@@ -39,12 +39,13 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 INSERT INTO rca_primary_checkpoint (
                     task_id, run_id, round_id, phase,
                     decision_seq, steps_used, batches_used,
-                    input_snapshot_digest, final_claims, final_missing_information, updated_at
+                    input_snapshot_digest, final_claims, final_missing_information,
+                    last_error, updated_at
                 ) VALUES (
                     :taskId, :runId, :roundId, :phase,
                     :decisionSeq, :stepsUsed, :batchesUsed,
                     :snapshotDigest, cast(:finalClaims as jsonb),
-                    cast(:missing as jsonb), :updatedAt
+                    cast(:missing as jsonb), :lastError, :updatedAt
                 )
                 ON CONFLICT (task_id) DO UPDATE SET
                     round_id = EXCLUDED.round_id,
@@ -55,6 +56,7 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                     input_snapshot_digest = EXCLUDED.input_snapshot_digest,
                     final_claims = EXCLUDED.final_claims,
                     final_missing_information = EXCLUDED.final_missing_information,
+                    last_error = EXCLUDED.last_error,
                     updated_at = EXCLUDED.updated_at
                 """)
                 .param("taskId", cp.taskId())
@@ -67,6 +69,7 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 .param("snapshotDigest", cp.inputSnapshotDigest())
                 .param("finalClaims", jsonOf(cp.finalClaims()))
                 .param("missing", jsonOf(cp.finalMissingInformation()))
+                .param("lastError", cp.lastError())
                 .param("updatedAt", Timestamp.from(cp.updatedAt()))
                 .update();
     }
@@ -113,6 +116,7 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 rs.getString("input_snapshot_digest"),
                 claimsJson == null ? List.of() : claimsOf(claimsJson),
                 missingJson == null ? List.of() : stringsOf(missingJson),
+                rs.getString("last_error"),
                 updatedAt.toInstant());
     }
 

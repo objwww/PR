@@ -386,7 +386,7 @@ class R7PrimaryModeExecutorTest {
                                 "statement", "零引用", "evidence_refs", List.of()),
                         Map.of("claim_key", "c4", "kind", "WEIRD",
                                 "statement", "未知类型", "evidence_refs", List.of(e1))),
-                List.of(), NOW);
+                List.of(), null, NOW);
         var projector = new PrimaryFinalClaimProjector(claims, evidence);
 
         int appended = projector.project(UUID.randomUUID(), checkpoint,

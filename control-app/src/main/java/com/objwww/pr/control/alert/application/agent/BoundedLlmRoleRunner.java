@@ -134,7 +134,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                     mapper.readValue(jsonOf(outcome.content()),
                             new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
         } catch (Exception e) {
-            advanceStep(request, checkpoint, null);
+            advanceStep(request, checkpoint, null,
+                    "DECISION_UNPARSEABLE: 上一步输出不是合法决策 JSON。严格按协议输出"
+                            + "恰一个纯 JSON 对象（tool_call/delegate/final 三形状选一），"
+                            + "禁 markdown 围栏、禁思考过程、禁多余文字。");
             log.warn("主决策不可解析（{}），计步重驱 task={}",
                     e.getClass().getSimpleName(), request.task().id());
             return RoleRunner.RoleDriveResult.failed("DECISION_UNPARSEABLE");
@@ -152,7 +155,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
         PrimaryDecision.ToolCall tool = decision.toolCall();
         if (!request.profile().toolAllowlist().contains(tool.toolId())) {
-            advanceStep(request, checkpoint, null);
+            advanceStep(request, checkpoint, null,
+                    "TOOL_NOT_ALLOWED: 工具 " + tool.toolId()
+                            + " 不在 tool_allowlist。只能从白名单工具中选择，"
+                            + "按 tool_schemas 的形状重发 tool_call 或改走 final。");
             log.warn("TOOL_CALL 越权拒绝（不在 allowlist），计步重驱 task={} tool={}",
                     request.task().id(), tool.toolId());
             return RoleRunner.RoleDriveResult.failed("TOOL_NOT_ALLOWED");
@@ -162,7 +168,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
         } catch (com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException e) {
             // 模型可见族（超时/限流/远端故障/零数据）：计步重驱，步数耗尽兜底保终止
-            advanceStep(request, checkpoint, null);
+            advanceStep(request, checkpoint, null,
+                    "TOOL_FAILED " + e.reason().name() + ": 工具 " + tool.toolId()
+                            + " 调用未成功。可修正查询（时间窗/service 过滤/指标名）后重试，"
+                            + "或换用白名单内其他工具，或基于已有证据走 final。");
             log.warn("TOOL_CALL 模型可见失败（{}），计步重驱 task={} tool={}",
                     e.reason(), request.task().id(), tool.toolId());
             return RoleRunner.RoleDriveResult.failed(
@@ -174,14 +183,17 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             // 会被当不可重试 → DEAD）；其余控制面终止族原样上抛降级 DEAD
             if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
                     .INVALID_ARGS) {
-                advanceStep(request, checkpoint, null);
+                advanceStep(request, checkpoint, null,
+                        "INVALID_ARGS: 工具 " + tool.toolId()
+                                + " 的 args 未通过校验。严格对照 tool_schemas 里该工具的"
+                                + " JSON Schema（字段名/类型/取值域）修正 args 后重发 tool_call。");
                 log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={}",
                         request.task().id(), tool.toolId());
                 return RoleRunner.RoleDriveResult.failed("TOOL_RETRYABLE:INVALID_ARGS");
             }
             throw e;
         }
-        advanceStep(request, checkpoint, null);
+        advanceStep(request, checkpoint, null, null);
         return new RoleRunner.RoleDriveResult(
                 RoleRunner.RoleDriveOutcome.EVIDENCE_PRODUCED, List.of(evidenceId), null);
     }
@@ -246,9 +258,14 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 List.of(), "STEPS_EXHAUSTED");
     }
 
+    /**
+     * 计步推进 + 反馈环（V88）：lastError = 本步结束后留给下一步模型的修正指引
+     * （A0 八跑实证盲重驱=连猜同错；信封 last_error 面下发，成功步传 null 清空）
+     */
     private void advanceStep(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint, String snapshotDigest) {
-        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest, clock.instant()));
+            PrimaryCheckpoint checkpoint, String snapshotDigest, String lastError) {
+        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest, lastError,
+                clock.instant()));
     }
 
     /** §六 模型动作身份：绑定三元组 + 检查点计数（decision_seq 为账本动作序） */
@@ -288,6 +305,11 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             envelope.put("tool_schemas", request.profile().inputSchema());
             envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted()
                     .toList());
+            // 反馈环（V88）：上一步可重试失败的原因与修正指引随信封回喂——A0 八跑
+            // 实证盲重驱=模型连猜同错 4 次；成功步该面缺席（检查点已清空）
+            if (checkpoint.lastError() != null) {
+                envelope.put("last_error", checkpoint.lastError());
+            }
             return request.profile().prompt() + "\n"
                     + mapper.writeValueAsString(envelope) + PROTOCOL_SUFFIX;
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {

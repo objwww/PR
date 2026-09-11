@@ -278,7 +278,7 @@ class R7RoleRunnerTest {
         // steps 已耗尽（maxSteps=1，已用 1）：重驱不花模型调用直接兜底
         stores.checkpoints.upsert(
                 stores.checkpoints.findByTask(primaryId).orElseThrow().withStepAdvanced(
-                        null, NOW));
+                        null, null, NOW));
 
         RoleRunner.RoleDriveResult result = boundedRunner.drive(
                 request(primaryId, primaryProfile()));
@@ -367,6 +367,9 @@ class R7RoleRunnerTest {
         assertThat(result.reason()).isEqualTo("TOOL_RETRYABLE:INVALID_ARGS");
         assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().stepsUsed())
                 .isEqualTo(1);
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().lastError())
+                .as("V88 反馈环：INVALID_ARGS 修正指引落检查点，下步信封 last_error 面下发")
+                .isNotNull().contains("INVALID_ARGS").contains("tool_schemas");
         toolPort.failWith = null;
     }
 
