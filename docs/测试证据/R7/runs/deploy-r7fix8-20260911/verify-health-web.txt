@@ -1,0 +1,4 @@
+# health 8080 / web 8090
+health8080=200
+web8090=200
+control-app running started=2026-09-11T15:35:14.44962635Z

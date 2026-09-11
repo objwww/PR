@@ -1,0 +1,65 @@
+++ date -u +%Y-%m-%dT%H:%M:%SZ
++ echo '==== O09 备份恢复演练 start:' 2026-09-11T16:23:41Z ====
+==== O09 备份恢复演练 start: 2026-09-11T16:23:41Z ====
++ echo '---- ① backup.sh 出档 ----'
+---- ① backup.sh 出档 ----
++ bash backup.sh
+[backup] OK：backups/pr_agent-20260912-002341.dump（238M）sha256=006a194ee70c5c823a05887e566bc5755b3633f15cb947bd01d18abcfcb323dd
+[backup] 保留窗口：pr_agent-20260912-002341.dump 至今（RPO 参照，实际以 cron 频率与成功率为准）
++ echo BACKUP_EXIT=0
+BACKUP_EXIT=0
+++ head -1
+++ ls -1t backups/pr_agent-20260912-002341.dump
++ DUMP=backups/pr_agent-20260912-002341.dump
++ echo DUMP=backups/pr_agent-20260912-002341.dump
+DUMP=backups/pr_agent-20260912-002341.dump
++ ls -l backups/pr_agent-20260912-002341.dump backups/pr_agent-20260912-002341.dump.sha256
+-rw------- 1 root root 248883261 Sep 12 00:24 backups/pr_agent-20260912-002341.dump
+-rw-r--r-- 1 root root        96 Sep 12 00:24 backups/pr_agent-20260912-002341.dump.sha256
++ echo '---- ② 建 scratch 库（restore 目标，非 pr_agent）----'
+---- ② 建 scratch 库（restore 目标，非 pr_agent）----
++ docker compose exec -T postgres createdb -U postgres it_scratch_o09
++ echo '---- ③ restore.sh 进 scratch（RTO 计时）----'
+---- ③ restore.sh 进 scratch（RTO 计时）----
++ POSTGRES_DB=it_scratch_o09
++ bash restore.sh backups/pr_agent-20260912-002341.dump --yes
+[restore] sha256 校验通过：006a194ee70c5c823a05887e566bc5755b3633f15cb947bd01d18abcfcb323dd
+[restore] TOC 完整性通过：1151 个对象
+[restore] 恢复完成，RTO=46s
+[restore] 迁移历史：最高版本 9
+[restore] release_asset：0 行，digest 形状异常 0 行
+[restore] config_bundle：51 行；当前指针行：1 行（0 = 无激活指针，如实呈现）
+[restore] 对拍快照 rca_run：276 行
+[restore] 对拍快照 incident：90 行
+[restore] 对拍快照 alert_incident：N/A（表不存在） 行
+[restore] 备份时点距现在 0h（RPO 实际损失参照；与故障时刻取更小者）
+[restore] DONE：以上为恢复后真实快照，请值守与故障前基线对拍后宣告恢复成功
++ echo RESTORE_EXIT=0
+RESTORE_EXIT=0
++ echo '---- ④ digest 对拍：双库逐表行数 diff ----'
+---- ④ digest 对拍：双库逐表行数 diff ----
++ docker compose exec -T postgres psql -U postgres -d pr_agent -Atc 'select relname||'\''='\''||n_live_tup from pg_stat_user_tables where schemaname='\''public'\'' order by relname'
++ docker compose exec -T postgres psql -U postgres -d it_scratch_o09 -Atc 'select relname||'\''='\''||n_live_tup from pg_stat_user_tables where schemaname='\''public'\'' order by relname'
++ diff /tmp/o09-src.txt /tmp/o09-dst.txt
++ echo 'LIVE-DIFF: 存在差异（统计视图非精确值，以精确 count 复核）'
+LIVE-DIFF: 存在差异（统计视图非精确值，以精确 count 复核）
++ docker compose exec -T postgres sh -c '
+  for t in $(psql -U postgres -d pr_agent -Atc "select relname from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='\''public'\'' and c.relkind='\''r'\'' order by 1"); do
+    a=$(psql -U postgres -d pr_agent -Atc "select count(*) from public.\"$t\"")
+    b=$(psql -U postgres -d it_scratch_o09 -Atc "select count(*) from public.\"$t\"" 2>/dev/null || echo ERR)
+    [ "$a" = "$b" ] && echo "OK $t=$a" || echo "DIFF $t src=$a dst=$b"
+  done'
++ grep -c '^OK' /opt/r7-e2e/runs/o09-20260911/rowcount-exact.txt
+95
++ grep '^DIFF' /opt/r7-e2e/runs/o09-20260911/rowcount-exact.txt
+DIFF canary_route_decision src=1787 dst=1784
++ echo '---- ⑤ 收尾：DROP scratch ----'
+---- ⑤ 收尾：DROP scratch ----
++ docker compose exec -T postgres dropdb -U postgres it_scratch_o09
++ echo 'scratch 已 DROP'
+scratch 已 DROP
++ docker compose exec -T postgres psql -U postgres -Atc 'select count(*) from pg_database where datname='\''it_scratch_o09'\'''
+0
+++ date -u +%Y-%m-%dT%H:%M:%SZ
++ echo '==== O09 end:' 2026-09-11T16:25:07Z ====
+==== O09 end: 2026-09-11T16:25:07Z ====

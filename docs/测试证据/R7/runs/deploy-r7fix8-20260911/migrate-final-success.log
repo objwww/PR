@@ -1,0 +1,57 @@
+migrate-1  | A more recent version of Flyway is available. Find out more about Flyway 13.6.0 at https://rd.gt/3rXiSlV
+migrate-1  | 
+migrate-1  | Flyway OSS Edition 10.22.0 by Redgate
+migrate-1  | 
+migrate-1  | See release notes here: https://rd.gt/416ObMi
+migrate-1  | Database: jdbc:postgresql://postgres:5432/pr_agent (PostgreSQL 16.15)
+migrate-1  | Successfully validated 61 migrations (execution time 00:00.094s)
+migrate-1  | Current version of schema "public": 88
+migrate-1  | WARNING: outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+migrate-1  | Migrating schema "public" to version "60 - en01 release asset" [out of order]
+migrate-1  | Migrating schema "public" to version "61 - en02 release qualification" [out of order]
+migrate-1  | Migrating schema "public" to version "62 - en09 eval grader version" [out of order]
+migrate-1  | Migrating schema "public" to version "63 - en04 run config epoch" [out of order]
+migrate-1  | Migrating schema "public" to version "64 - en06 mcp server registry" [out of order]
+migrate-1  | Migrating schema "public" to version "87 - ev08 eval review" [out of order]
+migrate-1  | ERROR: Migration of schema "public" to version "87 - ev08 eval review" [out of order] failed! Changes successfully rolled back.
+migrate-1  | ERROR: Script V87__ev08_eval_review.sql failed
+migrate-1  | ---------------------------------------
+migrate-1  | SQL State  : 42601
+migrate-1  | Error Code : 0
+migrate-1  | Message    : ERROR: syntax error at or near "||"
+migrate-1  |   Position: 110
+migrate-1  | Location   : /flyway/sql/V87__ev08_eval_review.sql (/flyway/sql/V87__ev08_eval_review.sql)
+migrate-1  | Line       : 75
+migrate-1  | Statement  : Run Flyway with -X option to see the actual statement causing the problem
+migrate-1  | 
+migrate-1  | Caused by: Script V87__ev08_eval_review.sql failed
+migrate-1  | ---------------------------------------
+migrate-1  | SQL State  : 42601
+migrate-1  | Error Code : 0
+migrate-1  | Message    : ERROR: syntax error at or near "||"
+migrate-1  |   Position: 110
+migrate-1  | Location   : /flyway/sql/V87__ev08_eval_review.sql (/flyway/sql/V87__ev08_eval_review.sql)
+migrate-1  | Line       : 75
+migrate-1  | Statement  : Run Flyway with -X option to see the actual statement causing the problem
+migrate-1  | 
+migrate-1  | Caused by: org.postgresql.util.PSQLException: ERROR: syntax error at or near "||"
+migrate-1  |   Position: 110
+migrate-1  | A more recent version of Flyway is available. Find out more about Flyway 13.6.0 at https://rd.gt/3rXiSlV
+migrate-1  | 
+migrate-1  | Flyway OSS Edition 10.22.0 by Redgate
+migrate-1  | 
+migrate-1  | See release notes here: https://rd.gt/416ObMi
+migrate-1  | Database: jdbc:postgresql://postgres:5432/pr_agent (PostgreSQL 16.15)
+migrate-1  | Successfully validated 61 migrations (execution time 00:00.075s)
+migrate-1  | Current version of schema "public": 88
+migrate-1  | WARNING: outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+migrate-1  | Migrating schema "public" to version "87 - ev08 eval review" [out of order]
+migrate-1  | Successfully applied 1 migration to schema "public", now at version v87 (execution time 00:00.075s)
+migrate-1  | Flyway OSS Edition 10.22.0 by Redgate
+migrate-1  | 
+migrate-1  | See release notes here: https://rd.gt/416ObMi
+migrate-1  | Database: jdbc:postgresql://postgres:5432/pr_agent (PostgreSQL 16.15)
+migrate-1  | Successfully validated 61 migrations (execution time 00:00.102s)
+migrate-1  | Current version of schema "public": 88
+migrate-1  | WARNING: outOfOrder mode is active. Migration of schema "public" may not be reproducible.
+migrate-1  | Schema "public" is up to date. No migration necessary.

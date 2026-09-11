@@ -1,0 +1,18 @@
+# r7fix8 部署后 flyway_schema_history 关键版本（V60-64/V87/V88）+ 全失败计数
+2026-09-11T15:36:59Z
+ installed_rank | version |        description         | type | success 
+----------------+---------+----------------------------+------+---------
+             55 | 88      | r7 checkpoint last error   | SQL  | t
+             56 | 60      | en01 release asset         | SQL  | t
+             57 | 61      | en02 release qualification | SQL  | t
+             58 | 62      | en09 eval grader version   | SQL  | t
+             59 | 63      | en04 run config epoch      | SQL  | t
+             60 | 64      | en06 mcp server registry   | SQL  | t
+             61 | 87      | ev08 eval review           | SQL  | t
+(7 rows)
+
+ failed 
+--------
+      0
+(1 row)
+

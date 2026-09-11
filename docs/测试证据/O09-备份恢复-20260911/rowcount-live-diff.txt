@@ -1,0 +1,16 @@
+8c8
+< canary_route_decision=1788
+---
+> canary_route_decision=1784
+35c35
+< external_invocation_ledger=194
+---
+> external_invocation_ledger=193
+79c79
+< repair_request=1508
+---
+> repair_request=1507
+81c81
+< report_publication=183
+---
+> report_publication=182

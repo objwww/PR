@@ -1,0 +1,36 @@
+-------------------------------------------------------------------------------
+Test set: com.objwww.pr.control.it.PostgresEvalLifecycleIT
+-------------------------------------------------------------------------------
+Tests run: 5, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 4.480 s <<< FAILURE! -- in com.objwww.pr.control.it.PostgresEvalLifecycleIT
+com.objwww.pr.control.it.PostgresEvalLifecycleIT.workerColumnGrantsAndPhaseEventInsertOnly -- Time elapsed: 0.169 s <<< FAILURE!
+java.lang.AssertionError: 
+
+Expecting actual throwable to be an instance of:
+  org.springframework.dao.PermissionDeniedDataAccessException
+but was:
+  org.springframework.jdbc.BadSqlGrammarException: PreparedStatementCallback; bad SQL grammar [UPDATE eval_run_command SET payload = '{}'::jsonb]
+	at org.springframework.jdbc.support.SQLStateSQLExceptionTranslator.doTranslate(SQLStateSQLExceptionTranslator.java:112)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:116)
+	...(80 remaining lines not displayed - this can be changed with Assertions.setMaxStackTraceElementsDisplayed)
+	at com.objwww.pr.control.it.PostgresEvalLifecycleIT.workerColumnGrantsAndPhaseEventInsertOnly(PostgresEvalLifecycleIT.java:117)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+
+com.objwww.pr.control.it.PostgresEvalLifecycleIT.commandTableGrantMatrix -- Time elapsed: 0.118 s <<< FAILURE!
+java.lang.AssertionError: 
+
+Expecting actual throwable to be an instance of:
+  org.springframework.dao.PermissionDeniedDataAccessException
+but was:
+  org.springframework.jdbc.BadSqlGrammarException: PreparedStatementCallback; bad SQL grammar [UPDATE eval_run_command SET state = 'CLAIMED']
+	at org.springframework.jdbc.support.SQLStateSQLExceptionTranslator.doTranslate(SQLStateSQLExceptionTranslator.java:112)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:107)
+	at org.springframework.jdbc.support.AbstractFallbackSQLExceptionTranslator.translate(AbstractFallbackSQLExceptionTranslator.java:116)
+	...(80 remaining lines not displayed - this can be changed with Assertions.setMaxStackTraceElementsDisplayed)
+	at com.objwww.pr.control.it.PostgresEvalLifecycleIT.commandTableGrantMatrix(PostgresEvalLifecycleIT.java:82)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+

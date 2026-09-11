@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.objwww.pr.control.it.En07RagSourcesIT
+-------------------------------------------------------------------------------
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.399 s -- in com.objwww.pr.control.it.En07RagSourcesIT

@@ -1,0 +1,13 @@
+# 首次 migrate（无 outOfOrder）失败转录——执行者控制台留痕（容器已重建，docker logs 不再持有）
+Detected resolved migration not applied to database: 60 61 62 63 64 87
+Current version of schema "public": 88
+ERROR: Found non-empty schema(s) without schema history table... （validate 拒绝，exit 1）
+—— 加 -outOfOrder=true 后第二轮：V60~V64 [out of order] 应用成功，V87 失败：
+ERROR: Migration of schema "public" to version "87 - ev08 eval review" [out of order] failed! Changes successfully rolled back.
+SQL State  : 42601
+Message    : ERROR: syntax error at or near "||"
+  Position: 110
+Location   : /flyway/sql/V87__ev08_eval_review.sql
+Line       : 75
+（V87 三处 COMMENT ON ... IS '...' || '...' —— PG COMMENT ON 不接受表达式，BA-121 立案；
+  修复=合并为单一字符串字面量，md5 01cca9f8，repair 报 no failed migration（回滚未留残留行）后重跑 success）
