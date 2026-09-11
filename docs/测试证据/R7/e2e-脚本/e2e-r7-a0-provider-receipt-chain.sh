@@ -64,7 +64,9 @@ r7_log "phase1 PASS（health 200；digest=$DA0）"
 # ---------------------------------------------------------------------------
 T0="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 r7_log "phase2 注入 checkout 合成告警（${AN}@$SVC）"
-_code="$(r7_inject_alert "$AN" "$SVC" firing "$RUNS")"
+# BA-111 同窗实证：run SUCCEEDED 后 last_investigation_hash=输入哈希，同输入再注入=
+# 正确去重（产品语义，非缺陷）——每次套件必须以唯一 summary 区分调查输入
+_code="$(r7_inject_alert "$AN" "$SVC" firing "$RUNS" "E2E-R7 A0 ${SUITE} checkout 现场")"
 [ "$_code" = "202" ] || r7_fail "phase2 注入期望 202 实得 $_code: $(cat "$RUNS/alert-${SVC}-firing.resp")"
 WL_L="alertname=$(echo "$AN" | tr '[:upper:]' '[:lower:]')|service=${SVC}"
 WLKEY="${WL_L}:${WL_L}"
