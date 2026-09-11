@@ -1,0 +1,40 @@
+# 2026-09-11T06:31:11Z pre
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda1        59G   39G   18G  69% /
+              total        used        free      shared  buff/cache   available
+Mem:           7725        4176         303         235        3245        3006
+Swap:          4095         448        3647
+deploy-web-1 0.00% 3.555MiB / 128MiB
+deploy-notify-app-1 0.06% 164MiB / 384MiB
+deploy-loki-1 0.76% 98.97MiB / 384MiB
+deploy-otelcol-control-1 0.06% 27.53MiB / 384MiB
+node-exporter 0.00% 12.01MiB / 64MiB
+flagd-admin-am3 0.01% 16.5MiB / 64MiB
+litellm-am3 0.11% 447.2MiB / 1.5GiB
+alert-arena-chaos-admin-1 0.08% 184.7MiB / 384MiB
+alert-order-arena-1 0.53% 225.3MiB / 512MiB
+prometheus-am0 0.23% 214.4MiB / 300MiB
+deploy-postgres-1 0.55% 362.1MiB / 512MiB
+alertmanager-am0 0.06% 16.47MiB / 7.545GiB
+otel-collector 14.61% 164MiB / 400MiB
+frontend-proxy 0.44% 21.61MiB / 90MiB
+load-generator 0.11% 228.1MiB / 1.465GiB
+frontend 1.12% 109MiB / 250MiB
+recommendation 2.57% 41.79MiB / 500MiB
+checkout 0.02% 14MiB / 20MiB
+product-catalog 0.03% 19.1MiB / 20MiB
+cart 0.06% 53.2MiB / 160MiB
+shipping 0.04% 9.543MiB / 20MiB
+ad 2.39% 256.1MiB / 300MiB
+payment 64.09% 139.7MiB / 140MiB
+flagd-ui 0.26% 137.8MiB / 200MiB
+currency 2.09% 5.602MiB / 20MiB
+quote 0.01% 25.82MiB / 40MiB
+email 0.02% 85.4MiB / 100MiB
+image-provider 0.04% 5.82MiB / 120MiB
+astronomy-db 2.16% 55.11MiB / 80MiB
+flagd 0.02% 38.4MiB / 75MiB
+telemetry-docs 2.10% 5.75MiB / 100MiB
+valkey-cart 0.14% 7.285MiB / 20MiB
+echo-receiver 0.09% 253.5MiB / 7.545GiB
+-- 0.00% 0B / 0B

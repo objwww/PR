@@ -1,0 +1,77 @@
+# A0 run8 证据包（执行者会话生成 2026-09-11T06:57:44Z；只读查询）
+# run=87572b9d-c10b-4bc8-80cd-44dcd64311d4 incident=141c5cb3-8bc8-4e66-bf02-2d7d4ab01201 image=0a11c7f374d4 (7fd5705/BA-113) suite=a0-20260911T063304Z
+
+## [1] run 终态
+                  id                  |   state   | generation | trigger_kind | engine | created  | finished | last_error 
+--------------------------------------+-----------+------------+--------------+--------+----------+----------+------------
+ 87572b9d-c10b-4bc8-80cd-44dcd64311d4 | SUCCEEDED |          0 | RERUN        | NATIVE | 06:33:08 | 06:38:28 | 
+(1 row)
+
+## [2] claim 面（BA-114）
+                  id                  | claim_key |  kind   | status  | lifecycle | evidence_basis |    sources     |              evidence_refs               |                                             reason_head                                              
+--------------------------------------+-----------+---------+---------+-----------+----------------+----------------+------------------------------------------+------------------------------------------------------------------------------------------------------
+ 7418c058-7ca2-4c7d-b1c5-b1cb8308566b | c1        | SYMPTOM | UNKNOWN | ACTIVE    | SINGLE_SOURCE  | ["prometheus"] | ["cd6e80ea-5dd2-4d1c-9642-28113aadd971"] | 调查初始化完成，已确认上下文工件引用有效性，但缺乏具体的故障现象描述或查询目标，无法进行针对性取证。
+(1 row)
+
+## [3] 工具调用面（logs.query 4x INVALID_INPUT）
+    tool_name     |  state  |  reason_code  |    at    
+------------------+---------+---------------+----------
+ prometheus.query | SUCCESS |               | 06:33:55
+ prometheus.query | SUCCESS |               | 06:34:32
+ logs.query       | FAILED  | INVALID_INPUT | 06:35:10
+ logs.query       | FAILED  | INVALID_INPUT | 06:35:42
+ logs.query       | FAILED  | INVALID_INPUT | 06:36:31
+ logs.query       | FAILED  | INVALID_INPUT | 06:37:05
+ prometheus.query | SUCCESS |               | 06:37:44
+(7 rows)
+
+## [4] rca_model_call 结清面（BA-115: cost/pricing NULL）
+ action_seq |  state  |                                  usage                                  | usage_missing | cost_micros | pricing_version | currency | route_id | requested_model | provider_request_id |          settled_at           
+------------+---------+-------------------------------------------------------------------------+---------------+-------------+-----------------+----------+----------+-----------------+---------------------+-------------------------------
+          0 | SUCCESS | {"total_tokens": 2772, "prompt_tokens": 512, "completion_tokens": 2260} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:33:55.88535+00
+          1 | SUCCESS | {"total_tokens": 2390, "prompt_tokens": 512, "completion_tokens": 1878} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:34:32.253625+00
+          2 | SUCCESS | {"total_tokens": 2468, "prompt_tokens": 512, "completion_tokens": 1956} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:35:10.407221+00
+          3 | SUCCESS | {"total_tokens": 1782, "prompt_tokens": 512, "completion_tokens": 1270} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:35:42.485169+00
+          4 | SUCCESS | {"total_tokens": 2237, "prompt_tokens": 512, "completion_tokens": 1725} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:36:31.406926+00
+          5 | SUCCESS | {"total_tokens": 2193, "prompt_tokens": 512, "completion_tokens": 1681} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:37:05.390056+00
+          6 | SUCCESS | {"total_tokens": 2304, "prompt_tokens": 512, "completion_tokens": 1792} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:37:44.414973+00
+          7 | SUCCESS | {"total_tokens": 2844, "prompt_tokens": 537, "completion_tokens": 2307} | f             |             |                 |          | primary  | glm-5           |                     | 2026-09-11 06:38:28.711662+00
+(8 rows)
+
+## [5] phase6 _nosettled 精确复算
+8
+## [6] 平台账本零交叉（BA-109 面复算）
+0
+189
+## [7] 报告链面（BA-116: 同 episode 发布一次语义）
+                  id                  |                run_id                |  rep_at  |    pub    
+--------------------------------------+--------------------------------------+----------+-----------
+ ca077ba3-a4c8-4936-99b7-eed19a68f28c | 1e1e9c70-8dd1-47c2-adc4-647093701f35 | 05:05:59 | PUBLISHED
+ 8374e19d-c52a-44f7-8f65-f081576d0b02 | 1cbeab4a-4683-4396-b2d8-2a577be7bfe9 | 05:23:50 | NO_PUB
+ abb1ba01-f267-49b3-a51c-059bae4b3e5c | b126fecc-56d6-4da3-8e8e-b1820feb07b0 | 05:48:53 | NO_PUB
+ a3bad6bb-1ee5-4b63-8bd6-91467b0f71a1 | 87572b9d-c10b-4bc8-80cd-44dcd64311d4 | 06:38:28 | NO_PUB
+(4 rows)
+
+                  id                  |   state   |  run_at  
+--------------------------------------+-----------+----------
+ 3ae56b60-0a85-4b95-872d-1c18830504a6 | FAILED    | 04:23:35
+ 2f8e267a-93b9-4e86-8786-a3ab900afcd4 | FAILED    | 04:37:38
+ 794b61cb-685f-4668-82ff-74da7d3d1074 | FAILED    | 04:52:39
+ 1e1e9c70-8dd1-47c2-adc4-647093701f35 | SUCCEEDED | 05:01:12
+ 1cbeab4a-4683-4396-b2d8-2a577be7bfe9 | SUCCEEDED | 05:23:04
+ b126fecc-56d6-4da3-8e8e-b1820feb07b0 | SUCCEEDED | 05:47:53
+ 87572b9d-c10b-4bc8-80cd-44dcd64311d4 | SUCCEEDED | 06:33:08
+(7 rows)
+
+## [8] incident episode 面（generation 恒 0 / 无 resolved）
+                 incident_key                  | status | generation |     episode_started_at     |   last_firing_starts_at    | resolved_at | received_count 
+-----------------------------------------------+--------+------------+----------------------------+----------------------------+-------------+----------------
+ alertname=E2EA0CheckoutProbe|service=checkout | FIRING |          0 | 2026-09-11 04:23:35.274+00 | 2026-09-11 06:33:07.608+00 |             |              8
+(1 row)
+
+## [9] report_generation_winner 本 incident 行数
+1
+## [10] notify_outbox 本 incident 报告行数
+ERROR:  column reference "id" is ambiguous
+LINE 1: ...(*) from notify_outbox where report_id in (select id from rc...
+                                                             ^
