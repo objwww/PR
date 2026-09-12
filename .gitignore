@@ -18,3 +18,24 @@ var/
 .zcode/
 .scheduler-research/
 alert-web/dist/
+.agent-notes/
+
+# IDE
+.idea/
+
+# 本地审计/构建日志、同步包与临时产物（根级，不入库）
+/*.log
+/*.tmp
+/*.tar.gz
+/EN-0
+/m6-ev/
+/alert-web/*.log
+research/**/_tmp*
+
+# 一次性部署/核查脚本（G 期现场工具，不入库）
+/asset-check.sh
+/chaos-cleanup.py
+/deploy-am4.sh
+/deploy-evidence.sh
+/mc-p0-verify.sh
+/tmp-195-*.sh
