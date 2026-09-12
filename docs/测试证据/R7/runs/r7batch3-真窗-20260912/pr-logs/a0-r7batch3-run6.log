@@ -1,0 +1,10 @@
+[R7] suite=a0-20260912T113645Z runs=/opt/build/runs-r7batch3/a0-20260912T113645Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=595ef426-42c8-4ad4-9faa-513ae304491d（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=5a31f045e56ab842e4fdaa9754b228ba2636f9b6b56f0a75493e0d9ebfb6e6d1）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=30f8a30f-4a6d-422f-944d-1e5105598e3c）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定 / 检查点
+[R7] FAIL: phase4 PRIMARY_INVESTIGATE DONE 应恰 1 实得 0（0 → 部署姿态疑非主模式：核对 app.alert.r7.primary.enabled）

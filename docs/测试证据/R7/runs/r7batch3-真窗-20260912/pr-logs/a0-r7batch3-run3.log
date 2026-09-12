@@ -1,0 +1,12 @@
+[R7] suite=a0-20260912T112423Z runs=/opt/build/runs-r7batch3/a0-20260912T112423Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=db28ae1d-449b-460d-92a4-a71d83371b38（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=ea38863775856d0034eca4f55be37af9fcab671d8397ac9563e089589314ef55）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=e0907820-8e80-4108-b18e-0ca5d20742e7）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定 / 检查点
+[R7] phase4 PASS（零子 Agent/绑定三元组/检查点 final_claims 在场）
+[R7] phase5 受限直查：allowlist=prometheus.query,logs.query,change.query,prometheus.instant,prometheus.catalog,prometheus.label_values,prometheus.rules,logs.aggregate,change.diff,alert.history,runbook.catalog,runbook.fetch,rca_history.search,code.search,code.read；evidence_refs 全可解析
+[R7] FAIL: phase5 证据行恒零（结论无证据锚）
