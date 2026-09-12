@@ -266,11 +266,78 @@
       </div>
     </template>
 
-    <!-- ============ 报告 ============ -->
+    <!-- ============ 报告（GET /api/rca-runs/{id}/report 真读面；raw_text 后端不透出）============ -->
     <template v-else-if="viewTab === 'report'">
       <div class="card panel">
         <div class="lbl">报告与发布状态</div>
-        <div class="muted">未生成——{{ reportState?.note ?? '调查完成并经人工复核后在此发布' }}</div>
+        <EmptyState v-if="reportLoadState === 'error'" kind="error" :description="reportError" @retry="loadReport" />
+        <div v-else-if="reportLoadState !== 'ok'" class="muted">
+          <el-icon class="is-loading"><Loading /></el-icon> 报告加载中…
+        </div>
+        <!-- NONE：run 无报告行——区分进行中与已结束，不冒充占位文案 -->
+        <div v-else-if="report?.state === 'NONE'" class="muted">
+          <template v-if="runActive">
+            <el-icon class="is-loading"><Loading /></el-icon> 调查进行中，尚未产生报告
+          </template>
+          <template v-else>本次调查未产生报告</template>
+        </div>
+        <template v-else-if="report">
+          <KvTable :data="reportHeadKv" />
+          <div v-if="report.supersededCount > 0" class="mini">
+            本调查共产生 {{ report.supersededCount + 1 }} 份报告（重试留痕），此处展示最新一份，早前 {{ report.supersededCount }} 份已被取代
+          </div>
+
+          <!-- REJECTED：结构验证拒绝链 + 原文折叠可查（审计面；未过验证的包不作结论渲染） -->
+          <template v-if="report.state === 'REJECTED'">
+            <el-alert type="error" :closable="false" show-icon class="rpt-alert"
+              :title="`报告未通过结构验证（${report.validationStatus}），未进入发布链`" />
+            <div class="box">
+              <b>拒绝原因</b>
+              <template v-if="(report.validationErrors ?? []).length">
+                <div v-for="(err, i) in report.validationErrors" :key="i" class="line-item">· {{ err }}</div>
+              </template>
+              <div v-else class="muted">无逐条原因记录</div>
+            </div>
+            <el-button size="small" text type="primary" @click="reportPkgOpen = !reportPkgOpen">
+              报告原文（未通过验证，仅供审计）{{ reportPkgOpen ? '▲' : '▼' }}
+            </el-button>
+            <pre v-if="reportPkgOpen" class="pkg-raw">{{ reportPkgRaw || '（空）' }}</pre>
+          </template>
+
+          <!-- OK：六段式结构化渲染（键名 = EvidencePackageValidator 六段式 schema：summary/root_cause/evidence/impact/remediation/references，v2 另带 claims） -->
+          <template v-else>
+            <template v-if="reportSections.length">
+              <div v-for="sec in reportSections" :key="sec.key" class="box">
+                <div class="lbl">{{ sec.title }}</div>
+                <div v-if="sec.kind === 'text'" class="rpt-text">{{ sec.value }}</div>
+                <template v-else-if="sec.kind === 'list'">
+                  <template v-if="sec.items.length">
+                    <div v-for="(item, i) in sec.items" :key="i" class="line-item">
+                      <template v-if="typeof item === 'string'">· {{ item }}</template>
+                      <pre v-else class="pkg-raw">{{ JSON.stringify(item, null, 2) }}</pre>
+                    </div>
+                  </template>
+                  <div v-else class="muted">无</div>
+                </template>
+                <pre v-else class="pkg-raw">{{ JSON.stringify(sec.value, null, 2) }}</pre>
+              </div>
+            </template>
+            <!-- 包可解析但六段皆缺 → 如实展示原文，不伪造结构 -->
+            <pre v-else class="pkg-raw">{{ reportPkgRaw || '（报告包为空）' }}</pre>
+          </template>
+
+          <!-- 发布状态：无记录 null 如实；SENT/DEAD/RETRY_WAIT 分态展示 -->
+          <div class="lbl pub-lbl">发布状态</div>
+          <template v-if="report.publication">
+            <div class="pub-line">
+              <el-tag :type="pubTagType" effect="plain" size="small" disable-transitions>{{ pubStateText }}</el-tag>
+              <span class="mini">尝试 {{ report.publication.attemptCount }}/{{ report.publication.maxAttempts }}</span>
+              <span class="mini">更新于 {{ fmtTime(report.publication.updatedAt) }}</span>
+            </div>
+            <div v-if="pubLastError" class="blocker-box">最近错误：{{ pubLastError }}</div>
+          </template>
+          <div v-else class="muted">无发布记录——报告未进入外发链</div>
+        </template>
       </div>
     </template>
 
@@ -535,8 +602,99 @@ const run = computed(() => detail.value?.run)
 const tasks = computed(() => detail.value?.tasks ?? [])
 const edges = computed(() => detail.value?.edges ?? [])
 const claims = computed(() => detail.value?.claims ?? [])
-const reportState = computed(() => detail.value?.reportState)
 const runActive = computed(() => ['QUEUED', 'RUNNING', 'REPORTING'].includes(run.value?.status))
+
+// ===== 报告 tab（GET /api/rca-runs/{id}/report；三态 NONE/OK/REJECTED，懒加载 + 失败重试）=====
+const report = ref(null)
+const reportLoadState = ref('idle') // idle | loading | ok | error
+const reportError = ref('')
+const reportPkgOpen = ref(false) // REJECTED 原文折叠
+
+async function loadReport() {
+  reportLoadState.value = 'loading'
+  reportError.value = ''
+  try {
+    report.value = await api(`/rca-runs/${route.params.runId}/report`)
+    reportLoadState.value = 'ok'
+  } catch (e) {
+    reportLoadState.value = 'error'
+    reportError.value = e?.response?.data?.error
+      ? `报告加载失败：${e.response.data.error}`
+      : '报告加载失败（后端不可达或接口未部署）'
+  }
+}
+
+// packageJson：后端可解析 → JSON 树内联；畸形原文（REJECTED_MALFORMED）→ 原样字符串，前端再兜底一次
+const reportPkg = computed(() => {
+  const p = report.value?.packageJson
+  if (p && typeof p === 'object') return p
+  if (typeof p === 'string') { try { return JSON.parse(p) } catch { return null } }
+  return null
+})
+const reportPkgRaw = computed(() => {
+  const p = report.value?.packageJson
+  if (p == null) return ''
+  return typeof p === 'string' ? p : JSON.stringify(p, null, 2)
+})
+
+// 六段式键序（v1/v2 共享六段；claims 为 v2 类型化断言附加段，缺省不渲染）
+const REPORT_SECTION_DEFS = [
+  ['summary', '摘要'],
+  ['root_cause', '根因'],
+  ['evidence', '证据'],
+  ['impact', '影响'],
+  ['remediation', '处置建议'],
+  ['references', '参考引用'],
+  ['claims', '类型化断言'],
+]
+const reportSections = computed(() => {
+  const pkg = reportPkg.value
+  if (!pkg || typeof pkg !== 'object') return []
+  const out = []
+  for (const [key, title] of REPORT_SECTION_DEFS) {
+    const v = pkg[key]
+    if (v == null) continue
+    if (typeof v === 'string') out.push({ key, title, kind: 'text', value: v })
+    else if (Array.isArray(v)) out.push({ key, title, kind: 'list', items: v })
+    else out.push({ key, title, kind: 'object', value: v })
+  }
+  return out
+})
+
+// usageMissing=true → 「用量未回报」，不显 0 冒充
+const reportHeadKv = computed(() => {
+  const r = report.value
+  if (!r || r.state === 'NONE') return {}
+  return {
+    '报告 ID': r.reportId,
+    '生成时间': fmtTime(r.createdAt),
+    'schema 版本': `v${r.schemaVersion}`,
+    '验证状态': r.validationStatus,
+    '模型': r.model ?? '—',
+    'token（入/出/合计）': r.usageMissing
+      ? '用量未回报'
+      : `${r.promptTokens ?? '—'} / ${r.completionTokens ?? '—'} / ${r.totalTokens ?? '—'}`,
+  }
+})
+
+const PUB_STATE_ZH = {
+  PENDING: '待发布', READY: '待投递', SENT: '已外发',
+  RETRY_WAIT: '重试中', DEAD: '外发失败', SUPPRESSED: '已抑制（不外发）',
+}
+const pubStateText = computed(() =>
+  PUB_STATE_ZH[report.value?.publication?.state] ?? report.value?.publication?.state ?? '')
+const pubTagType = computed(() => ({
+  SENT: 'success', DEAD: 'danger', RETRY_WAIT: 'warning',
+}[report.value?.publication?.state] ?? 'info'))
+// lastError 为 jsonb 原文（字符串）：可解析取 message/error 字段，否则原文展示
+const pubLastError = computed(() => {
+  const raw = report.value?.publication?.lastError
+  if (!raw) return ''
+  try {
+    const o = JSON.parse(raw)
+    return o?.message ?? o?.error ?? raw
+  } catch { return raw }
+})
 
 // 任务规范化：真投影 {id:taskKey, taskId, status, priority, deadline, lease, attempts:次数}；
 // name 供 DAG 节点显示，deps/downstream 由 edges 推导
@@ -1017,6 +1175,7 @@ function switchTab(key) {
   viewTab.value = key
   if (key === 'events') nextTick(scrollEvToBottom)
   if (key === 'meta' && cfgState.value === 'idle') loadCfgEpochs() // 配置切换区懒加载
+  if (key === 'report' && reportLoadState.value === 'idle') loadReport() // 报告面懒加载
 }
 
 function onSelectTask(id) {
@@ -1193,6 +1352,17 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 .ev-status { margin-top: 10px; font-size: var(--fs-aux); color: var(--ink-2); }
 
 .ev-refs { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); line-height: 1.8; }
+
+/* ===== 报告 tab ===== */
+.rpt-alert { margin: 10px 0; }
+.rpt-text { font-size: var(--fs-body); line-height: 1.8; white-space: pre-wrap; }
+.pkg-raw {
+  background: #f4f6fa; border: 1px solid var(--line); border-radius: var(--radius-ctl);
+  padding: 8px 10px; font-size: var(--fs-aux); overflow-x: auto; margin: 6px 0;
+  white-space: pre-wrap; word-break: break-all;
+}
+.pub-lbl { margin-top: 12px; }
+.pub-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* ===== EV-10 配置切换 ===== */
 .cfg-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
