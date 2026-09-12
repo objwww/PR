@@ -1,6 +1,7 @@
 package com.objwww.pr.control.alert.application.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.domain.tool.ArgsNormalizer;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger;
 import com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger.InvocationIdentity;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
@@ -102,11 +103,17 @@ public class McpToolInvoker {
         return new ToolModelVisibleException(reason, message);
     }
 
-    /** 参数 canonical JSON（键全层排序）的 sha256，作账本 action_digest */
+    /**
+     * 参数 canonical JSON（键全层排序）的 sha256，作账本 action_digest。MC24 裁定
+     * （P0-2 ③）：与主路径 ActionDigest <b>并列不收敛</b>——本 digest 是 MCP 面
+     * 账本审计指纹（无 replay 匹配职责），收敛需引入 envelope 字段（schema/
+     * timeRange/inputDigest）改变既有行值语义；防漂移靠同一规范化器接入
+     * （{@link ArgsNormalizer}，空白差异不再造成审计指纹漂移）。
+     */
     private static String actionDigest(Map<String, Object> arguments) {
         try {
-            return Digest.sha256Of(JSON.writeValueAsString(arguments == null
-                    ? Map.of() : arguments)).value();
+            return Digest.sha256Of(JSON.writeValueAsString(ArgsNormalizer.normalize(
+                    arguments == null ? Map.of() : arguments))).value();
         } catch (Exception e) {
             return Digest.sha256Of(String.valueOf(arguments)).value();
         }

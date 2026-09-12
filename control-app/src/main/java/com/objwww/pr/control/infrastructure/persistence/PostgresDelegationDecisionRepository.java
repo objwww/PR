@@ -53,6 +53,17 @@ public class PostgresDelegationDecisionRepository implements DelegationDecisionR
     }
 
     @Override
+    public Optional<DelegationDecision> findById(UUID id) {
+        List<DelegationDecision> rows = jdbc.sql("""
+                SELECT * FROM rca_delegation_decision WHERE id = :id
+                """)
+                .param("id", id)
+                .query(this::mapRow)
+                .list();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
     public Optional<DelegationDecision> findByRunAndGap(UUID runId, String gapId) {
         List<DelegationDecision> rows = jdbc.sql("""
                 SELECT * FROM rca_delegation_decision

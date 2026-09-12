@@ -110,7 +110,10 @@ public abstract class PostgresITBase {
             // V91（R10 工作记忆快照）——BA-41 同律：PostgresWorkingMemoryIT 起成为真 PG 消费者
             "rca_working_memory",
             // V92（R11 上下文压缩摘要）——BA-41 同律：PostgresContextSummaryIT 起成为真 PG 消费者
-            "rca_context_summary");
+            "rca_context_summary",
+            // V96（MC21~23 回执台账 + MC31/32 人工材料）——BA-41 同律：
+            // PostgresDelegationReceiptIT / PostgresOperatorMaterialIT 起成为真 PG 消费者
+            "rca_delegation_receipt", "incident_operator_material");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

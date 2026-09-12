@@ -22,12 +22,16 @@ public final class ActionDigest {
     }
 
     public static String of(ActionEnvelope envelope) {
+        // MC24：摘要计算前接查询规范化器（字符串值空白折叠）——同参数不同措辞
+        // （多余空白/换行）= 同一语义身份，Gateway 与 SingleToolEvidenceAgent 两侧
+        // 计算点因同走本函数而天然同源；对空白干净的存量参数 digest 逐字节不变
+        // （EX-A0 回放夹具零漂移）。规范化范围白名单见 ArgsNormalizer javadoc。
         Map<String, Object> canonicalForm = new LinkedHashMap<>();
         canonicalForm.put("toolNamespace", envelope.toolNamespace());
         canonicalForm.put("toolName", envelope.toolName());
         canonicalForm.put("toolVersion", envelope.toolVersion());
         canonicalForm.put("schemaVersion", envelope.schemaVersion());
-        canonicalForm.put("canonicalArgs", envelope.args());
+        canonicalForm.put("canonicalArgs", ArgsNormalizer.normalize(envelope.args()));
         canonicalForm.put("timeRange", envelope.timeRange());
         // EX-A0 F23 wire 冻结：canonical 键保留 v1 名 inputSnapshotDigest（改名=digest
         // 全量漂移=replay 夹具报废；值语义自 EX-A0 起 = 调查输入身份，改名须升

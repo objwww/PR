@@ -163,4 +163,56 @@ class ExA4bIncidentProjectorTest {
         assertThat(stores.incidents.findByKeyForUpdate("alertname=E|service=svc")
                 .orElseThrow().notificationCount()).isEqualTo(1);
     }
+
+    /**
+     * MC23/P0-4 时序缝隙钉案（ characterization，先测后修——修法须裁定）：旧 run
+     * 活跃中发生真再现（startsAt 晚于 resolvedAt）→ castRunIfFree 返回 null 不铸新
+     * run（uq_rca_run_active_incident 双活跃禁面），新 episode（generation+1）期间
+     * 无 run 且<b>无显式等待态</b>（waitingReason=null，沉默无调查）；旧 run 收尾走
+     * orchestrator 分支 3（pending=null 材料未变）不补偿铸造——下一事件且材料变化
+     * 才补铸。钉案结论：缝隙在案，修法候选（再现即取消旧 run 铸新 / 旧 run 收尾
+     * 补偿铸造）待裁定后另批实施。
+     */
+    @Test
+    void mc23_reproductionDuringActiveRunSeamCharacterization() {
+        IncidentProjector p = new IncidentProjector(stores.events, stores.incidents,
+                stores.runs, stores.tasks, identity, new DeferredPolicy(100),
+                SlaPolicy.defaults(), () -> now, router(true),
+                new com.objwww.pr.control.alert.domain.classification.IncidentClassifier(),
+                stores.categories);
+        p.project(UUID.randomUUID(), List.of(firing("F", "rb-1")));
+        UUID oldRunId = stores.runs.all().get(0).id();
+        assertThat(stores.runs.all()).as("首事件铸 run").hasSize(1);
+
+        p.project(UUID.randomUUID(), List.of(resolved("F")));
+        // 真再现：startsAt 晚于 resolvedAt（乱序防御不吞）
+        ParsedAlert reproduction = new ParsedAlert(AlertFiringStatus.FIRING,
+                "fp-F-rb-1", Map.of("alertname", "F", "service", "svc"),
+                Map.of("runbook", "rb-1"), now.plusSeconds(120), null);
+        p.project(UUID.randomUUID(), List.of(reproduction));
+
+        Incident f = stores.incidents.findByKeyForUpdate("alertname=F|service=svc")
+                .orElseThrow();
+        assertThat(f.status()).isEqualTo(IncidentStatus.FIRING);
+        assertThat(f.generation()).as("再现 = 新 episode（generation+1）").isEqualTo(1);
+        assertThat(stores.runs.all()).as("不铸第二活跃 run（uq 不变面）").hasSize(1);
+        assertThat(f.currentRcaRunId()).as("指针仍指旧 run（跨代残留）").isEqualTo(oldRunId);
+        assertThat(f.waitingReason()).as("缝隙：无显式等待态，沉默无调查").isNull();
+
+        // 旧 run 收尾（终态化）后：材料未变的下一 FIRING 事件也不补铸（R7 方案
+        // "材料未变=重复调查无益"——新 episode 继续无 run，缝隙延续到材料变化）
+        stores.runs.update(withRunTerminal(stores.runs.all().get(0)));
+        p.project(UUID.randomUUID(), List.of(firing("F", "rb-1")));
+        assertThat(stores.runs.all())
+                .as("钉案：旧 run 终态 + 材料未变 = 仍不补铸（修法待裁定）").hasSize(1);
+    }
+
+    private com.objwww.pr.control.alert.domain.model.RcaRun withRunTerminal(
+            com.objwww.pr.control.alert.domain.model.RcaRun run) {
+        return new com.objwww.pr.control.alert.domain.model.RcaRun(run.id(),
+                run.incidentId(), run.generation(), run.trigger(),
+                com.objwww.pr.control.alert.domain.model.RcaRunState.SUCCEEDED,
+                run.investigationHash(), run.createdAt(), now.plusSeconds(180),
+                now.plusSeconds(180), null, null);
+    }
 }

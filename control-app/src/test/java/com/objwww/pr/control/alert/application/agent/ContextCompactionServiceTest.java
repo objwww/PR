@@ -365,4 +365,55 @@ class ContextCompactionServiceTest {
                     false, "route-rca", UUID.randomUUID());
         }
     }
+
+    // ------------------------------------------------------------- 资产钉版面（EN-02/MC36）
+
+    @Test
+    @DisplayName("资产钉版：directiveTemplate = kind/schema/输出协议/策略的稳定登记内容")
+    void directiveTemplateIsStableAssetContent() {
+        Map<String, Object> template = service.directiveTemplate();
+
+        assertThat(template.get("kind")).isEqualTo("context-compaction-directive");
+        assertThat(template.get("schema_version"))
+                .isEqualTo(ContextCompactionService.SCHEMA_VERSION);
+        assertThat((String) template.get("output_protocol"))
+                .as("输出协议与 compactionPrompt 同源（OUTPUT_PROTOCOL 常量）")
+                .contains("\"summary\"").contains("\"refs\"");
+        assertThat((String) template.get("messages_template"))
+                .as("PROMPT kind 契约：模型可见指令面非 blank（ReleaseAsset.of 校验）")
+                .isNotBlank().contains("COMPACTION").contains("\"summary\"")
+                .contains("{{source_snapshot_digest}}").contains("{{required_refs}}");
+        @SuppressWarnings("unchecked")
+        List<Object> variables = (List<Object>) template.get("variables_schema");
+        assertThat(variables)
+                .as("PROMPT kind 契约：variables_schema 非空且覆盖模板全部 {{var}} 占位符")
+                .isNotEmpty()
+                .containsExactlyInAnyOrder("source_snapshot_digest", "event_seq_from",
+                        "event_seq_to", "required_refs");
+        // 注册门直证：登记内容过 ReleaseAsset.of 的 PROMPT 形状校验（P02）——
+        // 启动期登记失败不阻断但必须不发生，此断言即"登记必成"的 L0 锚。
+        com.objwww.pr.control.release.domain.model.ReleaseAsset.of(
+                com.objwww.pr.control.release.domain.model.ReleaseAsset.KIND_PROMPT,
+                template, "test", NOW);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> policy = (Map<String, Object>) template.get("policy");
+        assertThat(policy)
+                .containsEntry("enabled", false)
+                .containsEntry("soft_threshold", 0.7)
+                .containsEntry("target_ratio", 0.55)
+                .containsEntry("max_per_run", 2)
+                .containsEntry("max_input_tokens", V);
+    }
+
+    @Test
+    @DisplayName("资产钉版：policyView 与运行时旋钮同源（enabled 双构造各映本值）")
+    void policyViewMirrorsRuntimeKnobs() {
+        assertThat(service.policyView().get("enabled")).isEqualTo(false);
+        assertThat(enabledService.policyView().get("enabled")).isEqualTo(true);
+        assertThat(enabledService.policyView().get("summary_max_tokens"))
+                .isEqualTo(ContextCompactionService.SUMMARY_MAX_TOKENS);
+        assertThat(service.policyView().get("chars_per_token_estimate"))
+                .isEqualTo(ContextCompactionService.CHARS_PER_TOKEN);
+    }
 }

@@ -1528,6 +1528,12 @@ public final class AlertInMemoryStores {
         }
 
         @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.DelegationDecision> findById(
+                UUID id) {
+            return java.util.Optional.ofNullable(rows.get(id));
+        }
+
+        @Override
         public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.DelegationDecision> findByRunAndGap(
                 UUID runId, String gapId) {
             return rows.values().stream()

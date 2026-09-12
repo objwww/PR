@@ -115,4 +115,25 @@ public class PostgresRcaToolInvocationLedger implements RcaToolInvocationLedger 
                         rs.getObject("result_ref", UUID.class)))
                 .list());
     }
+
+    /** MC24 同现场复用读面——run 维度已成功且带结果引用的账本行（call_seq 序） */
+    @Override
+    public java.util.List<InvocationRecovery> findSuccessfulByRun(UUID runId) {
+        return tx.execute(status -> jdbc.sql("""
+                        SELECT id, call_seq, attempt_id, action_digest, state, result_ref
+                          FROM rca_tool_invocation
+                         WHERE run_id = :run AND state = 'SUCCESS'
+                           AND result_ref IS NOT NULL
+                         ORDER BY call_seq, id
+                        """)
+                .param("run", runId)
+                .query((rs, n) -> new InvocationRecovery(
+                        rs.getObject("id", UUID.class),
+                        rs.getLong("call_seq"),
+                        rs.getObject("attempt_id", UUID.class),
+                        rs.getString("action_digest"),
+                        ToolInvocationState.valueOf(rs.getString("state")),
+                        rs.getObject("result_ref", UUID.class)))
+                .list());
+    }
 }

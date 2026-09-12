@@ -6,6 +6,7 @@ import com.objwww.pr.control.alert.application.agent.SingleToolEvidenceAgent.Cal
 import com.objwww.pr.control.alert.domain.agent.AgentPhase;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.agent.DelegationDecision;
+import com.objwww.pr.control.alert.domain.agent.DelegationReceipt;
 import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.budget.BudgetKind;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
@@ -362,6 +363,96 @@ class ContextAssemblerTest {
         assertThat(envelopeOf(assembly.prompt()).get("working_memory")).isNotNull();
     }
 
+    // ------------------------------------------------------------- MC21/22 回执合并面
+
+    @Test
+    void mc21回执合并面_当前轮ACCEPTED行入信封_他轮不串() throws Exception {
+        MemReceipts receipts = new MemReceipts();
+        receipts.rows.add(new DelegationReceipt(UUID.randomUUID(), UUID.randomUUID(),
+                runId, taskId, UUID.randomUUID(), 0, "g-logs", "logs", 
+                DelegationReceipt.ChildStatus.SUCCEEDED, DelegationReceipt.Admission.ACCEPTED,
+                List.of("error_rate=0.98 于 checkout 网关"),
+                List.of("e-1"), List.of(), List.of(),
+                "a".repeat(64), 128, NOW));
+        receipts.rows.add(new DelegationReceipt(UUID.randomUUID(), UUID.randomUUID(),
+                runId, taskId, UUID.randomUUID(), 0, "g-change", "change",
+                DelegationReceipt.ChildStatus.FAILED, DelegationReceipt.Admission.ACCEPTED,
+                List.of(), List.of(), List.of(), List.of("变更窗口无数据"),
+                "b".repeat(64), 96, NOW));
+        // 他轮（round 9）回执：不进当前轮合并面
+        receipts.rows.add(new DelegationReceipt(UUID.randomUUID(), UUID.randomUUID(),
+                runId, taskId, UUID.randomUUID(), 9, "g-x", "logs",
+                DelegationReceipt.ChildStatus.SUCCEEDED, DelegationReceipt.Admission.ACCEPTED,
+                List.of("他轮结果"), List.of(), List.of(), List.of(),
+                "c".repeat(64), 64, NOW));
+
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), null, receipts, null,
+                CLOCK, MAPPER);
+        ContextAssembler.Assembly assembly = assembler.assemble(request(), checkpoint(), 2);
+
+        JsonNode childReceipts = envelopeOf(assembly.prompt()).get("child_receipts");
+        assertThat(childReceipts.isArray()).isTrue();
+        assertThat(childReceipts.size()).as("仅当前轮 ACCEPTED 行入合并面").isEqualTo(2);
+        assertThat(childReceipts.toString()).contains("g-logs").contains("error_rate=0.98");
+        assertThat(childReceipts.toString()).as("他轮零入模").doesNotContain("他轮结果");
+    }
+
+    @Test
+    void mc22反证可追溯_counter_refs与open_gaps并集入记忆槽() throws Exception {
+        MemReceipts receipts = new MemReceipts();
+        receipts.rows.add(new DelegationReceipt(UUID.randomUUID(), UUID.randomUUID(),
+                runId, taskId, UUID.randomUUID(), 0, "g-logs", "logs",
+                DelegationReceipt.ChildStatus.SUCCEEDED, DelegationReceipt.Admission.ACCEPTED,
+                List.of("同源复述A"), List.of("e-1"),
+                List.of("e-9", "e-8"), List.of(),
+                "a".repeat(64), 128, NOW));
+        receipts.rows.add(new DelegationReceipt(UUID.randomUUID(), UUID.randomUUID(),
+                runId, taskId, UUID.randomUUID(), 0, "g-metrics", "metrics",
+                DelegationReceipt.ChildStatus.SUCCEEDED, DelegationReceipt.Admission.ACCEPTED,
+                List.of("独立反证B"), List.of("e-2"),
+                List.of("e-9"), List.of("发布时间窗与告警起点不吻合"),
+                "b".repeat(64), 96, NOW));
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), null, receipts, null,
+                CLOCK, MAPPER);
+        ContextAssembler.Assembly assembly = assembler.assemble(request(), checkpoint(), 2);
+
+        JsonNode memory = envelopeOf(assembly.prompt()).get("working_memory");
+        assertThat(memory.get("counter_evidence_refs").toString())
+                .as("MC22：反证去重并集可追溯（同源复述不构成第二票——来源以 ref 身份入槽）")
+                .contains("e-9").contains("e-8");
+        assertThat(memory.get("open_gaps").toString())
+                .contains("发布时间窗与告警起点不吻合");
+    }
+
+    // ------------------------------------------------------------- MC31 人工材料区分面
+
+    @Test
+    void mc31人工材料区分面_单列标注_JUDGMENT不进合法引用全集() throws Exception {
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), null, null,
+                run -> List.of(
+                        new ContextAssembler.OperatorMaterialView("op-1", "EVIDENCE_LINK",
+                                "https://vcs.example.com/commit/abc123", "发布窗口内 commit abc123",
+                                "ACCEPTED"),
+                        new ContextAssembler.OperatorMaterialView("op-2", "JUDGMENT",
+                                null, "肯定是发布导致的", "ACCEPTED")),
+                CLOCK, MAPPER);
+        ContextAssembler.Assembly assembly = assembler.assemble(request(), checkpoint(), 2);
+
+        JsonNode envelope = envelopeOf(assembly.prompt());
+        JsonNode materials = envelope.get("operator_materials");
+        assertThat(materials.isArray()).isTrue();
+        assertThat(materials.size()).isEqualTo(2);
+        assertThat(materials.get(1).get("note").asText())
+                .as("MC31：无引用判断带标注，与实测证据区分")
+                .contains("不构成证据引用");
+        assertThat(envelope.get("valid_artifact_refs").toString())
+                .as("MC31：人工材料不进 validRefs——无证判断不能绕过 Claim 准入")
+                .doesNotContain("肯定是发布");
+    }
+
     // ------------------------------------------------------------- 假件
 
     /** run 域证据假件（五步纪律入口 create 已验 schema） */
@@ -393,6 +484,11 @@ class ContextAssemblerTest {
         }
 
         @Override
+        public Optional<DelegationDecision> findById(UUID id) {
+            return rows.stream().filter(d -> d.id().equals(id)).findFirst();
+        }
+
+        @Override
         public Optional<DelegationDecision> findByRunAndGap(UUID runId, String gapId) {
             return Optional.empty();
         }
@@ -400,6 +496,38 @@ class ContextAssemblerTest {
         @Override
         public List<DelegationDecision> findByRunAndPrimaryTask(UUID runId, UUID primaryTaskId) {
             return rows;
+        }
+    }
+
+    /** 回执台账最小假件（合并面只读 findAcceptedByRunAndRound） */
+    static final class MemReceipts implements com.objwww.pr.control.alert.domain.repository
+            .DelegationReceiptRepository {
+        final List<DelegationReceipt> rows = new ArrayList<>();
+
+        @Override
+        public void insert(DelegationReceipt receipt) {
+            rows.add(receipt);
+        }
+
+        @Override
+        public Optional<DelegationReceipt> findByMessageId(UUID messageId) {
+            return rows.stream().filter(r -> r.messageId().equals(messageId)).findFirst();
+        }
+
+        @Override
+        public List<DelegationReceipt> findAcceptedByRunAndRound(UUID runId,
+                UUID primaryTaskId, int roundId) {
+            return rows.stream()
+                    .filter(r -> r.admission() == DelegationReceipt.Admission.ACCEPTED
+                            && r.runId().equals(runId)
+                            && r.primaryTaskId().equals(primaryTaskId)
+                            && r.roundId() == roundId)
+                    .toList();
+        }
+
+        @Override
+        public List<DelegationReceipt> findByChildTaskId(UUID childTaskId) {
+            return rows.stream().filter(r -> r.childTaskId().equals(childTaskId)).toList();
         }
     }
 

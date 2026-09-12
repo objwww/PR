@@ -61,6 +61,13 @@ public class ContextCompactionService {
     /** 摘要输出 max_tokens（有界输出；首期静态值，待 MC34 调参） */
     static final int SUMMARY_MAX_TOKENS = 2048;
 
+    /** 摘要输出协议（候选 = {"summary","refs"}；compactionPrompt 与资产钉版同源） */
+    static final String OUTPUT_PROTOCOL = "恰一个 JSON 对象：{\"summary\":\"<压缩后的调查"
+            + "上下文。recall-first：先保全 required_refs 相关的事实/反证/未决缺口/"
+            + "已做动作与停止条件，不得为达到压缩比移除反证；再精简其余>\","
+            + "\"refs\":[<summary 保留项引用的证据 id：必须覆盖 required_refs，"
+            + "且只能引用待压缩上下文中出现过的 id>]}";
+
     /** token 保守估算分母（与 ContextAssembler/RcaModelGateway 同一口径） */
     static final int CHARS_PER_TOKEN = 2;
 
@@ -257,6 +264,48 @@ public class ContextCompactionService {
         return new CompactionOutcome(OutcomeKind.COMMITTED, committed, null);
     }
 
+    /**
+     * 资产钉版面（EN-02/MC36）：压缩指令的稳定模板 + 策略旋钮值——release_asset
+     * PROMPT kind 的登记内容。行级 summary_prompt_digest（V92，含材料全文的随行
+     * 冻结 digest）之外的资产级锚：内容寻址幂等，版本中心/资格面可引用，热切/
+     * 回滚按 digest 精确失效。不含 run 专属材料与区间（那些由行级 digest 承载）。
+     */
+    public Map<String, Object> directiveTemplate() {
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("kind", "context-compaction-directive");
+        template.put("schema_version", SCHEMA_VERSION);
+        template.put("output_protocol", OUTPUT_PROTOCOL);
+        // PROMPT kind 资产契约（ReleaseAsset.of 校验，P02）：messages_template 非
+        // blank + {{var}} 占位符全部在 variables_schema 声明。run 专属值以 {{var}}
+        // 占位符进模板（行级 summary_prompt_digest 承载随行原文），资产级
+        // target_ratio 为构造注入旋钮的具体值。
+        template.put("messages_template", "mode=COMPACTION"
+                + " | schema_version=" + SCHEMA_VERSION
+                + " | source_snapshot_digest={{source_snapshot_digest}}"
+                + " | event_seq_from={{event_seq_from}}"
+                + " | event_seq_to={{event_seq_to}}"
+                + " | required_refs={{required_refs}}"
+                + " | target_ratio=" + targetRatio
+                + " | " + OUTPUT_PROTOCOL);
+        template.put("variables_schema", List.of(
+                "source_snapshot_digest", "event_seq_from", "event_seq_to", "required_refs"));
+        template.put("policy", policyView());
+        return template;
+    }
+
+    /** 压缩策略旋钮值（资产登记内容；与构造注入的运行时值同源） */
+    public Map<String, Object> policyView() {
+        Map<String, Object> policy = new LinkedHashMap<>();
+        policy.put("enabled", enabled);
+        policy.put("soft_threshold", softThreshold);
+        policy.put("target_ratio", targetRatio);
+        policy.put("max_per_run", maxPerRun);
+        policy.put("max_input_tokens", maxInputTokens);
+        policy.put("summary_max_tokens", SUMMARY_MAX_TOKENS);
+        policy.put("chars_per_token_estimate", CHARS_PER_TOKEN);
+        return policy;
+    }
+
     /** 摘要指令信封（确定性装配）：recall-first 目标 + 输出协议 + 冻结区间元数据 */
     private String compactionPrompt(String source, long eventSeqFrom, long eventSeqTo,
             Set<String> requiredRefs, String material) {
@@ -268,11 +317,7 @@ public class ContextCompactionService {
         directive.put("event_seq_to", eventSeqTo);
         directive.put("required_refs", List.copyOf(requiredRefs));
         directive.put("target_ratio", targetRatio);
-        directive.put("output_protocol", "恰一个 JSON 对象：{\"summary\":\"<压缩后的调查"
-                + "上下文。recall-first：先保全 required_refs 相关的事实/反证/未决缺口/"
-                + "已做动作与停止条件，不得为达到压缩比移除反证；再精简其余>\","
-                + "\"refs\":[<summary 保留项引用的证据 id：必须覆盖 required_refs，"
-                + "且只能引用待压缩上下文中出现过的 id>]}");
+        directive.put("output_protocol", OUTPUT_PROTOCOL);
         try {
             return mapper.writeValueAsString(directive)
                     + "\n【待压缩上下文（冻结窗）】\n" + material;

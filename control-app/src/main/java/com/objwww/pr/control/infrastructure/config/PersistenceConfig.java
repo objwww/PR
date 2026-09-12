@@ -230,6 +230,28 @@ public class PersistenceConfig {
                 jdbc, objectMapper);
     }
 
+    /**
+     * MC21~23：子任务回执台账持久面（V96 rca_delegation_receipt，append-only）——
+     * message_id 唯一 = 幂等准入键，冲突显式抛（调用方竞态短路依据）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.DelegationReceiptRepository
+    delegationReceiptRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDelegationReceiptRepository(jdbc, objectMapper);
+    }
+
+    /**
+     * MC31/32：人工材料台账持久面（V96 incident_operator_material，append-only）——
+     * uq(incident_id, revision) = MC32 CAS 串行化点，冲突显式抛（行锁路径兜底）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.OperatorMaterialRepository
+    operatorMaterialRepository(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresOperatorMaterialRepository(jdbc, objectMapper);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository rcaAttemptRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository(jdbc);

@@ -120,6 +120,9 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private final com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger modelCalls;
     /** R7-X6：主模式 Profile（null = 主模式关闭，旧兼容路由行为零变化） */
     private final AgentProfile primaryProfile;
+    /** MC21 回执准入面（null = legacy 装配，不生产回执，行为零变化） */
+    private final com.objwww.pr.control.alert.application.agent.DelegationReceiptService
+            delegationReceipts;
 
     public NativeInvestigationExecutor(ConfigBundleRepository bundles,
             DeterministicSupervisor supervisor, RcaTaskRepository tasks,
@@ -135,6 +138,29 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             RunnerDirectory runners, PrimaryCheckpointRepository checkpoints,
             com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger modelCalls,
             AgentProfile primaryProfile) {
+        this(bundles, supervisor, tasks, runs, evidence, snapshots, nativeRcaAgent,
+                claims, validator, toolRegistryDigest, clock, metrics, budgetGate,
+                budgetLimits, toolLedger, bindings, agents, runners, checkpoints,
+                modelCalls, primaryProfile, null);
+    }
+
+    /** 全参构造（MC21：回执生产面并集；delegationReceipts 可空=legacy 姿态） */
+    public NativeInvestigationExecutor(ConfigBundleRepository bundles,
+            DeterministicSupervisor supervisor, RcaTaskRepository tasks,
+            RcaRunRepository runs, EvidenceRepository evidence,
+            EvidenceSnapshotRepository snapshots, NativeRcaAgent nativeRcaAgent,
+            ClaimStore claims, EvidencePackageValidator validator,
+            String toolRegistryDigest, AlertClock clock,
+            AlertMetrics metrics,
+            com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
+            Map<com.objwww.pr.control.alert.domain.budget.BudgetKind, Long> budgetLimits,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+            TaskExecutionBindingRepository bindings, AgentRegistry agents,
+            RunnerDirectory runners, PrimaryCheckpointRepository checkpoints,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger modelCalls,
+            AgentProfile primaryProfile,
+            com.objwww.pr.control.alert.application.agent.DelegationReceiptService
+                    delegationReceipts) {
         this.bundles = Objects.requireNonNull(bundles, "bundles");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
@@ -164,6 +190,7 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         // R6/EV-06：主模式终态化 usage_json 回填源（rca_model_call attempt 聚合）
         this.modelCalls = Objects.requireNonNull(modelCalls, "modelCalls");
         this.primaryProfile = primaryProfile;
+        this.delegationReceipts = delegationReceipts;
     }
 
     @Override
@@ -448,6 +475,8 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
             log.warn("DAG 任务 {} 角色/运行器解析拒绝 → DEAD key={} 原因: {}",
                     dagTask.id(), dagTask.taskKey(), e.getMessage());
+            submitDelegationReceipt(dagTask, binding, false, List.of(),
+                    "子任务失败：角色/运行器解析拒绝（" + e.getMessage() + "），未产出结论");
             return true;
         }
         boolean primaryMode = RoleRuntimeKind.BOUNDED_LLM.equals(profile.runtimeKind());
@@ -465,6 +494,9 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                 if (settled) {
                     log.info("DAG 任务 {} 阶段③恢复：result_ref 幂等收尾（零触网）key={}",
                             dagTask.id(), dagTask.taskKey());
+                    // MC21：恢复重驱=同结果重投（同 messageId）→ 准入幂等恰一次合并
+                    submitDelegationReceipt(dagTask, binding, true,
+                            List.of(recovered.get().resultRef()), null);
                 }
                 return settled;
             }
@@ -504,6 +536,8 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                 tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
                 log.warn("DAG 任务 {} FAILED 回执孤儿 → DEAD（不重复调用）key={}",
                         dagTask.id(), dagTask.taskKey());
+                submitDelegationReceipt(dagTask, binding, false, List.of(),
+                        "子任务失败：工具查询历史全败（FAILED 回执孤儿降级），未产出结论");
                 return true;
             }
         }
@@ -525,13 +559,63 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
             log.warn("DAG 任务 {} 工具控制面拒绝（{}），降级 DEAD", dagTask.taskKey(),
                     denied.reason());
+            submitDelegationReceipt(dagTask, binding, false, List.of(),
+                    "子任务失败：工具控制面拒绝（" + denied.reason() + "），未产出结论");
             return true;
         }
         if (result.outcome() == RoleRunner.RoleDriveOutcome.FAILED) {
             tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DEAD);
+            submitDelegationReceipt(dagTask, binding, false, List.of(),
+                    "子任务失败（" + result.reason() + "），未产出结论——结构化缺口如实上呈");
             return true;
         }
-        return tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING, RcaTaskState.DONE);
+        boolean done = tasks.transitionState(dagTask.id(), RcaTaskState.RUNNING,
+                RcaTaskState.DONE);
+        if (done) {
+            submitDelegationReceipt(dagTask, binding, true, result.evidenceIds(), null);
+        }
+        return done;
+    }
+
+    /**
+     * MC21 回执生产：委派子任务（binding.parentRequestId=裁决行 id）终态即提交
+     * 结构化回执——messageId 按 (childTaskId, attemptCount) 确定性铸造，恢复重驱
+     * 同键重投由准入幂等短路（恰一次合并）。回执是台账叠面，任务状态仍是事实源：
+     * 提交失败只 log-warn，不翻转任务结局。
+     */
+    private void submitDelegationReceipt(RcaTask task, TaskExecutionBinding binding,
+            boolean success, List<UUID> evidenceRefs, String failureNote) {
+        if (delegationReceipts == null || binding.parentRequestId() == null) {
+            return;
+        }
+        UUID messageId = UUID.nameUUIDFromBytes(("r7-receipt:" + task.id() + ":"
+                + task.attemptCount()).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        List<String> refs = evidenceRefs.stream().map(UUID::toString).toList();
+        List<String> findings = success
+                ? (refs.isEmpty()
+                        ? List.of("child DONE（零数据：查询成功但无证据行）")
+                        : refs.stream().map(ref -> "evidence:" + ref).toList())
+                : List.of();
+        List<String> missing = success ? List.of()
+                : List.of(failureNote == null ? "子任务失败，未产出结论" : failureNote);
+        try {
+            var verdict = delegationReceipts.submit(
+                    new com.objwww.pr.control.alert.application.agent
+                            .DelegationReceiptService.Submission(
+                            messageId, task.runId(), binding.parentRequestId(),
+                            task.id(), binding.roundId(),
+                            success
+                                    ? com.objwww.pr.control.alert.domain.agent
+                                            .DelegationReceipt.ChildStatus.SUCCEEDED
+                                    : com.objwww.pr.control.alert.domain.agent
+                                            .DelegationReceipt.ChildStatus.FAILED,
+                            findings, refs, List.of(), missing));
+            log.info("委派回执已提交 child={} admission={} duplicate={}",
+                    task.id(), verdict.receipt().admission(), verdict.duplicate());
+        } catch (RuntimeException e) {
+            log.warn("委派回执提交失败（不打断任务结局）child={}: {}",
+                    task.id(), e.getMessage());
+        }
     }
 
     /**

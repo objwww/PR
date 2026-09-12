@@ -16,6 +16,8 @@ import com.objwww.pr.control.alert.domain.tool.ToolInvocationState;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleReason;
 import com.objwww.pr.control.alert.domain.tool.ToolReasonCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -39,6 +41,8 @@ import java.util.UUID;
  * 无故障不制造证据 E2E-M4-00 同纪律）。
  */
 public class SingleToolEvidenceAgent {
+
+    private static final Logger log = LoggerFactory.getLogger(SingleToolEvidenceAgent.class);
 
     /** 调用身份与上下文（timeRange 非空——ActionEnvelope 契约；EX-A0：输入身份=调查输入绑定，可空） */
     public record CallContext(UUID runId, UUID taskId, UUID attemptId, long callSeq,
@@ -133,19 +137,57 @@ public class SingleToolEvidenceAgent {
                 spec.toolVersion(), schemaHash, args, ctx.timeRange(),
                 ctx.investigationInputDigest()));
 
+        UUID operationId = UUID.randomUUID();
+        com.objwww.pr.control.alert.domain.budget.ReservationKey budgetKey =
+                new com.objwww.pr.control.alert.domain.budget.ReservationKey(ctx.runId(),
+                        ctx.taskId(), ctx.attemptId(), ctx.callSeq(),
+                        com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL);
+
+        // MC24 同现场复用（P0-2 ④/⑤）：同 run 同 action_digest 已有成功证据行 →
+        // 复用回喂，零新工具执行。预算仍计一次 TOOL_CALL（重放洪水仍被硬闸封顶，
+        // 不给熔断豁免留后门——卡面裁定）；熔断计数不动（复用非进展亦非无进展）。
+        // 复用面在熔断闸之前：熔断封的是重复物理执行，既有证据回喂本就是零执行。
+        // 复用台账行 = open → markResultRef(既有证据) → succeed，call_seq 照常
+        // 推进（账本唯一键不撞；复用性质由行内 result_ref 早于本行成功时刻可辨）。
+        UUID reused = ledger.findSuccessfulByRun(ctx.runId()).stream()
+                .filter(r -> r.actionDigest().equals(actionDigest)
+                        && r.resultRef() != null)
+                .map(RcaToolInvocationLedger.InvocationRecovery::resultRef)
+                .findFirst().orElse(null);
+        if (reused != null) {
+            try {
+                budgetGate.call(java.util.Map.of(
+                                com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL,
+                                1L),
+                        budgetKey, () -> {
+                            ledger.open(new RcaToolInvocationLedger.InvocationIdentity(
+                                    operationId, ctx.runId(), ctx.taskId(), ctx.attemptId(),
+                                    ctx.callSeq(), spec.toolName(), spec.toolVersion(),
+                                    actionDigest));
+                            ledger.markResultRef(operationId, reused);
+                            ledger.succeed(operationId);
+                            return reused;
+                        }, ignored -> java.util.Map.of(
+                                com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL,
+                                com.objwww.pr.control.alert.application.RunBudgetGate.Usage
+                                        .of(1L)),
+                        e -> true);
+            } catch (com.objwww.pr.control.alert.domain.budget.BudgetExhaustedException e) {
+                return new AgentResult(AgentOutcome.FAILED, List.of(), "BUDGET_EXHAUSTED");
+            }
+            log.info("MC24 查询复用 run={} task={} tool={} evidence={}（零新工具执行）",
+                    ctx.runId(), ctx.taskId(), spec.toolName(), reused);
+            return new AgentResult(AgentOutcome.EVIDENCE_PRODUCED, List.of(reused), null);
+        }
+
         // EX-A1 前置闸：已熔断签名零预留零触网零落账（确定性直拒）
         if (!doomLoopGuard.isOpen(ctx.taskId(), spec.toolName(), actionDigest)) {
             return new AgentResult(AgentOutcome.FAILED, List.of(), "DOOM_LOOP_TRIPPED");
         }
 
-        UUID operationId = UUID.randomUUID();
         // EX-A1 准入（P1-02）：TOOL_CALL 一维硬闸；open 在 remote 段内——预留成功后
         // 记录写失败（确证未发出）走 releaseOn 全额退款；模型可见族（已发送/未知）
         // provisional 保守占用；准入拒 = 零触网零落账
-        com.objwww.pr.control.alert.domain.budget.ReservationKey budgetKey =
-                new com.objwww.pr.control.alert.domain.budget.ReservationKey(ctx.runId(),
-                        ctx.taskId(), ctx.attemptId(), ctx.callSeq(),
-                        com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL);
         try {
             ToolGateway.ToolInvocationResult result = budgetGate.call(
                     java.util.Map.of(com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL,

@@ -20,12 +20,18 @@ public record DelegationDecision(
         String roleId,
         String roleVersion,
         /** R3 路线B 语义钉面：仅台账审计（模型自述的信息缺口追问）；子任务执行面
-         * 不消费——专家按绑定 profile 的固定查询+冻结窗+input_refs 执行。 */
+         * 不消费——专家按绑定 profile 的固定查询+冻结窗+input_refs 执行。
+         * MC21/P0-1 长度闸：>512 字符截断并带定长标注（裁定=截断非拒绝——question
+         * 是审计台账字段不是执行面输入，超限审计文案不值得打断整委派批；标注保
+         * 截断可辨识，不假原文。量级对齐 OperatorCommand.idempotencyKey ≤128 惯例）。 */
         String question,
         Status status,
         String rejectReason,
         UUID childTaskId,
         Instant createdAt) {
+
+    /** question 审计文案上限（含标注；MC21/P0-1，超限截断不拒绝） */
+    public static final int MAX_QUESTION_CHARS = 512;
 
     public enum Status {APPROVED, REJECTED}
 
@@ -40,6 +46,11 @@ public record DelegationDecision(
         Objects.requireNonNull(roleId, "roleId");
         Objects.requireNonNull(roleVersion, "roleVersion");
         Objects.requireNonNull(question, "question");
+        if (question.length() > MAX_QUESTION_CHARS) {
+            // 480 + 标注 ≤25 字符（含 10 位原文长度）= 严格 ≤512
+            question = question.substring(0, MAX_QUESTION_CHARS - 32)
+                    + "…[超长截断，原文 " + question.length() + " 字符]";
+        }
         Objects.requireNonNull(status, "status");
         switch (status) {
             case APPROVED -> {

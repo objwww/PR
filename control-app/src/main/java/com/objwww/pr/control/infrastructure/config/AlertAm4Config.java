@@ -696,6 +696,8 @@ public class AlertAm4Config {
     /**
      * 任务信封装配器（R1/MA-01）：告警材料读口由 run→incident→最新告警事件确定性
      * 投影（缺项如实 null 不造数）；工具账本/裁决台账直读供轨迹与工作记忆重建。
+     * MC21/22 回执合并面（当前轮 ACCEPTED 回执入信封+反证/缺口记忆槽）与 MC31
+     * 人工材料区分面（run→incident→已准入材料，与实测证据分槽）随全参构造接入。
      */
     @Bean
     public com.objwww.pr.control.alert.application.agent.ContextAssembler
@@ -710,6 +712,10 @@ public class AlertAm4Config {
                     alertEventRepository,
             com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
                     workingMemoryPort,
+            com.objwww.pr.control.alert.domain.repository.DelegationReceiptRepository
+                    delegationReceiptRepository,
+            com.objwww.pr.control.alert.domain.repository.OperatorMaterialRepository
+                    operatorMaterialRepository,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -725,9 +731,17 @@ public class AlertAm4Config {
                 })
                 .orElse(com.objwww.pr.control.alert.application.agent.ContextAssembler
                         .AlertMaterial.unknown());
+        com.objwww.pr.control.alert.application.agent.ContextAssembler.OperatorMaterialPort
+                operatorMaterialPort = runId -> operatorMaterialRepository
+                .findAcceptedByRun(runId).stream()
+                .map(m -> new com.objwww.pr.control.alert.application.agent.ContextAssembler
+                        .OperatorMaterialView(m.operator(), m.kind().name(),
+                                m.sourceRef(), m.content(), m.admission().name()))
+                .toList();
         return new com.objwww.pr.control.alert.application.agent.ContextAssembler(
                 evidenceRepository, rcaToolInvocationLedger, delegationDecisionRepository,
-                alertMaterialPort, workingMemoryPort, Clock.systemUTC(), objectMapper);
+                alertMaterialPort, workingMemoryPort, delegationReceiptRepository,
+                operatorMaterialPort, Clock.systemUTC(), objectMapper);
     }
 
     /** 最新告警事件 → 告警材料（labels/annotations 确定性投影；缺项 null） */
@@ -787,6 +801,8 @@ public class AlertAm4Config {
             double compactionTargetRatio,
             @Value("${app.alert.r7.compaction.max-per-run:2}") int compactionMaxPerRun,
             @Value("${app.alert.r7.max-input-tokens:24000}") int compactionMaxInputTokens,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -811,10 +827,36 @@ public class AlertAm4Config {
                         Clock.systemUTC(), compactionEnabled, compactionSoftThreshold,
                         compactionTargetRatio, compactionMaxPerRun,
                         compactionMaxInputTokens);
+        registerCompactionDirectiveAsset(releaseAssetRepository, compaction);
         return new com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner(
                 guard, am4DeterministicSupervisor, primaryCheckpointRepository,
                 evidenceRepository, assembler, port, objectMapper, Clock.systemUTC(),
                 compaction);
+    }
+
+    /**
+     * 捎带（EN-02/MC36 资产钉版）：压缩指令模板+策略旋钮登记为 release_asset
+     * PROMPT kind（内容寻址幂等）——行级 summary_prompt_digest（V92）之外的资产级
+     * 锚，版本中心可见、资格面可引用、热切/回滚按 digest 精确失效。登记失败不阻断
+     * 启动（log-warn 留痕，与 registerPromptAssets 同律）。
+     */
+    private void registerCompactionDirectiveAsset(
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository assets,
+            com.objwww.pr.control.alert.application.agent.ContextCompactionService
+                    compaction) {
+        try {
+            boolean inserted = assets.insert(
+                    com.objwww.pr.control.release.domain.model.ReleaseAsset.of(
+                            com.objwww.pr.control.release.domain.model.ReleaseAsset
+                                    .KIND_PROMPT,
+                            compaction.directiveTemplate(), "am4-config",
+                            java.time.Clock.systemUTC().instant()));
+            if (!inserted) {
+                log.debug("压缩指令资产已登记（幂等重放锚）");
+            }
+        } catch (RuntimeException e) {
+            log.warn("压缩指令资产登记失败（不阻断启动）: {}", e.getMessage());
+        }
     }
 
     // ------------------------------------------------------------------ 内部

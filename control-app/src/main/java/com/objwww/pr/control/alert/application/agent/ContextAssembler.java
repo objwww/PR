@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.agent.DelegationDecision;
+import com.objwww.pr.control.alert.domain.agent.DelegationReceipt;
 import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.agent.WorkingMemory;
 import com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository;
+import com.objwww.pr.control.alert.domain.repository.DelegationReceiptRepository;
 import com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
@@ -72,6 +74,10 @@ public class ContextAssembler {
     private final DelegationDecisionRepository delegations;
     private final AlertMaterialPort alertMaterials;
     private final WorkingMemoryPort workingMemory;
+    /** MC21/22 合并面（可空=null 零漂移）：当前轮 ACCEPTED 回执入信封+记忆槽 */
+    private final DelegationReceiptRepository delegationReceipts;
+    /** MC31 区分面（可空=null 零漂移）：人工材料单列标注（与实测证据区分） */
+    private final OperatorMaterialPort operatorMaterials;
     private final Clock clock;
     private final ObjectMapper mapper;
 
@@ -88,11 +94,25 @@ public class ContextAssembler {
             DelegationDecisionRepository delegations,
             AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
             Clock clock, ObjectMapper mapper) {
+        this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
+                null, null, clock, mapper);
+    }
+
+    /** 全参构造（MC21~23 回执合并面 + MC31 人工材料区分面并集） */
+    public ContextAssembler(EvidenceRepository evidence,
+            RcaToolInvocationLedger toolLedger,
+            DelegationDecisionRepository delegations,
+            AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
+            DelegationReceiptRepository delegationReceipts,
+            OperatorMaterialPort operatorMaterials,
+            Clock clock, ObjectMapper mapper) {
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.delegations = Objects.requireNonNull(delegations, "delegations");
         this.alertMaterials = Objects.requireNonNull(alertMaterials, "alertMaterials");
         this.workingMemory = workingMemory;
+        this.delegationReceipts = delegationReceipts;
+        this.operatorMaterials = operatorMaterials;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
@@ -108,6 +128,40 @@ public class ContextAssembler {
 
         AlertMaterial byRun(UUID runId);
     }
+
+    /**
+     * 人工材料读口（MC31 区分面）：run→incident→已准入材料的确定性投影。
+     * 材料与实测证据严格分槽下发（operator_materials），JUDGMENT 类带
+     * "不构成证据引用"标注，不入 validRefs（无证判断不能绕过 Claim 准入）。
+     */
+    @FunctionalInterface
+    public interface OperatorMaterialPort {
+
+        List<OperatorMaterialView> byRun(UUID runId);
+    }
+
+    /** 人工材料视图（宿主投影；admission=ACCEPTED 才会进入） */
+    public record OperatorMaterialView(String operator, String kind, String sourceRef,
+            String content, String admission) {
+    }
+
+    /**
+     * 回执合并面（MC21/22）：当前轮 ACCEPTED 回执的有界投影——信封 child_receipts
+     * 槽载荷 + 记忆槽反证/缺口来源。messageId 幂等准入保证同一结果至多一行，合并
+     * 面不重复消费；LATE/OVERSIZED/REJECTED_SHAPE 行不进入（迟到只审计不冒充现场，
+     * MC23）。
+     */
+    record ReceiptSection(List<Map<String, Object>> rows, List<String> counterRefs,
+            List<String> openGaps) {
+
+        static final ReceiptSection EMPTY =
+                new ReceiptSection(List.of(), List.of(), List.of());
+    }
+
+    /** 信封 child_receipts 槽硬界（与批旋钮解耦的有界面） */
+    static final int RECEIPT_LIMIT = 8;
+    static final int RECEIPT_ITEMS_LIMIT = 6;
+    static final int MATERIAL_LIMIT = 10;
 
     /** 告警材料（缺项如实 null——信封省略该键，不造数） */
     public record AlertMaterial(String alertname, String service, String severity,
@@ -137,7 +191,10 @@ public class ContextAssembler {
         envelope.put("budget", budgetOf(request, checkpoint, delegationBatchesRemaining));
         EvidenceWindow window = evidenceOf(request);
         envelope.put("evidence", window.rows);
-        MemoryCommit memory = commitMemory(request, checkpoint);
+        ReceiptSection receiptSection = receiptsOf(request, checkpoint);
+        envelope.put("child_receipts", receiptSection.rows());
+        envelope.put("operator_materials", materialsOf(request));
+        MemoryCommit memory = commitMemory(request, checkpoint, receiptSection);
         envelope.put("working_memory", memory.slots());
         envelope.put("trajectory", trajectoryOf(request));
         envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
@@ -259,11 +316,12 @@ public class ContextAssembler {
      * 工作记忆提交（R10）：确定性重建为候选 → append 深冻结（同修订重放返回既有行
      * ——MC07 崩溃重驱读同快照不另生成；MC06 已提交快照不漂移），信封下发<b>返回行</b>
      * 的槽（冻结真相，与检查点 memory_id/digest 钉面一致）。未接持久面（legacy 构造）
-     * → 只下发重建槽，不落档。
+     * → 只下发重建槽，不落档。MC22：反证/缺口槽由当前轮 ACCEPTED 回执供给。
      */
     MemoryCommit commitMemory(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint) {
-        Map<String, List<String>> rebuilt = rebuildMemorySlots(request, checkpoint);
+            PrimaryCheckpoint checkpoint, ReceiptSection receiptSection) {
+        Map<String, List<String>> rebuilt = rebuildMemorySlots(request, checkpoint,
+                receiptSection);
         if (workingMemory == null) {
             return new MemoryCommit(rebuilt, null);
         }
@@ -277,10 +335,11 @@ public class ContextAssembler {
 
     /**
      * 工作记忆确定性重建（槽契约 R10 持久化后由快照承载）：假设=检查点 FINAL 提案史、
-     * ruled_out=裁决拒绝史；每槽 ≤10 项、单项 ≤100 字符。
+     * ruled_out=裁决拒绝史、反证=当前轮回执 counter_refs 并集（MC22 反证可追溯）、
+     * open_gaps=回执 missing_information 并集；每槽 ≤10 项、单项 ≤100 字符。
      */
     Map<String, List<String>> rebuildMemorySlots(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint) {
+            PrimaryCheckpoint checkpoint, ReceiptSection receiptSection) {
         List<String> hypotheses = new ArrayList<>();
         for (Map<String, Object> claim : checkpoint.finalClaims()) {
             Object statement = claim.get("statement");
@@ -296,9 +355,97 @@ public class ContextAssembler {
         Map<String, List<String>> memory = new LinkedHashMap<>();
         memory.put("hypotheses", bound(hypotheses));
         memory.put("ruled_out", bound(ruledOut));
-        memory.put("counter_evidence_refs", List.of());
-        memory.put("open_gaps", List.of());
+        memory.put("counter_evidence_refs", bound(receiptSection.counterRefs()));
+        memory.put("open_gaps", bound(receiptSection.openGaps()));
         return memory;
+    }
+
+    /**
+     * 当前轮 ACCEPTED 回执投影（MC21/22 合并面）：未接台账面（legacy 构造）→ 空。
+     * 行=有界载荷；counterRefs=反证并集（去重保序）；openGaps=缺口并集。
+     */
+    private ReceiptSection receiptsOf(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint) {
+        if (delegationReceipts == null) {
+            return ReceiptSection.EMPTY;
+        }
+        List<DelegationReceipt> accepted = delegationReceipts.findAcceptedByRunAndRound(
+                request.task().runId(), request.task().id(), checkpoint.roundId());
+        if (accepted.isEmpty()) {
+            return ReceiptSection.EMPTY;
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<String> counterRefs = new ArrayList<>();
+        List<String> openGaps = new ArrayList<>();
+        int omitted = 0;
+        for (DelegationReceipt receipt : accepted) {
+            if (rows.size() >= RECEIPT_LIMIT) {
+                omitted++;
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("gap_id", receipt.gapId());
+            row.put("role_id", receipt.roleId());
+            row.put("status", receipt.childStatus().name().toLowerCase());
+            List<String> shown = receipt.findings().stream()
+                    .limit(RECEIPT_ITEMS_LIMIT)
+                    .map(f -> clip(f, ITEM_LIMIT).text())
+                    .toList();
+            row.put("findings", shown);
+            if (receipt.findings().size() > shown.size()) {
+                row.put("findings_omitted", receipt.findings().size() - shown.size());
+            }
+            row.put("support_refs", bound(receipt.supportRefs()));
+            row.put("counter_refs", bound(receipt.counterRefs()));
+            row.put("missing_information", bound(receipt.missingInformation()));
+            rows.add(row);
+            receipt.counterRefs().stream()
+                    .filter(ref -> !counterRefs.contains(ref))
+                    .forEach(counterRefs::add);
+            receipt.missingInformation().stream()
+                    .filter(gap -> !openGaps.contains(gap))
+                    .forEach(openGaps::add);
+        }
+        if (omitted > 0) {
+            Map<String, Object> marker = new LinkedHashMap<>();
+            marker.put("receipts_omitted", omitted);
+            rows.add(marker);
+        }
+        return new ReceiptSection(List.copyOf(rows), List.copyOf(counterRefs),
+                List.copyOf(openGaps));
+    }
+
+    /** 人工材料投影（MC31 区分面）：与实测证据分槽；JUDGMENT 带不构成引用标注 */
+    private List<Map<String, Object>> materialsOf(RoleRunner.RoleDriveRequest request) {
+        if (operatorMaterials == null) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        int omitted = 0;
+        for (OperatorMaterialView material : operatorMaterials.byRun(
+                request.task().runId())) {
+            if (rows.size() >= MATERIAL_LIMIT) {
+                omitted++;
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("operator", material.operator());
+            row.put("kind", material.kind());
+            if (material.sourceRef() != null) {
+                row.put("source_ref", material.sourceRef());
+            }
+            row.put("content", clip(material.content(), ITEM_LIMIT).text());
+            if ("JUDGMENT".equals(material.kind())) {
+                row.put("note", "人工判断（无引用）——仅供参考，不构成证据引用");
+            }
+            rows.add(row);
+        }
+        if (omitted > 0) {
+            Map<String, Object> marker = new LinkedHashMap<>();
+            marker.put("materials_omitted", omitted);
+            rows.add(marker);
+        }
+        return rows;
     }
 
     /** 轨迹（最近 ≤8 步）：主任务工具调用账本 + 委派裁决台账的确定性投影 */

@@ -10,6 +10,7 @@ import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -55,17 +56,25 @@ public final class PrimaryFinalClaimProjector {
     }
 
     /**
-     * 检查点 FINAL 提案逐行投影；返回实际 append 的行数（跳过行不计）。
+     * 检查点 FINAL 提案逐组投影；返回实际 append 的行数（跳过行不计，同 claimKey
+     * 组恰一行）。
+     *
+     * <p>MC22/P0-1 对峙呈堂：投影前按 claimKey 分组做状态冲突检测——同组 TRUE/FALSE
+     * 双断言若各自落行，ClaimStore 同指纹异内容 = REVISED 覆盖（反证被覆盖而非对峙
+     * 呈堂，MC22 禁面）；冲突组强制 UNKNOWN + MULTI_SOURCE_CONFLICT 单行，证据引用
+     * 与来源为全组并集（与 {@code ClaimReducer.reduceGroup} 无法裁决分支同语义）。
+     * 同组同态多行 = 同一断言的重复提交，合并引用单行投影（避免 REVISED 覆盖同族
+     * 漂移）。EXCLUSION→FALSE 的"确认排除"语义不变；kind 语义门归 R7c P1-01，
+     * 冲突/合并行的 kind 取首行（确定性，投影序 = 提案行序）。
      *
      * @param snapshotHex 本 run 冻结证据快照 digest（外来快照排除面依赖此值对齐）
      */
     public int project(UUID runId, PrimaryCheckpoint checkpoint, String snapshotHex,
             long generation, String timeRange) {
-        int appended = 0;
+        Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
         for (Map<String, Object> row : checkpoint.finalClaims()) {
             String claimKey = str(row.get("claim_key"));
             String statement = str(row.get("statement"));
-            String note = str(row.get("admission_note"));
             List<String> refs = strings(row.get("evidence_refs"));
             if (claimKey == null || statement == null) {
                 log.warn("主 FINAL 提案行缺 claim_key/statement，跳过投影 run={} row={}",
@@ -77,8 +86,31 @@ public final class PrimaryFinalClaimProjector {
                         runId, claimKey);
                 continue;
             }
-            LinkedHashSet<String> sources = new LinkedHashSet<>();
-            for (String ref : refs) {
+            groups.computeIfAbsent(claimKey, key -> new ArrayList<>()).add(row);
+        }
+        int appended = 0;
+        for (Map.Entry<String, List<Map<String, Object>>> group : groups.entrySet()) {
+            if (projectGroup(runId, group.getKey(), group.getValue(), snapshotHex,
+                    generation, timeRange)) {
+                appended++;
+            }
+        }
+        return appended;
+    }
+
+    /** 同 claimKey 组投影恰一行：状态冲突 → UNKNOWN+CONFLICT 并集呈堂；否则按态 */
+    private boolean projectGroup(UUID runId, String claimKey,
+            List<Map<String, Object>> rows, String snapshotHex, long generation,
+            String timeRange) {
+        LinkedHashSet<String> refs = new LinkedHashSet<>();
+        LinkedHashSet<String> sources = new LinkedHashSet<>();
+        LinkedHashSet<ClaimStatus> statuses = new LinkedHashSet<>();
+        LinkedHashSet<ClaimKind> kinds = new LinkedHashSet<>();
+        List<String> reasons = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            List<String> rowRefs = strings(row.get("evidence_refs"));
+            refs.addAll(rowRefs);
+            for (String ref : rowRefs) {
                 try {
                     evidence.findById(UUID.fromString(ref))
                             .ifPresent(e -> sources.add(e.source()));
@@ -87,21 +119,43 @@ public final class PrimaryFinalClaimProjector {
                 }
             }
             ClaimKind kind = parseKind(str(row.get("kind")));
-            ClaimStatus status = switch (kind) {
-                case ROOT_CAUSE -> ClaimStatus.TRUE;
-                case EXCLUSION -> ClaimStatus.FALSE;
-                default -> ClaimStatus.UNKNOWN;
-            };
-            EvidenceBasis basis = sources.size() >= 2
+            statuses.add(statusFor(kind));
+            kinds.add(kind);
+            String note = str(row.get("admission_note"));
+            String statement = str(row.get("statement"));
+            reasons.add(note == null ? statement : statement + " [" + note + "]");
+        }
+
+        ClaimStatus status;
+        EvidenceBasis basis;
+        String reason;
+        if (statuses.size() > 1) {
+            status = ClaimStatus.UNKNOWN;
+            basis = EvidenceBasis.MULTI_SOURCE_CONFLICT;
+            reason = "对峙呈堂（同 claimKey 状态冲突，反证不覆盖）："
+                    + String.join("；", reasons);
+            log.warn("主 FINAL 提案同 claimKey 状态冲突，强制 UNKNOWN+CONFLICT 并集呈堂 "
+                    + "run={} claim={} statuses={}", runId, claimKey, statuses);
+        } else {
+            status = statuses.iterator().next();
+            basis = sources.size() >= 2
                     ? EvidenceBasis.MULTI_SOURCE_CONSISTENT
                     : EvidenceBasis.SINGLE_SOURCE;
-            String reason = note == null ? statement : statement + " [" + note + "]";
-            claims.append(runId, new ClaimVerdict(claimKey, SCOPE, timeRange, generation,
-                    snapshotHex, status, basis, List.copyOf(sources), reason, refs,
-                    POLICY_VERSION, kind));
-            appended++;
+            reason = reasons.size() == 1 ? reasons.get(0)
+                    : String.join("；", reasons.stream().distinct().toList());
         }
-        return appended;
+        claims.append(runId, new ClaimVerdict(claimKey, SCOPE, timeRange, generation,
+                snapshotHex, status, basis, List.copyOf(sources), reason,
+                List.copyOf(refs), POLICY_VERSION, kinds.iterator().next()));
+        return true;
+    }
+
+    private static ClaimStatus statusFor(ClaimKind kind) {
+        return switch (kind) {
+            case ROOT_CAUSE -> ClaimStatus.TRUE;
+            case EXCLUSION -> ClaimStatus.FALSE;
+            default -> ClaimStatus.UNKNOWN;
+        };
     }
 
     private static ClaimKind parseKind(String raw) {

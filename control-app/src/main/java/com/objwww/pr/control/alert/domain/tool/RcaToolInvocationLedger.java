@@ -57,6 +57,16 @@ public interface RcaToolInvocationLedger {
     }
 
     /**
+     * MC24 同现场复用读面：某 run 全部已成功且带结果引用的账本行（call_seq 序）
+     * ——SingleToolEvidenceAgent 在物理执行前按 action_digest 匹配本 run 已有
+     * 证据行（同 digest=同语义查询，复用 evidenceId 不重打工具）。default 空
+     * 表 = 假件环境无复用知识；真实 PG 实现覆盖。
+     */
+    default List<InvocationRecovery> findSuccessfulByRun(UUID runId) {
+        return List.of();
+    }
+
+    /**
      * EX-A3（F09）：结果引用随账落档——evidence.insert 后、succeed 前调用；
      * CAS 锚 PENDING（succeed 后不可改写）。返回 false = 行不在 PENDING（调用方
      * 忽略——随后 succeed 的 CAS 同样失败，账本一致）。default no-op = 假件环境

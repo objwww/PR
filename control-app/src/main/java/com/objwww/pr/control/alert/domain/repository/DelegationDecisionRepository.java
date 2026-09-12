@@ -16,6 +16,9 @@ public interface DelegationDecisionRepository {
     /** 裁决事务内写入（同事务性由调用方事务边界保证） */
     void insert(DelegationDecision decision);
 
+    /** 按行读（MC21 回执身份面：子任务经 parentRequestId=裁决行 id 反查既成裁决） */
+    Optional<DelegationDecision> findById(UUID id);
+
     /** 去重判定：同 run 同信息缺口是否已裁决 */
     Optional<DelegationDecision> findByRunAndGap(UUID runId, String gapId);
 

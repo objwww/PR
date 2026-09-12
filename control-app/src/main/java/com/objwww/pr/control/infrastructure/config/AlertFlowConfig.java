@@ -290,6 +290,8 @@ public class AlertFlowConfig {
                     boundedLlmRunner,
             ObjectProvider<com.objwww.pr.control.alert.domain.agent.AgentProfile> primaryProfile,
             com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
+            ObjectProvider<com.objwww.pr.control.alert.application.agent.DelegationReceiptService>
+                    delegationReceiptService,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
@@ -350,7 +352,42 @@ public class AlertFlowConfig {
                 java.util.Objects.requireNonNull(checkpoints.getIfAvailable(),
                         "主任务检查点仓储缺件（R7-X6 主模式 FINAL 投影面）"),
                 rcaModelCallLedger,
-                primaryProfile.getIfAvailable());
+                primaryProfile.getIfAvailable(),
+                delegationReceiptService.getIfAvailable());
+    }
+
+    /**
+     * MC21~23：子任务回执准入（单事务封闭裁决：幂等短路/终态围栏/身份面/限长/结构
+     * 契约）。生产方=NativeInvestigationExecutor 委派子任务终态；消费方=ContextAssembler
+     * 合并面（当前轮 ACCEPTED 行）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.DelegationReceiptService
+    delegationReceiptService(
+            com.objwww.pr.control.alert.domain.repository.DelegationReceiptRepository
+                    delegationReceiptRepository,
+            RcaRunRepository runs,
+            RcaTaskRepository tasks,
+            com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository
+                    delegationDecisions,
+            org.springframework.transaction.support.TransactionOperations tx,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.alert.application.agent.DelegationReceiptService(
+                delegationReceiptRepository, runs, tasks, delegationDecisions, tx,
+                AlertClock.system(), objectMapper);
+    }
+
+    /** MC31/32：人工补充材料受理（认证端身份由控制器传入；CAS 行锁串行化） */
+    @Bean
+    public com.objwww.pr.control.alert.application.OperatorMaterialService
+    operatorMaterialService(
+            com.objwww.pr.control.alert.domain.repository.OperatorMaterialRepository
+                    operatorMaterialRepository,
+            com.objwww.pr.control.alert.domain.repository.IncidentRepository
+                    incidentRepository,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.OperatorMaterialService(
+                operatorMaterialRepository, incidentRepository, tx, AlertClock.system());
     }
 
     /**
