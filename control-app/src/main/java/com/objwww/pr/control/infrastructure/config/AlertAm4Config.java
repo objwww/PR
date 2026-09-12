@@ -84,6 +84,9 @@ import java.util.concurrent.ExecutorService;
 @Profile("docker")
 public class AlertAm4Config {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(AlertAm4Config.class);
+
     private static final String PROMETHEUS_BASE_URL_KEY =
             "${app.alert.am4.prometheus.base-url:http://prometheus:9090}";
     /** EX-B2：logs 真实源（Loki 试验资源，契约 §3 准入条件）；fixture 退役
@@ -379,7 +382,9 @@ public class AlertAm4Config {
             @Value(BUDGET_EVIDENCES_KEY) long budgetEvidences,
             @Value(BUDGET_SUBTASKS_KEY) long budgetSubtasks,
             org.springframework.beans.factory.ObjectProvider<AgentProfile> primaryProfile,
-            @Value("${app.alert.r7.primary.release-digest:}") String releaseDigest) {
+            @Value("${app.alert.r7.primary.release-digest:}") String releaseDigest,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
         Map<BudgetKind, Long> budgetLimits = new LinkedHashMap<>();
         budgetLimits.put(BudgetKind.STEP, budgetStep);
         budgetLimits.put(BudgetKind.TOOL_CALL, budgetToolCalls);
@@ -397,13 +402,45 @@ public class AlertAm4Config {
                 Set.of(ChangeAgent.TOOL_NAME), budgetLimits, outputSchema);
         AgentProfile primary = primaryProfile.getIfAvailable();
         if (primary == null) {
+            registerPromptAssets(releaseAssetRepository, List.of(metrics, logs, change));
             return new AgentRegistry(List.of(metrics, logs, change));
         }
         if (releaseDigest == null || releaseDigest.isBlank()) {
             throw new IllegalStateException(
                     "主模式启用必须提供 app.alert.r7.primary.release-digest（release 快照身份面）");
         }
+        registerPromptAssets(releaseAssetRepository, List.of(metrics, logs, change, primary));
         return AgentRegistry.forRelease(releaseDigest, List.of(metrics, logs, change, primary));
+    }
+
+    /**
+     * R2：profile.prompt 原文随 release 落快照（release_asset PROMPT kind，内容寻址
+     * 幂等重放锚）——账行 role_digest 可反查原文（MC36 回放面）。注册失败不阻断启动
+     * （回放面退化 digest-only 诚实态），log-warn 留痕。
+     */
+    private void registerPromptAssets(
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository assets,
+            List<AgentProfile> profiles) {
+        for (AgentProfile profile : profiles) {
+            try {
+                Map<String, Object> content = new LinkedHashMap<>();
+                content.put("messages_template", profile.prompt());
+                content.put("variables_schema", List.of("task_envelope"));
+                content.put("role", profile.name());
+                content.put("role_version", profile.version());
+                content.put("role_digest", profile.digest());
+                boolean inserted = assets.insert(
+                        com.objwww.pr.control.release.domain.model.ReleaseAsset.of(
+                                com.objwww.pr.control.release.domain.model.ReleaseAsset.KIND_PROMPT,
+                                content, "am4-config", java.time.Clock.systemUTC().instant()));
+                if (!inserted) {
+                    log.debug("prompt 资产已登记（幂等重放锚）: role={}", profile.name());
+                }
+            } catch (RuntimeException e) {
+                log.warn("prompt 资产登记失败（不阻断启动）: role={}, 原因: {}",
+                        profile.name(), e.getMessage());
+            }
+        }
     }
 
     /** Metrics Agent（在线影子形态：工具出口 = 影子面；EX-A1 全参=预算门+熔断门） */
@@ -607,7 +644,9 @@ public class AlertAm4Config {
             @Value("${app.review.model-provider:openai-compatible}") String provider,
             @Value("${app.review.model-version:configured}") String contractVersion,
             @Value("${app.worker.max-lease-seconds:600}") int maxLeaseSeconds,
-            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger) {
+            @Value("${app.alert.r7.max-input-tokens:24000}") int maxInputTokens,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
+            com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture rcaModelInputCapture) {
         if (!enabled) {
             return null;
         }
@@ -624,7 +663,8 @@ public class AlertAm4Config {
                         primaryBaseUrl, fallbackBaseUrl, primaryApiKey, fallbackApiKey,
                         provider, contractVersion, maxLeaseSeconds);
         return new com.objwww.pr.control.alert.application.agent.RcaModelGateway(rcaFace,
-                rcaModelCallLedger, pricingService, Clock.systemUTC());
+                rcaModelCallLedger, pricingService, rcaModelInputCapture,
+                Clock.systemUTC(), maxInputTokens);
     }
 
     /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面；
@@ -654,8 +694,68 @@ public class AlertAm4Config {
     }
 
     /**
+     * 任务信封装配器（R1/MA-01）：告警材料读口由 run→incident→最新告警事件确定性
+     * 投影（缺项如实 null 不造数）；工具账本/裁决台账直读供轨迹与工作记忆重建。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.ContextAssembler
+            am4ContextAssembler(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            EvidenceRepository evidenceRepository,
+            RcaToolInvocationLedger rcaToolInvocationLedger,
+            com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository
+                    delegationDecisionRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.repository.AlertEventRepository
+                    alertEventRepository,
+            com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
+                    workingMemoryPort,
+            ObjectMapper objectMapper) {
+        if (!enabled) {
+            return null;
+        }
+        com.objwww.pr.control.alert.application.agent.ContextAssembler.AlertMaterialPort
+                alertMaterialPort = runId -> rcaRunRepository.findById(runId)
+                .map(run -> {
+                    var events = alertEventRepository.findByIncidentId(run.incidentId());
+                    return events.isEmpty()
+                            ? com.objwww.pr.control.alert.application.agent.ContextAssembler
+                            .AlertMaterial.unknown()
+                            : materialOf(events.get(events.size() - 1));
+                })
+                .orElse(com.objwww.pr.control.alert.application.agent.ContextAssembler
+                        .AlertMaterial.unknown());
+        return new com.objwww.pr.control.alert.application.agent.ContextAssembler(
+                evidenceRepository, rcaToolInvocationLedger, delegationDecisionRepository,
+                alertMaterialPort, workingMemoryPort, Clock.systemUTC(), objectMapper);
+    }
+
+    /** 最新告警事件 → 告警材料（labels/annotations 确定性投影；缺项 null） */
+    private static com.objwww.pr.control.alert.application.agent.ContextAssembler.AlertMaterial
+            materialOf(com.objwww.pr.control.alert.domain.model.AlertEvent event) {
+        Map<String, String> labels = event.labels();
+        Map<String, String> annotations = event.annotations() == null
+                ? Map.of() : event.annotations();
+        String service = firstOf(labels, "service", "service_name", "namespace", "job");
+        String summary = firstOf(annotations, "summary", "description", "message");
+        return new com.objwww.pr.control.alert.application.agent.ContextAssembler.AlertMaterial(
+                labels.get("alertname"), service, labels.get("severity"), summary);
+    }
+
+    private static String firstOf(Map<String, String> source, String... keys) {
+        for (String key : keys) {
+            String value = source.get(key);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    /**
      * 受控 LLM 运行器（R7-X6）：守卫（§六固定顺序，ActionGuard 组装点）+ 主 Runner
      * + 取证口三位一体；enabled=false 返回 null（运行器目录只含兼容单工具面）。
+     * R11：默认关的一步边界压缩（compaction.* 配置族，放量前提 MC34 三臂对照）。
      */
     @Bean
     public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner
@@ -673,23 +773,48 @@ public class AlertAm4Config {
                     primaryCheckpointRepository,
             DeterministicSupervisor am4DeterministicSupervisor,
             org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent.ContextAssembler>
+                    am4ContextAssembler,
+            org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort>
                     primaryToolPort,
+            com.objwww.pr.control.alert.domain.repository.ContextSummaryPort
+                    contextSummaryPort,
+            @Value("${app.alert.r7.compaction.enabled:false}") boolean compactionEnabled,
+            @Value("${app.alert.r7.compaction.soft-threshold:0.7}")
+            double compactionSoftThreshold,
+            @Value("${app.alert.r7.compaction.target-ratio:0.55}")
+            double compactionTargetRatio,
+            @Value("${app.alert.r7.compaction.max-per-run:2}") int compactionMaxPerRun,
+            @Value("${app.alert.r7.max-input-tokens:24000}") int compactionMaxInputTokens,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
         }
         var gateway = java.util.Objects.requireNonNull(rcaModelGateway.getIfAvailable(),
                 "RCA 模型网关缺件（主模式必要件）");
+        var assembler = java.util.Objects.requireNonNull(am4ContextAssembler.getIfAvailable(),
+                "任务信封装配器缺件（主模式必要件，R1）");
         var port = java.util.Objects.requireNonNull(primaryToolPort.getIfAvailable(),
                 "主 Agent 取证口缺件（主模式必要件）");
         com.objwww.pr.control.alert.application.agent.RcaActionGuard guard =
                 new com.objwww.pr.control.alert.application.agent.RcaActionGuard(
                         rcaRunRepository, rcaTaskRepository, am4AgentRegistry,
                         runBudgetGate, gateway, Clock.systemUTC());
+        com.objwww.pr.control.alert.application.agent.ContextCompactionService compaction =
+                new com.objwww.pr.control.alert.application.agent.ContextCompactionService(
+                        // token 估算 = 输入保守估值 + 输出预留（与网关口径同律）
+                        (action, prompt, maxTokens) -> guard.guardedModelCall(action,
+                                prompt, maxTokens, (long) prompt.length() / 2 + maxTokens),
+                        contextSummaryPort,
+                        primaryCheckpointRepository, evidenceRepository, objectMapper,
+                        Clock.systemUTC(), compactionEnabled, compactionSoftThreshold,
+                        compactionTargetRatio, compactionMaxPerRun,
+                        compactionMaxInputTokens);
         return new com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner(
                 guard, am4DeterministicSupervisor, primaryCheckpointRepository,
-                evidenceRepository, port, objectMapper, Clock.systemUTC());
+                evidenceRepository, assembler, port, objectMapper, Clock.systemUTC(),
+                compaction);
     }
 
     // ------------------------------------------------------------------ 内部

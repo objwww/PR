@@ -165,6 +165,40 @@ public class PersistenceConfig {
                 jdbc, objectMapper, tx);
     }
 
+    /**
+     * R2：模型输入捕获（V90 rca_model_input，append-only）。档位
+     * {@code app.alert.r7.input-capture: full|redacted|digest-only}（默认
+     * digest-only——默认面不落原文，回放靠 promptDigest 对账）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture rcaModelInputCapture(
+            JdbcClient jdbc,
+            @Value("${app.alert.r7.input-capture:digest-only}") String level) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelInputCapture(
+                jdbc, com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level
+                        .valueOf(level.trim().toUpperCase().replace('-', '_')));
+    }
+
+    /** R2 回放读面：捕获行+账本行 join 读（核验器按需装配） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelInputReplayPort
+    rcaModelInputReplayPort(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelInputReplay(
+                jdbc);
+    }
+
+    /** R2 回放核验（MC35/MC36）：摘要对账 + 原文复算 + PROMPT 快照 role_digest 反查 */
+    @Bean
+    public com.objwww.pr.control.alert.application.replay.InputReplayVerifier
+    r2InputReplayVerifier(
+            com.objwww.pr.control.alert.domain.agent.RcaModelInputReplayPort
+                    rcaModelInputReplayPort,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
+        return new com.objwww.pr.control.alert.application.replay.InputReplayVerifier(
+                rcaModelInputReplayPort, releaseAssetRepository);
+    }
+
     /** R7a-1：RCA 侧网关事件汇（MODEL_* 决策事件 → rca_event，绕开 pr_revision FK 面） */
     @Bean
     public com.objwww.pr.control.domain.service.ExecutionEventRepository rcaModelEventSink(
@@ -172,6 +206,28 @@ public class PersistenceConfig {
             ObjectMapper objectMapper) {
         return new com.objwww.pr.control.infrastructure.persistence.RcaModelEventSink(
                 rcaEventAppender, objectMapper);
+    }
+
+    /**
+     * R10：工作记忆快照持久面（V91 rca_working_memory，append-only 深冻结）——
+     * uq(run,task,revision) 冲突返回既有行（同修订重放不漂移已提交快照）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
+    workingMemoryPort(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresWorkingMemory(
+                jdbc, objectMapper);
+    }
+
+    /**
+     * R11：上下文压缩摘要持久面（V92 rca_context_summary，不可变档）——
+     * uq(run,task,source) 冲突返回既有行（CAS 提交：并发同源双写一胜一拒）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.ContextSummaryPort
+    contextSummaryPort(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresContextSummary(
+                jdbc, objectMapper);
     }
 
     @Bean
@@ -427,13 +483,27 @@ public class PersistenceConfig {
                 java.time.Duration.ofSeconds(30));
     }
 
+    /** R6/EV-06：run 查询面 usage 读口（rca_model_call 沿 rca_run_id 身份链聚合，RV08 不碰 PR 账本） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+    rcaModelCallUsageReader(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelCallUsageReader(
+                jdbc);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.application.RunQueryService runQueryService(
             com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
             com.objwww.pr.control.alert.domain.repository.RcaTaskRepository rcaTaskRepository,
-            com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository) {
+            com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository taskEdgeRepository,
+            com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository
+                    taskExecutionBindingRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+                    rcaModelCallUsageReader) {
         return new com.objwww.pr.control.alert.application.RunQueryService(
-                rcaRunRepository, rcaTaskRepository, taskEdgeRepository, java.time.Instant::now);
+                rcaRunRepository, rcaTaskRepository, taskEdgeRepository,
+                taskExecutionBindingRepository, rcaModelCallUsageReader,
+                java.time.Instant::now);
     }
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
