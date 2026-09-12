@@ -21,14 +21,18 @@ import java.util.UUID;
  * 400/404 应答沿用 {"error": ...} 惯例。
  *
  * <ul>
- *   <li>GET /api/v1/incidents——列表（status/severity/service/q 过滤 + 键集游标，
+ *   <li>GET /api/v1/incidents——列表（status/severity/service/q/category 过滤 +
+     *       UX-03 §三.2 高级筛选 from/to（last_event_at ISO-8601 闭区间）与
+     *       hasOwner（true/false=有/无 open 处置单负责人）+ 键集游标，
  *       limit 默认 50 上限 200，total=过滤后总数）；</li>
  *   <li>GET /api/v1/incidents/{incidentId}——详情 + labels/annotations 全文
  *       + alert_event 时间线 + 当前 run 徽标；</li>
  *   <li>GET /api/v1/incidents/facets——facet 计数（severity 维不过滤自身参数）；</li>
  *   <li>GET /api/v1/incidents/summary——统计条（mttr 诚实 null）；</li>
  *   <li>GET /api/v1/overview/summary——总览聚合（告警侧 SQL + cases/duty/通知
- *       经各自既有端口装配，口径不新造）。</li>
+ *       经各自既有端口装配，口径不新造；§三.1：notifications 含 failed24h
+ *       通知失败 24h（notify_outbox DEAD 同 AgentOpsReader 口径），topRisk=
+ *       按风险待办 Top5）。</li>
  * </ul>
  */
 @RestController
@@ -49,11 +53,14 @@ public class IncidentQueryController {
             @RequestParam(required = false) String service,
             @RequestParam(required = false) String q,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String hasOwner,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false, defaultValue = "50") int limit) {
         try {
             return ResponseEntity.ok(query.list(status, severity, service, q, category,
-                    cursor, Math.clamp(limit, 1, 200)));
+                    from, to, hasOwner, cursor, Math.clamp(limit, 1, 200)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

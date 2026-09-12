@@ -7,9 +7,12 @@ import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
+import com.objwww.pr.control.alert.domain.model.TaskExecutionBinding;
+import com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
+import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.Test;
 
@@ -28,7 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * RunQueryService 单测（M5-13）：bucket 由 run+task 状态推导（C-18④）、SLA 面、
- * detail 的路由/进度/DAG 投影（C-18②③：engine/config 读 V25 列，budget 如实 null）。
+ * detail 的路由/进度/DAG 投影（C-18②③：engine/config 读 V25 列，budget 如实 null）、
+ * §三.5 多 Agent 透出（role/round 读 V46 绑定、usage 读 V48 账本；旧 run 降级 null）。
  */
 class RunQueryServiceTest {
 
@@ -38,8 +42,10 @@ class RunQueryServiceTest {
     private final FakeRuns runs = new FakeRuns();
     private final FakeTasks tasks = new FakeTasks();
     private final FakeEdges edges = new FakeEdges();
+    private final FakeBindings bindings = new FakeBindings();
+    private final FakeUsage usage = new FakeUsage();
     private final RunQueryService service =
-            new RunQueryService(runs, tasks, edges, CLOCK);
+            new RunQueryService(runs, tasks, edges, bindings, usage, CLOCK);
 
     @Test
     void bucketsDeriveFromRunAndTaskStates() {
@@ -134,6 +140,75 @@ class RunQueryServiceTest {
     @Test
     void detailIsEmptyForUnknownRun() {
         assertThat(service.detail(UUID.randomUUID())).isEmpty();
+    }
+
+    // ------------------------------------------------ §三.5 多 Agent 透出（R7-X1/V46 + R7a-1/V48）
+
+    @Test
+    void detailProjectsRoleRoundAndUsageFromBindingAndLedger() {
+        UUID runId = run(RcaRunState.RUNNING);
+        UUID primaryId = task(runId, "PRIMARY_INVESTIGATE", RcaTaskState.RUNNING).taskId();
+        UUID delegateId = UUID.randomUUID();
+        tasks.rows.put(delegateId, new RcaTask(delegateId, runId, "LOG_ANALYZE",
+                RcaTaskState.READY, 10, NOW.minus(Duration.ofMinutes(5)),
+                NOW.minus(Duration.ofMinutes(4)), Instant.MAX, null, null, 0, 0, 3,
+                NOW.minus(Duration.ofMinutes(5)), NOW, 1));
+        UUID parentRequest = UUID.randomUUID();
+        bindings.insert(binding(primaryId, runId, 0, "PRIMARY_INVESTIGATE",
+                "primary-investigator", "1.2.0", null));
+        bindings.insert(binding(delegateId, runId, 1, "LOG_ANALYZE",
+                "log-analyst", "0.9.3", parentRequest));
+        usage.byRun.put(runId, new RcaModelCallUsageReader.RunUsage(
+                3, 1200, 340, 1523000L, 1, "CNY", "pv-2026-09"));
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> taskRows = (List<Map<String, Object>>) detail.get("tasks");
+        Map<String, Object> primary = taskRows.stream()
+                .filter(t -> "PRIMARY_INVESTIGATE".equals(t.get("id"))).findFirst().orElseThrow();
+        assertThat(primary.get("roundId")).isEqualTo(0);
+        assertThat(primary.get("roleId")).isEqualTo("primary-investigator");
+        assertThat(primary.get("roleVersion")).isEqualTo("1.2.0");
+        assertThat(primary.get("parentRequestId")).as("round0 主任务恒 null（V46）").isNull();
+        Map<String, Object> delegate = taskRows.stream()
+                .filter(t -> "LOG_ANALYZE".equals(t.get("id"))).findFirst().orElseThrow();
+        assertThat(delegate.get("roundId")).isEqualTo(1);
+        assertThat(delegate.get("roleId")).isEqualTo("log-analyst");
+        assertThat(delegate.get("parentRequestId")).isEqualTo(parentRequest.toString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> usageBlock = (Map<String, Object>) detail.get("usage");
+        assertThat(usageBlock)
+                .containsEntry("callCount", 3L).containsEntry("tokensIn", 1200L)
+                .containsEntry("tokensOut", 340L).containsEntry("costMicros", 1523000L)
+                .containsEntry("usageMissing", 1L).containsEntry("currency", "CNY")
+                .containsEntry("pricingVersion", "pv-2026-09");
+    }
+
+    @Test
+    void detailWithoutBindingsOrModelCallsDegradesToNulls() {
+        // 旧版单角色 run（R7 前铸造）：无绑定行、无模型调用账本 → 如实 null，不伪造
+        UUID runId = run(RcaRunState.SUCCEEDED);
+        task(runId, "HOLMES_INVESTIGATE", RcaTaskState.DONE);
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> taskRows = (List<Map<String, Object>>) detail.get("tasks");
+        Map<String, Object> row = taskRows.get(0);
+        assertThat(row.get("roleId")).isNull();
+        assertThat(row.get("roleVersion")).isNull();
+        assertThat(row.get("parentRequestId")).isNull();
+        assertThat(row.get("roundId")).as("存量行 default 0 = round 0（V46）").isEqualTo(0);
+        assertThat(detail.get("usage")).as("无行 → null，前端显「无模型调用」而非全 0").isNull();
+    }
+
+    private static TaskExecutionBinding binding(UUID taskId, UUID runId, int roundId,
+            String taskKey, String roleId, String roleVersion, UUID parentRequestId) {
+        return new TaskExecutionBinding(taskId, runId, roundId, taskKey, roleId, roleVersion,
+                "a".repeat(64), null, null, List.of(), Map.of(), parentRequestId, true,
+                TaskExecutionBinding.FailurePolicy.DEAD_ON_FAILURE, NOW);
     }
 
     // ------------------------------------------------------------------ fixtures
@@ -335,6 +410,38 @@ class RunQueryServiceTest {
         @Override
         public List<TaskEdge> findByRunId(UUID runId) {
             return byRun.getOrDefault(runId, List.of());
+        }
+    }
+
+    static final class FakeBindings implements TaskExecutionBindingRepository {
+        final Map<UUID, TaskExecutionBinding> byTask = new LinkedHashMap<>();
+
+        @Override
+        public void insert(TaskExecutionBinding binding) {
+            byTask.put(binding.taskId(), binding);
+        }
+
+        @Override
+        public Optional<TaskExecutionBinding> findByTask(UUID taskId) {
+            return Optional.ofNullable(byTask.get(taskId));
+        }
+
+        @Override
+        public List<TaskExecutionBinding> findByRun(UUID runId) {
+            return byTask.values().stream()
+                    .filter(b -> b.runId().equals(runId))
+                    .sorted(Comparator.comparingInt(TaskExecutionBinding::roundId)
+                            .thenComparing(TaskExecutionBinding::taskKey))
+                    .toList();
+        }
+    }
+
+    static final class FakeUsage implements RcaModelCallUsageReader {
+        final Map<UUID, RunUsage> byRun = new LinkedHashMap<>();
+
+        @Override
+        public Optional<RunUsage> summarizeByRun(UUID runId) {
+            return Optional.ofNullable(byRun.get(runId));
         }
     }
 }

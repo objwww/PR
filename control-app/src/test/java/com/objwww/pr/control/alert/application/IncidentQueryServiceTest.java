@@ -60,7 +60,8 @@ class IncidentQueryServiceTest {
                 7, true);
 
         IncidentQueryService.IncidentListResponse out =
-                service.list("FIRING", "critical", "order-arena", "oom", "INFRA", null, 50);
+                service.list("FIRING", "critical", "order-arena", "oom", "INFRA",
+                        null, null, null, null, 50);
 
         assertThat(out.total()).isEqualTo(7);
         assertThat(out.nextCursor()).isEqualTo(lastEvent + "/" + id);
@@ -74,10 +75,50 @@ class IncidentQueryServiceTest {
         assertThat(reader.lastCursor).isNull();
     }
 
+    /** UX-03（方案 §三.2 高级筛选）：时间窗/hasOwner 解析后透传端口 */
+    @Test
+    void listParsesAdvancedFiltersAndPassesThrough() {
+        reader.page = new IncidentPage(List.of(), 0, false);
+
+        service.list(null, null, null, null, null,
+                "2026-09-08T00:00:00Z", "2026-09-09T00:00:00Z", "true", null, 50);
+
+        assertThat(reader.lastFrom).isEqualTo(Instant.parse("2026-09-08T00:00:00Z"));
+        assertThat(reader.lastTo).isEqualTo(Instant.parse("2026-09-09T00:00:00Z"));
+        assertThat(reader.lastHasOwner).isEqualTo(Boolean.TRUE);
+
+        service.list(null, null, null, null, null, null, null, "FALSE", null, 50);
+        assertThat(reader.lastFrom).isNull();
+        assertThat(reader.lastTo).isNull();
+        assertThat(reader.lastHasOwner).isEqualTo(Boolean.FALSE);
+    }
+
+    /** UX-03：非法时间窗/hasOwner/from>to → 400 面（status/category 同律） */
+    @Test
+    void malformedAdvancedFiltersAreRejected() {
+        assertThatThrownBy(() -> service.list(null, null, null, null, null,
+                "2026-09-08", null, null, null, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("from 非法");
+        assertThatThrownBy(() -> service.list(null, null, null, null, null,
+                null, "not-an-instant", null, null, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("to 非法");
+        assertThatThrownBy(() -> service.list(null, null, null, null, null,
+                "2026-09-09T00:00:00Z", "2026-09-08T00:00:00Z", null, null, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("from 不得晚于 to");
+        assertThatThrownBy(() -> service.list(null, null, null, null, null,
+                null, null, "yes", null, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("hasOwner 必为 true/false");
+    }
+
     @Test
     void listWithoutMorePagesEmitsNullCursor() {
         reader.page = new IncidentPage(List.of(row(UUID.randomUUID(), NOW)), 1, false);
-        assertThat(service.list(null, null, null, null, null, null, 50).nextCursor()).isNull();
+        assertThat(service.list(null, null, null, null, null, null, null, null, null, 50)
+                .nextCursor()).isNull();
     }
 
     @Test
@@ -86,19 +127,21 @@ class IncidentQueryServiceTest {
         UUID id = UUID.randomUUID();
         reader.page = new IncidentPage(List.of(), 0, false);
 
-        service.list(null, null, null, null, null, at + "/" + id, 50);
+        service.list(null, null, null, null, null, null, null, null, at + "/" + id, 50);
 
         assertThat(reader.lastCursor).isEqualTo(new KeysetCursor(at, id));
     }
 
     @Test
     void malformedCursorAndBadStatusAreRejected() {
-        assertThatThrownBy(() -> service.list(null, null, null, null, null, "garbage", 50))
+        assertThatThrownBy(() -> service.list(null, null, null, null, null, null, null, null,
+                "garbage", 50))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.list(null, null, null, null, null,
+        assertThatThrownBy(() -> service.list(null, null, null, null, null, null, null, null,
                 "2026-09-08T01:02:03Z/not-a-uuid", 50))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.list("firing", null, null, null, null, null, 50))
+        assertThatThrownBy(() -> service.list("firing", null, null, null, null, null, null,
+                null, null, 50))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("FIRING/RESOLVED");
     }
@@ -108,10 +151,10 @@ class IncidentQueryServiceTest {
     void categoryFilterIsValidatedAgainstVocabulary() {
         reader.page = new IncidentPage(List.of(), 0, false);
         assertThatThrownBy(() -> service.list(null, null, null, null, "NOT_A_CATEGORY",
-                null, 50))
+                null, null, null, null, 50))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("category 非法");
-        service.list(null, null, null, null, "UNCLASSIFIED", null, 50);
+        service.list(null, null, null, null, "UNCLASSIFIED", null, null, null, null, 50);
         assertThat(reader.lastCategory).isEqualTo("UNCLASSIFIED");
     }
 
@@ -152,11 +195,13 @@ class IncidentQueryServiceTest {
 
     @Test
     void overviewAssemblesRunsCasesNotificationsDutyAndZeroFilledTrend() {
+        IncidentRow riskRow = row(UUID.randomUUID(), NOW.minusSeconds(60));
         reader.overview = new AlertOverview(3, new RunsStats(2, 1, 0, 5, 120L),
                 List.of(new TrendBucket(NOW.truncatedTo(java.time.temporal.ChronoUnit.HOURS)
                         .minus(java.time.Duration.ofHours(2)), 4, 1),
                         new TrendBucket(NOW.truncatedTo(java.time.temporal.ChronoUnit.HOURS),
-                                7, 0)));
+                                7, 0)),
+                2, List.of(riskRow));
         dutyStore.unread = 6;
         caseRepository.rows = List.of(
                 operatorCase("op", null),
@@ -174,6 +219,9 @@ class IncidentQueryServiceTest {
         assertThat(out.cases().unassigned()).isEqualTo(1);
         assertThat(out.cases().overdue()).isEqualTo(1);
         assertThat(out.notifications().unread()).isEqualTo(6);
+        // §三.1：通知失败 24h / 按风险待办原样透传端口口径
+        assertThat(out.notifications().failed24h()).isEqualTo(2);
+        assertThat(out.topRisk()).containsExactly(riskRow);
         assertThat(out.duty().oncall()).isEqualTo("alice");
         assertThat(out.duty().snapshotValidUntil())
                 .isEqualTo(NOW.plus(java.time.Duration.ofHours(1)));
@@ -195,7 +243,7 @@ class IncidentQueryServiceTest {
     private static IncidentRow row(UUID id, Instant lastEventAt) {
         return new IncidentRow(id, "key-" + id, "HighCpu", "order-arena", "critical",
                 "FIRING", NOW.minusSeconds(3600), lastEventAt, null, 10, 2, 1,
-                UUID.randomUUID(), "RUNNING", null, "INFRA", "RULE");
+                UUID.randomUUID(), "RUNNING", null, "INFRA", "RULE", null);
     }
 
     private static OperatorCase operatorCase(String owner, Instant resolveDue) {
@@ -214,25 +262,31 @@ class IncidentQueryServiceTest {
         Facets facets = new Facets(Map.of(), Map.of(), Map.of(), Map.of());
         IncidentSummary summary = new IncidentSummary(0, Map.of(), 0, 0, 0, null);
         AlertOverview overview = new AlertOverview(0, new RunsStats(0, 0, 0, 0, null),
-                List.of());
+                List.of(), 0, List.of());
         String lastStatus;
         String lastSeverity;
         String lastService;
         String lastQ;
         String lastCategory;
+        Instant lastFrom;
+        Instant lastTo;
+        Boolean lastHasOwner;
         KeysetCursor lastCursor;
         int lastLimit;
         Instant lastSince;
 
         @Override
         public IncidentPage listIncidents(String status, String severity, String service,
-                                          String q, String category, KeysetCursor cursor,
-                                          int limit) {
+                                          String q, String category, Instant from, Instant to,
+                                          Boolean hasOwner, KeysetCursor cursor, int limit) {
             this.lastStatus = status;
             this.lastSeverity = severity;
             this.lastService = service;
             this.lastQ = q;
             this.lastCategory = category;
+            this.lastFrom = from;
+            this.lastTo = to;
+            this.lastHasOwner = hasOwner;
             this.lastCursor = cursor;
             this.lastLimit = limit;
             return page;

@@ -24,6 +24,10 @@ import java.util.UUID;
  * <p>severity/alertname/service 无 incident 独立列：每行经 LATERAL 取该 incident
  * 最新一条 alert_event（starts_at DESC, recorded_at DESC）的 labels jsonb 提取；
  * labels 无键 → null（PostgreSQL {@code ->>} 天然语义，不造默认值）。
+ *
+ * <p>UX-03（方案 §三.2）：owner 经 LATERAL 取该 incident 最新 open 处置单
+ * （operator_case.incident_id，V94）的负责人，无 case/未认领 → null；
+ * 列表过滤补 from/to（last_event_at 闭区间）与 hasOwner（有/无负责人）。
  */
 public class PostgresIncidentQueryReader implements IncidentQueryReader {
 
@@ -40,6 +44,20 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
             ) le on true
             """;
 
+    /** UX-03（方案 §三.2）：该 incident 最新一张 open 处置单（OPEN/ACKED）的负责人——
+     *  同 incident 合法多单（fingerprint 粒度），created_at 最新确定性取一；
+     *  无 case/未认领 → null（前端显「未认领」） */
+    private static final String OWNER_CASE_LATERAL = """
+            left join lateral (
+                select c.owner
+                from operator_case c
+                where c.incident_id = i.id
+                  and c.status in ('OPEN','ACKED')
+                order by c.created_at desc, c.id desc
+                limit 1
+            ) oc on true
+            """;
+
     private static final String SELECT_ROW =
             "select i.id, i.incident_key, i.status, i.episode_started_at, i.last_event_at,"
                     + " i.resolved_at, i.received_count, i.distinct_event_count,"
@@ -48,8 +66,9 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                     + " i.category_rule_id, i.category_rule_version, i.category_classified_at,"
                     + " i.override_actor, i.override_reason, i.override_at, i.override_revision,"
                     + " le.alertname, le.service, le.severity,"
+                    + " oc.owner,"
                     + " r.state as run_state"
-                    + " from incident i " + LATEST_EVENT_LATERAL
+                    + " from incident i " + LATEST_EVENT_LATERAL + OWNER_CASE_LATERAL
                     + " left join rca_run r on r.id = i.current_rca_run_id";
 
     private final JdbcClient jdbc;
@@ -64,13 +83,16 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
 
     @Override
     public IncidentPage listIncidents(String status, String severity, String service,
-                                      String q, String category, KeysetCursor cursor,
-                                      int limit) {
+                                      String q, String category, Instant from, Instant to,
+                                      Boolean hasOwner, KeysetCursor cursor, int limit) {
         Map<String, Object> filterParams = new LinkedHashMap<>();
-        String where = filterWhere(status, severity, service, q, category, filterParams);
+        String where = filterWhere(status, severity, service, q, category, from, to, hasOwner,
+                filterParams);
 
-        // total = 过滤后全集（不含游标——游标只切页，不切总数）
-        long total = jdbc.sql("select count(*) from incident i " + LATEST_EVENT_LATERAL + where)
+        // total = 过滤后全集（不含游标——游标只切页，不切总数）；
+        // owner 面过滤（hasOwner）要求计数同样带 OWNER_CASE_LATERAL（LATEST_EVENT_LATERAL 同律）
+        long total = jdbc.sql("select count(*) from incident i " + LATEST_EVENT_LATERAL
+                        + OWNER_CASE_LATERAL + where)
                 .params(filterParams)
                 .query(Long.class).single();
 
@@ -251,6 +273,9 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
 
     // ------------------------------------------------------------------ 总览
 
+    /** §三.1 按风险待办上限（severity 风险序见 overview() 内 SQL case 表达式） */
+    private static final int TOP_RISK_LIMIT = 5;
+
     @Override
     public AlertOverview overview(Instant now) {
         Timestamp at = Timestamp.from(now);
@@ -300,20 +325,49 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                         rs.getLong("received"), rs.getLong("resolved")))
                 .list();
 
-        return new AlertOverview(firingIncidents, runs, trend);
+        // §三.1 通知失败 24h：复用 AgentOpsReader.notifyOutboxFailed24h 同口径
+        // （notify_outbox 落 DEAD = 投递终败，updated_at 窗），不新造定义
+        long notifyFailed24h = jdbc.sql(
+                        "select count(*) from notify_outbox"
+                                + " where state = 'DEAD' and updated_at >= :since")
+                .param("since", since)
+                .query(Long.class).single();
+
+        // §三.1 按风险待办：FIRING 按 severity 风险序（critical→warning→info/notice
+        // →其他已分级→未分级最后，与前端 utils/severity.js LEVEL_MAP 同映射），
+        // 同级按 last_event_at 次序；复用 SELECT_ROW 行形状，不动列表键集游标
+        List<IncidentRow> topRisk = jdbc.sql(SELECT_ROW + """
+                 where i.status = 'FIRING'
+                 order by case
+                     when le.severity is null then 4
+                     when lower(le.severity) = 'critical' then 0
+                     when lower(le.severity) = 'warning' then 1
+                     when lower(le.severity) in ('info', 'notice') then 2
+                     else 3 end,
+                     i.last_event_at desc, i.id desc
+                 limit :lim
+                """)
+                .param("lim", TOP_RISK_LIMIT)
+                .query(this::mapRow).list();
+
+        return new AlertOverview(firingIncidents, runs, trend, notifyFailed24h, topRisk);
     }
 
     // ------------------------------------------------------------------ 内部
 
-    /** 列表/facet 共用过滤（参数缺席即不拼条件——沿 PostgresDutyStore 惯例） */
+    /** 列表/facet 共用过滤（参数缺席即不拼条件——沿 PostgresDutyStore 惯例）；
+     *  facet 面无时间窗/owner 过滤（from/to/hasOwner 恒 null，且不 join owner 面） */
     private static String filterWhere(String status, String severity, String service,
                                       String q, Map<String, Object> params) {
-        return filterWhere(status, severity, service, q, null, params);
+        return filterWhere(status, severity, service, q, null, null, null, null, params);
     }
 
-    /** UX-01：category 生效面等值过滤（生成列 i.category；null=不过滤） */
+    /** UX-01：category 生效面等值过滤（生成列 i.category；null=不过滤）；
+     *  UX-03（方案 §三.2）：from/to = i.last_event_at 闭区间，hasOwner 按 owner 面
+     *  （oc.owner null = 无 open case 或 open case 未认领，同列显「未认领」口径） */
     private static String filterWhere(String status, String severity, String service,
-                                      String q, String category, Map<String, Object> params) {
+                                      String q, String category, Instant from, Instant to,
+                                      Boolean hasOwner, Map<String, Object> params) {
         List<String> clauses = new ArrayList<>();
         if (status != null && !status.isBlank()) {
             clauses.add("i.status = :status");
@@ -335,6 +389,17 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
         if (category != null && !category.isBlank()) {
             clauses.add("i.category = :category");
             params.put("category", category);
+        }
+        if (from != null) {
+            clauses.add("i.last_event_at >= :from");
+            params.put("from", Timestamp.from(from));
+        }
+        if (to != null) {
+            clauses.add("i.last_event_at <= :to");
+            params.put("to", Timestamp.from(to));
+        }
+        if (hasOwner != null) {
+            clauses.add(hasOwner ? "oc.owner is not null" : "oc.owner is null");
         }
         return clauses.isEmpty() ? "" : " where " + String.join(" and ", clauses);
     }
@@ -361,7 +426,8 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                 rs.getString("run_state"),
                 rs.getString("waiting_reason"),
                 rs.getString("category"),
-                rs.getString("category_source"));
+                rs.getString("category_source"),
+                rs.getString("owner"));
     }
 
     /** UX-01 分类详情列（SELECT_ROW 已含；无 override 时四列 null 如实返回） */

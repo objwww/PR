@@ -169,10 +169,11 @@ class PostgresIncidentClassificationIT extends PostgresITBase {
                 "INFRA-ALERTNAME", "ux01-rules-v1", NOW);
         categories.setOverride(sec, IncidentCategory.SECURITY, "sec-op", "人工确认", NOW, 0);
 
-        IncidentPage all = reader.listIncidents(null, null, null, null, null, null, 50);
+        IncidentPage all = reader.listIncidents(null, null, null, null, null, null, null,
+                null, null, 50);
         assertThat(all.items()).hasSize(2);
         IncidentPage onlySecurity = reader.listIncidents(null, null, null, null,
-                "SECURITY", null, 50);
+                "SECURITY", null, null, null, null, 50);
         assertThat(onlySecurity.items()).hasSize(1);
         assertThat(onlySecurity.items().get(0).category()).isEqualTo("SECURITY");
         assertThat(onlySecurity.items().get(0).categorySource()).isEqualTo("OVERRIDE");

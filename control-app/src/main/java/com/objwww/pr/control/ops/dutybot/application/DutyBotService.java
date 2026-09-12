@@ -194,7 +194,8 @@ public class DutyBotService {
             }
             case INCIDENT_QUERY -> {
                 IncidentQueryReader.IncidentPage page = incidentReader.listIncidents(
-                        intent.status(), null, intent.service(), null, null, null, TOP_N);
+                        intent.status(), null, intent.service(), null, null, null, null, null,
+                        null, TOP_N);
                 yield BotReplyComposer.incidents(intent, page, now.get());
             }
             case INCIDENT_DETAIL -> BotReplyComposer.incidentDetail(intent.incidentId(),

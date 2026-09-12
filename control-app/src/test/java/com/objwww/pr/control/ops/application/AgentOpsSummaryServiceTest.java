@@ -3,8 +3,10 @@ package com.objwww.pr.control.ops.application;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.AgentOpsAggregate;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.ToolCallCount;
+import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.WorkerActivity;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -54,14 +56,54 @@ class AgentOpsSummaryServiceTest {
         assertThat(out.topTools24h()).isEmpty();
     }
 
+    // -------------------------------------------------------------- 执行器活性（§三.12）
+
+    @Test
+    void workersPassesThroughAndStampsAsOf() {
+        reader.activities = List.of(
+                new WorkerActivity("rca", "worker-1", NOW.minusSeconds(30), 2),
+                new WorkerActivity("eval", "eval-host2", NOW.minusSeconds(120), 0));
+
+        AgentOpsSummaryService.WorkerActivityResponse out = service.workers(Duration.ofMinutes(60));
+
+        assertThat(out.workers()).containsExactly(
+                new WorkerActivity("rca", "worker-1", NOW.minusSeconds(30), 2),
+                new WorkerActivity("eval", "eval-host2", NOW.minusSeconds(120), 0));
+        assertThat(out.windowMinutes()).isEqualTo(60);
+        assertThat(out.derivedFromLeaseActivity()).isTrue();
+        assertThat(out.asOf()).isEqualTo(NOW);
+        assertThat(reader.lastActivityNow).isEqualTo(NOW);
+        assertThat(reader.lastWindow).isEqualTo(Duration.ofMinutes(60));
+    }
+
+    @Test
+    void emptyLeaseActivityIsHonestEmptyList() {
+        reader.activities = List.of();
+
+        AgentOpsSummaryService.WorkerActivityResponse out = service.workers(Duration.ofMinutes(30));
+
+        assertThat(out.workers()).isEmpty();
+        assertThat(out.windowMinutes()).isEqualTo(30);
+    }
+
     private static final class FakeReader implements AgentOpsReader {
         AgentOpsAggregate aggregate;
         Instant lastNow;
+        List<WorkerActivity> activities = List.of();
+        Instant lastActivityNow;
+        Duration lastWindow;
 
         @Override
         public AgentOpsAggregate summary(Instant now) {
             this.lastNow = now;
             return aggregate;
+        }
+
+        @Override
+        public List<WorkerActivity> workerActivity(Instant now, Duration window) {
+            this.lastActivityNow = now;
+            this.lastWindow = window;
+            return activities;
         }
     }
 }

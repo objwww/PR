@@ -285,7 +285,7 @@ class DutyBotServiceTest {
         return new IncidentQueryReader.IncidentRow(UUID.randomUUID(),
                 "key-" + alertname, alertname, service, severity, status,
                 NOW.minusSeconds(3600), NOW, null, 3, 2, 1,
-                null, null, null, "INFRA", "RULE");
+                null, null, null, "INFRA", "RULE", null);
     }
 
     private static DutyScheduleSnapshot scheduleSnapshot(List<String> members, boolean channel) {
@@ -439,8 +439,8 @@ class DutyBotServiceTest {
 
         @Override
         public IncidentPage listIncidents(String status, String severity, String service,
-                                          String q, String category, KeysetCursor cursor,
-                                          int limit) {
+                                          String q, String category, Instant from, Instant to,
+                                          Boolean hasOwner, KeysetCursor cursor, int limit) {
             List<IncidentRow> filtered = rows.stream()
                     .filter(r -> status == null || r.status().equals(status))
                     .filter(r -> service == null || service.equals(r.service()))

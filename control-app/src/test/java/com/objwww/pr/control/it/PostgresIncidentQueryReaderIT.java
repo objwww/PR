@@ -1,6 +1,8 @@
 package com.objwww.pr.control.it;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.IncidentPage;
+import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.IncidentRow;
 import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.IncidentSummary;
 import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentQueryReader;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +55,81 @@ class PostgresIncidentQueryReaderIT extends PostgresITBase {
 
         assertThat(out.mttrMinutes24h()).isNull();
         assertThat(out.firingTotal()).isEqualTo(1);
+    }
+
+    // ------------------------------------------------------------------ UX-03（方案 §三.2）：负责人列 + 高级筛选
+
+    @Test
+    void listMapsOwnerFromLatestOpenCaseOnly() {
+        Instant now = Instant.now();
+        UUID withOwner = UUID.randomUUID();
+        UUID noCase = UUID.randomUUID();
+        insertIncident(withOwner, "k-owned", "FIRING", now.minus(Duration.ofMinutes(5)), null);
+        insertIncident(noCase, "k-bare", "FIRING", now.minus(Duration.ofMinutes(4)), null);
+        // 同 incident 多单：旧 OPEN + 新 ACKED + RESOLVED（RESOLVED 不进 owner 面）
+        insertCase(withOwner, "older-op", "OPEN", now.minus(Duration.ofHours(2)));
+        insertCase(withOwner, "newer-op", "ACKED", now.minus(Duration.ofHours(1)));
+        insertCase(withOwner, "resolved-op", "RESOLVED", now);
+
+        IncidentPage page = reader.listIncidents(null, null, null, null, null, null, null,
+                null, null, 50);
+
+        IncidentRow owned = page.items().stream()
+                .filter(r -> r.incidentId().equals(withOwner)).findFirst().orElseThrow();
+        IncidentRow bare = page.items().stream()
+                .filter(r -> r.incidentId().equals(noCase)).findFirst().orElseThrow();
+        assertThat(owned.owner()).as("created_at 最新 open case 的负责人").isEqualTo("newer-op");
+        assertThat(bare.owner()).as("无 case → null（前端显未认领）").isNull();
+    }
+
+    @Test
+    void listFiltersByLastEventWindowAndHasOwner() {
+        Instant now = Instant.now();
+        UUID inWindow = UUID.randomUUID();
+        UUID oldOwned = UUID.randomUUID();
+        insertIncident(inWindow, "k-recent", "FIRING", now.minus(Duration.ofHours(1)), null);
+        insertIncident(oldOwned, "k-old", "FIRING", now.minus(Duration.ofDays(3)), null);
+        insertCase(oldOwned, "op-old", "OPEN", now.minus(Duration.ofDays(2)));
+
+        // 时间窗闭区间：只留近 24h
+        IncidentPage window = reader.listIncidents(null, null, null, null, null,
+                now.minus(Duration.ofHours(24)), now, null, null, 50);
+        assertThat(window.items()).extracting(r -> r.incidentId())
+                .containsExactly(inWindow);
+        assertThat(window.total()).isEqualTo(1);
+
+        // hasOwner=true 仅取有 open 负责人行；false 互补
+        IncidentPage owned = reader.listIncidents(null, null, null, null, null, null, null,
+                Boolean.TRUE, null, 50);
+        assertThat(owned.items()).extracting(r -> r.incidentId())
+                .containsExactly(oldOwned);
+        IncidentPage unowned = reader.listIncidents(null, null, null, null, null, null, null,
+                Boolean.FALSE, null, 50);
+        assertThat(unowned.items()).extracting(r -> r.incidentId())
+                .containsExactly(inWindow);
+
+        // 组合：时间窗 + hasOwner 叠加（window 内无负责人行）
+        IncidentPage combo = reader.listIncidents(null, null, null, null, null,
+                now.minus(Duration.ofHours(24)), now, Boolean.TRUE, null, 50);
+        assertThat(combo.items()).isEmpty();
+        assertThat(combo.total()).isZero();
+    }
+
+    /** UX-03：直插 operator_case（control_app 面；V26 约束 evidence_refs N≥1 兜底） */
+    private void insertCase(UUID incidentId, String owner, String status, Instant createdAt) {
+        controlJdbc.sql("""
+                        insert into operator_case (id, tenant, fingerprint, subject, priority,
+                            reason_code, status, owner, incident_id, evidence_refs, created_at)
+                        values (:id, 'tenant-1', :fp, 'IT 用例', 'P1', 'ALERT_FIRING', :status,
+                            :owner, :incidentId, '["e1"]'::jsonb, :createdAt)
+                        """)
+                .param("id", UUID.randomUUID())
+                .param("fp", "fp-" + UUID.randomUUID())
+                .param("status", status)
+                .param("owner", owner)
+                .param("incidentId", incidentId)
+                .param("createdAt", java.sql.Timestamp.from(createdAt))
+                .update();
     }
 
     private void insertIncident(UUID id, String key, String status,

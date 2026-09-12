@@ -80,26 +80,37 @@ public class IncidentQueryService {
     public record CasesStats(long open, long unassigned, long overdue) {
     }
 
-    public record NotificationsStats(long unread) {
+    /** unread=duty 通知未读；failed24h=§三.1 通知失败 24h（notify_outbox DEAD 口径） */
+    public record NotificationsStats(long unread, long failed24h) {
     }
 
     public record DutyBadge(String oncall, Instant snapshotValidUntil) {
     }
 
+    /** topRisk=§三.1 按风险待办（IncidentRow 形状，上限 5，severity 风险序） */
     public record OverviewResponse(long firingIncidents, RunsStats runs, CasesStats cases,
                                    NotificationsStats notifications, DutyBadge duty,
-                                   List<TrendBucket> alertTrend24h) {
+                                   List<TrendBucket> alertTrend24h, List<IncidentRow> topRisk) {
     }
 
     // ------------------------------------------------------------------ 列表 / 详情 / facet / 统计条
 
-    /** status/category 非法或 cursor 无法解析 → IllegalArgumentException（controller 400 面） */
+    /** status/category 非法、时间窗/hasOwner 无法解析或 cursor 无法解析 →
+     *  IllegalArgumentException（controller 400 面）；
+     *  UX-03（方案 §三.2 高级筛选）：from/to 为 last_event_at ISO-8601 闭区间端点，
+     *  hasOwner 取 "true"/"false" */
     public IncidentListResponse list(String status, String severity, String service,
-                                     String q, String category, String cursor, int limit) {
+                                     String q, String category, String from, String to,
+                                     String hasOwner, String cursor, int limit) {
         validateStatus(status);
         validateCategory(category);
+        Instant fromAt = parseWindow(from, "from");
+        Instant toAt = parseWindow(to, "to");
+        if (fromAt != null && toAt != null && fromAt.isAfter(toAt)) {
+            throw new IllegalArgumentException("from 不得晚于 to");
+        }
         IncidentPage page = reader.listIncidents(status, severity, service, q, category,
-                parseCursor(cursor), limit);
+                fromAt, toAt, parseHasOwner(hasOwner), parseCursor(cursor), limit);
         String nextCursor = null;
         if (page.hasMore() && !page.items().isEmpty()) {
             IncidentRow last = page.items().get(page.items().size() - 1);
@@ -149,8 +160,8 @@ public class IncidentQueryService {
         DutyBadge duty = new DutyBadge(resolved.onCall(), snapshot.validUntil());
 
         return new OverviewResponse(alert.firingIncidents(), alert.runs(), cases,
-                new NotificationsStats(dutyStore.unreadCount()), duty,
-                zeroFillTrend(alert.trend24h(), at));
+                new NotificationsStats(dutyStore.unreadCount(), alert.notifyFailed24h()), duty,
+                zeroFillTrend(alert.trend24h(), at), alert.topRisk());
     }
 
     // ------------------------------------------------------------------ 内部
@@ -198,6 +209,33 @@ public class IncidentQueryService {
         com.objwww.pr.control.alert.domain.classification.IncidentCategory.parse(category)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "category 非法（词表见 IncidentCategory）: " + category));
+    }
+
+    /** UX-03：时间窗端点解析（ISO-8601 瞬秒；非法 → 400 面，cursor 同律） */
+    private static Instant parseWindow(String value, String name) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException(
+                    name + " 非法（期形 ISO-8601 瞬秒，如 2026-09-12T00:00:00Z）: " + value);
+        }
+    }
+
+    /** UX-03：hasOwner 词表校验（"true"/"false"，大小写不敏感；其余 → 400 面） */
+    private static Boolean parseHasOwner(String hasOwner) {
+        if (hasOwner == null || hasOwner.isBlank()) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(hasOwner)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equalsIgnoreCase(hasOwner)) {
+            return Boolean.FALSE;
+        }
+        throw new IllegalArgumentException("hasOwner 必为 true/false: " + hasOwner);
     }
 
     private static KeysetCursor parseCursor(String cursor) {

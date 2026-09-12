@@ -5,9 +5,12 @@ import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.TaskExecutionBinding;
+import com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
+import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -36,19 +39,30 @@ import java.util.function.Supplier;
  *       （报告待人工复核，暂无复核状态机——诚实近似）；</li>
  *   <li>⑤ 鉴权沿 O-4 过渡形态：operator bearer + X-Operator-Id（控制器面）。</li>
  * </ul>
+ *
+ * <p>§三.5 多 Agent 透出（R7-X1/R7a-1 读面，纯加法不改旧字段语义）：
+ * detail 的 task 行加 roundId（rca_task 列直取）与 roleId/roleVersion/parentRequestId
+ * （rca_task_execution_binding 冻结绑定，V46——旧 run 无绑定 → null 如实，前端降级为
+ * "旧版单角色执行"）；响应加 run 级 usage 块（rca_model_call 聚合，V48，RV08 口径——
+ * 无行 → null 显"无模型调用"，UNKNOWN/失败行计 callCount 且入 usageMissing，费用为下限）。
  */
 public class RunQueryService {
 
     private final RcaRunRepository runs;
     private final RcaTaskRepository tasks;
     private final TaskEdgeRepository edges;
+    private final TaskExecutionBindingRepository bindings;
+    private final RcaModelCallUsageReader modelCalls;
     private final Supplier<Instant> now;
 
     public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
-                           TaskEdgeRepository edges, Supplier<Instant> now) {
+                           TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+                           RcaModelCallUsageReader modelCalls, Supplier<Instant> now) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.edges = Objects.requireNonNull(edges, "edges");
+        this.bindings = Objects.requireNonNull(bindings, "bindings");
+        this.modelCalls = Objects.requireNonNull(modelCalls, "modelCalls");
         this.now = Objects.requireNonNull(now, "now");
     }
 
@@ -119,8 +133,14 @@ public class RunQueryService {
 
             List<Map<String, Object>> taskRows = new ArrayList<>();
             Map<String, String> keyById = new LinkedHashMap<>();
+            // §三.5：任务→角色冻结绑定（V46；旧 run 无绑定 → 缺省 null 如实）
+            Map<UUID, TaskExecutionBinding> bindingByTask = new LinkedHashMap<>();
+            for (TaskExecutionBinding b : bindings.findByRun(runId)) {
+                bindingByTask.put(b.taskId(), b);
+            }
             for (RcaTask t : runTasks) {
                 keyById.put(t.id().toString(), t.taskKey());
+                TaskExecutionBinding binding = bindingByTask.get(t.id());
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", t.taskKey());
                 row.put("taskId", t.id().toString());
@@ -130,6 +150,11 @@ public class RunQueryService {
                 row.put("lease", t.leaseOwner() == null ? null : Map.of(
                         "worker", t.leaseOwner(), "epoch", t.leaseEpoch()));
                 row.put("attempts", t.attemptCount());
+                row.put("roundId", t.roundId());
+                row.put("roleId", binding != null ? binding.roleId() : null);
+                row.put("roleVersion", binding != null ? binding.roleVersion() : null);
+                row.put("parentRequestId", binding != null && binding.parentRequestId() != null
+                        ? binding.parentRequestId().toString() : null);
                 taskRows.add(row);
             }
             List<Map<String, Object>> edgeRows = new ArrayList<>();
@@ -144,8 +169,24 @@ public class RunQueryService {
             out.put("run", head);
             out.put("tasks", taskRows);
             out.put("edges", edgeRows);
+            out.put("usage", usageBlock(runId));
             return out;
         });
+    }
+
+    /** §三.5/RV08：run 级模型用量与费用（rca_model_call 聚合；无行 → null 显"无模型调用"） */
+    private Map<String, Object> usageBlock(UUID runId) {
+        return modelCalls.summarizeByRun(runId).map(u -> {
+            Map<String, Object> block = new LinkedHashMap<String, Object>();
+            block.put("callCount", u.callCount());
+            block.put("tokensIn", u.tokensIn());
+            block.put("tokensOut", u.tokensOut());
+            block.put("costMicros", u.costMicros());
+            block.put("usageMissing", u.usageMissing());
+            block.put("currency", u.currency());
+            block.put("pricingVersion", u.pricingVersion());
+            return block;
+        }).orElse(null);
     }
 
     // ------------------------------------------------------------------ 行投影

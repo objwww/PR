@@ -24,13 +24,15 @@ public interface IncidentQueryReader {
 
     /** 列表/详情共用的 incident 投影行（labels 三值 + 当前 run 态已展开）；
      *  UX-01：category/categorySource = V82 生成列生效面（UNCLASSIFIED 如实返回，
-     *  前端按三态惯例显示"未分类"） */
+     *  前端按三态惯例显示"未分类"）；
+     *  UX-03（方案 §三.2）：owner = 该 incident 最新 open 处置单（OPEN/ACKED）
+     *  的负责人——无 case 或未认领如实 null（前端显"未认领"） */
     record IncidentRow(UUID incidentId, String incidentKey, String alertname, String service,
                        String severity, String status, Instant episodeStartedAt,
                        Instant lastEventAt, Instant resolvedAt, long receivedCount,
                        long distinctEventCount, long notificationCount,
                        UUID currentRcaRunId, String runState, String waitingReason,
-                       String category, String categorySource) {
+                       String category, String categorySource, String owner) {
     }
 
     /** 一页 + 过滤后总数；hasMore = 取到 limit+1 行（调用方据此发 nextCursor） */
@@ -89,17 +91,32 @@ public interface IncidentQueryReader {
     record TrendBucket(Instant bucketStart, long received, long resolved) {
     }
 
-    /** 总览的告警侧聚合（cases/notifications/duty 由服务层经各自端口装配） */
-    record AlertOverview(long firingIncidents, RunsStats runs, List<TrendBucket> trend24h) {
+    /**
+     * 总览的告警侧聚合（cases/notifications.unread/duty 由服务层经各自端口装配）。
+     *
+     * <p>§三.1 增补：
+     * <ul>
+     *   <li>notifyFailed24h = 通知失败 24h——复用 AgentOpsReader.notifyOutboxFailed24h
+     *       同口径（notify_outbox 落 DEAD，updated_at 窗），不新造定义；</li>
+     *   <li>topRisk = 按风险待办——FIRING incident 按 severity 风险序
+     *       （critical→warning→info/notice→其他已分级→未分级最后）+ last_event_at 次序，
+     *       上限 5 行；与列表键集游标（last_event_at DESC）互不干扰。</li>
+     * </ul>
+     */
+    record AlertOverview(long firingIncidents, RunsStats runs, List<TrendBucket> trend24h,
+                         long notifyFailed24h, List<IncidentRow> topRisk) {
     }
 
     /**
      * 列表页（cursor=null 首页；各过滤参数 null=不过滤；q 对 incident_key 与最新
-     * 事件 alertname 做 ILIKE；UX-01：category 按生效面等值过滤）。
+     * 事件 alertname 做 ILIKE；UX-01：category 按生效面等值过滤；
+     * UX-03（方案 §三.2 高级筛选）：from/to = last_event_at 闭区间时间窗，
+     * hasOwner = TRUE 仅取有 open 处置单负责人行 / FALSE 仅取无负责人行）。
      * 实现方内部取 limit+1 判 hasMore。
      */
     IncidentPage listIncidents(String status, String severity, String service, String q,
-                               String category, KeysetCursor cursor, int limit);
+                               String category, Instant from, Instant to, Boolean hasOwner,
+                               KeysetCursor cursor, int limit);
 
     /** 详情；未知 id → empty（controller 404 面） */
     Optional<IncidentDetail> detail(UUID incidentId);
