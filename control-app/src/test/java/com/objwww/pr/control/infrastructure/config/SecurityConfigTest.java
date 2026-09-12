@@ -299,6 +299,21 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("方案 §三.12（/api/metrics/** 白名单代理）：operator 线放行（docker 控制器不在场 → 404）；"
+            + "release 线 403；未认证 401")
+    void metricsProxyFaceRoleMatrix() throws Exception {
+        mvc.perform(get("/api/metrics/query_range")
+                        .header("Authorization", "Bearer op-line-token"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/metrics/query_range")
+                        .header("Authorization", "Bearer rel-line-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("forbidden"));
+        mvc.perform(get("/api/metrics/query_range"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("/api/auth/me（UI-1）：任何已认证主体 200 {\"name\": 主体}；未认证 401")
     void authMeReturnsAuthenticatedName() throws Exception {
         mvc.perform(get("/api/auth/me")

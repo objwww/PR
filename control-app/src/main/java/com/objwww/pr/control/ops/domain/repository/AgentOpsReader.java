@@ -1,5 +1,6 @@
 package com.objwww.pr.control.ops.domain.repository;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -37,6 +38,22 @@ public interface AgentOpsReader {
                              List<ToolCallCount> topTools24h) {
     }
 
+    /**
+     * 执行器活性投影行（监控页「执行器」区，方案 §三.12）：
+     * 按租约活动推导，非心跳注册表——无 worker 注册表，仅有数据源是 rca_attempt/
+     * rca_task 租约、eval_run_command 与 drill_job 的领取列。source ∈ rca/eval/drill；
+     * lastActivityAt = 窗口内最近一次租约相关时刻；inFlightTasks = 当前在飞任务数。
+     */
+    record WorkerActivity(String source, String workerId, Instant lastActivityAt,
+                          long inFlightTasks) {
+    }
+
     /** 聚合（now 参与 oldestReadyWait 计算与 24h 窗） */
     AgentOpsAggregate summary(Instant now);
+
+    /**
+     * 近 window 内有租约活动的 worker 清单（lastActivityAt 降序）；
+     * 空清单 = 窗口内无租约活动，如实返回，不编造在线 worker。
+     */
+    List<WorkerActivity> workerActivity(Instant now, Duration window);
 }

@@ -3,7 +3,9 @@ package com.objwww.pr.control.ops.application;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.AgentOpsAggregate;
 import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.ToolCallCount;
+import com.objwww.pr.control.ops.domain.repository.AgentOpsReader.WorkerActivity;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -41,5 +43,20 @@ public class AgentOpsSummaryService {
                 aggregate.oldestReadyWaitSeconds(), aggregate.openCases(),
                 aggregate.notifyOutboxPending(), aggregate.notifyOutboxFailed24h(),
                 aggregate.llmCalls24h(), aggregate.tokens24h(), aggregate.topTools24h(), at);
+    }
+
+    /**
+     * 执行器活性应答（监控页「执行器」区，方案 §三.12；record 字段名即 JSON 契约）。
+     * derivedFromLeaseActivity 恒 true——显式声明「按租约活动推导，非心跳注册表」，
+     * 前端文案依据；asOf 必带（新鲜度判断归前端）。
+     */
+    public record WorkerActivityResponse(List<WorkerActivity> workers, long windowMinutes,
+                                         boolean derivedFromLeaseActivity, Instant asOf) {
+    }
+
+    public WorkerActivityResponse workers(Duration window) {
+        Instant at = now.get();
+        return new WorkerActivityResponse(reader.workerActivity(at, window),
+                window.toMinutes(), true, at);
     }
 }
