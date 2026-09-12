@@ -134,13 +134,20 @@ class RcaWorkerTest {
     }
 
     private RcaWorker newWorker(String owner) {
+        return newWorker(owner, org.mockito.Mockito.mock(RunConfigSwitchService.class),
+                Duration.ofSeconds(1));
+    }
+
+    /** A2 调度接线测试入口：可注入切换服务假件与拍间隔 */
+    private RcaWorker newWorker(String owner, RunConfigSwitchService runConfigSwitchService,
+                                Duration pollInterval) {
         return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
                 stores.incidents, stores.slots, stores.invocations, stores.toolLedger,
                 java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
                         executor),
                 orchestrator, TransactionOperations.withoutTransaction(), clock, owner, "rca",
-                Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
-                Duration.ofMinutes(1), Duration.ofMinutes(10), 2);
+                Duration.ofMinutes(5), Duration.ofSeconds(30), pollInterval,
+                Duration.ofMinutes(1), Duration.ofMinutes(10), 2, runConfigSwitchService);
     }
 
     /** percent=100 canary 段（全桶 NATIVE 意愿；NativeEngineWiringTest.canaryBundle 同构） */
@@ -657,5 +664,90 @@ class RcaWorkerTest {
         Optional<RcaWorker.ClaimedWork> work = worker.claimWork();
         assertThat(work).isPresent();
         assertThat(work.get().incident().incidentKey()).contains("checkout");
+    }
+
+    // ------------------------------------------------------------------ A2：expireOverdue 调度接线
+
+    @Test
+    @DisplayName("A2①：loop 每拍恰调一次 expireOverdue（拍间隔级重复，无同拍双调）")
+    void a2_expireOverdueCalledOncePerBeat() {
+        RunConfigSwitchService switchService =
+                org.mockito.Mockito.mock(RunConfigSwitchService.class);
+        java.util.List<Long> callTimes =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        org.mockito.Mockito.doAnswer(inv -> {
+            callTimes.add(System.nanoTime());
+            return List.of();
+        }).when(switchService).expireOverdue();
+        RcaWorker w = newWorker("worker-expire", switchService, Duration.ofMillis(100));
+
+        w.start();
+        try {
+            org.mockito.Mockito.verify(switchService,
+                    org.mockito.Mockito.timeout(3000).atLeast(3)).expireOverdue();
+        } finally {
+            w.stop();
+        }
+        // 每拍恰一次：同拍双调会留下近零间隔；拍间隔 100ms 下相邻调用间隔不得过短
+        assertThat(callTimes.size()).isGreaterThanOrEqualTo(3);
+        for (int i = 1; i < callTimes.size(); i++) {
+            long gapMs = (callTimes.get(i) - callTimes.get(i - 1)) / 1_000_000;
+            assertThat(gapMs).as("相邻拍间隔（同拍双调会近零）").isGreaterThanOrEqualTo(50);
+        }
+    }
+
+    @Test
+    @DisplayName("A2②：expireOverdue 抛异常时循环继续——下一拍仍执行 recoverExpired")
+    void a2_expireOverdueFailureDoesNotBreakRecoverLoop() throws InterruptedException {
+        RunConfigSwitchService switchService =
+                org.mockito.Mockito.mock(RunConfigSwitchService.class);
+        org.mockito.Mockito.doThrow(new RuntimeException("expireOverdue 拍失败模拟"))
+                .when(switchService).expireOverdue();
+        // 种一个租约已过期的 LEASED task（run 不存在 → 回收目标 STALE）：
+        // 若循环被炸断，recoverExpired 不再执行，此行永不翻态
+        UUID staleTaskId = UUID.randomUUID();
+        stores.tasks.insert(new RcaTask(staleTaskId, UUID.randomUUID(),
+                RcaTask.NATIVE_INVESTIGATE, RcaTaskState.LEASED, 5,
+                clock.now(), clock.now(), Instant.MAX, "dead-worker",
+                clock.now().minusSeconds(60), 3, 1, 5, clock.now(), clock.now(), 0));
+        RcaWorker w = newWorker("worker-expire-fail", switchService, Duration.ofMillis(50));
+
+        w.start();
+        try {
+            // 连续抛错仍被反复调用 = 外层 recover 循环未断
+            org.mockito.Mockito.verify(switchService,
+                    org.mockito.Mockito.timeout(3000).atLeast(3)).expireOverdue();
+            // 下一拍 recoverExpired 仍在跑：过期租约 task 被回收
+            long deadlineMs = System.currentTimeMillis() + 3000;
+            while (System.currentTimeMillis() < deadlineMs
+                    && stores.tasks.findById(staleTaskId).orElseThrow().state()
+                    == RcaTaskState.LEASED) {
+                Thread.sleep(20);
+            }
+            assertThat(stores.tasks.findById(staleTaskId).orElseThrow().state())
+                    .as("recoverExpired 循环未被 expireOverdue 异常炸断")
+                    .isEqualTo(RcaTaskState.STALE);
+        } finally {
+            w.stop();
+        }
+    }
+
+    @Test
+    @DisplayName("A2③：stop() 后不再调用 expireOverdue")
+    void a2_expireOverdueNotCalledAfterStop() throws InterruptedException {
+        RunConfigSwitchService switchService =
+                org.mockito.Mockito.mock(RunConfigSwitchService.class);
+        RcaWorker w = newWorker("worker-expire-stop", switchService, Duration.ofMillis(50));
+
+        w.start();
+        org.mockito.Mockito.verify(switchService,
+                org.mockito.Mockito.timeout(3000).atLeast(1)).expireOverdue();
+        w.stop();
+        Thread.sleep(300); // 让在途拍收尾
+        int callsAfterStop =
+                org.mockito.Mockito.mockingDetails(switchService).getInvocations().size();
+        Thread.sleep(300); // 6 拍窗口
+        assertThat(org.mockito.Mockito.mockingDetails(switchService).getInvocations().size())
+                .as("stop 后调用数不得增长").isEqualTo(callsAfterStop);
     }
 }

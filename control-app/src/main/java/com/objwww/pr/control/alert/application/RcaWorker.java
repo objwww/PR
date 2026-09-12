@@ -83,6 +83,8 @@ public class RcaWorker {
     private final Duration hangingGrace;
     /** STARTED 调查记录随 attempt 铸造的请求 schema 版本（M3-04；与 executor RESPONSE_FORMAT 同值） */
     private final int investigationSchemaVersion;
+    /** EN-04 调度接线（A 批 A2）：loop 每拍巡回翻转过期 WAITING 切换命令（独立容错，不炸 recover 循环） */
+    private final RunConfigSwitchService runConfigSwitchService;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
 
@@ -106,12 +108,14 @@ public class RcaWorker {
                      Duration pollInterval,
                      Duration retryBackoff,
                      Duration hangingGrace,
-                     int investigationSchemaVersion) {
+                     int investigationSchemaVersion,
+                     RunConfigSwitchService runConfigSwitchService) {
         this(tasks, runs, attempts, investigationResults, incidents, slots, invocations,
                 toolLedger,
                 Map.of(RcaEngine.HOLMES, Objects.requireNonNull(executor, "executor 不得为 null")),
                 orchestrator, tx, clock, owner, slotScope, taskLease, heartbeatInterval,
-                pollInterval, retryBackoff, hangingGrace, investigationSchemaVersion);
+                pollInterval, retryBackoff, hangingGrace, investigationSchemaVersion,
+                runConfigSwitchService);
     }
 
     /** 引擎映射表构造（M6-01）：Map 分派面唯一权威，未知引擎 fail-closed 不回退 */
@@ -134,7 +138,8 @@ public class RcaWorker {
                      Duration pollInterval,
                      Duration retryBackoff,
                      Duration hangingGrace,
-                     int investigationSchemaVersion) {
+                     int investigationSchemaVersion,
+                     RunConfigSwitchService runConfigSwitchService) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -167,6 +172,8 @@ public class RcaWorker {
             throw new IllegalArgumentException("investigationSchemaVersion 从 1 起");
         }
         this.investigationSchemaVersion = investigationSchemaVersion;
+        this.runConfigSwitchService = Objects.requireNonNull(runConfigSwitchService,
+                "runConfigSwitchService");
     }
 
     // ------------------------------------------------------------------ 恢复扫描（崩溃双回收 + 悬挂账本）
@@ -347,6 +354,11 @@ public class RcaWorker {
         while (running.get()) {
             try {
                 recoverExpired();
+                try {
+                    runConfigSwitchService.expireOverdue();
+                } catch (RuntimeException e) {
+                    log.error("expireOverdue 拍失败，下拍重试", e);
+                }
                 CycleOutcome outcome = runOneCycle();
                 if (outcome != CycleOutcome.EXECUTED) {
                     Thread.sleep(pollInterval.toMillis());

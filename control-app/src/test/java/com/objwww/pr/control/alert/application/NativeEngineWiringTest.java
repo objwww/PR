@@ -140,7 +140,8 @@ class NativeEngineWiringTest {
                 executors, newOrchestrator(),
                 TransactionOperations.withoutTransaction(), clock, owner, "rca",
                 Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
-                Duration.ofMinutes(1), Duration.ofMinutes(10), 2);
+                Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
+                org.mockito.Mockito.mock(RunConfigSwitchService.class));
     }
 
     private void deliver(String service, String severity, String status,

@@ -11,6 +11,7 @@ import com.objwww.pr.control.alert.application.RcaRunOrchestrator;
 import com.objwww.pr.control.alert.application.RcaTaskExecutor;
 import com.objwww.pr.control.alert.application.RcaWorker;
 import com.objwww.pr.control.alert.application.ReportCompletedNotifier;
+import com.objwww.pr.control.alert.application.RunConfigSwitchService;
 import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
 import com.objwww.pr.control.alert.domain.repository.AlertInboxRepository;
@@ -453,7 +454,8 @@ public class AlertFlowConfig {
                                // read-timeout PT8M+2m 派生面随退场摘除）
                                @Value("${app.alert.worker.retry-backoff:PT1M}") Duration retryBackoff,
                                @Value("${app.alert.worker.hanging-grace:PT10M}") Duration hangingGrace,
-                               @Value("${app.alert.worker.investigation-schema-version:2}") int investigationSchemaVersion) {
+                               @Value("${app.alert.worker.investigation-schema-version:2}") int investigationSchemaVersion,
+                               RunConfigSwitchService runConfigSwitchService) {
         Map<RcaEngine, RcaTaskExecutor> executors = new java.util.EnumMap<>(RcaEngine.class);
         NativeInvestigationExecutor nativeExecutorInstance = nativeExecutor.getIfAvailable();
         if (nativeExecutorInstance != null) {
@@ -462,7 +464,7 @@ public class AlertFlowConfig {
         return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
                 invocations, toolLedger, executors, orchestrator, tx, AlertClock.system(),
                 owner, slotScope, taskLease, heartbeatInterval, pollInterval, retryBackoff,
-                hangingGrace, investigationSchemaVersion);
+                hangingGrace, investigationSchemaVersion, runConfigSwitchService);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */

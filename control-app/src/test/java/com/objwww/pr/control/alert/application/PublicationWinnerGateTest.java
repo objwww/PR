@@ -106,7 +106,9 @@ class PublicationWinnerGateTest {
                 orchestrator,
                 org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
                 clock, "worker-a", "rca", Duration.ofMinutes(5), Duration.ofSeconds(30),
-                Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofMinutes(10), 2);
+                Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
+                org.mockito.Mockito.mock(
+                        com.objwww.pr.control.alert.application.RunConfigSwitchService.class));
     }
 
     private ReportCompletedNotifier notifier() {
