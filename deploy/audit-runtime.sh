@@ -224,10 +224,15 @@ judge("config_whitelist", "UNKNOWN" if absent else "MATCH",
       f"部署层未钉（走应用默认）={absent}" if absent
       else f"{len(manifest['config'])} 键全部显式钉定")
 
-# 4. 容器/资源面在场性
-no_limit = [c["name"] for c in manifest["containers"] if not c["mem_limit"]]
-judge("container_mem_limits", "MATCH" if not no_limit else "DRIFT",
-      f"未设内存上限={no_limit}" if no_limit else f"{len(manifest['containers'])} 容器全有上限")
+# 4. 容器/资源面在场性（RR03：docker 面采集失败=零容器时 UNKNOWN，不得冒充 MATCH）
+if not manifest["containers"]:
+    judge("container_mem_limits", "UNKNOWN",
+          "docker 面采集失败或无运行容器——不可判一致（RR03）")
+else:
+    no_limit = [c["name"] for c in manifest["containers"] if not c["mem_limit"]]
+    judge("container_mem_limits", "MATCH" if not no_limit else "DRIFT",
+          f"未设内存上限={no_limit}" if no_limit
+          else f"{len(manifest['containers'])} 容器全有上限")
 
 # 5. Skill/RAG 绑定计数在场
 judge("skill_binding_rows", "MATCH" if manifest["skill_binding_rows"] != "UNKNOWN" else "UNKNOWN",
