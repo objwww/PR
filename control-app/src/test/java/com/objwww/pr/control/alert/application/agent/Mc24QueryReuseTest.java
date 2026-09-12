@@ -71,7 +71,8 @@ class Mc24QueryReuseTest {
                         "metrics.instant", "prometheus"),
                 registry, gateway, evidence, ledger, MAPPER,
                 new com.objwww.pr.control.alert.application.RunBudgetGate(
-                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                        new com.objwww.pr.control.alert.infrastructure
+                                .FixtureSeededBudgetLedger()),
                 doom);
     }
 

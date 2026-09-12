@@ -14,9 +14,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 预算账本的内存实现（EX-A1）：与 {@code PostgresRunBudgetLedger} 同语义的假件——
- * 单语句原子性由 synchronized 兜底（同 JVM 串行），供无 PG 面环境（单元测试假件、
- * 无预算语义装配）使用。<b>无限额行 = 不限</b>（probe remaining 上限值），与 PG 面
- * "无行 fail-closed 拒绝"刻意不同——假件只做非强制的记账，生产准入面永远走 PG。
+ * 单语句原子性由 synchronized 兜底（同 JVM 串行），供单元测试假件环境使用。
+ * <b>无行 fail-closed 拒绝</b>（BA-108 对齐）：无限额行时 reserve 拒绝且不落 entry、
+ * probe remaining=0——与 PG 侧"单语句条件 UPDATE 无行=0 行更新=拒绝"同语义
+ * （RunBudgetLedger javadoc 以 PG 语义为参照）；测试需先 openRun/ensureLimit 播种。
  *
  * <p>终态迁移与 PG 同形：RESERVED → COMMITTED/RELEASED/PROVISIONAL；
  * PROVISIONAL → UNMATCHED（usage 缺失不猜零）；落空显式抛。
@@ -57,12 +58,14 @@ public class InMemoryRunBudgetLedger implements RunBudgetLedger {
             return probe(key.runId(), key.budgetKind(), true);
         }
         LimitRow row = limits.get(absKey(key.runId(), key.budgetKind()));
-        if (row != null && row.consumedUnits + units > row.limitUnits) {
+        // BA-108 对齐（PG 同语义）：无限额行 = fail-closed 拒绝且不落 entry
+        if (row == null) {
             return probe(key.runId(), key.budgetKind(), false);
         }
-        if (row != null) {
-            row.consumedUnits += units;
+        if (row.consumedUnits + units > row.limitUnits) {
+            return probe(key.runId(), key.budgetKind(), false);
         }
+        row.consumedUnits += units;
         Entry entry = new Entry();
         entry.reservedUnits = units;
         entry.state = "RESERVED";
@@ -138,8 +141,9 @@ public class InMemoryRunBudgetLedger implements RunBudgetLedger {
 
     private BudgetProbe probe(UUID runId, BudgetKind kind, boolean allowed) {
         LimitRow row = limits.get(absKey(runId, kind));
+        // BA-108 对齐：无限额行 remaining=0（与 PG"无行拒绝"同语义观测面）
         long consumed = row == null ? 0 : row.consumedUnits;
-        long remaining = row == null ? Long.MAX_VALUE : row.limitUnits - consumed;
+        long remaining = row == null ? 0 : row.limitUnits - consumed;
         return allowed ? BudgetProbe.allowed(consumed, remaining)
                 : BudgetProbe.rejected(consumed, remaining);
     }

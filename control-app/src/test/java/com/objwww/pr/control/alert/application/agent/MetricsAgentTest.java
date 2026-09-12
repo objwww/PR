@@ -382,7 +382,7 @@ class MetricsAgentTest {
         java.util.concurrent.atomic.AtomicInteger remote = new java.util.concurrent.atomic.AtomicInteger();
         MetricsAgent agent = gatedAgent(
                 new com.objwww.pr.control.alert.application.RunBudgetGate(
-                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                        new com.objwww.pr.control.alert.infrastructure.FixtureSeededBudgetLedger()),
                 guard,
                 args -> {
                     remote.incrementAndGet();
@@ -408,7 +408,7 @@ class MetricsAgentTest {
                                 2, "doom-test", java.util.Set.of()));
         MetricsAgent agent = gatedAgent(
                 new com.objwww.pr.control.alert.application.RunBudgetGate(
-                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                        new com.objwww.pr.control.alert.infrastructure.FixtureSeededBudgetLedger()),
                 guard,
                 args -> fixtureBytes());
 

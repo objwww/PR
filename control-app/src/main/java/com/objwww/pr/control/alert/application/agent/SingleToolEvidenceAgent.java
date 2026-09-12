@@ -90,13 +90,15 @@ public class SingleToolEvidenceAgent {
             RcaToolInvocationLedger ledger, ObjectMapper mapper) {
         this(profile, spec, registry, gateway, evidence, ledger, mapper,
                 new com.objwww.pr.control.alert.application.RunBudgetGate(
-                        new com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger()),
+                        new com.objwww.pr.control.alert.infrastructure
+                                .FixtureSeededBudgetLedger()),
                 com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.permissive());
     }
 
     /**
-     * EX-A1 全参形态（生产装配唯一入口）：预算门 + 熔断门。6 参旧形态委托本构造
-     * 的非强制假件面，仅供单元测试假件环境；生产装配禁止。
+     * EX-A1 全参形态（生产装配唯一入口）：预算门 + 熔断门。7 参旧形态委托本构造
+     * 的 fixture 预播种假件门（BA-108 对齐后：有限限额显式播种、超限同 PG 语义
+     * 拒绝——不再是"无行=不限"失真面），仅供单元测试假件环境；生产装配禁止。
      */
     protected SingleToolEvidenceAgent(AgentProfile profile, ToolSpec spec,
             ToolRegistry registry, ToolInvoker gateway, EvidenceRepository evidence,
