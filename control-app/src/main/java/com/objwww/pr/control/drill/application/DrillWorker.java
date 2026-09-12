@@ -17,14 +17,16 @@ import java.util.Optional;
  * DR-02 演练 worker（eval_app 身份；沿用 EV-04 EvalRunWorker 的 SKIP LOCKED 领取 +
  * 启动孤儿清扫模式，§7.3"由已有评测执行身份所在的 worker 领取"）：
  * <ul>
- *   <li><b>单拍语义</b>：claimNext 单语句 CAS（SKIP LOCKED）→ 停止面检查 →
- *       PRECHECK（服务端预检重执行并落 PRECHECK_RESULT 事件）→ INJECTING →
- *       {@link DrillInjectionPort}——每次相位迁移都是 state+revision 双对账 CAS
- *       并落 PHASE_TRANSITION 事件；HTTP 线程全程零执行；</li>
+ *   <li><b>单拍语义</b>：claimNext 单语句 CAS（SKIP LOCKED）且领取即相位迁移
+ *       QUEUED→PRECHECK（BA-114，与 EVAL claimNextLaunch 同律——行在领取语句
+ *       提交时即离开 QUEUED 可见集，杜绝两语句窗口期双领）→ 停止面检查 →
+ *       服务端预检重执行（落 PRECHECK_RESULT 事件）→ INJECTING →
+ *       {@link DrillInjectionPort}——领取后的每次相位迁移都是 state+revision
+ *       双对账 CAS 并落 PHASE_TRANSITION 事件；HTTP 线程全程零执行；</li>
  *   <li><b>停止收口</b>（§7.4）：相位边界检查 stop_requested_at——注入前取消
  *       CANCELLED；注入一旦发生/可能发生，停止或失败都必先进 RECOVERING
  *       （本批注入零副作用，NOT_PERFORMED 才允许 INJECTING→FAILED）；</li>
- *   <li><b>崩溃恢复</b>：启动扫超龄 CLAIMED 孤儿——PRECHECK（零副作用）→ 重排队
+ *   <li><b>崩溃恢复</b>：启动扫超龄租约孤儿——PRECHECK（零副作用）→ 重排队
  *       QUEUED 身份稳定；INJECTING 及以后（注入/恢复状态无法判定）→
  *       RECOVERY_FAILED 保留靶场占位（worker_lost），不冒充现场干净；</li>
  *   <li><b>本批诚实边界</b>：注入接线未交付（DR-03/DR-04），执行器在注入相位
@@ -72,7 +74,7 @@ public class DrillWorker {
     public void runLoop() {
         int orphans = sweepOrphanedClaims();
         if (orphans > 0) {
-            log.warn("drill worker {} 启动孤儿清扫：{} 条超龄 CLAIMED 作业已处置",
+            log.warn("drill worker {} 启动孤儿清扫：{} 条超龄租约作业已处置",
                     workerId, orphans);
         }
         log.warn("drill worker {} 进入轮询（poll={}s, staleClaim={}s）",
@@ -95,7 +97,7 @@ public class DrillWorker {
         try {
             drive(job);
         } catch (RuntimeException e) {
-            // 驱动异常：作业保持当前相位 + CLAIMED 身份，超龄后由孤儿清扫按相位
+            // 驱动异常：作业保持当前相位 + 租约身份，超龄后由孤儿清扫按相位
             // 对账（PRECHECK 重排队 / INJECTING 起 RECOVERY_FAILED）——不盲重放
             log.error("drill {} 驱动异常（留待孤儿对账）: {}", job.id(), e.getMessage(), e);
         }
@@ -105,14 +107,19 @@ public class DrillWorker {
     // ------------------------------------------------------------------ 驱动
 
     private void drive(DrillJob job) {
-        // 受理即取消（停止面先于一切相位动作）
+        // BA-114：claim 已单语句原子完成 QUEUED→PRECHECK（领取即迁移）——此处只补
+        // 事件账保持相位链完整，不再二次推进（二次推进必撞 CAS：from 已非 QUEUED）
+        events.insert(DrillEvent.phaseTransition(job.id(), DrillJob.State.QUEUED,
+                DrillJob.State.PRECHECK, workerId,
+                "{\"note\":\"claim 单语句原子领取即迁移\"}", clock.now()));
+        // 受理即取消（停止面先于一切相位动作；claim 落 PRECHECK 后取消走
+        // PRECHECK→CANCELLED，状态机合法迁移）
         if (job.stopRequestedAt() != null) {
-            finalize(job, DrillJob.State.QUEUED, DrillJob.State.CANCELLED,
+            finalize(job, DrillJob.State.PRECHECK, DrillJob.State.CANCELLED,
                     "cancelled_by_operator", null);
             return;
         }
-        DrillJob current = advance(job, DrillJob.State.QUEUED, DrillJob.State.PRECHECK,
-                null);
+        DrillJob current = job;
 
         // 服务端预检重执行（§7.2 旧预览不保证现在仍可启动；结果落 PRECHECK_RESULT 事件）
         DrillTemplate template = catalog.byScenarioId(current.scenarioId()).orElse(null);

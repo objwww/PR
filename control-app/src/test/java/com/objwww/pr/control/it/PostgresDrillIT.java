@@ -239,8 +239,7 @@ class PostgresDrillIT extends PostgresITBase {
     }
 
     @Test
-    @DisplayName("领取 CAS：领取=身份标记不翻相位（state 留 QUEUED）；顺序双领后"
-            + "恰一人推进（执行权由相位 CAS 兜底）；无 QUEUED 才真空手")
+    @DisplayName("领取 CAS：SKIP LOCKED 单语句领取即迁移 PRECHECK，第二领取空手（多 worker 恰一人领到）")
     void claimSkipLocked() {
         DrillJob job = job("arena-195", "it-w1");
         controlJobs.insert(job);
@@ -248,22 +247,14 @@ class PostgresDrillIT extends PostgresITBase {
         assertThat(claimed).isPresent();
         assertThat(claimed.get().workerId()).isEqualTo("worker-a");
         assertThat(claimed.get().revision()).isEqualTo(1);
-        // 领取契约（V86）：只写 worker_id/claimed_at/revision，state 不翻——
-        // State 枚举无 CLAIMED，worker 首个相位推进就是 QUEUED→PRECHECK；
-        // findOrphanedClaims 按 worker_id+claimed_at 认领超龄（QUEUED 在扫描集内）
-        assertThat(claimed.get().state()).isEqualTo(DrillJob.State.QUEUED);
-        // SKIP LOCKED 只保并发瞬间一人锁到；顺序双领 = 后者覆盖身份（revision+1）。
-        // "恰一人执行"由相位 CAS 兜底：持旧 revision 的 worker-a 推进失败，
-        // 持新 revision 的 worker-b 推进成功（租约过期 ≠ 可重做）
-        Optional<DrillJob> reclaimed = evalJobs.claimNext("worker-b", Instant.now());
-        assertThat(reclaimed).isPresent();
-        assertThat(reclaimed.get().workerId()).isEqualTo("worker-b");
-        assertThat(reclaimed.get().revision()).isEqualTo(2);
-        assertThat(evalJobs.advance(job.id(), 1, DrillJob.State.QUEUED,
+        // BA-114：领取语句提交时行已落 PRECHECK（领取即迁移，与 EVAL 同律）
+        assertThat(claimed.get().state()).isEqualTo(DrillJob.State.PRECHECK);
+        assertThat(evalJobs.findById(job.id()).orElseThrow().state())
+                .isEqualTo(DrillJob.State.PRECHECK);
+        // 已离开 QUEUED 可见集 → 下一领取空手（修复前此处被重复领取，revision 1→2）
+        assertThat(evalJobs.claimNext("worker-b", Instant.now())).isEmpty();
+        // revision 对账：旧 revision/旧相位推进失败（租约过期 ≠ 可重做）
+        assertThat(evalJobs.advance(job.id(), 0, DrillJob.State.QUEUED,
                 DrillJob.State.PRECHECK, Instant.now())).isFalse();
-        assertThat(evalJobs.advance(job.id(), 2, DrillJob.State.QUEUED,
-                DrillJob.State.PRECHECK, Instant.now())).isTrue();
-        // 无 QUEUED 行才是真空手（领取子查询只扫 QUEUED）
-        assertThat(evalJobs.claimNext("worker-c", Instant.now())).isEmpty();
     }
 }

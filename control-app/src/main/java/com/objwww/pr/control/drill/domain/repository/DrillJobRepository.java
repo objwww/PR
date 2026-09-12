@@ -42,7 +42,9 @@ public interface DrillJobRepository {
      *  不碰 updated_at——control_app 列级授权边界） */
     boolean requestStop(UUID id, String stopIdempotencyKey, Instant stopRequestedAt);
 
-    /** 领取 = 单语句 CAS：锁定并标记最老 QUEUED；SKIP LOCKED 防多 worker 撞同一行 */
+    /** 领取 = 单语句 CAS 且领取即迁移 QUEUED→PRECHECK（BA-114：与 EVAL
+     *  claimNextLaunch 同律，行在领取语句提交时即离开 QUEUED 可见集）；
+     *  SKIP LOCKED 防多 worker 撞同一行 */
     Optional<DrillJob> claimNext(String workerId, Instant claimedAt);
 
     /** 相位推进 CAS（state+revision 双对账；非终态目标） */
@@ -53,9 +55,10 @@ public interface DrillJobRepository {
     boolean finalize(UUID id, long expectedRevision, DrillJob.State from, DrillJob.State to,
                      String terminalReason, String outcome, Instant closedAt, Instant updatedAt);
 
-    /** 崩溃恢复：worker 失联时对账扫描（CLAIMED 超龄且非终态） */
+    /** 崩溃恢复：worker 失联时对账扫描（租约超龄且非终态；QUEUED 谓词仅兜底
+     *  旧行——BA-114 后领取即 PRECHECK，claim 不再产生 QUEUED+租约行） */
     List<DrillJob> findOrphanedClaims(Instant claimedBefore);
 
-    /** 孤儿重排队（仅 PRECHECK——尚未触及注入零副作用；身份稳定不换 id） */
+    /** 孤儿重排队（QUEUED/PRECHECK——尚未触及注入零副作用；身份稳定不换 id） */
     boolean requeue(UUID id, long expectedRevision, Instant updatedAt);
 }
