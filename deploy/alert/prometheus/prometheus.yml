@@ -8,6 +8,15 @@ scrape_configs:
   - job_name: otel-collector
     static_configs:
       - targets: ['otel-collector:9464']
+    metric_relabel_configs:
+      # EN-01/MC34 真窗修复（2026-09-12）：collector prometheus exporter 以
+      # service_name 透出 service.name 资源属性，工具面（allowlist 选择器/告警
+      # 材料/模型查询）契约按 service 标签——映射恢复标签兼容，双标签共存加法不改旧
+      - source_labels: [service_name]
+        target_label: service
+        regex: '(.+)'
+        replacement: '$1'
+        action: replace
   # AM2 靶场（order-arena 内嵌 /metrics；指标自带 service="order-arena" 公共标签）
   - job_name: order-arena
     static_configs:
