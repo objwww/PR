@@ -38,6 +38,9 @@ import com.objwww.pr.control.infrastructure.rag.RunbookCatalogSearchExecutor;
 import com.objwww.pr.control.infrastructure.tool.AlertHistoryExecutor;
 import com.objwww.pr.control.infrastructure.tool.ChangeDiffExecutor;
 import com.objwww.pr.control.infrastructure.tool.ChangeQueryExecutor;
+import com.objwww.pr.control.infrastructure.tool.CodeReadExecutor;
+import com.objwww.pr.control.infrastructure.tool.CodeSearchExecutor;
+import com.objwww.pr.control.infrastructure.tool.CodeSourceBinding;
 import com.objwww.pr.control.infrastructure.tool.DockerInspectExecutor;
 import com.objwww.pr.control.infrastructure.tool.LogQueryExecutor;
 import com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutor;
@@ -52,6 +55,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
 
+import java.nio.file.Path;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -110,6 +114,10 @@ public class AlertAm4Config {
     /** EN-07 history_rca_search 服务范围（R10 先行过滤；独立键，缺省仅自身 fail-closed） */
     private static final String RAG_SERVICE_ALLOWLIST_KEY =
             "${app.alert.rag.service-allowlist:control-app}";
+    /** R7-X10 代码取证：checkout 根 + service=repo@commit 绑定映射（两者均配置才注册
+     * ——fail-closed，docker 同律；第一期宿主声明绑定，运行时 digest 核验属后续卡） */
+    private static final String CODE_CHECKOUT_ROOT_KEY = "${app.alert.r7.code.checkout-root:}";
+    private static final String CODE_MAPPING_KEY = "${app.alert.r7.code.mapping:}";
     /** EN-05 docker 双工具条件注册件：两项均非空才注册（未配置不注册，fail-closed） */
     private static final String DOCKER_BASE_URL_KEY = "${app.alert.am4.docker.base-url:}";
     private static final String DOCKER_CONTAINER_ALLOWLIST_KEY =
@@ -118,7 +126,8 @@ public class AlertAm4Config {
             "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query,"
                     + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
                     + "prometheus.rules,logs.aggregate,change.diff,alert.history,"
-                    + "runbook.catalog,runbook.fetch,rca_history.search}";
+                    + "runbook.catalog,runbook.fetch,rca_history.search,"
+                    + "code.search,code.read}";
     private static final String SHADOW_MAX_CALLS_KEY =
             "${app.alert.am4.shadow.max-calls-per-window:60}";
     private static final String SHADOW_WINDOW_MILLIS_KEY =
@@ -218,7 +227,9 @@ public class AlertAm4Config {
             @Value(DOCKER_CONTAINER_ALLOWLIST_KEY) String dockerContainerAllowlist,
             RunbookCorpusStore runbookCorpusStore,
             @Value(RAG_RUNBOOK_CATALOG_DIGEST_KEY) String runbookCatalogDigest,
-            @Value(RAG_SERVICE_ALLOWLIST_KEY) String ragServiceAllowlist) {
+            @Value(RAG_SERVICE_ALLOWLIST_KEY) String ragServiceAllowlist,
+            @Value(CODE_CHECKOUT_ROOT_KEY) String codeCheckoutRoot,
+            @Value(CODE_MAPPING_KEY) String codeMapping) {
         PrometheusApiExecutor prometheusApi = new PrometheusApiExecutor(prometheusBaseUrl,
                 Set.of(prometheusServiceAllowlist.split(",")));
         List<ToolRegistry.Registration> registrations = new ArrayList<>(List.of(
@@ -287,6 +298,19 @@ public class AlertAm4Config {
                 DirectReadToolCatalog.rcaHistorySearch(timeoutMillis, resultLimitBytes),
                 new HistoryRcaSearchExecutor(jdbc,
                         Set.of(ragServiceAllowlist.split(",")))));
+        // R7-X10 代码取证双工具：checkout 根与绑定映射均配置才注册（fail-closed，
+        // docker 同律）。宿主静态声明 service→repo@commit 绑定——模型不可指定仓库/
+        // commit/绝对路径；映射坏形状在 CodeSourceBinding.parse 构造期 fail-fast。
+        if (!codeCheckoutRoot.isBlank() && !codeMapping.isBlank()) {
+            Map<String, CodeSourceBinding.Entry> codeBinding =
+                    CodeSourceBinding.parse(codeMapping);
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.codeSearch(timeoutMillis, resultLimitBytes),
+                    new CodeSearchExecutor(Path.of(codeCheckoutRoot.trim()), codeBinding)));
+            registrations.add(new ToolRegistry.Registration(
+                    DirectReadToolCatalog.codeRead(timeoutMillis, resultLimitBytes),
+                    new CodeReadExecutor(Path.of(codeCheckoutRoot.trim()), codeBinding)));
+        }
         return new ToolRegistry(registrations);
     }
 

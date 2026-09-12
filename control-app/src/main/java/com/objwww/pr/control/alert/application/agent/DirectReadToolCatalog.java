@@ -36,6 +36,13 @@ public final class DirectReadToolCatalog {
     public static final String TOOL_RUNBOOK_CATALOG = "runbook.catalog";
     public static final String TOOL_RUNBOOK_FETCH = "runbook.fetch";
     public static final String TOOL_RCA_HISTORY = "rca_history.search";
+    /** R7-X10 代码取证（§二 L64/L209）：部署版本代码只读双工具 */
+    public static final String TOOL_CODE_SEARCH = "code.search";
+    public static final String TOOL_CODE_READ = "code.read";
+
+    /** 路径形状：相对路径（'/' 分隔，禁反斜杠；'..' 段由执行器沙箱复判） */
+    private static final String PATH_PATTERN =
+            "^[a-zA-Z0-9._][a-zA-Z0-9._/-]{0,255}$";
 
     private DirectReadToolCatalog() {
     }
@@ -157,6 +164,31 @@ public final class DirectReadToolCatalog {
         properties.put("since", Map.of("type", "string"));
         properties.put("until", Map.of("type", "string"));
         return definition(TOOL_RCA_HISTORY, properties, List.of("service", "since", "until"),
+                timeoutMillis, resultLimitBytes);
+    }
+
+    /** code_search_query：service+query(+path_prefix) → 部署版本源码行命中
+     * （R7-X10：service 必在宿主绑定集；字面量匹配，无正则面；schema 即权限首闸） */
+    public static ToolDefinition codeSearch(long timeoutMillis, long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("service", Map.of("type", "string", "maxLength", 128));
+        properties.put("query", Map.of("type", "string", "maxLength", 128));
+        properties.put("path_prefix", Map.of("type", "string",
+                "pattern", PATH_PATTERN));
+        return definition(TOOL_CODE_SEARCH, properties, List.of("service", "query"),
+                timeoutMillis, resultLimitBytes);
+    }
+
+    /** code_read：service+path(+行窗) → 部署版本源码行窗（沙箱复判 + 脱敏 + 溯源块） */
+    public static ToolDefinition codeRead(long timeoutMillis, long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("service", Map.of("type", "string", "maxLength", 128));
+        properties.put("path", Map.of("type", "string", "pattern", PATH_PATTERN));
+        properties.put("line_start", Map.of("type", "string",
+                "pattern", "^\\d{1,7}$"));
+        properties.put("line_end", Map.of("type", "string",
+                "pattern", "^\\d{1,7}$"));
+        return definition(TOOL_CODE_READ, properties, List.of("service", "path"),
                 timeoutMillis, resultLimitBytes);
     }
 

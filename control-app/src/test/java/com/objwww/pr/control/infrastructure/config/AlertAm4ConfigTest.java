@@ -58,7 +58,7 @@ class AlertAm4ConfigTest {
                 "http://prometheus:9090", TIMEOUT, LIMIT, jdbc,
                 "http://loki:3100", "control-app,checkout", "control-app",
                 "control-app,checkout", "", "",
-                store(), "", "control-app");
+                store(), "", "control-app", "", "");
 
         assertThat(registry.find(MetricsAgent.TOOL_NAME, MetricsAgent.TOOL_VERSION)
                 .orElseThrow().executor())
@@ -112,6 +112,12 @@ class AlertAm4ConfigTest {
                 DirectReadToolCatalog.VERSION).orElseThrow().executor())
                 .isInstanceOf(
                         com.objwww.pr.control.infrastructure.rag.HistoryRcaSearchExecutor.class);
+
+        // R7-X10 代码取证：未配置不注册（fail-closed，docker 同律）
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CODE_SEARCH,
+                DirectReadToolCatalog.VERSION)).isEmpty();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CODE_READ,
+                DirectReadToolCatalog.VERSION)).isEmpty();
     }
 
     /** docker + EN-07 条件注册正向钉：配置齐 → 双工具注册（runbook 双工具挂真语料执行器） */
@@ -127,7 +133,9 @@ class AlertAm4ConfigTest {
                 "http://prometheus:9090", TIMEOUT, LIMIT, jdbc,
                 "http://loki:3100", "control-app", "control-app",
                 "control-app", "http://docker-engine:2375", "control-app",
-                store(), CORPUS_DIGEST, "control-app");
+                store(), CORPUS_DIGEST, "control-app",
+                java.nio.file.Path.of("src/test/resources").toAbsolutePath().toString(),
+                "checkout=control-app@probe");
 
         assertThat(registry.find(DirectReadToolCatalog.TOOL_DOCKER_PS,
                 DirectReadToolCatalog.VERSION)).as("docker.ps 已注册").isPresent();
@@ -143,6 +151,12 @@ class AlertAm4ConfigTest {
                 .as("runbook.fetch 已注册")
                 .isInstanceOf(
                         com.objwww.pr.control.infrastructure.rag.FetchRunbookExecutor.class);
+
+        // R7-X10 条件件正向钉：checkout 根 + 映射配置齐 → code 双工具注册
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CODE_SEARCH,
+                DirectReadToolCatalog.VERSION)).as("code.search 已注册").isPresent();
+        assertThat(registry.find(DirectReadToolCatalog.TOOL_CODE_READ,
+                DirectReadToolCatalog.VERSION)).as("code.read 已注册").isPresent();
     }
 
     /** P1-03 面收官钉：生产镜像 main 资源零 am4 fixture 文件（logs 全删/change 迁 test） */
