@@ -163,6 +163,31 @@ class DrillWorkerTest {
                     updatedAt, null));
             return true;
         }
+
+        @Override
+        public List<DrillJob> findActiveInStates(List<DrillJob.State> states) {
+            return byId.values().stream()
+                    .filter(j -> states.contains(j.state()))
+                    .toList();
+        }
+
+        @Override
+        public boolean linkRelated(UUID id, long expectedRevision, UUID incidentId,
+                                   UUID runId, Instant updatedAt) {
+            DrillJob job = byId.get(id);
+            if (job == null || job.revision() != expectedRevision
+                    || job.relatedIncidentId() != null) {
+                return false;
+            }
+            byId.put(id, new DrillJob(job.id(), job.scenarioId(), job.scenarioName(),
+                    job.templateDigest(), job.targetEnv(), job.operator(), job.state(),
+                    job.outcome(), job.terminalReason(), job.paramsJson(),
+                    job.payloadHash(), job.idempotencyKey(), job.stopIdempotencyKey(),
+                    job.stopRequestedAt(), job.workerId(), job.claimedAt(),
+                    job.revision() + 1, incidentId, runId, job.createdAt(),
+                    updatedAt, job.closedAt()));
+            return true;
+        }
     }
 
     private static final class FakeEvents implements DrillEventRepository {

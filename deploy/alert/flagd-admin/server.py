@@ -6,15 +6,36 @@
 #   → 只改 demo.flagd.json 中目标 flag 的 defaultVariant 单键（未知 flag 404、
 #     未知 variant 400，fail-closed；写盘 = 同目录 tmp + os.replace 原子替换；
 #     flagd file 源 inotify 热加载，无需重启 flagd）。
+# GET /flags/<flag>
+#   → DR-05 条件恢复读面（方案 §7.4「记录修改前值和版本」）：
+#     200 {"flag", "variant", "generation"}；generation = 该 flag 条目 canonical JSON
+#     的 sha256 代际令牌——任何改写（含同值重写）必变，供「他者已改写」判定；
+#     未知 flag 404。
 # GET /health → 200 {"ok": true}
 #
 # 纪律：本侧车不含任何密钥；仅 eval-mgmt 私网可达；访问日志静默（防 token 类查询串）。
+import hashlib
 import json
 import os
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote
 
 FLAGD_FILE = os.environ.get("FLAGD_FILE", "/flags/demo.flagd.json")
+
+
+def read_flag(flag):
+    """读目标 flag 的当前 defaultVariant + 代际令牌（条目 canonical JSON 的 sha256）。"""
+    with open(FLAGD_FILE, encoding="utf-8") as f:
+        doc = json.load(f)
+    flags = doc.get("flags")
+    if not isinstance(flags, dict) or flag not in flags:
+        raise KeyError("unknown flag: %s" % flag)
+    entry = flags[flag]
+    canonical = json.dumps(entry, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":"))
+    generation = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return entry.get("defaultVariant"), generation
 
 
 def set_default_variant(flag, variant):
@@ -61,8 +82,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self._json(200, {"ok": True})
-        else:
-            self._json(404, {"error": "not found"})
+            return
+        if self.path.startswith("/flags/"):
+            flag = unquote(self.path[len("/flags/"):])
+            if not flag or "/" in flag:
+                self._json(404, {"error": "not found"})
+                return
+            try:
+                variant, generation = read_flag(flag)
+            except KeyError as e:
+                self._json(404, {"error": str(e)})
+                return
+            self._json(200, {"flag": flag, "variant": variant,
+                             "generation": generation})
+            return
+        self._json(404, {"error": "not found"})
 
     def _read_body(self):
         # RFC 7230：java RestClient（JdkClientHttpRequestFactory 链）实测以 chunked 发送

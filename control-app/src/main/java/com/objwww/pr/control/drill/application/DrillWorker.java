@@ -5,13 +5,17 @@ import com.objwww.pr.control.drill.domain.model.DrillJob;
 import com.objwww.pr.control.drill.domain.model.DrillTemplate;
 import com.objwww.pr.control.drill.domain.repository.DrillEventRepository;
 import com.objwww.pr.control.drill.domain.repository.DrillJobRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * DR-02 演练 worker（eval_app 身份；沿用 EV-04 EvalRunWorker 的 SKIP LOCKED 领取 +
@@ -29,6 +33,17 @@ import java.util.Optional;
  *   <li><b>崩溃恢复</b>：启动扫超龄租约孤儿——PRECHECK（零副作用）→ 重排队
  *       QUEUED 身份稳定；INJECTING 及以后（注入/恢复状态无法判定）→
  *       RECOVERY_FAILED 保留靶场占位（worker_lost），不冒充现场干净；</li>
+ *   <li><b>DR-05 作业级截止恢复</b>（§7.4 Flagd 段「作业级截止恢复和重启清扫」）：
+ *       每拍 + 启动时扫 flagd 场景（模板 driver=FlagdScenarioDriver）超「领取时刻
+ *       + 冻结 totalEstimateSeconds」仍活动中（INJECTING/OBSERVING/RECOVERING/
+ *       VERIFYING）的作业 → 必先进 RECOVERING（不越级），恢复执行接线未交付 →
+ *       RECOVERY_FAILED 保留占位待人工核验；arena 场景 TTL 保障归 DR-04 面不动。
+ *       台账级截止清扫（eval 激活面）由可选 {@link FlagdRestoreSweeper} 携带；</li>
+ *   <li><b>DR-06 关联回填</b>（§7.5）：OBSERVING 相位按「注入时间窗 + 场景主症状
+ *       标签」经 {@link DrillCorrelationPort} 匹配 incident，匹配到才 CAS 回填
+ *       related_incident_id（currentRcaRunId 存在才带 related_run_id）并落
+ *       WORKER_NOTE；匹配不到/窗口已过保持 null（前端「尚未关联」），不按时间
+ *       近似瞎关联；重复回填由「related_incident_id IS NULL」CAS 幂等；</li>
  *   <li><b>本批诚实边界</b>：注入接线未交付（DR-03/DR-04），执行器在注入相位
  *       如实 FAILED（INJECTION_NOT_IMPLEMENTED）——不假装注入成功；OBSERVING
  *       及以后的推进（症状等待/恢复/核验）随真实接线一并交付。</li>
@@ -37,6 +52,9 @@ import java.util.Optional;
 public class DrillWorker {
 
     private static final Logger log = LoggerFactory.getLogger(DrillWorker.class);
+
+    /** 冻结参数 JSON 读面（totalEstimateSeconds 提取；静态共享实例，配置后即线程安全） */
+    private static final ObjectMapper PARAMS_JSON = new ObjectMapper();
 
     /** 时钟面（EvalBatchRunner.EvalClock 同式；测试面可控） */
     public interface DrillClock {
@@ -54,11 +72,24 @@ public class DrillWorker {
     private final String workerId;
     private final long pollSeconds;
     private final long staleClaimSeconds;
+    private final DrillCorrelationPort correlation;
+    private final FlagdRestoreSweeper flagdSweeper;
 
+    /** 旧装配面（DR-05/DR-06 接线前）：关联回填 disabled（恒不关联，不假装），
+     *  台账级清扫缺席；作业级截止对账（仅走 catalog+params，无新依赖）仍生效 */
     public DrillWorker(DrillJobRepository jobs, DrillEventRepository events,
                        DrillTemplateCatalog catalog, DrillInjectionPort injection,
                        DrillClock clock, List<String> allowedEnvs, String workerId,
                        long pollSeconds, long staleClaimSeconds) {
+        this(jobs, events, catalog, injection, clock, allowedEnvs, workerId,
+                pollSeconds, staleClaimSeconds, DrillCorrelationPort.disabled(), null);
+    }
+
+    public DrillWorker(DrillJobRepository jobs, DrillEventRepository events,
+                       DrillTemplateCatalog catalog, DrillInjectionPort injection,
+                       DrillClock clock, List<String> allowedEnvs, String workerId,
+                       long pollSeconds, long staleClaimSeconds,
+                       DrillCorrelationPort correlation, FlagdRestoreSweeper flagdSweeper) {
         this.jobs = Objects.requireNonNull(jobs);
         this.events = Objects.requireNonNull(events);
         this.catalog = Objects.requireNonNull(catalog);
@@ -68,14 +99,17 @@ public class DrillWorker {
         this.workerId = Objects.requireNonNull(workerId);
         this.pollSeconds = pollSeconds;
         this.staleClaimSeconds = staleClaimSeconds;
+        this.correlation = Objects.requireNonNull(correlation);
+        this.flagdSweeper = flagdSweeper; // 可空：台账未接线的装配面
     }
 
-    /** 常驻循环：启动先扫孤儿，之后 领取→驱动→睡 pollSeconds（中断即退） */
+    /** 常驻循环：启动先扫孤儿与超期 flagd 作业，之后 领取→驱动→睡 pollSeconds（中断即退） */
     public void runLoop() {
         int orphans = sweepOrphanedClaims();
-        if (orphans > 0) {
-            log.warn("drill worker {} 启动孤儿清扫：{} 条超龄租约作业已处置",
-                    workerId, orphans);
+        int expired = sweepFlagdRecoveryDeadlines();
+        if (orphans > 0 || expired > 0) {
+            log.warn("drill worker {} 启动清扫：{} 条超龄租约孤儿 + {} 条超期 flagd 作业已处置",
+                    workerId, orphans, expired);
         }
         log.warn("drill worker {} 进入轮询（poll={}s, staleClaim={}s）",
                 workerId, pollSeconds, staleClaimSeconds);
@@ -85,11 +119,15 @@ public class DrillWorker {
         }
     }
 
-    /** 单拍：领取一条 QUEUED 并驱动到本批可达终态；true = 本拍有活干（测试面直调） */
+    /** 单拍：先对账（台账清扫/flagd 截止/关联回填）再领取一条 QUEUED 驱动到本批
+     *  可达终态；true = 本拍有活干（测试面直调） */
     public boolean tick() {
+        int recovered = flagdSweeper == null ? 0 : flagdSweeper.sweep();
+        int expired = sweepFlagdRecoveryDeadlines();
+        int linked = correlateObserving();
         Optional<DrillJob> claimed = jobs.claimNext(workerId, clock.now());
         if (claimed.isEmpty()) {
-            return false;
+            return recovered + expired + linked > 0;
         }
         DrillJob job = claimed.get();
         log.warn("drill worker {} 领取作业：drill={} scenario={} env={}",
@@ -225,6 +263,136 @@ public class DrillWorker {
             }
         }
         return handled;
+    }
+
+    // ------------------------------------------------------------------ DR-05 截止恢复
+
+    /**
+     * flagd 作业级截止对账（§7.4「作业级截止恢复和重启清扫」；跟随孤儿清扫模式：
+     * 无状态、可重入、CAS 竞争留拍下轮）。超「claimed_at + 冻结 totalEstimateSeconds」
+     * 仍活动中 → 必先进 RECOVERING（状态机纪律不越级）；恢复执行接线未交付
+     * （DR-03/DR-04）→ RECOVERY_FAILED 保留占位，不冒充现场干净。
+     * 仅限 flagd 场景（模板 driver=FlagdScenarioDriver）；arena 场景的 TTL 保障与
+     * 恢复接线归 DR-04 面，本清扫不动。截止读不出的行（params 缺 totalEstimateSeconds）
+     * 不动——留超龄租约孤儿清扫对账。
+     */
+    public int sweepFlagdRecoveryDeadlines() {
+        int handled = 0;
+        Instant now = clock.now();
+        for (DrillJob job : jobs.findActiveInStates(List.of(
+                DrillJob.State.INJECTING, DrillJob.State.OBSERVING,
+                DrillJob.State.RECOVERING, DrillJob.State.VERIFYING))) {
+            DrillTemplate template = catalog.byScenarioId(job.scenarioId()).orElse(null);
+            if (template == null || !"FlagdScenarioDriver".equals(template.driver())) {
+                continue;
+            }
+            Long estimate = totalEstimateSeconds(job.paramsJson());
+            if (estimate == null || job.claimedAt() == null) {
+                continue;
+            }
+            if (now.isBefore(job.claimedAt().plusSeconds(estimate))) {
+                continue;
+            }
+            DrillJob current = job;
+            if (job.state() == DrillJob.State.INJECTING
+                    || job.state() == DrillJob.State.OBSERVING) {
+                if (!jobs.advance(job.id(), job.revision(), job.state(),
+                        DrillJob.State.RECOVERING, now)) {
+                    continue; // CAS 竞争：下轮再对账
+                }
+                events.insert(DrillEvent.phaseTransition(job.id(), job.state(),
+                        DrillJob.State.RECOVERING, workerId,
+                        "{\"reason\":\"flagd 作业级截止到期：必先进恢复路径（§7.4）\"}",
+                        now));
+                current = jobs.findById(job.id()).orElse(job);
+            }
+            if (jobs.finalize(current.id(), current.revision(), current.state(),
+                    DrillJob.State.RECOVERY_FAILED,
+                    "flagd_recovery_deadline_exceeded: 超作业级截止（claimed_at+"
+                            + "totalEstimateSeconds）仍未完成恢复，且恢复执行接线未交付"
+                            + "（DR-03/DR-04）——保留占位待人工核验，不冒充现场干净",
+                    null, null, now)) {
+                events.insert(DrillEvent.phaseTransition(current.id(), current.state(),
+                        DrillJob.State.RECOVERY_FAILED, workerId,
+                        "{\"reason\":\"flagd_recovery_deadline_exceeded\"}", now));
+                log.warn("flagd drill {} 超作业级截止 → RECOVERY_FAILED（保留占位）",
+                        current.id());
+                handled++;
+            }
+        }
+        return handled;
+    }
+
+    // ------------------------------------------------------------------ DR-06 关联回填
+
+    /**
+     * OBSERVING 相位的告警/调查关联回填（§7.5 DR-06）：时间窗 = INJECTING→OBSERVING
+     * 迁移时刻（事件账本读回，重启可恢复）+ 模板 maxFiringWaitSeconds；关联键 =
+     * 场景主症状码（symptomCodes 首项）。匹配到才 CAS 回填并落 WORKER_NOTE；
+     * 匹配不到/窗口已过保持 null（前端「尚未关联」），严禁按时间近似瞎关联。
+     */
+    private int correlateObserving() {
+        int linked = 0;
+        for (DrillJob job : jobs.findActiveInStates(List.of(DrillJob.State.OBSERVING))) {
+            if (job.relatedIncidentId() != null) {
+                continue; // 重复回填幂等
+            }
+            DrillTemplate template = catalog.byScenarioId(job.scenarioId()).orElse(null);
+            if (template == null || template.symptomCodes().isEmpty()) {
+                continue;
+            }
+            Instant injectedAt = observingSince(job.id());
+            if (injectedAt == null) {
+                continue;
+            }
+            Instant windowEnd = injectedAt
+                    .plusSeconds(template.timing().maxFiringWaitSeconds());
+            if (clock.now().isAfter(windowEnd)) {
+                continue; // 窗口外不猜（保持尚未关联）
+            }
+            String alertname = template.symptomCodes().getFirst();
+            Optional<DrillCorrelationPort.Correlation> hit =
+                    correlation.correlate(alertname, injectedAt, windowEnd);
+            if (hit.isEmpty()) {
+                continue;
+            }
+            DrillCorrelationPort.Correlation c = hit.get();
+            if (jobs.linkRelated(job.id(), job.revision(), c.incidentId(),
+                    c.currentRcaRunId(), clock.now())) {
+                events.insert(DrillEvent.of(job.id(), DrillEvent.EventType.WORKER_NOTE,
+                        workerId,
+                        "{\"correlation\":{\"incidentId\":\"" + c.incidentId()
+                                + "\",\"runId\":" + (c.currentRcaRunId() == null
+                                ? "null" : "\"" + c.currentRcaRunId() + "\"")
+                                + ",\"alertname\":" + quote(alertname)
+                                + ",\"rule\":\"primary-symptom+injection-window\"}}",
+                        clock.now()));
+                log.warn("drill {} 关联回填：incident={} run={}",
+                        job.id(), c.incidentId(), c.currentRcaRunId());
+                linked++;
+            }
+        }
+        return linked;
+    }
+
+    /** 注入时刻 = 最早一条 to_state=OBSERVING 的相位迁移事件（账本读回，重启可恢复） */
+    private Instant observingSince(UUID drillId) {
+        return events.listByDrill(drillId).stream()
+                .filter(e -> e.eventType() == DrillEvent.EventType.PHASE_TRANSITION
+                        && DrillJob.State.OBSERVING.name().equals(e.toState()))
+                .map(DrillEvent::createdAt)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    /** 冻结参数里的后端计算总窗口（§7.2 不允许前端各算一套；读不出 = null，不猜） */
+    private static Long totalEstimateSeconds(String paramsJson) {
+        try {
+            JsonNode node = PARAMS_JSON.readTree(paramsJson).path("totalEstimateSeconds");
+            return node.isNumber() ? node.asLong() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------ 内部
