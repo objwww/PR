@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * 靶场 chaos 场景驱动（M3-17，S3~S5）：eval-mgmt 私网调 ChaosController（M2-17 契约）。
@@ -18,23 +19,42 @@ import java.util.Objects;
  * 激活/解除/解析三面共用同一派生；②激活后按故障族注入 chaos 前缀评测流量
  * （{@link ArenaTrafficClient}，recipe 与 AM2 E2E 驱动一致）——无流量则 F1~F3 Gauge
  * 恒零，期望告警永不 firing。流量创单失败向上抛（runner 落 activate_failed）。
+ *
+ * <p>DR-04（方案 §7.5/§7.4）三件安全收口：①on 回执到手立即成形 {@link ActivationReceipt}
+ * 身份，流量注入是其后的独立阶段；②settle 等待/流量阶段被中断或失败即抛
+ * {@link ActivationException}——activate 立即退出、零后续流量，已激活会话的恢复责任
+ * 随异常携带的 receipt 身份移交调用方；③恢复核验的会话面探针查有效实例 id
+ * （receipt.scenarioId()，每轮派生），告警面探针保留注册表模板键并先核验
+ * receipt↔模板映射，多轮/跨场景不串场。
  */
 public final class ArenaChaosScenarioDriver implements ScenarioDriver {
+
+    /** 开关读面快照轮换等待（生产固定值； ChaosSwitchboard 2s TTL + 余量，见 settleSwitchboard） */
+    static final long SETTLE_SWITCHBOARD_MILLIS = 3_000;
 
     private final ChaosAdminClient client;
     private final AlertProbe alertProbe;
     private final ArenaTrafficClient traffic;
     private final String datasetVersion;
     private final String runTag;
+    private final long settleMillis;
 
     public ArenaChaosScenarioDriver(ChaosAdminClient client, AlertProbe alertProbe,
                                     ArenaTrafficClient traffic, String datasetVersion,
                                     String runTag) {
+        this(client, alertProbe, traffic, datasetVersion, runTag, SETTLE_SWITCHBOARD_MILLIS);
+    }
+
+    /** 测试面：settle 等待时长可注入（生产装配走五参构造，固定 {@link #SETTLE_SWITCHBOARD_MILLIS}） */
+    ArenaChaosScenarioDriver(ChaosAdminClient client, AlertProbe alertProbe,
+                             ArenaTrafficClient traffic, String datasetVersion,
+                             String runTag, long settleMillis) {
         this.client = Objects.requireNonNull(client);
         this.alertProbe = Objects.requireNonNull(alertProbe);
         this.traffic = Objects.requireNonNull(traffic);
         this.datasetVersion = Objects.requireNonNull(datasetVersion);
         this.runTag = runTag == null ? "" : runTag;
+        this.settleMillis = settleMillis;
     }
 
     /**
@@ -87,12 +107,20 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
                         golden.expectedRootCause()).value(),
                 datasetVersion, payloadDigest, activationLabels(golden), ruleDigest);
         ChaosAdminClient.Activation activation = client.activate(golden.chaosFamily(), body);
-        settleSwitchboard();
-        injectTraffic(golden, sid);
-        return new ActivationReceipt(sid,
+        // DR-04（方案 §7.5）债务②：on 回执到手立即成形 receipt 身份——流量注入是其后的
+        // 独立阶段；中断/流量部分失败时凭此 receipt 仍可恢复已激活会话（异常携带面）。
+        ActivationReceipt receipt = new ActivationReceipt(sid,
                 ChaosAdminClient.actionDigest("activate", golden.scenarioId(),
                         activation.sessionId(), activation.generation()).value(),
                 activation.generation(), activation.alertFingerprint());
+        settleSwitchboard(receipt);
+        try {
+            injectTraffic(golden, sid);
+        } catch (RuntimeException e) {
+            throw new ActivationException("chaos 评测流量注入失败（会话已激活，凭回执恢复）: "
+                    + e.getMessage(), receipt, e);
+        }
+        return receipt;
     }
 
     /**
@@ -100,12 +128,16 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
      * 它按默认 2s TTL 缓存 ACTIVE 会话快照，激活后立即注入会撞旧快照（fail-closed
      * = 无故障）→ 同 intent 幂等重放、重复单不复现、告警永不 firing
      * （2026-09-05 E2E-M3-01 实测；3s 手动诊断复现修复）。3s ≥ 2s TTL 留余量。
+     *
+     * <p>DR-04（方案 §7.5/§7.4）债务①：中断必须让 activate 立即退出——恢复中断标记后
+     * 抛 {@link ActivationException}（携带已激活会话的 receipt 身份），不得继续注入流量。
      */
-    private void settleSwitchboard() {
+    private void settleSwitchboard(ActivationReceipt receipt) {
         try {
-            Thread.sleep(3_000);
+            Thread.sleep(settleMillis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            throw new ActivationException("激活后开关读面轮换等待被中断（会话已激活）", receipt, e);
         }
     }
 
@@ -130,18 +162,33 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
     @Override
     public RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt) {
         List<String> unmet = new ArrayList<>();
+        // DR-04（方案 §7.5）债务③映射核验：回执必须携带本模板派生的有效实例 id
+        // （chaos-eval-[tag-]{template}-r{round}，与 effectiveScenarioId 同式）——
+        // 跨场景/跨轮回执不进本场次的恢复通路（不抛半途，落 unmet 回执）。
+        if (!receiptMatchesTemplate(receipt.scenarioId(), golden)) {
+            unmet.add("receipt_scenario_mismatch:" + receipt.scenarioId());
+            return new RecoveryReceipt(golden.scenarioId(), receipt.actionDigest(),
+                    receipt.generation(), false, false, List.copyOf(unmet));
+        }
         boolean closed = client.deactivate(golden.chaosFamily(), Map.of(
                 "scenarioId", receipt.scenarioId(),
                 "expectedGeneration", receipt.generation()));
         if (!closed) {
             unmet.add("chaos_cas_rejected");
         } else {
-            boolean recovered = alertProbe.awaitSessionClosed(golden.scenarioId(),
+            // 债务③：会话在 chaos 管理面按每轮派生的有效实例 id 登记（模板 id 无此
+            // 会话）——收口探针查 receipt 的有效实例 id，不用模板 golden.scenarioId()。
+            boolean recovered = alertProbe.awaitSessionClosed(receipt.scenarioId(),
                     golden.timing().cleanupTimeoutSeconds());
             if (!recovered) {
                 unmet.add("session_not_closed_in_cleanup_window");
             }
         }
+        // 债务③探针契约追踪：awaitAllResolved 的 scenarioId 是注册表模板键
+        // （PrometheusAlertProbe 经 registry.byScenarioId 解析期望 alertname 集，
+        // 有效实例 id 不在注册表；告警查询面无 per-round 场次维度，C-6 激活标签
+        // 轮次无关）——探针无法把模板键映射到有效实例，告警面核验保留模板键，
+        // 映射正确性由上面的 receiptMatchesTemplate 核验。
         boolean alertsResolved = alertProbe.awaitAllResolved(golden.scenarioId(),
                 golden.timing().maxResolvedWaitSeconds());
         if (!alertsResolved) {
@@ -149,5 +196,32 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
         }
         return new RecoveryReceipt(golden.scenarioId(), receipt.actionDigest(),
                 receipt.generation(), unmet.isEmpty(), alertsResolved, List.copyOf(unmet));
+    }
+
+    /** 回执的有效实例 id 是否本模板派生（chaos-eval-[tag-]{template}-r{round} 精确式） */
+    private static boolean receiptMatchesTemplate(String receiptScenarioId, GoldenCase golden) {
+        String template = Pattern.quote(golden.scenarioId().toLowerCase());
+        return receiptScenarioId != null && receiptScenarioId
+                .matches("chaos-eval-(?:[a-z0-9-]+-)?" + template + "-r[0-9]+");
+    }
+
+    /**
+     * 激活半途退出（中断/流量失败）时携带的回执身份（DR-04，方案 §7.5）：
+     * 会话已在 chaos 管理面激活，调用方凭 {@link #receipt()} 走恢复通路
+     * （off CAS 需 scenarioId + expectedGeneration）。
+     */
+    public static final class ActivationException extends RuntimeException {
+
+        private final ActivationReceipt receipt;
+
+        public ActivationException(String message, ActivationReceipt receipt, Throwable cause) {
+            super(message, cause);
+            this.receipt = Objects.requireNonNull(receipt);
+        }
+
+        /** 已激活会话的回执身份（中断/流量失败现场不丢，凭此恢复） */
+        public ActivationReceipt receipt() {
+            return receipt;
+        }
     }
 }
