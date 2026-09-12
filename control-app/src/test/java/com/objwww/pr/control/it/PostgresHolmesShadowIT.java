@@ -305,8 +305,8 @@ class PostgresHolmesShadowIT extends PostgresITBase {
 
         private static EvidencePackageV2 typedPackage() {
             try {
-                return EvidencePackageV2.fromJson(new com.fasterxml.jackson.databind.ObjectMapper()
-                        .readTree(PACKAGE));
+                return EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(PACKAGE)));
             } catch (Exception e) {
                 throw new IllegalStateException(e);
             }

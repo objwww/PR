@@ -58,7 +58,9 @@ class ControlArchitectureTest {
 
     /**
      * AFT-A01（AM1 §3.1/T02 验收）：告警域 domain 零框架依赖——Spring/Jakarta/JDBC/HTTP/JUnit
-     * 一律禁入；jackson（纯 JSON 库）与 shared-kernel 通用件允许。
+     * 一律禁入；shared-kernel 通用件允许。<b>jackson 放行随 BA-22 清账（2026-09-12）废止</b>：
+     * EvidencePackageValidator/EvidencePackageV2 已迁移中立树（解析归 application 层
+     * EvidencePackageJsonCodec），domain 零 Jackson，jackson 禁项并入 am4 全域规则。
      */
     @Test
     void alertDomainHasNoFrameworkDependency() {
@@ -66,7 +68,7 @@ class ControlArchitectureTest {
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "org.springframework..", "jakarta..",
                         "java.sql..", "org.apache.http..", "java.net.http..",
-                        "org.junit..")
+                        "org.junit..", "com.fasterxml..")
                 .check(classes);
     }
 
@@ -88,16 +90,16 @@ class ControlArchitectureTest {
      * </ul>
      * 覆盖面扩展（2026-09-07，V16/V14 批次落码后的收口）：AM4 新建的 evidence/event
      * 子包加入零框架面（两包现状零 Jackson/Spring，规则扩面即绿——预防性收紧，
-     * 非违规驱动）；EvidencePackageValidator 为 AM1 既有类仍在根包、不随子包通配
-     * 扩面进入覆盖（待其迁移到 InternalCanonicalJsonV1 后可将本规则扩至整个 alert.domain）。
+     * 非违规驱动）。
+     *
+     * <p>BA-22 清账收口（2026-09-12）：覆盖面扩至<b>全 alert.domain</b>——
+     * EvidencePackageValidator/EvidencePackageV2 已迁移中立树（唯一阻塞项清除，
+     * 前置全量 grep 零 Jackson 残余）；AFT-A01 同步废止 jackson 放行并并入禁项，
+     * 两规则不再语义打架。
      */
     @Test
     void am4AlertDomainZeroFrameworkDependency() {
-        noClasses().that().resideInAnyPackage(
-                        "..control.alert.domain.dag..", "..control.alert.domain.tool..",
-                        "..control.alert.domain.budget..", "..control.alert.domain.claim..",
-                        "..control.alert.domain.evidence..", "..control.alert.domain.event..",
-                        "..control.alert.domain.agent..")
+        noClasses().that().resideInAPackage("..control.alert.domain..")
                 .should().dependOnClassesThat().resideInAnyPackage(
                         "org.springframework..", "com.fasterxml..",
                         "java.net.http..", "java.sql..",

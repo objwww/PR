@@ -562,7 +562,7 @@ public class EvalQueryService {
             return null;
         }
         try {
-            return EvidencePackageV2.fromJson(mapper.readTree(row.packageJson()));
+            return EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(mapper.readTree(row.packageJson())));
         } catch (Exception e) {
             return null;
         }

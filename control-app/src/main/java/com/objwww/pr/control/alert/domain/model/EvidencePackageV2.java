@@ -1,10 +1,10 @@
 package com.objwww.pr.control.alert.domain.model;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.objwww.pr.control.alert.domain.claim.ClaimStatus;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -12,10 +12,12 @@ import java.util.Objects;
  * summary/evidence/impact/remediation/references（人读报告 + 通知白名单渲染的素材），
  * 自由文本 root_cause 换成 {@link TypedRootCause}，并新增 {@link ReportClaim} 列表。
  *
- * <p>{@code fromJson} 只做<b>形状映射</b>（键存在/类型正确/枚举合法），形状错误抛
+ * <p>{@code fromMap} 只做<b>形状映射</b>（键存在/类型正确/枚举合法），形状错误抛
  * IllegalArgumentException 由调用方转 REJECTED_*；长度上限、非 blank、artifact_ref
  * 政策由 record 构造器与 Validator 各管一段（typed 部分自校验，共享文本字段与
  * scheme 白名单仍是 Validator 的政策）。schema_version=2 固定，未知版本在路由层拒绝。
+ * 入参为<b>中立树</b>（BA-22：Map/List/String/Number/Boolean/null，无 Jackson 类型——
+ * 解析归 {@code EvidencePackageJsonCodec}，application 层）。
  */
 public record EvidencePackageV2(int schemaVersion,
                                 String summary,
@@ -50,13 +52,14 @@ public record EvidencePackageV2(int schemaVersion,
     }
 
     /**
-     * 从 analysis 内嵌 JSON 对象做形状映射。缺失键/类型错/枚举值外 → IllegalArgumentException
-     * （消息进拒绝原因链）。长度/blank/scheme 校验不在此处（见类注释）。
+     * 从 analysis 内嵌 JSON 对象（中立树）做形状映射。缺失键/类型错/枚举值外 →
+     * IllegalArgumentException（消息进拒绝原因链）。长度/blank/scheme 校验不在此处
+     * （见类注释）。
      */
-    public static EvidencePackageV2 fromJson(JsonNode pkg) {
+    public static EvidencePackageV2 fromMap(Map<String, Object> pkg) {
         requireObject(pkg);
         requireInt(pkg, "schema_version");
-        int schemaVersion = pkg.get("schema_version").asInt();
+        int schemaVersion = (Integer) pkg.get("schema_version");
         requireText(pkg, "summary");
         requireText(pkg, "impact");
         requireText(pkg, "remediation");
@@ -64,13 +67,15 @@ public record EvidencePackageV2(int schemaVersion,
         requireArray(pkg, "claims");
         requireArray(pkg, "references");
 
-        JsonNode rc = requireObjectMember(pkg, "root_cause");
+        Map<?, ?> rc = requireObjectMember(pkg, "root_cause");
         TypedRootCause rootCause = new TypedRootCause(
                 text(rc, "component"), text(rc, "fault_type"), text(rc, "reason_code"));
 
         List<ReportClaim> claims = new ArrayList<>();
-        for (JsonNode claim : pkg.get("claims")) {
-            requireObject(claim);
+        for (Object claimObj : requireList(pkg, "claims")) {
+            if (!(claimObj instanceof Map<?, ?> claim)) {
+                throw new IllegalArgumentException("必须是 JSON 对象");
+            }
             claims.add(new ReportClaim(
                     text(claim, "claim_type"),
                     ClaimStatus.valueOf(text(claim, "status")),
@@ -81,74 +86,84 @@ public record EvidencePackageV2(int schemaVersion,
         }
 
         List<String> evidence = new ArrayList<>();
-        for (JsonNode ev : pkg.get("evidence")) {
-            if (!ev.isTextual()) {
+        for (Object ev : requireList(pkg, "evidence")) {
+            if (!(ev instanceof String s)) {
                 throw new IllegalArgumentException("evidence 条目必须为字符串");
             }
-            evidence.add(ev.asText());
+            evidence.add(s);
         }
 
         List<String> refs = new ArrayList<>();
-        for (JsonNode ref : pkg.get("references")) {
-            requireObject(ref);
+        for (Object refObj : requireList(pkg, "references")) {
+            if (!(refObj instanceof Map<?, ?> ref)) {
+                throw new IllegalArgumentException("必须是 JSON 对象");
+            }
             refs.add(text(ref, "artifact_ref"));
         }
 
-        return new EvidencePackageV2(schemaVersion, pkg.get("summary").asText(), rootCause,
-                claims, evidence, pkg.get("impact").asText(), pkg.get("remediation").asText(), refs);
+        return new EvidencePackageV2(schemaVersion, (String) pkg.get("summary"), rootCause,
+                claims, evidence, (String) pkg.get("impact"), (String) pkg.get("remediation"), refs);
     }
 
-    private static void requireObject(JsonNode node) {
-        if (!node.isObject()) {
+    private static void requireObject(Object node) {
+        if (!(node instanceof Map<?, ?>)) {
             throw new IllegalArgumentException("必须是 JSON 对象");
         }
     }
 
-    private static JsonNode requireObjectMember(JsonNode pkg, String field) {
-        JsonNode node = pkg.get(field);
-        if (node == null || !node.isObject()) {
+    private static Map<?, ?> requireObjectMember(Map<String, Object> pkg, String field) {
+        Object node = pkg.get(field);
+        if (!(node instanceof Map<?, ?> map)) {
             throw new IllegalArgumentException("缺少对象字段: " + field);
         }
-        return node;
+        return map;
     }
 
-    private static void requireInt(JsonNode pkg, String field) {
-        if (!pkg.has(field) || !pkg.get(field).isInt()) {
+    private static void requireInt(Map<String, Object> pkg, String field) {
+        if (!(pkg.get(field) instanceof Integer)) {
             throw new IllegalArgumentException("缺整型字段: " + field);
         }
     }
 
-    private static void requireText(JsonNode pkg, String field) {
-        if (!pkg.has(field) || !pkg.get(field).isTextual()) {
+    private static void requireText(Map<String, Object> pkg, String field) {
+        if (!(pkg.get(field) instanceof String)) {
             throw new IllegalArgumentException("缺字符串字段: " + field);
         }
     }
 
-    private static void requireArray(JsonNode pkg, String field) {
-        if (!pkg.has(field) || !pkg.get(field).isArray()) {
+    private static void requireArray(Map<String, Object> pkg, String field) {
+        if (!(pkg.get(field) instanceof List<?>)) {
             throw new IllegalArgumentException("缺数组字段: " + field);
         }
     }
 
-    private static String text(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || !value.isTextual()) {
-            throw new IllegalArgumentException("缺字符串字段: " + field);
+    private static List<?> requireList(Map<String, Object> pkg, String field) {
+        Object value = pkg.get(field);
+        if (!(value instanceof List<?> list)) {
+            throw new IllegalArgumentException("缺数组字段: " + field);
         }
-        return value.asText();
+        return list;
     }
 
-    private static List<String> stringList(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || !value.isArray()) {
+    private static String text(Map<?, ?> node, String field) {
+        Object value = node.get(field);
+        if (!(value instanceof String s)) {
+            throw new IllegalArgumentException("缺字符串字段: " + field);
+        }
+        return s;
+    }
+
+    private static List<String> stringList(Map<?, ?> node, String field) {
+        Object value = node.get(field);
+        if (!(value instanceof List<?> list)) {
             throw new IllegalArgumentException("缺数组字段: " + field);
         }
         List<String> out = new ArrayList<>();
-        for (JsonNode item : value) {
-            if (!item.isTextual()) {
+        for (Object item : list) {
+            if (!(item instanceof String s)) {
                 throw new IllegalArgumentException(field + " 条目必须为字符串");
             }
-            out.add(item.asText());
+            out.add(s);
         }
         return out;
     }

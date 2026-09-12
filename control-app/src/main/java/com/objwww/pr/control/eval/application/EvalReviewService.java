@@ -447,7 +447,7 @@ public class EvalReviewService {
         }
         try {
             EvidencePackageV2 pkg =
-                    EvidencePackageV2.fromJson(mapper.readTree(row.packageJson()));
+                    EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(mapper.readTree(row.packageJson())));
             return new ReportSummary(pkg.summary(), pkg.impact(), pkg.remediation(),
                     pkg.referenceArtifactRefs());
         } catch (Exception e) {

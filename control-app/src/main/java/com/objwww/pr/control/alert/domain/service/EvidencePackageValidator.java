@@ -1,14 +1,13 @@
 package com.objwww.pr.control.alert.domain.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.objwww.pr.control.alert.application.EvidencePackageJsonCodec;
 import com.objwww.pr.control.alert.domain.model.EvidencePackageV2;
 import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,6 +26,12 @@ import java.util.regex.Pattern;
  * claims[]（类型化断言）；typed 部分的长度/枚举由契约 record 自校验，本类管共享文本字段
  * 限制与 artifact_ref 白名单。references 只允许安全 artifact_ref（prometheus:// /
  * dashboard://），禁止凭证与任意外链（评审修正；AFT-A03 守字段扫描）。
+ *
+ * <p>BA-22（R3 domain 零框架）：本类零 Jackson——解析/写出经
+ * {@link EvidencePackageJsonCodec}（application 层，唯一 Jackson 触点），内部全程
+ * 中立树（Map/List/String/Number/Boolean/null）。规范化输出由 ObjectNode.toString()
+ * （输入键序）改为 canonical 字典序——前置检查确认无下游对 packageJson 做 digest
+ * 对账（raw/payload digest 只对原文），键序漂移安全。
  */
 public final class EvidencePackageValidator {
 
@@ -57,7 +62,6 @@ public final class EvidencePackageValidator {
             Pattern.compile("[0-9a-fA-F]{32,}")
     };
 
-    private final ObjectMapper mapper = new ObjectMapper();
     private final int maxResponseBytes;
     private final int maxEvidenceItems;
     private final int maxFieldChars;
@@ -104,19 +108,21 @@ public final class EvidencePackageValidator {
         }
 
         // 2. Holmes 外层响应（官方 ChatResponse）：对象 + analysis(字符串)
-        JsonNode outer = parse(body);
-        if (!outer.isObject() || !outer.has("analysis") || !outer.get("analysis").isTextual()) {
+        Object outerTree = parseTree(body);
+        if (!(outerTree instanceof Map<?, ?> outer)
+                || !(outer.get("analysis") instanceof String analysis)) {
             throw new Malformed("Holmes 外层响应缺 analysis 字符串字段");
         }
 
-        // 3. analysis 内嵌 JSON 字符串
-        JsonNode pkg = parseAnalysis(outer.get("analysis").asText());
+        // 3. analysis 内嵌 JSON 字符串（BA-14 包裹提取面）
+        Object pkgTree = parseAnalysis(analysis);
 
-        // 4. schema_version 显式路由（禁止猜版本）
-        if (!pkg.has("schema_version") || !pkg.get("schema_version").isInt()) {
+        // 4. schema_version 显式路由（禁止猜版本）——非对象/缺键/非整型都落本检查
+        //（与旧链一致：ArrayNode.has=false、文本 "2" isInt=false 均为 Malformed）
+        if (!(pkgTree instanceof Map<?, ?> pkg)
+                || !(pkg.get("schema_version") instanceof Integer version)) {
             throw new Malformed("package 缺整型 schema_version");
         }
-        int version = pkg.get("schema_version").asInt();
         if (!SUPPORTED_VERSIONS.contains(version)) {
             errors.add("未知 schema_version=" + version + "，支持 " + SUPPORTED_VERSIONS + "，禁止猜版本");
             return new Result(ValidationStatus.REJECTED_SCHEMA_VERSION, List.copyOf(errors), null, redact(body));
@@ -126,12 +132,9 @@ public final class EvidencePackageValidator {
 
     // ---------------------------------------------------------------- v1（原链路原样保留）
 
-    private Result validateV1(JsonNode pkg, String body, List<String> errors) {
-        if (!pkg.isObject()) {
-            return malformedV1(body, errors, "analysis 不是 JSON 对象");
-        }
+    private Result validateV1(Map<?, ?> pkg, String body, List<String> errors) {
         for (String field : REQUIRED_FIELDS) {
-            if (!pkg.has(field)) {
+            if (!pkg.containsKey(field)) {
                 errors.add("缺少字段: " + field);
             }
         }
@@ -139,138 +142,133 @@ public final class EvidencePackageValidator {
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
         for (String field : TEXT_FIELDS) {
-            if (!pkg.get(field).isTextual() || pkg.get(field).asText().isBlank()) {
+            if (!(pkg.get(field) instanceof String text) || text.isBlank()) {
                 errors.add("字段 " + field + " 必须为非空字符串");
             }
         }
-        if (!pkg.get("evidence").isArray()) {
+        if (!(pkg.get("evidence") instanceof List<?>)) {
             errors.add("字段 evidence 必须为数组");
         }
-        if (!pkg.get("references").isArray()) {
+        if (!(pkg.get("references") instanceof List<?>)) {
             errors.add("字段 references 必须为数组");
         }
         if (!errors.isEmpty()) {
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
-        if (textLimitViolations(pkg, TEXT_FIELDS, (ArrayNode) pkg.get("evidence"), errors)) {
+        if (textLimitViolations(pkg, TEXT_FIELDS, pkg.get("evidence"), errors)) {
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
 
-        // 通过：规范化 package + 脱敏原文
-        ObjectNode normalized = mapper.createObjectNode();
-        normalized.set("schema_version", pkg.get("schema_version"));
+        // 通过：规范化 package（canonical 字典序）+ 脱敏原文
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        normalized.put("schema_version", pkg.get("schema_version"));
         for (String field : TEXT_FIELDS) {
-            normalized.put(field, pkg.get(field).asText());
+            normalized.put(field, pkg.get(field));
         }
-        normalized.set("evidence", ((ArrayNode) pkg.get("evidence")).deepCopy());
-        normalized.set("references", ((ArrayNode) pkg.get("references")).deepCopy());
+        normalized.put("evidence", pkg.get("evidence"));
+        normalized.put("references", pkg.get("references"));
         return new Result(ValidationStatus.STRUCTURE_VALIDATED, List.of(),
-                normalized.toString(), redact(body), 1, null);
-    }
-
-    private Result malformedV1(String body, List<String> errors, String message) {
-        errors.add(message);
-        return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
+                EvidencePackageJsonCodec.writeCanonical(normalized), redact(body), 1, null);
     }
 
     // ---------------------------------------------------------------- v2（类型化，AM3 §6.3）
 
-    private Result validateV2(JsonNode pkg, String body, List<String> errors) {
-        if (!pkg.isObject()) {
-            return malformedV1(body, errors, "analysis 不是 JSON 对象");
-        }
+    private Result validateV2(Map<?, ?> pkg, String body, List<String> errors) {
         for (String field : REQUIRED_FIELDS) {
-            if (!pkg.has(field)) {
+            if (!pkg.containsKey(field)) {
                 errors.add("缺少字段: " + field);
             }
         }
-        if (pkg.has("root_cause") && !pkg.get("root_cause").isObject()) {
+        if (pkg.containsKey("root_cause") && !(pkg.get("root_cause") instanceof Map<?, ?>)) {
             errors.add("v2 root_cause 必须为对象{component,fault_type,reason_code}");
         }
-        if (pkg.has("claims") && !pkg.get("claims").isArray()) {
+        if (pkg.containsKey("claims") && !(pkg.get("claims") instanceof List<?>)) {
             errors.add("字段 claims 必须为数组");
         }
         if (!errors.isEmpty()) {
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
         for (String field : V2_TEXT_FIELDS) {
-            if (!pkg.get(field).isTextual() || pkg.get(field).asText().isBlank()) {
+            if (!(pkg.get(field) instanceof String text) || text.isBlank()) {
                 errors.add("字段 " + field + " 必须为非空字符串");
             }
         }
-        if (!pkg.get("evidence").isArray() || !pkg.get("references").isArray()) {
+        if (!(pkg.get("evidence") instanceof List<?>) || !(pkg.get("references") instanceof List<?>)) {
             errors.add("字段 evidence/references 必须为数组");
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
-        if (textLimitViolations(pkg, V2_TEXT_FIELDS, (ArrayNode) pkg.get("evidence"), errors)) {
+        if (textLimitViolations(pkg, V2_TEXT_FIELDS, pkg.get("evidence"), errors)) {
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
 
         // 类型化契约自校验（长度/枚举/嵌套形状）；形状错误进拒绝原因链
         EvidencePackageV2 typed;
         try {
-            typed = EvidencePackageV2.fromJson(pkg);
+            typed = EvidencePackageV2.fromMap(castObjectMap(pkg));
         } catch (IllegalArgumentException | NullPointerException e) {
             errors.add("v2 类型化契约违规: " + e.getMessage());
             return new Result(ValidationStatus.REJECTED_SCHEMA_MISMATCH, List.copyOf(errors), null, redact(body));
         }
 
-        // 通过：规范化 package（保留 typed 字段）+ 脱敏原文
-        ObjectNode normalized = mapper.createObjectNode();
+        // 通过：规范化 package（保留 typed 字段；canonical 字典序）+ 脱敏原文
+        Map<String, Object> normalized = new LinkedHashMap<>();
         normalized.put("schema_version", EvidencePackageV2.SCHEMA_VERSION);
-        normalized.put("summary", pkg.get("summary").asText());
-        normalized.set("root_cause", pkg.get("root_cause").deepCopy());
-        normalized.set("claims", ((ArrayNode) pkg.get("claims")).deepCopy());
-        normalized.set("evidence", ((ArrayNode) pkg.get("evidence")).deepCopy());
-        normalized.put("impact", pkg.get("impact").asText());
-        normalized.put("remediation", pkg.get("remediation").asText());
-        normalized.set("references", ((ArrayNode) pkg.get("references")).deepCopy());
+        normalized.put("summary", pkg.get("summary"));
+        normalized.put("root_cause", pkg.get("root_cause"));
+        normalized.put("claims", pkg.get("claims"));
+        normalized.put("evidence", pkg.get("evidence"));
+        normalized.put("impact", pkg.get("impact"));
+        normalized.put("remediation", pkg.get("remediation"));
+        normalized.put("references", pkg.get("references"));
         return new Result(ValidationStatus.STRUCTURE_VALIDATED, List.of(),
-                normalized.toString(), redact(body), EvidencePackageV2.SCHEMA_VERSION, typed);
+                EvidencePackageJsonCodec.writeCanonical(normalized), redact(body),
+                EvidencePackageV2.SCHEMA_VERSION, typed);
     }
 
     // ---------------------------------------------------------------- 共享政策（限长 + artifact_ref 白名单）
 
     /** 共享文本字段限长 + evidence 条目限制 + references 白名单；有违规写进 errors 返回 true */
-    private boolean textLimitViolations(JsonNode pkg, Set<String> textFields,
-                                        ArrayNode evidence, List<String> errors) {
+    private boolean textLimitViolations(Map<?, ?> pkg, Set<String> textFields,
+                                        Object evidenceObj, List<String> errors) {
+        List<?> evidence = (List<?>) evidenceObj;
         boolean violated = false;
         if (evidence.size() > maxEvidenceItems) {
             errors.add("evidence 条数 " + evidence.size() + " 超上限 " + maxEvidenceItems);
             violated = true;
         }
         for (String field : textFields) {
-            if (pkg.get(field).isTextual() && pkg.get(field).asText().length() > maxFieldChars) {
+            if (pkg.get(field) instanceof String text && text.length() > maxFieldChars) {
                 errors.add("字段 " + field + " 超长");
                 violated = true;
             }
         }
-        for (JsonNode ev : evidence) {
-            if (!ev.isTextual() || ev.asText().isBlank()) {
+        for (Object ev : evidence) {
+            if (!(ev instanceof String text) || text.isBlank()) {
                 errors.add("evidence 条目必须为非空字符串");
                 violated = true;
-            } else if (ev.asText().length() > maxFieldChars) {
+            } else if (text.length() > maxFieldChars) {
                 errors.add("evidence 条目超长");
                 violated = true;
             }
         }
-        for (JsonNode ref : pkg.get("references")) {
-            if (!ref.isObject() || !ref.has("artifact_ref") || !ref.get("artifact_ref").isTextual()) {
+        for (Object refObj : (List<?>) pkg.get("references")) {
+            if (!(refObj instanceof Map<?, ?> ref) || !(ref.get("artifact_ref") instanceof String refText)) {
                 errors.add("reference 条目必须含 artifact_ref 字符串");
                 violated = true;
-            } else if (!SAFE_REF.matcher(ref.get("artifact_ref").asText()).matches()) {
-                errors.add("artifact_ref 含不允许的外链/凭证: " + truncate(ref.get("artifact_ref").asText()));
+            } else if (!SAFE_REF.matcher(refText).matches()) {
+                errors.add("artifact_ref 含不允许的外链/凭证: " + truncate(refText));
                 violated = true;
             }
         }
         return violated;
     }
 
-    private JsonNode parse(String text) throws Malformed {
+    /** JSON 文本 → 中立树；解析失败转 Malformed，消息与旧链一致（"JSON 解析失败: …"） */
+    private Object parseTree(String text) throws Malformed {
         try {
-            return mapper.readTree(text);
-        } catch (Exception e) {
-            throw new Malformed("JSON 解析失败: " + e.getMessage());
+            return EvidencePackageJsonCodec.readTree(text);
+        } catch (IllegalArgumentException e) {
+            throw new Malformed(e.getMessage());
         }
     }
 
@@ -281,17 +279,17 @@ public final class EvidencePackageValidator {
      * 提取后仍走完整 schema 验证链，任何不合规照样 REJECTED_*——提取只是恢复被包裹的合法包，
      * 不是放宽标准。无候选或候选仍非 JSON → REJECTED_MALFORMED（与旧行为一致）。
      */
-    private JsonNode parseAnalysis(String analysis) throws Malformed {
+    private Object parseAnalysis(String analysis) throws Malformed {
         try {
-            return mapper.readTree(analysis);
-        } catch (Exception original) {
+            return parseTree(analysis);
+        } catch (Malformed original) {
             String candidate = extractJsonCandidate(analysis);
             if (candidate == null) {
-                throw new Malformed("JSON 解析失败: " + original.getMessage());
+                throw original;
             }
             try {
-                return mapper.readTree(candidate);
-            } catch (Exception e) {
+                return parseTree(candidate);
+            } catch (Malformed e) {
                 throw new Malformed("JSON 解析失败(包裹提取后): " + e.getMessage());
             }
         }
@@ -320,6 +318,12 @@ public final class EvidencePackageValidator {
         for (Pattern p : REDACTIONS) {
             out = p.matcher(out).replaceAll("****");
         }
+        return out;
+    }
+
+    private static Map<String, Object> castObjectMap(Map<?, ?> map) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        map.forEach((k, v) -> out.put(String.valueOf(k), v));
         return out;
     }
 

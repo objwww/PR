@@ -308,7 +308,7 @@ public class EngineComparisonRecorder {
     private static void putPackageConclusion(Map<String, Object> outcome, JsonNode analysis) {
         EvidencePackageV2 pkg;
         try {
-            pkg = EvidencePackageV2.fromJson(analysis);
+            pkg = EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(analysis));
         } catch (IllegalArgumentException e) {
             outcome.put("parse_error", e.getMessage());
             return;

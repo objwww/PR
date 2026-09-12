@@ -132,7 +132,7 @@ public class SingleCaseScorer {
     private EvidencePackageV2 parse(String packageJson) {
         try {
             JsonNode node = JSON.readTree(packageJson);
-            return EvidencePackageV2.fromJson(node);
+            return EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(node));
         } catch (Exception e) {
             return null;
         }

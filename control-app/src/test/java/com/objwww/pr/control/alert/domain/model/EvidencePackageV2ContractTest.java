@@ -53,7 +53,7 @@ class EvidencePackageV2ContractTest {
 
     private EvidencePackageV2 parse(ObjectNode pkg) {
         JsonNode node = pkg;
-        return EvidencePackageV2.fromJson(node);
+        return EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(node));
     }
 
     // ---------------------------------------------------------------- 正样本
@@ -141,7 +141,7 @@ class EvidencePackageV2ContractTest {
 
         // 整个包不是对象
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> EvidencePackageV2.fromJson(mapper.getNodeFactory().textNode("x")));
+                .isThrownBy(() -> EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(mapper.getNodeFactory().textNode("x"))));
     }
 
     // ---------------------------------------------------------------- 反样本（长度/构造器校验）

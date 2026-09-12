@@ -219,7 +219,7 @@ class HolmesShadowWorkerTest {
     private static EvidencePackageV2 parse(String json) {
         try {
             JsonNode node = MAPPER.readTree(json);
-            return EvidencePackageV2.fromJson(node);
+            return EvidencePackageV2.fromMap(com.objwww.pr.control.alert.application.EvidencePackageJsonCodec.toMap(node));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
