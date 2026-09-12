@@ -1,0 +1,60 @@
+r7fix10-全仓verify-20260912 — 证据清单（独立复核缺口闭账窗）
+================================================================
+缘起：第二轮独立复核三项硬缺口的当场闭账——①PostgresEvalReviewIT（EV-08 评审链）
+从未执行；②合并（fdc57ea）后无全量验证，「当前工作树全量绿」无证据；③历史全量跑
+（1596/1866）无原始日志。执行面全部在 195（146.56.195.225）真 PG。
+
+§1 PostgresEvalReviewIT 首跑（EV-08 评审链真值）
+- 195 真 PG 首跑 5/5 绿（Testcontainers + Flyway V1~V93 全量迁移；
+  evalreview-it-ev08-green.log，13:18:34 完成）。类内实为 5 例（领取提交 CAS/
+  insert-only/授权矩阵列级 update/HOLDOUT 针孔 RLS 等），非复核口径的 4 例。
+- EV-08 后端状态：编码完成+单测绿+真值 NOT_RUN → **195 真值绿**。
+- 同目录：docs/测试证据/R7/runs/r7fix9-195真值-20260912/evalreview-it-ev08-green.log
+
+§2 全仓 mvn verify 三轮收官（195 真 PG，Testcontainers 全量，零跳过）
+- round1（full-verify-round1-partition-stale-red.log）：control-app UT 1596 例
+  1 红——PostgresDatasetPartitionAccessTest.controlAppIdentityHasZeroAccessToCaseVersion。
+  定责=存量测试前提陈旧：断言钉 V20 时代「control_app 对 case_version 零 grant，
+  查询必 42501」，V45（UI-5 评测只读投影）已翻面（SELECT grant + RLS 策略
+  pol_case_version_control_app_select，可视面=评分身份同构非 HOLDOUT）。该测试
+  docker 门内从未真跑（本地 25 skip 之一），首次真值执行暴露。V90~V95 零涉
+  （全迁移 grep 无 case_version 授权变更）。
+  修复=按真契约重钉 controlAppIdentitySeesNonHoldoutRowsOnly（非 HOLDOUT 可见=1/
+  HOLDOUT 恒 0/admin 全貌=2，INV-AM5-1 封存语义验证力不变）→ 单类 5/5 绿
+  （partition-fix-green.log，md5 b278b64f 双侧对拍）。
+- round2（full-verify-round2-two-stale-red.log）：UT 1596 全绿；failsafe IT 265 例
+  2 红——
+  ①AlertV10EvalRunIT.grantsFollowLeastPrivilegeOnRealRoles（同族：V10 封闭矩阵
+  「control_app 对 eval_run 查询必 permission denied」vs V45 翻面）→ 重钉=
+  control_app 零写开口（DELETE 拒）+只读面在场+notify/publisher 全零（M3-15 写
+  隔离性质不变）；
+  ②En10VersionCenterIT.bundleListingMarksCurrentPointer——共享库污染：config 两表
+  按设计不在基座 TRUNCATE 清单（V24 种子行自管，BA-43），该类未自清，前序类残留
+  rev1/2 行被 listRecent 全量捞出（actual [2,2,1,1]=自种 [2,1]+残留 [2,1]；
+  §17 单类跑无残留故绿）→ 与 PostgresConfigBundleRepositoryTest 同构自清
+  （@BeforeEach 清两表+重种 pointer id=1）。
+  修复后单批 8/8 绿（en10-v10-fix-green.log，md5 5b5d469a/edbaf03f 双侧对拍）。
+- round3（full-verify-round3-final-green.log）：**BUILD SUCCESS 六模块——
+  shared-kernel 15 / control-app 1596(UT)+265(IT) / order-arena 30+58 /
+  arena-chaos-admin 14+8 / notify-app 26+14 / duty-adapter 18，
+  合计 2044 例 0 失败 0 错误 0 跳过**，2026-09-12T13:36:18+08:00 完成（Total 2:16 min）。
+  「合并+全部未提交改动」的当前工作树自此有了全仓真 PG 原始日志证据。
+
+§3 教训面（三红同族）
+- 「本地 25 skip」的 docker 门内 *Test 类在全量上下文=首次真跑面——单类真值绿
+  不能外推全量绿（三轮红全是这一族）；「单类跑过」也不等于「全量跑得过」（共享库
+  污染族）。
+- 授权矩阵类断言钉机制（42501 拒绝）不钉性质（封存数据不可见）——设计翻面（V45）
+  时必碎；重钉必须钉性质+机制两层各自成立。
+- config 两表「自管清场」惯例对新增消费者类是隐性义务（BA-43 的反面：不在公共清单
+  =每个消费者都要自己抄作业）。
+
+§4 关联
+- 台账：R7 执行日志 §20.6；PROGRESS 2026-09-12 行。
+- 修复文件（未提交，分支 fix/ba-114-drill-claim-precheck）：
+  control-app/src/test/java/com/objwww/pr/control/it/PostgresDatasetPartitionAccessTest.java
+  control-app/src/test/java/com/objwww/pr/control/it/AlertV10EvalRunIT.java
+  control-app/src/test/java/com/objwww/pr/control/it/En10VersionCenterIT.java
+- 独立复核确认成立的其余缺口（非本窗处置面）：MC21~24（MA-05 消息身份语义空档，
+  需立项裁定）；未提交工作树+195 已应用 V90~V93 的仓库漂移（需提交+合 main 裁定）；
+  R5 deepseek 真机复核 BLOCKED（无钥匙）；16 条 RG 路线逐例执行记录（待编制）。

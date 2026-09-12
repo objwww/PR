@@ -1,0 +1,207 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/build/pr/shared-kernel/src/main/resources
+[INFO] skip non existing resourceDirectory /opt/build/pr/shared-kernel/src/main/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory /opt/build/pr/shared-kernel/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 68 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+10:43:23.965 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+10:43:24.123 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+10:43:24.455 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+10:43:24.458 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+10:43:24.472 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+10:43:24.482 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+10:43:24.484 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+10:43:24.548 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+10:43:24.552 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+10:43:24.796 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: 0cb30eb545c77222093e68004a73de913d01e5b92375388a96d8fc4dedb00081
+10:43:25.084 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.536479329S
+10:43:25.098 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+10:43:25.099 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+10:43:25.099 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresReleaseActivationIT
+10:43:25.128 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+10:43:25.204 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: 17301725d0159ff317cb990764db8c0cc03582fe415109aa9911970eb89dbc79
+10:43:26.379 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.251129468S
+10:43:26.380 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://localhost:33616/test?loggerLevel=OFF)
+10:43:26.388 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+10:43:26.633 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@7ce9e05a
+10:43:26.635 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+10:43:27.016 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://localhost:33616/test?loggerLevel=OFF (PostgreSQL 16.15)
+10:43:27.149 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+10:43:27.155 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 66 migrations (execution time 00:00.092s)
+10:43:27.172 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+10:43:27.238 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+10:43:27.289 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+10:43:27.434 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+10:43:27.473 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+10:43:27.519 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+10:43:27.587 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+10:43:27.641 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+10:43:27.715 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+10:43:27.796 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+10:43:27.827 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+10:43:27.910 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+10:43:27.941 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+10:43:27.954 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "12 - am4 state expansion"
+10:43:27.978 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "13 - am4 budget ledger"
+10:43:28.013 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "14 - am4 rca event"
+10:43:28.045 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "15 - am4 tool invocation ledger"
+10:43:28.062 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "16 - am4 evidence snapshot"
+10:43:28.085 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "17 - am4 claim"
+10:43:28.154 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "18 - am4 task edge run scope"
+10:43:28.177 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "19 - am4 tool replay"
+10:43:28.223 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "20 - am5 dataset version"
+10:43:28.254 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "21 - am5 dataset partition"
+10:43:28.292 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "22 - am5 golden candidate"
+10:43:28.351 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "23 - am5 sampling fingerprint"
+10:43:28.386 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "24 - am5 config bundle"
+10:43:28.418 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "25 - am5 canary route"
+10:43:28.453 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "26 - am5 operator case"
+10:43:28.473 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "27 - am5 operator command"
+10:43:28.496 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "28 - am5 monthly partition"
+10:43:28.540 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "29 - am5 retention archive"
+10:43:28.569 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "30 - am6 canary window verdict"
+10:43:28.593 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "31 - ba52 canary decision fk deferred"
+10:43:28.607 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "32 - am6 engine comparison"
+10:43:28.622 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "33 - am6 run fallback"
+10:43:28.725 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "34 - am6 engine shadow work"
+10:43:28.746 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "35 - m607 holmes wish decision run id nullable"
+10:43:28.766 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "36 - exa0 investigation identity"
+10:43:28.775 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "37 - exa4a claim kind"
+10:43:28.782 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "38 - exa3 tool invocation result ref"
+10:43:28.791 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "39 - b21 operator command state widen"
+10:43:28.798 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "40 - exb1 change event"
+10:43:28.809 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "41 - exa4b incident waiting reason"
+10:43:28.815 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "42 - exc3a auth event"
+10:43:28.827 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "43 - am7 duty"
+10:43:28.901 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "44 - auth1 platform user"
+10:43:28.912 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "45 - ui5 eval readonly grants"
+10:43:28.918 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "46 - r7x1 task execution binding"
+10:43:28.933 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "47 - r7x4 primary state"
+10:43:28.964 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "48 - r7a1 rca model call"
+10:43:28.991 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "60 - en01 release asset"
+10:43:29.003 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "61 - en02 release qualification"
+10:43:29.016 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "62 - en09 eval grader version"
+10:43:29.022 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "63 - en04 run config epoch"
+10:43:29.039 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "64 - en06 mcp server registry"
+10:43:29.051 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "80 - ev03 eval projection contract"
+10:43:29.070 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "81 - ev04 eval lifecycle"
+10:43:29.085 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "82 - ux01 incident classification"
+10:43:29.104 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "83 - ux02 duty bot"
+10:43:29.118 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "85 - ev07 eval comparison"
+10:43:29.137 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "86 - dr02 drill job"
+10:43:29.162 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "87 - ev08 eval review"
+10:43:29.185 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "88 - r7 checkpoint last error"
+10:43:29.192 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "89 - en07 release asset kinds"
+10:43:29.199 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "90 - r2 input capture"
+10:43:29.211 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "91 - r10 working memory"
+10:43:29.222 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "92 - r11 context summary"
+10:43:29.237 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "93 - r6 eval app model call grant"
+10:43:29.248 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 66 migrations to schema "public", now at version v93 (execution time 00:01.262s)
+10:43:29.253 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+10:43:29.283 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@433c6abb
+10:43:29.284 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+10:43:29.284 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+10:43:29.309 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@1bb740f2
+10:43:29.310 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+10:43:29.310 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+10:43:29.373 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@630b6190
+10:43:29.373 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+10:43:29.374 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+10:43:29.390 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@6d0b0da6
+10:43:29.390 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+10:43:29.672 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=it-op policy=policy-2026-09
+10:43:29.689 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c verdict=FAIL usage=MATCHED by=it-grader
+10:43:29.906 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=it-op policy=policy-2026-09
+10:43:29.907 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=it-op policy=policy-2026-09
+10:43:29.909 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c verdict=PASS usage=MATCHED by=it-grader
+10:43:29.910 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 verdict=PASS usage=MATCHED by=it-grader
+10:43:29.912 [main] WARN com.objwww.pr.control.release.application.ConfigBundleService -- 资格撤销: id=4adc40d6-b5c3-4483-9fc7-7683f4a02481 by=safety-officer reason=基线漂移
+10:43:30.044 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=it-op policy=policy-2026-09
+10:43:30.047 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c verdict=PASS usage=UNKNOWN by=it-grader
+10:43:30.477 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=it-op policy=policy-2026-09
+10:43:30.482 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c verdict=PASS usage=UNKNOWN by=it-grader
+10:43:30.601 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: 30ad808ed98886e339611e59f7bac711638e216776d0231c3aad2a5fe468382c revision=1 by=it-op policy=policy-2026-09
+10:43:30.613 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- bundle 发布: be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 revision=2 by=it-op policy=policy-2026-09
+10:43:30.614 [main] INFO com.objwww.pr.control.release.application.ConfigBundleService -- 资格授予: candidate=be840a4ff5d98fc58380e1ed2d6501f2a7edb25711430dc0e9023b687140db80 verdict=PASS usage=UNKNOWN by=it-grader
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.520 s -- in com.objwww.pr.control.it.PostgresReleaseActivationIT
+[INFO] Running com.objwww.pr.control.it.PostgresWorkingMemoryIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.683 s -- in com.objwww.pr.control.it.PostgresWorkingMemoryIT
+[INFO] Running com.objwww.pr.control.it.PostgresRcaModelInputIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.513 s -- in com.objwww.pr.control.it.PostgresRcaModelInputIT
+[INFO] Running com.objwww.pr.control.it.PostgresContextSummaryIT
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.504 s -- in com.objwww.pr.control.it.PostgresContextSummaryIT
+[INFO] Running com.objwww.pr.control.it.PostgresRcaModelCallUsageReaderIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.409 s -- in com.objwww.pr.control.it.PostgresRcaModelCallUsageReaderIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 21, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.056 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.602 s]
+[INFO] control-app ........................................ SUCCESS [ 10.479 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  11.592 s
+[INFO] Finished at: 2026-09-12T10:43:32+08:00
+[INFO] ------------------------------------------------------------------------

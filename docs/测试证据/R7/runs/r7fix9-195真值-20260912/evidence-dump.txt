@@ -1,0 +1,73 @@
+r7fix9-195真值-20260912 — 证据清单（执行窗回拉）
+================================================================
+缘起：用户裁定 §19.6 遗留不留窗——「新增的 jsonb 回归 IT…所有的都需要在真机195跑」；
+评测中心范围在 127 机不属本批。本窗在 195（146.56.195.225）完成四件事：
+IT 真值批（再获两真雷当场修复）、R4 价目注入实测、R12 前端部署+真数据走查、
+R5 无钥匙 BLOCKED 登记。另补跑 PostgresDrillIT 销 BA-114 新契约 §17.5 警示。
+
+§1 IT 真值批（195 真 PG：Testcontainers postgres:16-alpine + Flyway V1~V93 全量）
+- 调用口径（同 IT-EN真值 SUMMARY）：export JAVA_HOME=/opt/jdk-21.0.12.1+1；
+  mvn -pl control-app test -Dtest=<classes> -Dsurefire.failIfNoSpecifiedTests=false
+- 批 A（六类 30 例全绿，本窗终态）：
+  · PostgresRcaModelInputReplayIT(4)+PostgresRcaWorkingMemoryIT(5)+PostgresRcaContextSummaryIT(4)
+   +PostgresReleaseActivationIT(5)+PostgresRcaModelCallUsageReaderIT(3) = 21 例
+    - 首轮 21 run/1 fail：qualificationLockSerializesActivation 确定性红 → BA-124（it-21batch-first-red1.log）
+    - 修复后 21/21 终绿（it-21batch-final-green.log）
+    - 含 §19.4 雷回归钉 settledUsageExportRoundTripsFromJsonbUsage 绿
+  · PostgresEvalQueryReaderIT = 7 例（evalquery-jsonb-fix-green.log）：
+    usageProjectionReadsRcaChainOnlyAndIgnoresPrLedger 加固 jsonb 往返断言
+    （SUCCESS priced 100/20/120 token+cost 1500+pv/CNY；unpriced 30/5 cost NULL；
+    FAILED promptTokens NULL cost NULL usageMissing false）→ BA-125 红绿
+    （evalquery-fixture-red.log=夹具修正前；修正面=ScoringVerdict TIMEOUT_OR_ABSENT 合
+     EvalCaseResult:61 域约束，非产品面）
+  · PostgresDrillIT = 9 例（drill-it-ba114-green.log）：BA-114 新契约「领取即迁移
+    PRECHECK」195 真 PG 首真值；§17.5「claimSkipLocked 契约钉需随新契约调形」警示销账
+
+§2 本窗两真雷（均当场修复+红绿实证+进 jar）
+- BA-124 EN-02 P07：4 参 activateQualified 激活事务缺资格行 FOR UPDATE 锁——接口契约
+  （ConfigBundleRepository.java:44-59）要求锁先于 CAS，此前只有 5 参事实路径带锁。
+  红=relact-p07-repro-red.log；修复=PostgresConfigBundleRepository 同事务先行
+  LOCK_QUALIFICATION_SQL；绿=relact-p07-fix-green.log 5/5。
+- BA-125 R6 jsonb 家族第二处：PostgresEvalQueryReader listUsageCalls/listUsageCallsForRuns
+  裸列 m.prompt_tokens（V48 rca_model_call.usage 是 jsonb 无物理列）→ 真 PG
+  BadSqlGrammar；真机面具=/api/eval/runs 500 经 Spring /error 分派撞
+  anyRequest().denyAll() → 认证用户见 403「没有查看该内容的权限」。
+  修复=两查询改 (m.usage->>'prompt_tokens')::int 等抽取形；全仓扫尾：rca_model_call
+  join 点仅此两处（PostgresRcaModelInputReplay 只取 digest/roleId 列），家族雷扫尽。
+  修复后真机 /api/eval/runs 200。
+
+§3 R4 价目注入实测（SUITE PASS，run=9649ba40-da99-4a4e-954d-e1297dca30f9）
+- 脚本：docs/测试证据/R7/e2e-脚本/e2e-r4-pricing-inject.sh（195 md5 e8164a56…）
+- 注入（SPRING_APPLICATION_JSON，compose 透传+.env 行）：
+  app.model.price.qwen3-max-preview = {pricing-version: op-inject-20260912,
+  currency: CNY, input-micros-per-1k: 2000, output-micros-per-1k: 8000}
+- 断言面（r4-pricing-inject-20260912/r4p-20260912T025309Z/phase4-pricing-rows.txt）：
+  5 账行全 priced，算术逐行精确吻合（cost=(in×2+out×8) micros，1009+70→2578、
+  1090+51→2588、1108+70→2776、1138+41→2604、1165+111→3218），零 NULL/零假零。
+  反向面（unpriced→cost NULL 如实）§19.3 已证。
+- 姿态回收：SPRING_APPLICATION_JSON 注入拔除，备份
+  .env.bak-r4pricing-20260912 / docker-compose.yml.bak-r4pricing-20260912（195 侧）。
+
+§4 R12 前端部署 195 + 差值面真数据走查
+- alert-web 镜像本窗自本树重建部署（sha 57463411…）。
+- /eval/compare 真数据走查（截图 r12-compare-delta-live.png）：基线 214812df…4608 vs
+  候选 860161cb…30cf（dataset am3-e2e04-0905）可比性检查通过、gate=INCONCLUSIVE
+  （独立簇不足）；逐例 2 行全持平（分数差 0）、成本=双侧费用未知 BOTH_COST_UNKNOWN
+  如实未知（R4 同律不猜 0）、时延未统计；每行「发起评审」按钮在位（接 EV-08）。
+- 对照面：错配对（数据集/规则不同源）gate=NOT_EVALUABLE+差异清单如实。
+- 前置：/api/eval/runs 曾 403 即 BA-125 面具，修复后列表真数据。
+
+§5 R5 deepseek staging = BLOCKED（如实登记）
+- 195 deploy/.env 全量扫描（掩码查看）无 deepseek 钥匙；验证规程（推理烧穿→
+  OutputBudgetExhausted 熔断）留 staging 窗，需运维发钥匙或用户裁定。
+
+§6 部署指纹
+- control-app jar repair6 md5 93285148c56e（BA-124 锁+BA-125 jsonb 读面+§19.4 Ledger
+  jsonb 修复），部署后 health 200、/api/eval/runs 200。
+- alert-web 镜像 sha 57463411…；AGENT_MODEL=qwen3-max-preview @ master key 无
+  fallback（常备姿态不变）。
+- 本目录日志：it-21batch-first-red1.log / it-21batch-final-green.log /
+  relact-p07-repro-red.log / relact-p07-fix-green.log / evalquery-fixture-red.log /
+  evalquery-jsonb-fix-green.log / drill-it-ba114-green.log / r12-compare-delta-live.png
+- 关联：R4 脚本与工件在 ../r4-pricing-inject-20260912/；台账=BUGLOG BA-124/125+
+  BA-114/115/117/118/119/120 状态翻面；执行日志 §20。
