@@ -1,9 +1,7 @@
 package com.objwww.pr.control.ops.application;
 
-import com.objwww.pr.control.alert.domain.claim.ClaimIdentity;
 import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
 import com.objwww.pr.control.alert.domain.claim.ClaimStore;
-import com.objwww.pr.control.alert.domain.claim.ClaimVerdict;
 import com.objwww.pr.control.alert.domain.claim.EvidenceBasis;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
@@ -45,48 +43,6 @@ public class OperatorQueryService {
         this.evidenceRepository = Objects.requireNonNull(evidenceRepository, "evidenceRepository");
         this.claimStore = Objects.requireNonNull(claimStore, "claimStore");
     }
-
-    /**
-     * 过渡兼容构造（A1 §六收口前 PersistenceConfig 旧 2 参装配用；收口切 4 参后删除本构造
-     * 与 UNWIRED_* 两个空读 shim）。空读 = 接通前行为（evidence/claims 恒空列表），不编造数据。
-     */
-    public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock) {
-        this(repository, clock, UNWIRED_EVIDENCE, UNWIRED_CLAIMS);
-    }
-
-    private static final EvidenceRepository UNWIRED_EVIDENCE = new EvidenceRepository() {
-        @Override
-        public void insert(EvidenceEnvelope envelope) {
-            throw new UnsupportedOperationException("unwired read-face shim");
-        }
-
-        @Override
-        public Optional<EvidenceEnvelope> findById(UUID evidenceId) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<EvidenceEnvelope> findByRunId(UUID runId) {
-            return List.of();
-        }
-    };
-
-    private static final ClaimStore UNWIRED_CLAIMS = new ClaimStore() {
-        @Override
-        public ClaimAppendResult append(UUID runId, ClaimVerdict verdict) {
-            throw new UnsupportedOperationException("unwired read-face shim");
-        }
-
-        @Override
-        public long markUnresolved(UUID runId, ClaimIdentity identity, String policyVersion) {
-            throw new UnsupportedOperationException("unwired read-face shim");
-        }
-
-        @Override
-        public List<ClaimRow> findByRunId(UUID runId) {
-            return List.of();
-        }
-    };
 
     /** tab 计数（view 语义：mine/all/unassigned/overdue 均排除 RESOLVED；notifyUnread 待 AM7） */
     public Map<String, Object> summary(String actor) {

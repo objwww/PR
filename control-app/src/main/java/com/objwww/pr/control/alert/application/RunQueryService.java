@@ -76,37 +76,6 @@ public class RunQueryService {
         this.now = Objects.requireNonNull(now, "now");
     }
 
-    /**
-     * 过渡兼容构造（A4 §六收口前 PersistenceConfig 旧 6 参装配用；收口切 7 参后删除
-     * 本构造与 UNWIRED_CLAIMS 空读 shim，沿 A1 OperatorQueryService 同式）。空读 =
-     * 接通前行为（claims 恒空列表），不编造数据。
-     */
-    public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
-                           TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
-                           RcaModelCallUsageReader modelCalls, Supplier<Instant> now) {
-        this(runs, tasks, edges, bindings, modelCalls, UNWIRED_CLAIMS, now);
-    }
-
-    private static final ClaimStore UNWIRED_CLAIMS = new ClaimStore() {
-        @Override
-        public ClaimAppendResult append(UUID runId,
-                com.objwww.pr.control.alert.domain.claim.ClaimVerdict verdict) {
-            throw new UnsupportedOperationException("unwired read-face shim");
-        }
-
-        @Override
-        public long markUnresolved(UUID runId,
-                com.objwww.pr.control.alert.domain.claim.ClaimIdentity identity,
-                String policyVersion) {
-            throw new UnsupportedOperationException("unwired read-face shim");
-        }
-
-        @Override
-        public List<ClaimRow> findByRunId(UUID runId) {
-            return List.of();
-        }
-    };
-
     /** 队列页：summary 计数 + 全量 rows（O-5：游标分页未落，nextCursor 恒 null） */
     public Map<String, Object> list() {
         Instant at = now.get();

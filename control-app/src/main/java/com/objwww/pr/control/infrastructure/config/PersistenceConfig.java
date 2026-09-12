@@ -533,9 +533,11 @@ public class PersistenceConfig {
 
     @Bean
     public com.objwww.pr.control.ops.application.OperatorQueryService operatorQueryService(
-            com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository repository) {
+            com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository repository,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore) {
         return new com.objwww.pr.control.ops.application.OperatorQueryService(repository,
-                java.time.Instant::now);
+                java.time.Instant::now, evidenceRepository, claimStore);
     }
 
     // ---------------- AM5 观测域（M5-13 装配；HTTP 面 = alert/interfaces EventQueryController） ----------------
@@ -577,11 +579,12 @@ public class PersistenceConfig {
             com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository
                     taskExecutionBindingRepository,
             com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
-                    rcaModelCallUsageReader) {
+                    rcaModelCallUsageReader,
+            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore) {
         return new com.objwww.pr.control.alert.application.RunQueryService(
                 rcaRunRepository, rcaTaskRepository, taskEdgeRepository,
                 taskExecutionBindingRepository, rcaModelCallUsageReader,
-                java.time.Instant::now);
+                claimStore, java.time.Instant::now);
     }
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
