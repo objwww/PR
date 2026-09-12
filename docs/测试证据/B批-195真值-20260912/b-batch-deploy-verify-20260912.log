@@ -1,0 +1,14 @@
+[INFO] BUILD SUCCESS
+#9 DONE 0.1s
+ Container deploy-control-app-1  Started
+=== Hikari 双池启动面 ===
+2026-09-12T17:17:04.557Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-worker - Starting...
+2026-09-12T17:17:05.071Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-worker - Start completed.
+2026-09-12T17:17:07.869Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-ingress - Starting...
+2026-09-12T17:17:07.883Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-ingress - Start completed.
+=== 池配置生效（日志含 Start completed 前后关键行） ===
+1
+=== health ===
+200
+=== ERROR count ===
+0
