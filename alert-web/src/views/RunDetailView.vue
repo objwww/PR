@@ -250,7 +250,7 @@
         <template v-if="g.items.length">
           <div v-for="c in g.items" :key="c.id" class="box">
             <b>{{ c.text }}</b> <span class="mini">（{{ c.code }}）</span>
-            ｜ {{ c.verdict }} ｜ {{ c.agree }} ｜ {{ c.current ? '当前有效' : '已被取代' }}
+            ｜ {{ c.verdict }} ｜ {{ c.current ? '当前有效' : '已被取代' }}
             <el-button size="small" text type="primary" @click="toggleClaim(c.id)">
               证据 {{ c.evidences?.length ?? 0 }} 条 {{ openClaims.has(c.id) ? '▲' : '▼' }}
             </el-button>
@@ -817,14 +817,13 @@ function taskNameOf(ev) {
   return tasks.value.find(t => t.taskId === ev.taskId)?.id ?? null
 }
 
-// ===== Claim 三层分级：证据 / 假设 / 结论 =====
+// ===== Claim 三层分级：证据 / 假设 / 结论（A4：真值四枚举精确匹配，删 mock 时代中英混排正则）=====
 const claimGroups = computed(() => {
   const groups = { conclusion: [], hypothesis: [], evidence: [] }
   for (const c of claims.value) {
-    const kind = String(c.kind ?? '')
-    if (/evidence|证据/i.test(kind)) groups.evidence.push(c)
-    else if (/hypoth|假设/i.test(kind)) groups.hypothesis.push(c)
-    else groups.conclusion.push(c)
+    if (c.kind === 'SYMPTOM') groups.evidence.push(c)
+    else if (c.kind === 'HYPOTHESIS') groups.hypothesis.push(c)
+    else groups.conclusion.push(c) // ROOT_CAUSE / EXCLUSION / null / 未知 → 结论组（保旧兜底语义）
   }
   return [
     { key: 'conclusion', title: '结论', items: groups.conclusion, emptyText: '暂无结论——原因待确认' },
@@ -833,7 +832,7 @@ const claimGroups = computed(() => {
   ]
 })
 const currentConclusion = computed(() =>
-  claims.value.find(c => c.current && !/evidence|证据|hypoth|假设/i.test(String(c.kind ?? ''))) ?? null)
+  claims.value.find(c => c.kind === 'ROOT_CAUSE' && c.current) ?? null)
 const pendingHypotheses = computed(() =>
   claims.value.filter(c => /hypoth|假设/i.test(String(c.kind ?? '')) && !/validated|confirmed/i.test(String(c.verdict ?? ''))))
 

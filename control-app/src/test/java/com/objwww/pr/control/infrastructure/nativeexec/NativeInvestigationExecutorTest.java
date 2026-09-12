@@ -776,7 +776,7 @@ class NativeInvestigationExecutorTest {
                     v.fingerprint(), v.contentHash(), v.claimKey(), v.status(),
                     v.evidenceBasis(), ClaimLifecycle.ACTIVE, v.reason(), v.scope(),
                     v.timeRange(), v.observedGeneration(), v.sources(), v.evidenceRefs(),
-                    v.policyVersion(), v.snapshotDigest())).toList();
+                    v.policyVersion(), v.snapshotDigest(), v.kind())).toList();
         }
     }
 

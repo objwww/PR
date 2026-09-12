@@ -68,7 +68,7 @@ class EventQueryControllerTest {
         runs.put(run(runId, RcaRunState.RUNNING));
         EventQueryService events = new EventQueryService(eventRows, new EventPayloadSanitizer(200));
         RunQueryService runQuery = new RunQueryService(runs, new StubTasks(), new StubEdges(),
-                new StubBindings(), new StubUsage(), CLOCK);
+                new StubBindings(), new StubUsage(), new StubClaims(), CLOCK);
         SseStreamService sse = new SseStreamService(events, Duration.ofSeconds(30));
         mvc = MockMvcBuilders.standaloneSetup(
                         new EventQueryController(runQuery, events, sse, runs))
@@ -360,6 +360,29 @@ class EventQueryControllerTest {
         @Override
         public Optional<RunUsage> summarizeByRun(UUID runId) {
             return Optional.empty();
+        }
+    }
+
+    /** A4：无断言存根面——claims 键投影空列表 */
+    static final class StubClaims implements
+            com.objwww.pr.control.alert.domain.claim.ClaimStore {
+        @Override
+        public com.objwww.pr.control.alert.domain.claim.ClaimStore.ClaimAppendResult append(
+                UUID runId, com.objwww.pr.control.alert.domain.claim.ClaimVerdict verdict) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long markUnresolved(UUID runId,
+                com.objwww.pr.control.alert.domain.claim.ClaimIdentity identity,
+                String policyVersion) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<com.objwww.pr.control.alert.domain.claim.ClaimStore.ClaimRow> findByRunId(
+                UUID runId) {
+            return List.of();
         }
     }
 }

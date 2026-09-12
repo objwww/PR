@@ -1,5 +1,10 @@
 package com.objwww.pr.control.alert.application;
 
+import com.objwww.pr.control.alert.domain.claim.ClaimKind;
+import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
+import com.objwww.pr.control.alert.domain.claim.ClaimStatus;
+import com.objwww.pr.control.alert.domain.claim.ClaimStore;
+import com.objwww.pr.control.alert.domain.claim.EvidenceBasis;
 import com.objwww.pr.control.alert.domain.dag.DependencyType;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
@@ -44,8 +49,9 @@ class RunQueryServiceTest {
     private final FakeEdges edges = new FakeEdges();
     private final FakeBindings bindings = new FakeBindings();
     private final FakeUsage usage = new FakeUsage();
+    private final FakeClaims claims = new FakeClaims();
     private final RunQueryService service =
-            new RunQueryService(runs, tasks, edges, bindings, usage, CLOCK);
+            new RunQueryService(runs, tasks, edges, bindings, usage, claims, CLOCK);
 
     @Test
     void bucketsDeriveFromRunAndTaskStates() {
@@ -140,6 +146,67 @@ class RunQueryServiceTest {
     @Test
     void detailIsEmptyForUnknownRun() {
         assertThat(service.detail(UUID.randomUUID())).isEmpty();
+    }
+
+    // ------------------------------------------------ A4：claims 投影 + task name
+
+    @Test
+    void detailProjectsClaimsWithFixedKeyMapping() {
+        UUID runId = run(RcaRunState.RUNNING);
+        task(runId, "ROOT_CAUSE", RcaTaskState.RUNNING);
+        UUID activeId = UUID.randomUUID();
+        claims.byRun.put(runId, List.of(
+                // 乱序入桩：投影必须按 claimKey 字典序重排（与 A1 一致）
+                new ClaimStore.ClaimRow(UUID.randomUUID(), runId, "fp-b", "hash-b", "b-key",
+                        ClaimStatus.UNKNOWN, EvidenceBasis.SINGLE_SOURCE,
+                        ClaimLifecycle.SUPERSEDED, "旧假设", "scope", "10m", 2L,
+                        List.of("src"), List.of(), "pv", "dg", null),
+                new ClaimStore.ClaimRow(activeId, runId, "fp-a", "hash-a", "a-key",
+                        ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONFLICT,
+                        ClaimLifecycle.ACTIVE, "根因已定", "scope", "10m", 3L,
+                        List.of("src"), List.of("ev-1", "ev-2"), "pv", "dg",
+                        ClaimKind.ROOT_CAUSE)));
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> claimRows = (List<Map<String, Object>>) detail.get("claims");
+        assertThat(claimRows).hasSize(2);
+        Map<String, Object> first = claimRows.get(0);
+        // 五字段映射逐键断言（写死键名：id/kind/text/code/verdict/current/evidences）
+        assertThat(first.get("id")).isEqualTo(activeId.toString());
+        assertThat(first.get("kind")).isEqualTo("ROOT_CAUSE");
+        assertThat(first.get("text")).isEqualTo("根因已定");
+        assertThat(first.get("code")).isEqualTo("a-key");
+        assertThat(first.get("verdict")).isEqualTo("TRUE");
+        assertThat(first.get("current")).isEqualTo(true);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> evidences =
+                (List<Map<String, Object>>) first.get("evidences");
+        assertThat(evidences).as("evidences 首版只给 id（ref 原文）")
+                .containsExactly(Map.of("id", "ev-1"), Map.of("id", "ev-2"));
+        assertThat(first).as("agree 为 mock 遗留无源字段——不给键").doesNotContainKey("agree");
+
+        Map<String, Object> second = claimRows.get(1);
+        assertThat(second.get("kind")).as("旧行 kind 无值 → 如实 null").isNull();
+        assertThat(second.get("current")).as("current 由 lifecycle 推导（SUPERSEDED → false）")
+                .isEqualTo(false);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> taskRows = (List<Map<String, Object>>) detail.get("tasks");
+        assertThat(taskRows.get(0).get("name")).as("name = taskKey 显式给键消歧义")
+                .isEqualTo("ROOT_CAUSE");
+    }
+
+    @Test
+    void detailWithoutClaimsProjectsEmptyArrayNotNull() {
+        UUID runId = run(RcaRunState.SUCCEEDED);
+        task(runId, "METRICS", RcaTaskState.DONE);
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        assertThat(detail.get("claims")).as("无 claim run → 空数组非 null")
+                .isEqualTo(List.of());
     }
 
     // ------------------------------------------------ §三.5 多 Agent 透出（R7-X1/V46 + R7a-1/V48）
@@ -442,6 +509,29 @@ class RunQueryServiceTest {
         @Override
         public Optional<RunUsage> summarizeByRun(UUID runId) {
             return Optional.ofNullable(byRun.get(runId));
+        }
+    }
+
+    /** A4 内存 ClaimStore 桩（findByRunId 直返入桩行，排序归服务层验证） */
+    static final class FakeClaims implements ClaimStore {
+        final Map<UUID, List<ClaimRow>> byRun = new LinkedHashMap<>();
+
+        @Override
+        public ClaimAppendResult append(UUID runId,
+                com.objwww.pr.control.alert.domain.claim.ClaimVerdict verdict) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long markUnresolved(UUID runId,
+                com.objwww.pr.control.alert.domain.claim.ClaimIdentity identity,
+                String policyVersion) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<ClaimRow> findByRunId(UUID runId) {
+            return byRun.getOrDefault(runId, List.of());
         }
     }
 }

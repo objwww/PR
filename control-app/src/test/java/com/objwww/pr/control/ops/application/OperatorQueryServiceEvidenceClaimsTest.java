@@ -227,6 +227,6 @@ class OperatorQueryServiceEvidenceClaimsTest {
                                                 List<String> evidenceRefs) {
         return new ClaimStore.ClaimRow(id, runId, "fingerprint", "hash-" + claimKey, claimKey,
                 status, basis, lifecycle, reason, "scope", "range", 13,
-                List.of("source-1"), evidenceRefs, "policy-v1", "snapshot-digest");
+                List.of("source-1"), evidenceRefs, "policy-v1", "snapshot-digest", null);
     }
 }

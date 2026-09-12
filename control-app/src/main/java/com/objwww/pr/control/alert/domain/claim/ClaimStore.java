@@ -45,7 +45,8 @@ public interface ClaimStore {
         }
     }
 
-    /** rca_claim 行读面（内容字段只读；lifecycle 变化不伴随内容变化） */
+    /** rca_claim 行读面（内容字段只读；lifecycle 变化不伴随内容变化）。
+     *  kind（V37 列，A4 起投影）可空——旧行无类型如实 null，四值见 {@link ClaimKind} */
     record ClaimRow(
             UUID id,
             UUID runId,
@@ -62,7 +63,8 @@ public interface ClaimStore {
             List<String> sources,
             List<String> evidenceRefs,
             String policyVersion,
-            String snapshotDigest) {
+            String snapshotDigest,
+            ClaimKind kind) {
         public ClaimRow {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(runId, "runId");

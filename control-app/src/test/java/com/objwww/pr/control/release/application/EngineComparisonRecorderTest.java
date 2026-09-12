@@ -246,7 +246,8 @@ class EngineComparisonRecorderTest {
         return new ClaimStore.ClaimRow(UUID.randomUUID(), runId, "fp-" + key,
                 "hash-" + key, key, status, EvidenceBasis.SINGLE_SOURCE,
                 ClaimLifecycle.ACTIVE, reason, scope, "10m", 1L,
-                List.of("prometheus"), List.of("e1"), "ut-policy", Digest.sha256Of("s").hex());
+                List.of("prometheus"), List.of("e1"), "ut-policy", Digest.sha256Of("s").hex(),
+                null);
     }
 
     private static final class AlertInMemoryRuns implements RcaRunRepository {

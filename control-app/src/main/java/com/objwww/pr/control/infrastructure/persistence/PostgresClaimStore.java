@@ -3,6 +3,7 @@ package com.objwww.pr.control.infrastructure.persistence;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.domain.claim.ClaimIdentity;
+import com.objwww.pr.control.alert.domain.claim.ClaimKind;
 import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
 import com.objwww.pr.control.alert.domain.claim.ClaimProjection;
 import com.objwww.pr.control.alert.domain.claim.ClaimStatus;
@@ -57,7 +58,7 @@ public class PostgresClaimStore implements ClaimStore {
             select id, run_id, claim_fingerprint, claim_hash, claim_key, status,
                    evidence_basis, lifecycle, reason, scope, time_range,
                    observed_generation, sources, evidence_refs, policy_version,
-                   snapshot_digest
+                   snapshot_digest, kind
               from rca_claim
             """;
 
@@ -223,7 +224,8 @@ public class PostgresClaimStore implements ClaimStore {
                 listOf(rs.getString("sources")),
                 listOf(rs.getString("evidence_refs")),
                 rs.getString("policy_version"),
-                rs.getString("snapshot_digest"));
+                rs.getString("snapshot_digest"),
+                rs.getString("kind") == null ? null : ClaimKind.valueOf(rs.getString("kind")));
     }
 
     private void insertRow(UUID runId, ClaimVerdict verdict, String fingerprint, String claimHash) {

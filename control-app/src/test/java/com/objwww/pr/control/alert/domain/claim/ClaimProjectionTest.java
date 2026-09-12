@@ -96,6 +96,6 @@ class ClaimProjectionTest {
         return new ClaimStore.ClaimRow(UUID.randomUUID(), UUID.randomUUID(), FP, "hash-old",
                 key, ClaimStatus.TRUE, EvidenceBasis.SINGLE_SOURCE, ClaimLifecycle.ACTIVE,
                 "r-0", scope.strip(), timeRange, generation, List.of("src-old"),
-                List.of("ev-old"), "policy-v0", null);
+                List.of("ev-old"), "policy-v0", null, null);
     }
 }

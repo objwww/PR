@@ -1,5 +1,7 @@
 package com.objwww.pr.control.alert.application;
 
+import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
+import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
@@ -15,6 +17,7 @@ import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingReposit
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,10 @@ import java.util.function.Supplier;
  * （rca_task_execution_binding 冻结绑定，V46——旧 run 无绑定 → null 如实，前端降级为
  * "旧版单角色执行"）；响应加 run 级 usage 块（rca_model_call 聚合，V48，RV08 口径——
  * 无行 → null 显"无模型调用"，UNKNOWN/失败行计 callCount 且入 usageMissing，费用为下限）。
+ *
+ * <p>A4 读面补全：detail 加 claims 键（rca_claim 投影，字段映射写死见 claimRows；
+ * kind 读 V37 列、旧行 null 如实）+ task 行加 name=taskKey（rca_task 无 name 列，
+ * 显式给键消歧义，不加列）。
  */
 public class RunQueryService {
 
@@ -53,18 +60,52 @@ public class RunQueryService {
     private final TaskEdgeRepository edges;
     private final TaskExecutionBindingRepository bindings;
     private final RcaModelCallUsageReader modelCalls;
+    private final ClaimStore claims;
     private final Supplier<Instant> now;
 
     public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
                            TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
-                           RcaModelCallUsageReader modelCalls, Supplier<Instant> now) {
+                           RcaModelCallUsageReader modelCalls, ClaimStore claims,
+                           Supplier<Instant> now) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.edges = Objects.requireNonNull(edges, "edges");
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.modelCalls = Objects.requireNonNull(modelCalls, "modelCalls");
+        this.claims = Objects.requireNonNull(claims, "claims");
         this.now = Objects.requireNonNull(now, "now");
     }
+
+    /**
+     * 过渡兼容构造（A4 §六收口前 PersistenceConfig 旧 6 参装配用；收口切 7 参后删除
+     * 本构造与 UNWIRED_CLAIMS 空读 shim，沿 A1 OperatorQueryService 同式）。空读 =
+     * 接通前行为（claims 恒空列表），不编造数据。
+     */
+    public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
+                           TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+                           RcaModelCallUsageReader modelCalls, Supplier<Instant> now) {
+        this(runs, tasks, edges, bindings, modelCalls, UNWIRED_CLAIMS, now);
+    }
+
+    private static final ClaimStore UNWIRED_CLAIMS = new ClaimStore() {
+        @Override
+        public ClaimAppendResult append(UUID runId,
+                com.objwww.pr.control.alert.domain.claim.ClaimVerdict verdict) {
+            throw new UnsupportedOperationException("unwired read-face shim");
+        }
+
+        @Override
+        public long markUnresolved(UUID runId,
+                com.objwww.pr.control.alert.domain.claim.ClaimIdentity identity,
+                String policyVersion) {
+            throw new UnsupportedOperationException("unwired read-face shim");
+        }
+
+        @Override
+        public List<ClaimRow> findByRunId(UUID runId) {
+            return List.of();
+        }
+    };
 
     /** 队列页：summary 计数 + 全量 rows（O-5：游标分页未落，nextCursor 恒 null） */
     public Map<String, Object> list() {
@@ -144,6 +185,7 @@ public class RunQueryService {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", t.taskKey());
                 row.put("taskId", t.id().toString());
+                row.put("name", t.taskKey());
                 row.put("status", t.state().name());
                 row.put("priority", t.priority());
                 row.put("deadline", t.deadlineAt().equals(Instant.MAX) ? null : t.deadlineAt().toString());
@@ -169,9 +211,40 @@ public class RunQueryService {
             out.put("run", head);
             out.put("tasks", taskRows);
             out.put("edges", edgeRows);
+            out.put("claims", claimRows(runId));
             out.put("usage", usageBlock(runId));
             return out;
         });
+    }
+
+    /**
+     * A4：run 断言投影（前端 claims tab 三层分级消费）。字段映射写死（禁自创键名）：
+     * id=行 uuid、kind=V37 类型列（旧行 null 如实）、text=reason（人读判定理由）、
+     * code=claimKey（结构化键）、verdict=status 三态、current 由 lifecycle==ACTIVE
+     * 推导、evidences 首版只给 id（ref 原文；desc/digest/window 无源不给键）；
+     * agree 为 mock 遗留无源字段——不给键。排序 claimKey 字典序（与 A1 一致）。
+     */
+    private List<Map<String, Object>> claimRows(UUID runId) {
+        List<ClaimStore.ClaimRow> rows = new ArrayList<>(claims.findByRunId(runId));
+        rows.sort(Comparator.comparing(ClaimStore.ClaimRow::claimKey,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (ClaimStore.ClaimRow c : rows) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", c.id().toString());
+            row.put("kind", c.kind() == null ? null : c.kind().name());
+            row.put("text", c.reason());
+            row.put("code", c.claimKey());
+            row.put("verdict", c.status().name());
+            row.put("current", c.lifecycle() == ClaimLifecycle.ACTIVE);
+            List<Map<String, Object>> evidences = new ArrayList<>(c.evidenceRefs().size());
+            for (String ref : c.evidenceRefs()) {
+                evidences.add(Map.of("id", ref));
+            }
+            row.put("evidences", evidences);
+            out.add(row);
+        }
+        return out;
     }
 
     /** §三.5/RV08：run 级模型用量与费用（rca_model_call 聚合；无行 → null 显"无模型调用"） */
