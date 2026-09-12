@@ -32,15 +32,20 @@ public class PostgresOperatorCaseRepository implements OperatorCaseRepository {
     private static final TypeReference<List<Object>> LIST = new TypeReference<>() {
     };
 
+    /** UX-03（V94）：incident_id 创建时由 run_id 经 rca_run.incident_id 解析落列——
+     *  run_id 可空来源（预算/通知侧）或 run 不存在时如实 NULL；只对新单生效
+     *  （历史行不回填），UPDATE_SQL 来源列零开口不变（快照冻结同律） */
     private static final String INSERT_SQL = """
             INSERT INTO operator_case (
                 id, tenant, fingerprint, subject, priority, reason_code, status, owner,
-                run_id, task_id, incident_type, snapshot_digest, observed_generation,
+                run_id, task_id, incident_id, incident_type, snapshot_digest, observed_generation,
                 evidence_refs, activities, audits, resolution,
                 first_seen, ack_due, resolve_due, revision, created_at, updated_at
             ) VALUES (
                 :id, :tenant, :fingerprint, :subject, :priority, :reasonCode, :status, :owner,
-                :runId, :taskId, :incidentType, :snapshotDigest, :observedGeneration,
+                :runId, :taskId,
+                (SELECT r.incident_id FROM rca_run r WHERE r.id = :runId),
+                :incidentType, :snapshotDigest, :observedGeneration,
                 CAST(:evidenceRefs AS jsonb), CAST(:activities AS jsonb), CAST(:audits AS jsonb),
                 CAST(:resolution AS jsonb),
                 :firstSeen, :ackDue, :resolveDue, :revision, :createdAt, :updatedAt

@@ -1,6 +1,7 @@
 <template>
   <!-- incident 列表通用表格（UI-1：告警中心 / 历史档案同列口径）：
-       行首 4px severity 色条 + 严重度徽章、分类徽章（UX-01）、告警/服务、状态、持续时间、接收/事件、调查状态、操作槽 -->
+       行首 4px severity 色条 + 严重度徽章、分类徽章（UX-01）、告警/服务、状态、持续时间、
+       负责人（§三.2，UX-03）、接收/事件、调查状态、操作槽 -->
   <el-table
     :data="rows"
     v-loading="loading"
@@ -36,6 +37,13 @@
         <span :title="fmtTime(row.lastEventAt ?? row.episodeStartedAt)">
           {{ fmtAgo(row.lastEventAt ?? row.episodeStartedAt) }}
         </span>
+      </template>
+    </el-table-column>
+    <!-- §三.2 负责人列（UX-03）：owner = 最新 open 处置单负责人；空（无 case/未认领/旧契约后端缺席）→「未认领」灰显，不伪造 -->
+    <el-table-column label="负责人" width="110">
+      <template #default="{ row }">
+        <span v-if="row.owner">{{ row.owner }}</span>
+        <span v-else class="cell-sub">未认领</span>
       </template>
     </el-table-column>
     <el-table-column label="接收 / 事件" width="100" align="right">

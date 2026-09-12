@@ -65,12 +65,32 @@
         </span>
       </el-tooltip>
       <span v-if="!categorySupported" class="cat-note">分类过滤依赖后端 UX-01（未部署）</span>
-      <el-popover placement="bottom-start" trigger="click" width="260">
+      <!-- §三.2 高级筛选面板（UX-03，结构化条件替代 DSL，普通使用不要求输入表达式）：
+           时间窗（last_event_at 闭区间）+ 负责人（有/无=已认领/未认领）+ 严重度；全部进 URL query -->
+      <el-popover placement="bottom-start" trigger="click" width="340">
         <template #reference>
           <el-button>
             更多筛选<el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </el-button>
         </template>
+        <div class="more-filter">
+          <div class="mf-label">时间窗（最近事件）</div>
+          <el-date-picker
+            v-model="range" type="daterange" range-separator="至"
+            start-placeholder="开始日期" end-placeholder="结束日期" clearable
+            style="width: 100%" @change="onRangeChange"
+          />
+        </div>
+        <div class="more-filter">
+          <div class="mf-label">负责人</div>
+          <el-select
+            v-model="filters.hasOwner" placeholder="全部" clearable style="width: 100%"
+            @change="applyFilters"
+          >
+            <el-option value="true" label="已认领" />
+            <el-option value="false" label="未认领" />
+          </el-select>
+        </div>
         <div class="more-filter">
           <div class="mf-label">严重度</div>
           <el-select v-model="filters.severity" placeholder="全部严重度" clearable style="width: 100%" @change="applyFilters">
@@ -154,7 +174,13 @@ const filters = reactive({
   service: str(route.query.service),
   category: str(route.query.category),
   q: str(route.query.q),
+  // UX-03 §三.2 高级筛选：时间窗（ISO 瞬秒，后端 Instant.parse 只收 Z 形）+ 负责人有无
+  from: str(route.query.from),
+  to: str(route.query.to),
+  hasOwner: str(route.query.hasOwner),
 })
+// daterange 本地 Date 对（filters.from/to 是唯一真源；range 仅作选择器回显）
+const range = ref(filters.from && filters.to ? [new Date(filters.from), new Date(filters.to)] : null)
 
 const summary = ref(null)
 const facets = ref(null)
@@ -166,7 +192,8 @@ const loading = ref(false)
 const loadingMore = ref(false)
 const facetOpen = ref(true)
 
-const hasFilter = computed(() => !!(filters.status || filters.severity || filters.service || filters.category || filters.q))
+const hasFilter = computed(() => !!(filters.status || filters.severity || filters.service
+  || filters.category || filters.q || filters.from || filters.to || filters.hasOwner))
 
 // UX-01：facets 响应含 category 维分桶 = 后端 UX-01 已部署；缺席 = 旧契约，分类过滤禁用
 const categorySupported = computed(() => facets.value?.category != null && typeof facets.value.category === 'object')
@@ -216,8 +243,25 @@ function listParams(cursor) {
   if (filters.service) p.service = filters.service
   if (filters.category) p.category = filters.category
   if (filters.q) p.q = filters.q
+  if (filters.from) p.from = filters.from
+  if (filters.to) p.to = filters.to
+  if (filters.hasOwner) p.hasOwner = filters.hasOwner
   if (cursor) p.cursor = cursor
   return p
+}
+
+// UX-03 时间窗：daterange 给本地日界，转 ISO Z 瞬秒（闭区间——末日收进 23:59:59.999）
+function onRangeChange(v) {
+  if (Array.isArray(v) && v[0] && v[1]) {
+    const start = new Date(v[0]); start.setHours(0, 0, 0, 0)
+    const end = new Date(v[1]); end.setHours(23, 59, 59, 999)
+    filters.from = start.toISOString()
+    filters.to = end.toISOString()
+  } else {
+    filters.from = ''
+    filters.to = ''
+  }
+  applyFilters()
 }
 
 async function loadList() {
@@ -274,10 +318,12 @@ async function loadFacets() {
 
 function loadAll() { loadList(); loadSummary(); loadFacets() }
 
+const FILTER_KEYS = ['status', 'severity', 'service', 'category', 'q', 'from', 'to', 'hasOwner']
+
 function applyFilters() {
   filters.q = kw.value.trim()
   const query = {}
-  for (const k of ['status', 'severity', 'service', 'category', 'q']) if (filters[k]) query[k] = filters[k]
+  for (const k of FILTER_KEYS) if (filters[k]) query[k] = filters[k]
   router.replace({ query })
   loadAll()
 }
@@ -289,7 +335,8 @@ function toggleFilter(key, value) {
 
 function resetFilters() {
   kw.value = ''
-  Object.assign(filters, { status: '', severity: '', service: '', category: '', q: '' })
+  range.value = null
+  Object.assign(filters, { status: '', severity: '', service: '', category: '', q: '', from: '', to: '', hasOwner: '' })
   applyFilters()
 }
 
@@ -297,10 +344,12 @@ function openDetail(row) { router.push(`/alerts/${row.incidentId}`) }
 
 // 浏览器前进/后退：query 变化回灌过滤条件并重载
 watch(() => route.query, q => {
-  const next = { status: str(q.status), severity: str(q.severity), service: str(q.service), category: str(q.category), q: str(q.q) }
-  if (['status', 'severity', 'service', 'category', 'q'].every(k => next[k] === filters[k])) return
+  const next = {}
+  for (const k of FILTER_KEYS) next[k] = str(q[k])
+  if (FILTER_KEYS.every(k => next[k] === filters[k])) return
   Object.assign(filters, next)
   kw.value = next.q
+  range.value = next.from && next.to ? [new Date(next.from), new Date(next.to)] : null
   loadAll()
 })
 
@@ -337,6 +386,7 @@ onMounted(loadAll)
 .cat-note { font-size: var(--fs-aux); color: var(--ink-2); }
 .flex-spacer { flex: 1; }
 .more-filter .mf-label { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 6px; }
+.more-filter + .more-filter { margin-top: 12px; }
 
 /* 主区：左 facet（200px 默认展开）+ 右表格 */
 .main { display: flex; align-items: flex-start; gap: var(--section-gap); }
