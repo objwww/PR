@@ -289,6 +289,7 @@ public class AlertFlowConfig {
             ObjectProvider<com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner>
                     boundedLlmRunner,
             ObjectProvider<com.objwww.pr.control.alert.domain.agent.AgentProfile> primaryProfile,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
@@ -348,6 +349,7 @@ public class AlertFlowConfig {
                 bindingRepository, agentRegistry, runners,
                 java.util.Objects.requireNonNull(checkpoints.getIfAvailable(),
                         "主任务检查点仓储缺件（R7-X6 主模式 FINAL 投影面）"),
+                rcaModelCallLedger,
                 primaryProfile.getIfAvailable());
     }
 

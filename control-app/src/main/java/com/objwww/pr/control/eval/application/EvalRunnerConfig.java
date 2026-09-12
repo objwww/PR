@@ -54,6 +54,22 @@ public class EvalRunnerConfig {
         return JdbcClient.create(dataSource);
     }
 
+    /**
+     * R6 用量链读面（rca_model_call 逐调用行）：eval 批跑 profile 自持装配——
+     * docker profile 的 PersistenceConfig 不在本 profile 内，UsageLedgerService
+     * 的账本读口在此落地（eval_app 只读，SELECT 授权随 V93）；事务面走批跑数据源，
+     * 装配期不建连（与 evalJdbcClient 同律）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger(
+            JdbcClient jdbc, DataSource dataSource) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelCallLedger(
+                jdbc, new com.fasterxml.jackson.databind.ObjectMapper(),
+                new org.springframework.transaction.support.TransactionTemplate(
+                        new org.springframework.jdbc.datasource.DataSourceTransactionManager(
+                                dataSource)));
+    }
+
     // ---------------- 仓储（eval_app 身份；生产调查链路表 = V11 只读授权） ----------------
 
     @Bean
@@ -282,7 +298,7 @@ public class EvalRunnerConfig {
      */
     @Bean
     public UsageLedgerService usageLedgerService(EvalRunRepository evalRuns,
-                                                 InvestigationResultRepository investigations,
+                                                 com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
                                                  @Value("${app.alert.eval.litellm.base-url:}")
                                                  String litellmBaseUrl,
                                                  @Value("${app.alert.eval.litellm.master-key:}")
@@ -295,7 +311,7 @@ public class EvalRunnerConfig {
                 litellmBaseUrl.isBlank() ? null
                         : new com.objwww.pr.control.infrastructure.litellm.HttpLiteLlmAdminClient(
                                 litellmBaseUrl, litellmMasterKey);
-        return new UsageLedgerService(evalRuns, investigations, port,
+        return new UsageLedgerService(evalRuns, rcaModelCallLedger, port,
                 runKeyAlias, reconcileWaitSeconds * 1000);
     }
 

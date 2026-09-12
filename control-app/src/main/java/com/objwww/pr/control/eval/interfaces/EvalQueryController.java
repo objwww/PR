@@ -36,6 +36,9 @@ import java.util.UUID;
  *   <li>GET /api/eval/log-compare——EV-05 受限日志比较（baselineRunId/
  *       candidateRunId/scenarioId 三参数限定，冻结 logs.query 证据签名 diff）；
  *       参数非法 400，任一 run 未知 404。</li>
+ *   <li>GET /api/eval/runs/{runId}/usage——R6/EV-06 Run 用量投影（rca_run_id 身份链
+ *       直读 rca_model_call；按角色/状态/usageStatus 分组，priced|unpriced|
+ *       usage_missing 三态，多币种分组不相加——EU20）；未知 run → 404。</li>
  * </ul>
  * 六维分析/评分器/发布门无持久化数据，不开端点（前端空态明示）。
  */
@@ -154,6 +157,20 @@ public class EvalQueryController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /** R6/EV-06 Run 用量投影（按角色/状态/usageStatus 分组；多币种不跨组相加，
+     * unpriced/usage_missing 显式态不并入 0——R4 契约）；未知 run → 404。 */
+    @GetMapping("/runs/{runId}/usage")
+    public ResponseEntity<?> usage(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.usage(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
     }
 
     private static UUID parseId(String raw) {

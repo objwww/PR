@@ -161,6 +161,17 @@ class EvalCommandServiceTest {
         public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCalls(UUID evalRunId) {
+            return List.of();
+        }
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCallsForRuns(
+                Iterable<UUID> evalRunIds) {
+            return List.of();
+        }
     }
 
     private InMemoryCommands commands;

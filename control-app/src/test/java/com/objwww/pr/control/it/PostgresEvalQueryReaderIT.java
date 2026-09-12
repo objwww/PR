@@ -1,6 +1,16 @@
 package com.objwww.pr.control.it;
 
+import com.objwww.pr.control.alert.domain.identity.InvestigationInputs;
+import com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger;
+import com.objwww.pr.control.alert.domain.model.Incident;
+import com.objwww.pr.control.alert.domain.model.IncidentStatus;
+import com.objwww.pr.control.alert.domain.model.RcaEngine;
+import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
+import com.objwww.pr.control.alert.domain.model.RcaRunState;
+import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.model.TypedRootCause;
+import com.objwww.pr.control.domain.ai.ModelCallLedgerEntry;
 import com.objwww.pr.control.eval.domain.EvalCaseResult;
 import com.objwww.pr.control.eval.domain.EvalRun;
 import com.objwww.pr.control.eval.domain.EvalRunMetadata;
@@ -10,6 +20,9 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCasePage
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
 import com.objwww.pr.control.infrastructure.persistence.PostgresEvalQueryReader;
 import com.objwww.pr.control.infrastructure.persistence.PostgresEvalRunRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresIncidentRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunRepository;
+import com.objwww.pr.control.infrastructure.persistence.PostgresRunConfigEpochRepository;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,11 +52,16 @@ class PostgresEvalQueryReaderIT extends PostgresITBase {
 
     private PostgresEvalRunRepository evalRuns;
     private PostgresEvalQueryReader reader;
+    private PostgresIncidentRepository incidents;
+    private PostgresRcaRunRepository rcaRuns;
 
     @BeforeEach
     void setUpRepositories() {
         evalRuns = new PostgresEvalRunRepository(evalJdbc);
         reader = new PostgresEvalQueryReader(controlJdbc);
+        incidents = new PostgresIncidentRepository(controlJdbc);
+        rcaRuns = new PostgresRcaRunRepository(controlJdbc,
+                new PostgresRunConfigEpochRepository(controlJdbc));
     }
 
     private EvalRunMetadata metadata() {
@@ -126,8 +144,158 @@ class PostgresEvalQueryReaderIT extends PostgresITBase {
         assertThat(row.caseCount()).isEqualTo(1);
     }
 
-    // ------------------------------------------------------------------ EU16/EU22 读面：计数只来自 eval 域真实列
+    // ------------------------------------------------------------------ R6/EV-06 usage 投影
 
+    @Test
+    @DisplayName("R6/EU17：usage 投影只读 rca_run 身份链的已结算行；V5 域干扰行零污染")
+    void usageProjectionReadsRcaChainOnlyAndIgnoresPrLedger() {
+        // ① V5 域干扰行（PR review 链 + model_call_ledger）——同库同类调用，读面必须不见
+        com.objwww.pr.control.infrastructure.persistence.PostgresModelCallLedgerRepository
+                prLedger =
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresModelCallLedgerRepository(
+                        new org.springframework.jdbc.core.JdbcTemplate(controlDataSource()));
+        RepairSeed prSeed = seedRepairScope("usage-proj");
+        UUID prStepId = UUID.randomUUID();
+        UUID prWorkItemId = UUID.randomUUID();
+        UUID prAttemptId = UUID.randomUUID();
+        adminJdbc.sql("""
+                INSERT INTO run_step(id,review_run_id,step_key,operation_id,step_type,state,
+                    ordinal,timeout_seconds,created_at,updated_at)
+                VALUES (:id,:run,'step-usage-proj',:op,'REVIEW','READY',1,600,now(),now())
+                """).param("id", prStepId).param("run", prSeed.runId())
+                .param("op", UUID.randomUUID()).update();
+        adminJdbc.sql("""
+                INSERT INTO work_item(id,review_run_id,step_id,work_type,state,available_at,
+                    max_attempts,created_at,updated_at)
+                VALUES (:id,:run,:step,'REVIEW','READY',now(),3,now(),now())
+                """).param("id", prWorkItemId).param("run", prSeed.runId())
+                .param("step", prStepId).update();
+        adminJdbc.sql("""
+                INSERT INTO step_attempt(id,step_id,work_item_id,attempt_no,lease_epoch,
+                    worker_id,status,started_at)
+                VALUES (:id,:step,:wi,1,1,'it-worker','STARTED',now())
+                """).param("id", prAttemptId).param("step", prStepId)
+                .param("wi", prWorkItemId).update();
+        prLedger.insertStarted(ModelCallLedgerEntry.builder()
+                .id(UUID.randomUUID()).invocationId(UUID.randomUUID()).callSeq(1)
+                .reviewRunId(prSeed.runId()).runStepId(prStepId).attemptId(prAttemptId)
+                .leaseEpoch(1).routeId("pr-route").routeRole("PRIMARY")
+                .endpointScope("it-endpoint").quotaScope("it-quota")
+                .requestedModel("pr-model").build());
+
+        // ② eval run + 案例绑定 RCA run（身份链显式映射）
+        EvalRun evalRun = runningRun();
+        evalRuns.insertRunning(evalRun);
+
+        // ③ RCA 链：incident → routed run → task/attempt → 三笔结算调用
+        UUID rcaRunId = mintRcaRunWithCalls("usage-proj");
+
+        evalRuns.insertCaseResult(new EvalCaseResult(UUID.randomUUID(), evalRun.id(),
+                "S1", 1, "final-validated-report-v1", rcaRunId, null, null,
+                ScenarioMetrics.ScoringVerdict.TIMEOUT_OR_ABSENT, false,
+                new TypedRootCause("payment", "BUSINESS_ERROR_RATE", "PAYMENT_CHARGE_FAILURE"),
+                null,
+                List.of("checkout"), List.of("checkout"), 1, 1, 0, 5L, false, null));
+
+        // ④ 投影：只含 rca_model_call 三行；V5 行零出现
+        List<EvalQueryReader.UsageCallRow> rows = reader.listUsageCalls(evalRun.id());
+        assertThat(rows).hasSize(3);
+        assertThat(rows).allSatisfy(r -> assertThat(r.rcaRunId()).isEqualTo(rcaRunId));
+        assertThat(rows).allSatisfy(r -> assertThat(r.evalRunId()).isEqualTo(evalRun.id()));
+        assertThat(rows).extracting(EvalQueryReader.UsageCallRow::roleId)
+                .containsOnly("primary");
+
+        // jsonb 键面回归（R6 同族第二处，2026-09-12 195 首跑实证）：rca_model_call.usage
+        // 是 V48 jsonb 列——裸列名 prompt_tokens 真 PG 直接 BadSqlGrammar，且该异常经
+        // /error 错误派发被 anyRequest().denyAll() 翻成 403，把 500 真相埋进权限烟雾。
+        assertThat(rows).extracting(EvalQueryReader.UsageCallRow::state)
+                .containsExactly("SUCCESS", "SUCCESS", "FAILED");
+        var priced = rows.stream().filter(r -> r.costMicros() != null).findFirst().orElseThrow();
+        assertThat(priced.promptTokens()).isEqualTo(100);
+        assertThat(priced.completionTokens()).isEqualTo(20);
+        assertThat(priced.totalTokens()).isEqualTo(120);
+        assertThat(priced.costMicros()).isEqualTo(1500L);
+        assertThat(priced.pricingVersion()).isEqualTo("pv-it");
+        assertThat(priced.currency()).isEqualTo("CNY");
+        var unpriced = rows.stream().filter(r -> "unpriced".equals(r.pricingVersion()))
+                .findFirst().orElseThrow();
+        assertThat(unpriced.promptTokens()).isEqualTo(30);
+        assertThat(unpriced.completionTokens()).isEqualTo(5);
+        assertThat(unpriced.costMicros()).isNull();
+        assertThat(unpriced.currency()).isNull();
+        var failedRow = rows.stream().filter(r -> "FAILED".equals(r.state())).findFirst().orElseThrow();
+        assertThat(failedRow.promptTokens()).as("FAILED 行 usage 恒空").isNull();
+        assertThat(failedRow.costMicros()).isNull();
+        assertThat(failedRow.usageMissing()).isFalse();
+
+        // ⑤ 批量面同口径（列表接线走 IN 查询，禁 N+1）
+        List<EvalQueryReader.UsageCallRow> batched =
+                reader.listUsageCallsForRuns(List.of(evalRun.id(), UUID.randomUUID()));
+        assertThat(batched).hasSize(3);
+        assertThat(batched).allSatisfy(r -> assertThat(r.evalRunId()).isEqualTo(evalRun.id()));
+        // 空集直返（不拼 IN ()）
+        assertThat(reader.listUsageCallsForRuns(List.of())).isEmpty();
+    }
+
+    /** UsageReaderIT 同形：incident → routed run → task/attempt → 三笔结算调用
+     * （1 priced SUCCESS + 1 unpriced SUCCESS + 1 FAILED），返回 rca_run id。 */
+    private UUID mintRcaRunWithCalls(String tag) {
+        UUID incidentId = UUID.randomUUID();
+        incidents.insert(new Incident(incidentId,
+                "alertname=HighErrorRate|service=" + tag, IncidentStatus.FIRING, 0,
+                Instant.now(), Instant.now(), null, null, null, 0, 0, 0, null,
+                Instant.now(), Instant.now(), Instant.now(), Instant.now()));
+        UUID rcaRunId = UUID.randomUUID();
+        Instant now = Instant.now();
+        rcaRuns.insertRouted(new RcaRun(rcaRunId, incidentId, 0, RunTrigger.INITIAL,
+                        RcaRunState.QUEUED, Digest.sha256Of("run-" + tag),
+                        now.minusSeconds(240), now, null, null, null),
+                new RcaRunRouting(RcaEngine.NATIVE, Digest.sha256Of(tag + "-bundle"),
+                        "alertname=HighErrorRate|service=" + tag, 37, "IT_USAGE_PROJ"),
+                InvestigationInputs.freezeAt(incidents.findById(incidentId).orElseThrow(), now));
+        UUID taskId = UUID.randomUUID();
+        UUID attemptId = UUID.randomUUID();
+        controlJdbc.sql("""
+                INSERT INTO rca_task (id, run_id, task_key, state,
+                    available_at, ready_since, deadline_at, created_at, updated_at)
+                VALUES (:id, :run, :key, 'DONE', now(), now(), now(), now(), now())
+                """).param("id", taskId).param("run", rcaRunId)
+                .param("key", "USAGE_PROJ_" + taskId.toString().substring(0, 8)).update();
+        controlJdbc.sql("""
+                INSERT INTO rca_attempt (id, task_id, attempt_no, lease_epoch, worker_id,
+                    status, started_at, finished_at)
+                VALUES (:id, :task, 1, 0, 'usage-proj-it', 'SUCCEEDED', now(), now())
+                """).param("id", attemptId).param("task", taskId).update();
+
+        RcaModelCallLedger ledger = new com.objwww.pr.control.infrastructure.persistence
+                .PostgresRcaModelCallLedger(controlJdbc, new com.fasterxml.jackson.databind
+                        .ObjectMapper(), controlTx);
+        // ① priced SUCCESS
+        UUID priced = UUID.randomUUID();
+        ledger.open(call(priced, rcaRunId, taskId, attemptId, 0));
+        ledger.succeed(priced, new RcaModelCallLedger.UsageOutcome(100, 20, 120, false,
+                1500L, "pv-it", "CNY", "req-1", "route-a", "demo-model", 42, null));
+        // ② unpriced SUCCESS（R4：有 usage 无价目显式态）
+        UUID unpriced = UUID.randomUUID();
+        ledger.open(call(unpriced, rcaRunId, taskId, attemptId, 1));
+        ledger.succeed(unpriced, new RcaModelCallLedger.UsageOutcome(30, 5, 35, false,
+                null, "unpriced", null, "req-2", "route-a", "demo-model", 30, null));
+        // ③ FAILED（无 usage 无 cost）
+        UUID failed = UUID.randomUUID();
+        ledger.open(call(failed, rcaRunId, taskId, attemptId, 2));
+        ledger.fail(failed, "UPSTREAM_5XX");
+        return rcaRunId;
+    }
+
+    private static RcaModelCallLedger.OpenRow call(UUID id, UUID runId, UUID taskId,
+            UUID attemptId, long actionSeq) {
+        return new RcaModelCallLedger.OpenRow(id, runId, taskId, attemptId, actionSeq, 1,
+                0, "primary", "1", Digest.sha256Of("role").hex(),
+                Digest.sha256Of("prompt-" + actionSeq).hex(), null, null, null, null, 0);
+    }
+
+    // ------------------------------------------------------------------ EU16/EU22 读面：计数只来自 eval 域真实列
     @Test
     @DisplayName("终态 run：分子分母来自终态回填列；caseCount 只计 eval_case_result 行")
     void terminalRunCountsAndCaseCountFromPg() {

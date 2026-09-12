@@ -10,6 +10,7 @@ import com.objwww.pr.control.eval.domain.service.PairedTrialStats;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +38,11 @@ import java.util.UUID;
  *       + 门 INCONCLUSIVE）；逐例列表游标分页（group 过滤 + (scenarioId, roundNo)
  *       键集）；unpaired 列表上限 {@value #MAX_UNPAIRED_LISTED}（超出截断标记）。</li>
  * </ul>
+ *
+ * <p>R12 逐例差值（EV-07+）：配对双方按 caseExecutionId 稳定投影间直接作差——
+ * Δscore（rootCauseHit 0/1，higher-better）/ Δcost（微积分，仅双方链路完全
+ * priced，R4/EU20 契约：unpriced/usage_missing/跨币种不折算不为 0）/ Δlatency
+ * （lower-better）；每指标带"高分是否更好"方向声明，缺值如实 UNKNOWN。
  */
 public class EvalCompareService {
 
@@ -67,12 +73,31 @@ public class EvalCompareService {
                            String contentDigest) {
     }
 
+    /**
+     * 单指标差值（R12/EV-07+）：direction = 该指标"高分是否更好"的显式声明；
+     * delta 为 null = 该侧缺值如实（group=UNKNOWN，不猜 0——R4 同律）。
+     */
+    public record MetricDelta(Long delta, String direction, String group) {
+
+        public static final String HIGHER_IS_BETTER = "HIGHER_IS_BETTER";
+        public static final String LOWER_IS_BETTER = "LOWER_IS_BETTER";
+    }
+
+    /**
+     * 逐例差值（R12）：score = rootCauseHit 0/1 差（恒可算）；cost = 微分——仅双方
+     * 链路完全 priced（R4/EU20：unpriced/usage_missing/跨币种不折算不为 0，costNote
+     * 机器码留痕）；latency = eval_case_result.latency_ms 差（任一侧缺 → UNKNOWN）。
+     */
+    public record CaseDelta(MetricDelta score, MetricDelta cost, MetricDelta latency,
+                            String costNote) {
+    }
+
     /** 逐例对比行（group ∈ IMPROVED/REGRESSED/FLAT；differenceNote 可空 = 持平同形无噪声） */
     public record CompareCaseItem(String scenarioId, int roundNo, String group,
                                   SideCase baseline, SideCase candidate,
                                   String verdictChange, String differenceNote,
                                   String inputDigestMatch, String clusterId,
-                                  String faultType) {
+                                  String faultType, CaseDelta delta) {
     }
 
     /** 未配对行（side ∈ BASELINE_ONLY/CANDIDATE_ONLY；reason = 机器码） */
@@ -176,7 +201,8 @@ public class EvalCompareService {
                                EvalCompare.Pairing pairing, int[] counts,
                                PairedTrialStats.StatsResult stats,
                                EvalCompare.GateResult gate, boolean scanTruncated,
-                               String group, Keyset keyset, int limit) {
+                               String group, Keyset keyset, int limit,
+                               Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
 
         EvalCompareResponse response(ObjectMapper mapper, GateRecordRef persistedRef) {
             ComparabilityBlock comparabilityBlock = new ComparabilityBlock(
@@ -196,7 +222,8 @@ public class EvalCompareService {
                     ratio(counts[3], pairing.pairs().size()),
                     pairing.verdictChangeMatrix(), pairing.clusters(), pairing.byFaultType(),
                     stats == null ? null : statsBlock(stats));
-            Slice slice = sliceCases(mapper, pairing.pairs(), group, keyset, limit);
+            Slice slice = sliceCases(mapper, pairing.pairs(), group, keyset, limit,
+                    usageByRcaRun);
             List<UnpairedItem> unpairedItems = new ArrayList<>(
                     Math.min(pairing.unpaired().size(), MAX_UNPAIRED_LISTED));
             for (EvalCompare.UnpairedCase u : pairing.unpaired()) {
@@ -248,11 +275,17 @@ public class EvalCompareService {
         if (!comparability.comparable()) {
             EvalCompare.GateResult gate = EvalCompare.gate(false, false, 0, 0, null);
             return new Computation(baseline.get(), candidate.get(), comparability, null,
-                    new int[4], null, gate, false, effectiveGroup, keyset, limit);
+                    new int[4], null, gate, false, effectiveGroup, keyset, limit, Map.of());
         }
         long seed = EvalCompare.statsSeed(baselineRunId, candidateRunId);
         EvalCompare.Pairing pairing = EvalCompare.pair(mapper, baselineCases, candidateCases,
                 seed);
+        // R12 逐例差值输入：双 run usage 链一次取回（禁 N+1），按案例 rca_run_id 分组
+        Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun = new LinkedHashMap<>();
+        for (EvalQueryReader.UsageCallRow row : reader.listUsageCallsForRuns(
+                List.of(baselineRunId, candidateRunId))) {
+            usageByRcaRun.computeIfAbsent(row.rcaRunId(), k -> new ArrayList<>()).add(row);
+        }
         int[] counts = new int[4];
         for (EvalCompare.PairedCase p : pairing.pairs()) {
             counts[0]++;
@@ -265,7 +298,8 @@ public class EvalCompareService {
         EvalCompare.GateResult gate = EvalCompare.gate(true, scanTruncated,
                 pairing.pairs().size(), counts[2], pairing.stats());
         return new Computation(baseline.get(), candidate.get(), comparability, pairing,
-                counts, pairing.stats(), gate, scanTruncated, effectiveGroup, keyset, limit);
+                counts, pairing.stats(), gate, scanTruncated, effectiveGroup, keyset, limit,
+                Map.copyOf(usageByRcaRun));
     }
 
     /** 逐案例 selection_policy_version 去重升序集（评分器语义锚维度） */
@@ -286,7 +320,8 @@ public class EvalCompareService {
     }
 
     private static Slice sliceCases(ObjectMapper mapper, List<EvalCompare.PairedCase> pairs,
-                                    String group, Keyset keyset, int limit) {
+                                    String group, Keyset keyset, int limit,
+                                    Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
         List<CompareCaseItem> items = new ArrayList<>(Math.min(limit, pairs.size()));
         String nextCursor = null;
         for (EvalCompare.PairedCase p : pairs) {
@@ -303,15 +338,97 @@ public class EvalCompareService {
                         + "/" + items.get(items.size() - 1).roundNo();
                 break;
             }
-            items.add(toItem(mapper, p));
+            items.add(toItem(mapper, p, usageByRcaRun));
         }
         return new Slice(List.copyOf(items), nextCursor);
     }
 
-    private static CompareCaseItem toItem(ObjectMapper mapper, EvalCompare.PairedCase p) {
+    private static CompareCaseItem toItem(ObjectMapper mapper, EvalCompare.PairedCase p,
+            Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
         return new CompareCaseItem(p.scenarioId(), p.roundNo(), p.group(),
                 side(mapper, p.baseline()), side(mapper, p.candidate()), p.verdictChange(),
-                p.differenceNote(), p.inputDigestMatch(), p.clusterId(), p.faultType());
+                p.differenceNote(), p.inputDigestMatch(), p.clusterId(), p.faultType(),
+                delta(p, usageByRcaRun));
+    }
+
+    /**
+     * R12 逐例差值（按 caseExecutionId 稳定 join 的双侧投影间直接作差，不按时间/顺序）：
+     * score 恒可算（hit=1/miss=0，higher-better）；cost 仅双方链路完全 priced（R4：
+     * unpriced/usage_missing 不折算不为 0，EU20 跨币种不折算）；latency 任一侧缺如实
+     * UNKNOWN。改善 = 候选侧更优（按各指标 direction 判）。
+     */
+    private static CaseDelta delta(EvalCompare.PairedCase p,
+            Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
+        long scoreDelta = (p.candidate().rootCauseHit() ? 1 : 0)
+                - (p.baseline().rootCauseHit() ? 1 : 0);
+        MetricDelta score = new MetricDelta(scoreDelta, MetricDelta.HIGHER_IS_BETTER,
+                groupOf(scoreDelta, true));
+
+        Long baselineCost = caseCostMicros(p.baseline().rcaRunId(), usageByRcaRun);
+        Long candidateCost = caseCostMicros(p.candidate().rcaRunId(), usageByRcaRun);
+        MetricDelta cost;
+        String costNote;
+        if (baselineCost == null || candidateCost == null) {
+            cost = new MetricDelta(null, MetricDelta.LOWER_IS_BETTER, "UNKNOWN");
+            costNote = baselineCost == null && candidateCost == null
+                    ? "BOTH_COST_UNKNOWN" : baselineCost == null
+                    ? "BASELINE_COST_UNKNOWN" : "CANDIDATE_COST_UNKNOWN";
+        } else {
+            long costDelta = candidateCost - baselineCost;
+            cost = new MetricDelta(costDelta, MetricDelta.LOWER_IS_BETTER,
+                    groupOf(costDelta, false));
+            costNote = null;
+        }
+
+        Long baselineLatency = p.baseline().latencyMs();
+        Long candidateLatency = p.candidate().latencyMs();
+        MetricDelta latency;
+        if (baselineLatency == null || candidateLatency == null) {
+            latency = new MetricDelta(null, MetricDelta.LOWER_IS_BETTER, "UNKNOWN");
+        } else {
+            long latencyDelta = candidateLatency - baselineLatency;
+            latency = new MetricDelta(latencyDelta, MetricDelta.LOWER_IS_BETTER,
+                    groupOf(latencyDelta, false));
+        }
+        return new CaseDelta(score, cost, latency, costNote);
+    }
+
+    /** 改善判：higher-better 时 delta>0 改善，lower-better 时 delta<0 改善 */
+    private static String groupOf(long delta, boolean higherIsBetter) {
+        if (delta == 0) {
+            return EvalCompare.GROUP_FLAT;
+        }
+        boolean better = higherIsBetter ? delta > 0 : delta < 0;
+        return better ? EvalCompare.GROUP_IMPROVED : EvalCompare.GROUP_REGRESSED;
+    }
+
+    /** 单案例链路费用（R6 usage 链按 rca_run_id 归组；R4：任一行 usage 缺失/unpriced
+     * → null 不折算；EU20：链内跨币种 → null 不折算） */
+    private static Long caseCostMicros(UUID rcaRunId,
+            Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
+        if (rcaRunId == null) {
+            return null;
+        }
+        List<EvalQueryReader.UsageCallRow> rows = usageByRcaRun.get(rcaRunId);
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        long sum = 0;
+        String currency = null;
+        for (EvalQueryReader.UsageCallRow row : rows) {
+            if (row.usageMissing() || row.costMicros() == null) {
+                return null;
+            }
+            if (row.currency() != null) {
+                if (currency == null) {
+                    currency = row.currency();
+                } else if (!currency.equals(row.currency())) {
+                    return null;
+                }
+            }
+            sum += row.costMicros();
+        }
+        return sum;
     }
 
     private static SideCase side(ObjectMapper mapper, CompareCaseRow row) {

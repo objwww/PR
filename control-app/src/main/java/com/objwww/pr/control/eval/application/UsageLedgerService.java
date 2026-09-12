@@ -1,9 +1,7 @@
 package com.objwww.pr.control.eval.application;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.objwww.pr.control.alert.domain.model.InvestigationResult;
-import com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository;
+import com.objwww.pr.control.alert.domain.agent.RcaAttemptUsage;
+import com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger;
 import com.objwww.pr.control.eval.domain.litellm.LiteLlmAdminPort;
 import com.objwww.pr.control.eval.domain.litellm.SpendRecord;
 import com.objwww.pr.control.eval.domain.litellm.UsageLedgerReconciler;
@@ -15,15 +13,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * usage 对账编排（M3-25 出账口）：EvalRun → 关联的全部 RCA Run → 全部 attempt 账本
- * 用量（rca_investigation_result.usage_json，§6.2 usage_missing=NULL）→ proxy 行全集
- * 交给纯对账器（降级链在域内）。
+ * usage 对账编排（M3-25 出账口；R6/EV-06 起账本侧改读 rca_model_call 逐调用行——
+ * usage_json 主模式回填仅兼容存量读面）：EvalRun → 关联的全部 RCA Run → 全部
+ * attempt 账本用量（RcaAttemptUsage 聚合，§6.6 冻结的 attempt 级对账单位）→
+ * proxy 行全集交给纯对账器（降级链在域内）。
  *
  * <p>降级原则（评审 P0-8 + spike 结论）：对账失败/未配置绝不阻断批件终态，也绝不
  * 伪造 MATCHED——统一落 UNMATCHED/BEST_EFFORT 台账并在 notes/日志留原因。
@@ -32,21 +33,20 @@ import java.util.UUID;
 public final class UsageLedgerService {
 
     private static final Logger log = LoggerFactory.getLogger(UsageLedgerService.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final EvalRunRepository evalRuns;
-    private final InvestigationResultRepository investigations;
+    private final RcaModelCallLedger modelCalls;
     private final LiteLlmAdminPort litellm;   // null = 未配置（chain③ 诚实降级）
     private final String runKeyAlias;         // null = 无 per-run key（chain③）
     private final long waitMillis;
 
     public UsageLedgerService(EvalRunRepository evalRuns,
-                              InvestigationResultRepository investigations,
+                              RcaModelCallLedger modelCalls,
                               LiteLlmAdminPort litellm,
                               String runKeyAlias,
                               long waitMillis) {
         this.evalRuns = evalRuns;
-        this.investigations = investigations;
+        this.modelCalls = modelCalls;
         this.litellm = litellm;
         this.runKeyAlias = (runKeyAlias == null || runKeyAlias.isBlank()) ? null : runKeyAlias;
         this.waitMillis = Math.max(0, waitMillis);
@@ -79,7 +79,12 @@ public final class UsageLedgerService {
         return new UsageLedgerReconciler().reconcile(input, rows);
     }
 
-    /** 关联全部 case 的全部 attempt 用量（评分选定的 report 只是子集——对账对全部尝试负责） */
+    /**
+     * 关联全部 case 的全部 attempt 用量（评分选定的 report 只是子集——对账对全部尝试负责）。
+     * R6：账本侧改读 rca_model_call 逐调用行（身份链 c.rcaRunId 显式映射不按时间猜——
+     * RV08 红线不变），按 attempt 聚合（RcaAttemptUsage 诚实规则）；对账输入保持
+     * attempt 粒度（§6.6 冻结），逐调用行只在评测 usage 端点透出。
+     */
     private RunLedgerInput buildInput(UUID evalRunId) {
         Set<UUID> rcaRunIds = new LinkedHashSet<>();
         evalRuns.findCasesByRunId(evalRunId).forEach(c -> {
@@ -87,32 +92,19 @@ public final class UsageLedgerService {
                 rcaRunIds.add(c.rcaRunId());
             }
         });
-        List<AttemptUsage> attempts = new ArrayList<>();
+        Map<UUID, List<RcaModelCallLedger.CallUsage>> byAttempt = new LinkedHashMap<>();
         for (UUID rcaRunId : rcaRunIds) {
-            for (InvestigationResult result : investigations.findByRunId(rcaRunId)) {
-                attempts.add(toAttemptUsage(result));
+            for (RcaModelCallLedger.CallUsage row : modelCalls.listSettledUsageByRunId(rcaRunId)) {
+                byAttempt.computeIfAbsent(row.attemptId(), k -> new ArrayList<>()).add(row);
             }
         }
+        List<AttemptUsage> attempts = new ArrayList<>();
+        byAttempt.forEach((attemptId, rows) -> {
+            RcaAttemptUsage.Aggregated agg = RcaAttemptUsage.aggregate(rows);
+            attempts.add(agg.usageMissing()
+                    ? new AttemptUsage(attemptId, null, null)
+                    : new AttemptUsage(attemptId, agg.promptTokens(), agg.completionTokens()));
+        });
         return new RunLedgerInput(evalRunId, runKeyAlias, attempts);
-    }
-
-    /** usage_json（{"prompt_tokens":N,...} 或 NULL）→ AttemptUsage；解析失败按缺失落账 */
-    private static AttemptUsage toAttemptUsage(InvestigationResult result) {
-        if (result.usageJson() == null || result.usageJson().isBlank()) {
-            return new AttemptUsage(result.attemptId(), null, null);
-        }
-        try {
-            JsonNode usage = JSON.readTree(result.usageJson());
-            JsonNode prompt = usage.path("prompt_tokens");
-            JsonNode completion = usage.path("completion_tokens");
-            if (!prompt.isInt() || !completion.isInt()) {
-                return new AttemptUsage(result.attemptId(), null, null);
-            }
-            return new AttemptUsage(result.attemptId(), prompt.asInt(), completion.asInt());
-        } catch (Exception e) {
-            log.warn("usage_json 解析失败按 usage_missing 落账: attempt={}",
-                    result.attemptId());
-            return new AttemptUsage(result.attemptId(), null, null);
-        }
     }
 }

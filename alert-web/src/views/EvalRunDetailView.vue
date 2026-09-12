@@ -101,11 +101,11 @@
           <el-descriptions-item>
             <template #label>
               用量（usageStatus）
-              <el-tooltip content="数据来源归 EV-06（R7 RCA 调用账本显式接线）；RV08 红线——不读 PR 域账本冒充，当前恒 UNKNOWN" placement="top">
+              <el-tooltip content="数据来源归 EV-06（rca_model_call 沿 rca_run_id 身份链接线，R6）；RV08 红线——不读 PR 域账本冒充；无链/无已结算调用显 UNKNOWN（未统计）" placement="top">
                 <span class="facet-tip">?</span>
               </el-tooltip>
             </template>
-            <span :class="{ muted: isUnknownFacet(run.facets?.usageStatus) }">{{ fmtFacet(run.facets?.usageStatus) }}</span>
+            <span :class="{ muted: isUnknownFacet(run.facets?.usageStatus) }">{{ fmtUsageFacet(run.facets?.usageStatus) }}</span>
           </el-descriptions-item>
           <el-descriptions-item>
             <template #label>
@@ -279,9 +279,69 @@
         <div v-else v-loading="true" class="loading-box" />
       </div>
 
-      <!-- 用量与对账：占位说明（合并原“对比/成本”占位；均未交付能力集中说明） -->
+      <!-- 用量与对账（R6/EV-06 接线）：GET /eval/runs/{runId}/usage——rca_model_call 身份链投影，
+           按 角色/调用状态/用量状态/币种/价目版本 分组；usage_missing/unpriced 显“用量未知/未定价”，
+           绝不显 0（R4 契约）；多币种/多价版分属不同组不相加（EU20）；实验对比走 /eval/compare -->
       <div v-else class="card panel">
-        <EmptyState kind="empty" description="用量与对账依赖后端 EV-06（调用账本接线与 usage 投影），本批未交付。实验对比请从实验列表选中两条后进入对比工作台（/eval/compare）。" :image-size="160" />
+        <div class="ev-summary">
+          <div class="es-head">
+            <span class="es-title">用量与对账</span>
+            <span class="muted es-note">来源 GET /eval/runs/{runId}/usage（EV-06，rca_model_call 身份链投影）</span>
+            <el-button size="small" :loading="usageLoading" @click="loadUsage">刷新</el-button>
+          </div>
+          <template v-if="usageState === 'ok'">
+            <div class="es-strip">
+              <div class="es-item">
+                <div class="es-label">已结算模型调用</div>
+                <div class="es-value">{{ fmtCount(usageData?.totalCalls) }}</div>
+              </div>
+              <div class="es-item">
+                <div class="es-label">用量未知调用</div>
+                <div class="es-value">{{ fmtCount(usageData?.usageMissingCalls) }}</div>
+              </div>
+            </div>
+            <el-table :data="usageData?.groups ?? []" size="small" class="es-table">
+              <el-table-column prop="roleId" label="角色" min-width="100" show-overflow-tooltip />
+              <el-table-column prop="state" label="调用状态" width="100" />
+              <el-table-column label="用量状态" width="110">
+                <template #default="{ row }">
+                  <el-tag v-if="row.usageStatus === 'usage_missing'" type="danger" size="small" disable-transitions>用量未知</el-tag>
+                  <el-tag v-else-if="row.usageStatus === 'unpriced'" type="warning" size="small" disable-transitions>未定价</el-tag>
+                  <span v-else>已计价</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="调用数" width="80" align="right">
+                <template #default="{ row }">{{ row.calls }}</template>
+              </el-table-column>
+              <el-table-column label="Prompt tokens" width="130" align="right">
+                <template #default="{ row }">{{ fmtCount(row.promptTokens) }}</template>
+              </el-table-column>
+              <el-table-column label="Completion tokens" width="150" align="right">
+                <template #default="{ row }">{{ fmtCount(row.completionTokens) }}</template>
+              </el-table-column>
+              <el-table-column label="总 tokens" width="110" align="right">
+                <template #default="{ row }">{{ fmtCount(row.totalTokens) }}</template>
+              </el-table-column>
+              <el-table-column label="费用" min-width="130" align="right">
+                <template #default="{ row }">{{ fmtMoney(row) }}</template>
+              </el-table-column>
+              <el-table-column label="币种 / 价目版本" min-width="140" show-overflow-tooltip>
+                <template #default="{ row }">{{ [row.currency, row.pricingVersion].filter(Boolean).join(' / ') || '未统计' }}</template>
+              </el-table-column>
+              <template #empty>
+                <EmptyState kind="empty" description="该实验暂无已结算的模型调用（无 RCA 链或调用未结算）" />
+              </template>
+            </el-table>
+            <el-alert v-if="(usageData?.usageMissingCalls ?? 0) > 0" type="warning" :closable="false" show-icon
+              title="存在用量未知调用：供应商未回报 usage 或调用失败/未知；其对账组不列 tokens 与费用（不猜 0），费用合计不含该部分。"
+              class="usage-note" />
+            <div class="asof muted">数据截至 {{ usageData?.asOf ? fmtClock(usageData.asOf) : '未统计' }}</div>
+          </template>
+          <EmptyState v-else-if="usageState === 'unavailable'" kind="empty"
+            description="用量与对账依赖后端 EV-06（usage 投影接口），当前未部署；不展示推测计数。实验对比请从实验列表选中两条后进入对比工作台（/eval/compare）。" />
+          <EmptyState v-else-if="usageState === 'error'" kind="error" @retry="loadUsage" />
+          <div v-else v-loading="true" class="es-loading" />
+        </div>
       </div>
     </template>
 
@@ -416,6 +476,8 @@
 // facets 六分面（UNKNOWN→未统计并注明归属）/asOf 数据截至。
 // EV-05 接线：案例 tab 顶部证据汇总区 + 行内“详情”抽屉（判定/场景身份/证据三分组/关联链）；
 // 两端点 403/404（后端未部署）→ 显式降级空态，不伪造证据/计数；NO_REPORT/NO_REFS 如实区分。
+// R6/EV-06 接线：“用量与对账”页签接 GET /eval/runs/{runId}/usage（分组投影）；
+// usage_missing/unpriced 显“用量未知/未定价”，绝不显 0（R4 契约）；403/404 降级空态。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
@@ -432,6 +494,12 @@ const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: '
 
 // 分面未接线/缺席（UNKNOWN/null）→ 弱化显示
 const isUnknownFacet = v => v == null || v === 'UNKNOWN'
+
+// EV-06 用量分面词表 → 中文（OK 透传；USAGE_MISSING 显“用量未知”，不显 0）
+function fmtUsageFacet(v) {
+  if (v === 'USAGE_MISSING') return '用量未知'
+  return fmtFacet(v)
+}
 
 // RV02：优先 caseExecutionId；旧接口无该字段时回退 runId+scenarioId+roundNo，禁止数组下标
 const caseKey = row =>
@@ -468,6 +536,12 @@ const summaryState = ref('loading') // loading | ok | unavailable | error
 const summaryLoading = ref(false)
 let summaryLoaded = false
 
+// R6/EV-06 用量与对账：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
+const usageData = ref(null)
+const usageState = ref('loading') // loading | ok | unavailable | error
+const usageLoading = ref(false)
+let usageLoaded = false
+
 const detailOpen = ref(false)
 const detail = ref(null)
 const detailState = ref('loading') // loading | ok | unavailable | error
@@ -477,10 +551,12 @@ let detailCaseId = null
 let runSeq = 0
 let casesSeq = 0
 let summarySeq = 0
+let usageSeq = 0
 let detailSeq = 0
 let runCtl = null
 let casesCtl = null
 let summaryCtl = null
+let usageCtl = null
 
 async function loadRun() {
   const id = runId.value
@@ -556,11 +632,16 @@ function switchTab(key) {
   if (key !== 'cases') delete query.verdict
   router.replace({ query })
   if (key === 'cases') ensureCasesTabLoaded()
+  if (key === 'usage') ensureUsageTabLoaded()
 }
 
 function ensureCasesTabLoaded() {
   if (!casesLoaded) loadCases()
   if (!summaryLoaded) loadEvidenceSummary()
+}
+
+function ensureUsageTabLoaded() {
+  if (!usageLoaded) loadUsage()
 }
 
 // EV-05 run 证据汇总：按案例分桶；403/404（接口未部署）→ unavailable 诚实空态
@@ -585,6 +666,38 @@ async function loadEvidenceSummary() {
   } finally {
     if (seq === summarySeq) summaryLoading.value = false
   }
+}
+
+// R6/EV-06 用量投影：403/404（接口未部署）→ unavailable 诚实空态
+async function loadUsage() {
+  const id = runId.value
+  const seq = ++usageSeq
+  usageCtl?.abort()
+  const ctl = new AbortController()
+  usageCtl = ctl
+  usageState.value = 'loading'
+  usageLoading.value = true
+  try {
+    const d = await api(`/eval/runs/${encodeURIComponent(id)}/usage`, { signal: ctl.signal })
+    if (seq !== usageSeq || id !== runId.value) return
+    usageData.value = d
+    usageState.value = 'ok'
+    usageLoaded = true
+  } catch (e) {
+    if (ctl.signal.aborted || seq !== usageSeq) return
+    const st = e?.response?.status
+    usageState.value = st === 403 || st === 404 ? 'unavailable' : 'error'
+  } finally {
+    if (seq === usageSeq) usageLoading.value = false
+  }
+}
+
+// 用量状态三态 → 中文（R4/EU19：usage_missing/unpriced 如实显式，不并入 0）
+function fmtMoney(row) {
+  if (row.costMicros == null) return '未统计'
+  const v = row.costMicros / 1e6
+  const s = Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(6)))
+  return row.currency ? `${s} ${row.currency}` : s
 }
 
 // EV-05 案例详情：双键定位；行无 caseExecutionId 不入（按钮已禁用）；403/404 → 降级提示
@@ -713,6 +826,7 @@ watch(() => route.query, q => {
   if (nextTab !== tab.value) {
     tab.value = nextTab
     if (nextTab === 'cases') ensureCasesTabLoaded()
+    if (nextTab === 'usage') ensureUsageTabLoaded()
   }
   const nextVerdict = str(q.verdict)
   if (nextVerdict !== verdict.value) {
@@ -727,28 +841,35 @@ watch(runId, (id, old) => {
   runCtl?.abort()
   casesCtl?.abort()
   summaryCtl?.abort()
+  usageCtl?.abort()
   runSeq++
   casesSeq++
   summarySeq++
+  usageSeq++
   detailSeq++
   casesLoaded = false
   summaryLoaded = false
+  usageLoaded = false
   cases.value = []
   casesCursor.value = null
   casesState.value = 'loading'
   summary.value = null
   summaryState.value = 'loading'
+  usageData.value = null
+  usageState.value = 'loading'
   detailOpen.value = false
   detail.value = null
   detailCaseId = null
   run.value = null
   loadRun()
   if (tab.value === 'cases') ensureCasesTabLoaded()
+  if (tab.value === 'usage') ensureUsageTabLoaded()
 })
 
 onMounted(() => {
   loadRun()
   if (tab.value === 'cases') ensureCasesTabLoaded()
+  if (tab.value === 'usage') ensureUsageTabLoaded()
 })
 </script>
 
@@ -814,6 +935,7 @@ onMounted(() => {
 .es-tag { margin-right: 6px; }
 .es-table { width: 100%; }
 .es-loading { height: 120px; }
+.usage-note { margin: 10px 0 4px; }
 
 /* EV-05 案例详情抽屉 */
 .cd-loading { height: 240px; }

@@ -118,7 +118,7 @@
 
         <div v-if="compareState === 'loading'" v-loading="true" class="loading-box" />
         <div v-else-if="compareState === 'undeployed'" class="cmp-note">
-          可比性检查与对比质量门依赖后端 EV-07 对比投影：后端 EV-07 未部署（接口 404/403），前端不做推断。
+          对比投影接口不可用（403/404，可能为后端版本滞后或权限不足）：前端不做推断，保持诚实空态。
         </div>
         <EmptyState
           v-else-if="compareState === 'error'"
@@ -165,9 +165,12 @@
             class="gt" :class="{ cur: group === g.key }"
             @click="group = g.key"
           >{{ g.label }} <span class="gt-count">{{ tabCount(g.key) }}</span></button>
-          <span v-if="compareState === 'undeployed'" class="gt-note">分组计数来源未就绪：后端 EV-07 未部署，显示“—”而不显示 0。</span>
+          <span v-if="compareState === 'undeployed'" class="gt-note">分组计数来源未就绪：对比接口不可用（403/404），显示“—”而不显示 0。</span>
           <span v-else-if="cmp?.summary" class="gt-note">
             配对 {{ cmp.summary.pairedCount }} 例 · 未配对 {{ cmp.summary.unpairedCount }} 例
+          </span>
+          <span v-else-if="group === 'REGRESSED' && compareState === 'ok'" class="gt-note">
+            退化组即评审工作清单：逐例可发起人工标注（复用 EV-08 评审链，人工结论独立留档，不覆盖机器评分）。
           </span>
         </div>
         <el-table :data="caseRows" class="cmp-table" v-loading="compareState === 'loading'">
@@ -183,15 +186,29 @@
           <el-table-column label="候选判定" width="150">
             <template #default="{ row }"><VerdictCell :side="row.candidate" /></template>
           </el-table-column>
+          <el-table-column label="差值" width="220">
+            <template #default="{ row }"><DeltaCell :delta="row.delta" /></template>
+          </el-table-column>
           <el-table-column label="差异说明" min-width="220">
             <template #default="{ row }">{{ row.differenceNote ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="标注" width="96">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.candidate?.caseExecutionId"
+                text type="primary" size="small"
+                :loading="annotating === String(row.candidate.caseExecutionId)"
+                @click="annotate(row)"
+              >发起评审</el-button>
+              <span v-else>—</span>
+            </template>
           </el-table-column>
           <template #empty>
             <EmptyState
               v-if="compareState === 'undeployed'"
               kind="empty"
               :image-size="120"
-              description="逐例对比投影依赖后端 EV-07（按 case 身份配对、判定差异与差异说明）：后端 EV-07 未部署；此处不展示任何推测数据。"
+              description="逐例对比投影接口不可用（403/404，可能为后端版本滞后或权限不足）；此处不展示任何推测数据。"
             />
             <EmptyState
               v-else-if="cmp && !cmp.comparability?.comparable"
@@ -243,9 +260,12 @@
 <script setup>
 // 对比工作台（/eval/compare?baseline=…&candidate=…）：基线固定/选择 + EV-07 对比投影接线。
 // 实验选项来自真实 GET /eval/runs；query 参数非法/缺失走引导空态不报错。
-// GET /api/eval/compare：403/404 = 后端 EV-07 未部署 → 保持诚实空态（“—”/空表），不伪造对比数据；
+// GET /api/eval/compare：403/404 = 接口不可用（后端版本滞后/权限不足）→ 保持诚实空态（“—”/空表），不伪造对比数据；
 // comparable=false 只展示差异清单不出配对结论；计数三件套 UNKNOWN→未统计 / NOT_APPLICABLE→不适用；
-// 未收录枚举原样透出（不虚构词表）。
+// R12 逐例差值：delta.score/cost/latency 三行，各带 改善/退化/持平/未知 徽章与方向 tooltip；
+// 成本任一侧未定价/用量未知/跨币种 → delta=null 如实展示 costNote 机器码，不猜 0（R4 同律）；
+// 标注：对候选侧案例发起 EV-08 评审任务（ensure 幂等，人工结论独立留档，不覆盖机器评分），跳评审页领取提交。
+// 判定/维度/原因等机器码词表：未收录枚举原样透出（不虚构词表）。
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElTag } from 'element-plus'
@@ -283,6 +303,47 @@ const VerdictCell = props => {
   return h('span', [tag, h('span', { class: 'hit-sub' }, side.rootCauseHit ? '命中' : '未命中')])
 }
 VerdictCell.props = { side: { type: Object, default: null } }
+
+// 差值分组徽章（服务端已按 direction 判好组；UNKNOWN = 该侧缺值如实未知，未收录原样透出）
+const GROUP_CONF = {
+  IMPROVED: { text: '改善', type: 'success' },
+  REGRESSED: { text: '退化', type: 'danger' },
+  FLAT: { text: '持平', type: 'info' },
+  UNKNOWN: { text: '未知', type: 'warning' },
+}
+const groupConf = g => GROUP_CONF[g] ?? { text: g ?? '未统计', type: 'info' }
+// costNote 机器码 → 中文（R4 同律：未定价/用量缺失不折算不为 0；未收录原样透出）
+const COST_NOTE_ZH = {
+  BOTH_COST_UNKNOWN: '双侧费用未知',
+  BASELINE_COST_UNKNOWN: '基线侧费用未知',
+  CANDIDATE_COST_UNKNOWN: '候选侧费用未知',
+}
+const signed = v => (v > 0 ? `+${v}` : String(v))
+// 差值单元（R12）：分数=命中 0/1 差（恒可算）；成本/时延任一侧缺 → UNKNOWN + costNote/未统计
+const DeltaCell = props => {
+  const d = props.delta
+  if (!d) return '—'
+  const line = (label, md, unit, note) => {
+    const conf = groupConf(md?.group)
+    const num = md && md.delta != null
+      ? h('span', {
+          class: 'dv-num mono',
+          title: md.direction === 'HIGHER_IS_BETTER' ? '该指标分数越高越好' : '该指标数值越低越好',
+        }, `${signed(md.delta)}${unit}`)
+      : h('span', { class: 'dv-unknown', title: note ?? '' }, (note && (COST_NOTE_ZH[note] ?? note)) ?? '未统计')
+    return h('div', { class: 'dv-line' }, [
+      h('span', { class: 'dv-label' }, label),
+      num,
+      h(ElTag, { size: 'small', type: conf.type, disableTransitions: true }, () => conf.text),
+    ])
+  }
+  return h('div', { class: 'dv' }, [
+    line('分数', d.score, ''),
+    line('成本', d.cost, 'μ', d.costNote),
+    line('时延', d.latency, 'ms'),
+  ])
+}
+DeltaCell.props = { delta: { type: Object, default: null } }
 
 // 可比性维度名 → 中文（维度表开放，未收录原样透出）
 const DIM_ZH = {
@@ -344,7 +405,7 @@ const candidateId = ref(str(route.query.candidate))
 const baselinePinned = ref(!!str(route.query.baseline))
 const invalidQuery = ref([]) // query 中带来但列表里找不到的身份标签
 
-// EV-07 对比投影：idle | loading | ok | undeployed（403/404 = 后端未部署）| error
+// EV-07 对比投影：idle | loading | ok | undeployed（403/404 = 接口不可用：版本滞后/权限不足）| error
 const compareState = ref('idle')
 const compareError = ref('')
 const cmp = ref(null)          // 最近一次 GET /api/eval/compare 响应
@@ -353,6 +414,7 @@ const nextCursor = ref(null)
 const appending = ref(false)
 const saving = ref(false)
 const savedRecordId = ref('')
+const annotating = ref('') // 正在发起评审的 caseExecutionId（防连点）
 
 let reqSeq = 0
 let cmpSeq = 0
@@ -478,12 +540,36 @@ async function saveComparison() {
   } catch (e) {
     const st = e?.response?.status
     if (st === 403 || st === 404) {
-      ElMessage.warning('落档接口依赖后端 EV-07，当前未部署')
+      ElMessage.warning('落档接口不可用（403/404），请检查后端版本与权限')
     } else {
       ElMessage.error(e?.response?.data?.error || '落档失败，请重试')
     }
   } finally {
     saving.value = false
+  }
+}
+
+// 标注（R12）：对候选侧案例生成 EV-08 评审任务（POST review-assignments，ensure 幂等：
+// 重复生成 created=0），人工结论在评审页 claim/submit 独立留档，不覆盖机器评分
+async function annotate(row) {
+  const caseId = row.candidate?.caseExecutionId
+  if (!caseId || annotating.value) return
+  annotating.value = String(caseId)
+  try {
+    const d = await api(`/eval/runs/${encodeURIComponent(candidateId.value)}/review-assignments`, {
+      method: 'POST',
+      body: { caseExecutionIds: [caseId], assignmentsPerCase: 1 },
+    })
+    ElMessage.success(d?.created > 0
+      ? `已生成评审任务 ${d.created} 份，请到评审页领取并提交结论`
+      : '该案例已有评审任务，请到评审页领取')
+    router.push({ path: '/eval/review', query: { runId: candidateId.value } })
+  } catch (e) {
+    const st = e?.response?.status
+    if (st === 403 || st === 404) ElMessage.warning('评审任务接口不可用（403/404），请检查后端版本与权限')
+    else ElMessage.error(e?.response?.data?.error || '评审任务生成失败，请重试')
+  } finally {
+    annotating.value = ''
   }
 }
 
@@ -603,6 +689,10 @@ onMounted(loadRuns)
 .cmp-table { width: 100%; }
 .round { font-size: var(--fs-aux); color: var(--ink-2); margin-left: 6px; }
 :deep(.hit-sub) { font-size: var(--fs-aux); color: var(--ink-2); margin-left: 6px; }
+:deep(.dv-line) { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: var(--fs-aux); }
+:deep(.dv-label) { color: var(--ink-2); flex: none; width: 26px; }
+:deep(.dv-num) { color: var(--head); }
+:deep(.dv-unknown) { color: var(--ink-2); }
 .more-row { text-align: center; padding-top: 8px; }
 .unpaired { margin-top: 16px; }
 .up-note { font-size: var(--fs-aux); color: var(--warn, #b26a00); margin-left: 8px; }

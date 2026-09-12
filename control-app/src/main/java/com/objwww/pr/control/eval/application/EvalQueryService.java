@@ -50,9 +50,10 @@ import java.util.UUID;
  *       eval_phase_event（V80）最新事件，无事件如实 null；stageEnteredAt、
  *       lastProgressAt（= 最新案例落档时刻）、leaseHeartbeatAt 是三个不同时间戳——
  *       租约心跳无数据源（EV-04 前）如实 null；</li>
- *   <li><b>未接线分面不编造</b>：usageStatus/costStatus（RV08 红线：PR 域模型调用账本的
- *       review_run_id 指向 PR review_run，严禁用它汇总 eval/RCA 用量——等 R7 RCA
- *       调用账本显式接线，EV-06）常量 UNKNOWN；qualityVerdict 自 EV-07 起接真值
+ *   <li><b>未接线分面不编造</b>：usageStatus/costStatus 自 EV-06 起接真值（R7 RCA
+ *       调用账本 rca_model_call 沿 rca_run_id 身份链聚合，RV08 红线：PR 域模型调用账本的
+ *       review_run_id 指向 PR review_run，严禁用它汇总 eval/RCA 用量——rollup 规则见
+ *       RunUsageRollup）；qualityVerdict 自 EV-07 起接真值
  *       （本 run 作为候选的最新 eval_comparison 落档门结论，见 facets 装配注释）；
  *       recoveryState/cancelRequestedAt 自 EV-04 起有真值
  *       （V81 列 + eval_run_command 受理面，见 facets 装配注释）；</li>
@@ -74,11 +75,14 @@ public class EvalQueryService {
             "STRUCTURE_REJECTED", "TIMEOUT_OR_ABSENT");
 
     /** 分面状态词表：OK=有真实数据；VIOLATED=质量门未过（EV-07 起）；
-     *  NOT_APPLICABLE=分母 0；UNKNOWN=未回填/未接线 */
+     *  NOT_APPLICABLE=分母 0；UNKNOWN=未回填/未接线；USAGE_MISSING/UNPRICED =
+     *  EV-06 用量/价目显式态（R4/EU19 契约——绝不把未知并成 0） */
     private static final String STATUS_OK = "OK";
     private static final String STATUS_VIOLATED = "VIOLATED";
     private static final String STATUS_NOT_APPLICABLE = "NOT_APPLICABLE";
     private static final String STATUS_UNKNOWN = "UNKNOWN";
+    private static final String STATUS_USAGE_MISSING = "USAGE_MISSING";
+    private static final String STATUS_UNPRICED = "UNPRICED";
 
     /** 同步直读主表 = 投影无滞后（asOf 即请求时刻） */
     private static final String FRESHNESS_LIVE = "LIVE";
@@ -114,14 +118,43 @@ public class EvalQueryService {
 
     /**
      * 状态分面（§5.1）：各面分开表达，互不顶替。leaseHeartbeatAt 无租约数据源 → null；
-     * qualityVerdict 未接线（EV-05+）/usageStatus/costStatus 未接线（EV-06，RV08 红线）
-     * → UNKNOWN；EV-04 起 recoveryState/cancelRequestedAt 有真值（见 facets 装配）。
+     * usageStatus/costStatus 自 EV-06 起接真值（rca_model_call 沿 rca_run_id 身份链
+     * 聚合，RunUsageRollup；无 rca 链/无已结算调用 → UNKNOWN）；EV-04 起
+     * recoveryState/cancelRequestedAt 有真值（见 facets 装配）。
      */
     public record RunFacets(String executionState, String phase, Instant stageEnteredAt,
                             Instant lastProgressAt, Instant leaseHeartbeatAt,
                             String qualityVerdict, String recoveryState,
                             String usageStatus, String costStatus, String freshness,
                             Instant cancelRequestedAt) {
+    }
+
+    /**
+     * run 级用量/价目 rollup（EV-06 列表接线；逐调用三态归 usageStatusOf，
+     * run 级取最坏态——任何一笔 usage_missing 即整 run 用量未知，任何一笔
+     * unpriced 即整 run 费用未定价。无 rca 链/无已结算调用 → 双 UNKNOWN 如实）。
+     */
+    record RunUsageRollup(String usageStatus, String costStatus) {
+        static final RunUsageRollup UNKNOWN_FACETS =
+                new RunUsageRollup(STATUS_UNKNOWN, STATUS_UNKNOWN);
+
+        static RunUsageRollup of(List<EvalQueryReader.UsageCallRow> rows) {
+            if (rows.isEmpty()) {
+                return UNKNOWN_FACETS;
+            }
+            boolean usageMissing = false;
+            boolean unpriced = false;
+            for (EvalQueryReader.UsageCallRow row : rows) {
+                String s = usageStatusOf(row);
+                usageMissing |= "usage_missing".equals(s);
+                unpriced |= "unpriced".equals(s);
+            }
+            if (usageMissing) {
+                return new RunUsageRollup(STATUS_USAGE_MISSING, STATUS_UNKNOWN);
+            }
+            return unpriced ? new RunUsageRollup(STATUS_OK, STATUS_UNPRICED)
+                    : new RunUsageRollup(STATUS_OK, STATUS_OK);
+        }
     }
 
     public record EvalRunListItem(UUID runId, String datasetVersion, String registryDigest,
@@ -290,9 +323,15 @@ public class EvalQueryService {
             EvalRunRow last = page.items().get(page.items().size() - 1);
             nextCursor = last.startedAt() + "/" + last.runId();
         }
+        // EV-06：页内 run 的用量行一次批量取回（禁 N+1），rollup 后进分面
+        List<UUID> runIds = page.items().stream().map(EvalRunRow::runId).toList();
+        Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRun = new LinkedHashMap<>();
+        for (EvalQueryReader.UsageCallRow callRow : reader.listUsageCallsForRuns(runIds)) {
+            usageByRun.computeIfAbsent(callRow.evalRunId(), k -> new ArrayList<>()).add(callRow);
+        }
         List<EvalRunListItem> items = new ArrayList<>(page.items().size());
         for (EvalRunRow row : page.items()) {
-            items.add(toListItem(row));
+            items.add(toListItem(row, usageByRun.getOrDefault(row.runId(), List.of())));
         }
         return new EvalRunListResponse(List.copyOf(items), nextCursor, Instant.now());
     }
@@ -304,8 +343,13 @@ public class EvalQueryService {
                 row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
-                qualityFacet(row), facets(row), Instant.now(),
+                qualityFacet(row), facets(row, usageRollup(runId)), Instant.now(),
                 row.terminalReason(), parseLaunchPlan(row.launchPlanJson())));
+    }
+
+    /** 单 run rollup（详情面；与列表同一条批量 SQL 路径，口径一致） */
+    private RunUsageRollup usageRollup(UUID runId) {
+        return RunUsageRollup.of(reader.listUsageCallsForRuns(List.of(runId)));
     }
 
     // ------------------------------------------------------------------ cases
@@ -635,6 +679,114 @@ public class EvalQueryService {
                 candidateRunId, status, List.copyOf(roundDiffs), Instant.now()));
     }
 
+    // ------------------------------------------------------------------ R6/EV-06 usage 投影
+
+    /**
+     * usageStatus 三态（R4/EU19 契约——绝不把未定价并入 0）：priced=已确认价目落账；
+     * unpriced=有 usage 无价目（pricing_version='unpriced'，待运维核定，费用待对账）；
+     * usage_missing=供应商未回报 usage / FAILED / UNKNOWN（用量与费用双未知）。
+     */
+    static String usageStatusOf(EvalQueryReader.UsageCallRow row) {
+        if (row.usageMissing() || !"SUCCESS".equals(row.state())
+                || row.promptTokens() == null) {
+            return "usage_missing";
+        }
+        return "unpriced".equals(row.pricingVersion()) ? "unpriced" : "priced";
+    }
+
+    /** 分组投影（字段名即 JSON 契约）；usage_missing 组 tokens/cost 恒 null（不猜零），
+     * unpriced 组 cost 恒 null（待价目）；多币种/多价版分属不同组，绝不跨组相加（EU20）。 */
+    public record UsageGroup(String roleId, String state, String usageStatus,
+                             String currency, String pricingVersion, long calls,
+                             Long promptTokens, Long completionTokens, Long totalTokens,
+                             Long costMicros) {
+    }
+
+    public record UsageResponse(UUID runId, long totalCalls, long usageMissingCalls,
+                                List<UsageGroup> groups, Instant asOf) {
+    }
+
+    /**
+     * Run 用量投影（EV-06）：eval run 关联（rca_run_id 身份链，RV08 不碰 PR 域账本）
+     * 的已结算模型调用按 (roleId, state, usageStatus, currency, pricingVersion) 分组。
+     * 未知 run → empty（404 面）。
+     */
+    public Optional<UsageResponse> usage(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.UsageCallRow> rows = reader.listUsageCalls(runId);
+        record Key(String roleId, String state, String usageStatus,
+                   String currency, String pricingVersion) {
+        }
+        Map<Key, UsageGroupBuilder> byKey = new LinkedHashMap<>();
+        long usageMissingCalls = 0;
+        for (EvalQueryReader.UsageCallRow row : rows) {
+            String status = usageStatusOf(row);
+            if ("usage_missing".equals(status)) {
+                usageMissingCalls++;
+            }
+            byKey.computeIfAbsent(new Key(row.roleId(), row.state(), status,
+                            "priced".equals(status) ? row.currency() : null,
+                            "usage_missing".equals(status) ? null : row.pricingVersion()),
+                    k -> new UsageGroupBuilder(k.roleId(), k.state(), k.usageStatus(),
+                            k.currency(), k.pricingVersion())).add(row);
+        }
+        List<UsageGroup> groups = byKey.values().stream()
+                .map(UsageGroupBuilder::build)
+                .sorted(java.util.Comparator.comparing(UsageGroup::roleId)
+                        .thenComparing(UsageGroup::state)
+                        .thenComparing(UsageGroup::usageStatus))
+                .toList();
+        return Optional.of(new UsageResponse(runId, rows.size(), usageMissingCalls,
+                groups, Instant.now()));
+    }
+
+    /** 分组累加器（usage_missing 组不累 tokens；unpriced 组不累 cost——不猜零） */
+    private static final class UsageGroupBuilder {
+        private final String roleId;
+        private final String state;
+        private final String usageStatus;
+        private final String currency;
+        private final String pricingVersion;
+        private long calls;
+        private Long promptTokens;
+        private Long completionTokens;
+        private Long totalTokens;
+        private Long costMicros;
+
+        UsageGroupBuilder(String roleId, String state, String usageStatus,
+                String currency, String pricingVersion) {
+            this.roleId = roleId;
+            this.state = state;
+            this.usageStatus = usageStatus;
+            this.currency = currency;
+            this.pricingVersion = pricingVersion;
+        }
+
+        void add(EvalQueryReader.UsageCallRow row) {
+            calls++;
+            if ("usage_missing".equals(usageStatus)) {
+                return;
+            }
+            promptTokens = nvl(promptTokens) + row.promptTokens();
+            completionTokens = nvl(completionTokens) + row.completionTokens();
+            totalTokens = nvl(totalTokens) + row.totalTokens();
+            if ("priced".equals(usageStatus)) {
+                costMicros = nvl(costMicros) + row.costMicros();
+            }
+        }
+
+        private static long nvl(Long v) {
+            return v == null ? 0L : v;
+        }
+
+        UsageGroup build() {
+            return new UsageGroup(roleId, state, usageStatus, currency, pricingVersion,
+                    calls, promptTokens, completionTokens, totalTokens, costMicros);
+        }
+    }
+
     /** 一侧（run+scenario）的装配结果：round → 摘要 + round → 签名桶（diff 输入） */
     private record SideLogs(Map<Integer, CaseLogSummary> byRound,
                             Map<Integer, Map<String, Long>> bucketsByRound) {
@@ -711,13 +863,14 @@ public class EvalQueryService {
 
     // ------------------------------------------------------------------ 分面装配（纯函数段）
 
-    private EvalRunListItem toListItem(EvalRunRow row) {
+    private EvalRunListItem toListItem(EvalRunRow row,
+            List<EvalQueryReader.UsageCallRow> usageRows) {
         return new EvalRunListItem(row.runId(), row.datasetVersion(), row.registryDigest(),
                 row.model(), row.promptVersion(), row.configDigest(), row.state(),
                 row.startedAt(), row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 row.displayName(), row.mode(), row.caseCount(), row.totalScenarios(),
-                qualityFacet(row), facets(row));
+                qualityFacet(row), facets(row, RunUsageRollup.of(usageRows)));
     }
 
     /** 质量分面：计数列未回填（RUNNING/FAILED）→ 五比率全 UNKNOWN，不填 0 */
@@ -741,8 +894,9 @@ public class EvalQueryService {
     /**
      * 状态分面：executionState = 旧 state 同义别名；phase/stageEnteredAt 直透端口投影
      * （无 eval_phase_event 事件 → null）；leaseHeartbeatAt 无租约数据源 → null；
-     * usage/cost 未接线常量 UNKNOWN（RV08：用量/费用等 R7 RCA 调用账本，
-     * 不读 PR 账本冒充）。EV-04 真值面：
+     * usage/cost 自 EV-06 起接真值（rollup 入参：rca_model_call 沿 rca_run_id 身份链
+     * 聚合，绝不读 PR 账本冒充——RV08；无链/无已结算调用 → UNKNOWN 如实）。
+     * EV-04 真值面：
      * <ul>
      *   <li>recoveryState：V81 列有值直透（PENDING/RECOVERING/VERIFIED/FAILED）；
      *       null + mode=L → UNKNOWN（worker 未上报）；null + 其他模式/旧 CLI 行 →
@@ -754,7 +908,7 @@ public class EvalQueryService {
      * 结论 PASS → OK、FAIL → VIOLATED、INCONCLUSIVE/NOT_EVALUABLE/无落档 → UNKNOWN
      * （对比资格结论，非单 run 绝对质量——词表语义见 EV-07 文档）。
      */
-    private static RunFacets facets(EvalRunRow row) {
+    private static RunFacets facets(EvalRunRow row, RunUsageRollup usage) {
         String recoveryFacet;
         if (row.recoveryState() != null) {
             recoveryFacet = row.recoveryState();
@@ -763,7 +917,8 @@ public class EvalQueryService {
         }
         return new RunFacets(row.state(), row.phase(), row.phaseEnteredAt(),
                 row.lastProgressAt(), null,
-                qualityVerdict(row), recoveryFacet, STATUS_UNKNOWN, STATUS_UNKNOWN,
+                qualityVerdict(row), recoveryFacet,
+                usage.usageStatus(), usage.costStatus(),
                 FRESHNESS_LIVE, row.cancelRequestedAt());
     }
 

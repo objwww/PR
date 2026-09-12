@@ -87,7 +87,7 @@ class EvalCompareTest {
                                           boolean hit, String digest, String family) {
         return new CompareCaseRow(UUID.randomUUID(), scenarioId, roundNo, verdict, hit,
                 "{\"component\":\"redis\",\"fault_type\":\"oom\",\"reason_code\":\"x\"}",
-                "policy-v1", digest, family);
+                "policy-v1", digest, family, null, null);
     }
 
     @Test

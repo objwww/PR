@@ -432,7 +432,8 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         select c.id as case_execution_id, c.scenario_id, c.round_no, c.verdict,
                                c.root_cause_hit, c.expected_root_cause::text as expected_json,
                                c.selection_policy_version,
-                               idn.content_digest, idn.scenario_family_id
+                               idn.content_digest, idn.scenario_family_id,
+                               c.rca_run_id, c.latency_ms
                         from eval_case_result c
                         join eval_run er on er.id = c.eval_run_id
                         left join lateral (
@@ -456,8 +457,79 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("scenario_id"), rs.getInt("round_no"),
                         rs.getString("verdict"), rs.getBoolean("root_cause_hit"),
                         rs.getString("expected_json"), rs.getString("selection_policy_version"),
-                        rs.getString("content_digest"), rs.getString("scenario_family_id")))
+                        rs.getString("content_digest"), rs.getString("scenario_family_id"),
+                        rs.getObject("rca_run_id", UUID.class),
+                        rs.getObject("latency_ms", Long.class)))
                 .list();
+    }
+
+    /** R6/EV-06：eval run 关联的已结算模型调用行（rca_run_id 身份链 join，不碰 PR 域账本） */
+    @Override
+    public List<UsageCallRow> listUsageCalls(UUID evalRunId) {
+        return jdbc.sql("""
+                        select c.eval_run_id, c.rca_run_id, m.attempt_id, m.role_id, m.state,
+                               (m.usage->>'prompt_tokens')::int as prompt_tokens,
+                               (m.usage->>'completion_tokens')::int as completion_tokens,
+                               (m.usage->>'total_tokens')::int as total_tokens,
+                               m.cost_micros, m.pricing_version, m.currency, m.usage_missing
+                        from eval_case_result c
+                        join rca_model_call m on m.run_id = c.rca_run_id
+                        where c.eval_run_id = :runId
+                          and c.rca_run_id is not null
+                          and m.state <> 'PENDING'
+                        order by c.rca_run_id, m.attempt_id, m.action_seq, m.physical_seq
+                        """)
+                .param("runId", evalRunId)
+                .query(EvalQueryReaderUsageRows::map)
+                .list();
+    }
+
+    /** 批量面（列表接线，单查询禁 N+1）；空集直返不拼 IN () */
+    @Override
+    public List<UsageCallRow> listUsageCallsForRuns(Iterable<UUID> evalRunIds) {
+        List<UUID> ids = new ArrayList<>();
+        for (UUID id : evalRunIds) {
+            ids.add(Objects.requireNonNull(id));
+        }
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        select c.eval_run_id, c.rca_run_id, m.attempt_id, m.role_id, m.state,
+                               (m.usage->>'prompt_tokens')::int as prompt_tokens,
+                               (m.usage->>'completion_tokens')::int as completion_tokens,
+                               (m.usage->>'total_tokens')::int as total_tokens,
+                               m.cost_micros, m.pricing_version, m.currency, m.usage_missing
+                        from eval_case_result c
+                        join rca_model_call m on m.run_id = c.rca_run_id
+                        where c.eval_run_id in (:ids)
+                          and c.rca_run_id is not null
+                          and m.state <> 'PENDING'
+                        order by c.eval_run_id, c.rca_run_id, m.attempt_id, m.action_seq, m.physical_seq
+                        """)
+                .param("ids", ids)
+                .query(EvalQueryReaderUsageRows::map)
+                .list();
+    }
+
+    /** usage 行映射（单 run / 批量两查询共用同一列面） */
+    private static final class EvalQueryReaderUsageRows {
+        private EvalQueryReaderUsageRows() {
+        }
+
+        static UsageCallRow map(ResultSet rs, int rowNum) throws SQLException {
+            return new UsageCallRow(
+                    rs.getObject("eval_run_id", UUID.class),
+                    rs.getObject("rca_run_id", UUID.class),
+                    rs.getObject("attempt_id", UUID.class),
+                    rs.getString("role_id"), rs.getString("state"),
+                    (Integer) rs.getObject("prompt_tokens"),
+                    (Integer) rs.getObject("completion_tokens"),
+                    (Integer) rs.getObject("total_tokens"),
+                    (Long) rs.getObject("cost_micros"),
+                    rs.getString("pricing_version"), rs.getString("currency"),
+                    rs.getBoolean("usage_missing"));
+        }
     }
 
     // ------------------------------------------------------------------ 内部

@@ -200,11 +200,14 @@ public interface EvalQueryReader {
      * case_version 身份列（content_digest/scenario_family_id）经精确键横向解析
      * （dv.version = run.dataset_version 且 case_key = scenario_id；无匹配/歧义/
      * HOLDOUT RLS 不可见 → 身份列 null，与 EV-05 findCaseIdentity 同律不猜）。
+     * rca_run_id/latency_ms（R12 逐例差值输入）：费用差经 rca_run_id 链 usage
+     * 投影（R6 同源），延迟差直读用例列。
      */
     record CompareCaseRow(UUID caseExecutionId, String scenarioId, int roundNo,
                           String verdict, boolean rootCauseHit,
                           String expectedRootCauseJson, String selectionPolicyVersion,
-                          String contentDigest, String scenarioFamilyId) {
+                          String contentDigest, String scenarioFamilyId,
+                          UUID rcaRunId, Long latencyMs) {
     }
 
     /** 对比 run 元数据；未知 id → empty（controller 404 面） */
@@ -215,4 +218,27 @@ public interface EvalQueryReader {
      * 调用方传上限+1 判 truncated，超出行不得进入统计）。run 无案例 → 空表。
      */
     List<CompareCaseRow> listCasesForCompare(UUID runId, int limit);
+
+    // ------------------------------------------------------------------ R6/EV-06 usage 投影
+
+    /**
+     * eval run 关联的全部已结算模型调用行（逐调用原样返回，分组聚合归应用面）。
+     * 身份链 = eval_case_result.rca_run_id 显式映射（RV08 红线：不碰 PR 域平台
+     * 模型账本——RCA 唯一账本山是 rca_model_call；不按时间窗猜归因——EU17 结构性隔离）。
+     */
+    List<UsageCallRow> listUsageCalls(UUID evalRunId);
+
+    /**
+     * 批量面（EV-06 列表接线，禁 N+1）：多 run 的已结算调用行一次取回，
+     * 按 run 分组归应用服务。evalRunIds 为空 → 空表（不拼 IN ()）。
+     */
+    List<UsageCallRow> listUsageCallsForRuns(Iterable<UUID> evalRunIds);
+
+    /** usage 调用行（usage/cost 仅 SUCCESS 带回报行可能在场；pricingVersion 含
+     * 'unpriced' 显式态——R4 契约，与 usage 缺失可区分） */
+    record UsageCallRow(UUID evalRunId, UUID rcaRunId, UUID attemptId, String roleId,
+                        String state, Integer promptTokens, Integer completionTokens,
+                        Integer totalTokens, Long costMicros, String pricingVersion,
+                        String currency, boolean usageMissing) {
+    }
 }

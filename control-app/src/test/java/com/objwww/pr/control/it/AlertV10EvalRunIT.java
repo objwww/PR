@@ -294,7 +294,8 @@ class AlertV10EvalRunIT extends PostgresITBase {
     }
 
     @Test
-    @DisplayName("授权矩阵：eval_app 写面全通；eval_case_result 无 UPDATE/DELETE；生产角色零权限")
+    @DisplayName("授权矩阵：eval_app 写面全通；eval_case_result 无 UPDATE/DELETE；"
+            + "control_app 只读（V45）零写；notify/publisher 零权限")
     void grantsFollowLeastPrivilegeOnRealRoles() {
         EvalRun run = runningRun();
         evalRuns.insertRunning(run);
@@ -311,10 +312,13 @@ class AlertV10EvalRunIT extends PostgresITBase {
                         "DELETE FROM eval_case_result WHERE false").update(),
                 "permission denied")).isTrue();
 
-        // 生产面角色全部零权限（M3-15 评测/生产隔离）
+        // 生产面写隔离不变（M3-15）；control_app 读面自 V45 翻面——UI-5 评测只读投影
+        // 授 SELECT（/api/eval 后端面），零写开口维持（V45 纪律「只授 SELECT」）
         assertThat(chainContains(() -> controlJdbc.sql(
-                        "SELECT count(*) FROM eval_run").query(Long.class).single(),
+                        "DELETE FROM eval_run WHERE false").update(),
                 "permission denied")).isTrue();
+        assertThat(controlJdbc.sql("SELECT count(*) FROM eval_run")
+                .query(Long.class).single()).isNotNull();
         assertThat(chainContains(() -> notifyJdbc.sql(
                         "SELECT count(*) FROM eval_case_result").query(Long.class).single(),
                 "permission denied")).isTrue();

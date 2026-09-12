@@ -20,10 +20,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * V21 四分区权限真 PG 组件测试（M5-02；方案 §12.1 L2 的 IT 面）：
- * Agent/RAG 身份（control_app 族）对 case_version 查询恒 0（零 grant + RLS 零策略
- * 双保险）、eval_app（SCORING）封存前不见 HOLDOUT、PUBLIC_BENCHMARK 数据行不得
- * 落 HOLDOUT（INV-AM5-1 触发器兜底）、同 family 拆跨分区被登记面拒绝、
- * 四分区角色各见单分区（RLS 策略行为面）。
+ * control_app 对 case_version 的可视面自 V45 起 = 评分身份同构（UI-5 评测只读投影：
+ * SELECT grant + RLS 策略 partition_class<>'HOLDOUT'）——HOLDOUT 封存恒不可见，
+ * 纵深由授权层拒绝（V20 时代 42501）演进为 RLS 行级过滤；eval_app（SCORING）封存前
+ * 不见 HOLDOUT、PUBLIC_BENCHMARK 数据行不得落 HOLDOUT（INV-AM5-1 触发器兜底）、
+ * 同 family 拆跨分区被登记面拒绝、四分区角色各见单分区（RLS 策略行为面）。
  * 本机无 Docker 自动跳过（真证据待 195 释放后统一补）。
  */
 class PostgresDatasetPartitionAccessTest extends PostgresITBase {
@@ -98,15 +99,28 @@ class PostgresDatasetPartitionAccessTest extends PostgresITBase {
     }
 
     @Test
-    void controlAppIdentityHasZeroAccessToCaseVersion() {
-        UUID ds = seedDataset("fault-injection", "v1", "PRIVATE", "TUNING");
-        seedCase(ds, "case-1", "family-f1", "TUNING", Instant.parse("2026-09-01T00:00:00Z"), null);
+    void controlAppIdentitySeesNonHoldoutRowsOnly() {
+        UUID tuning = seedDataset("fault-injection", "v1", "PRIVATE", "TUNING");
+        UUID holdout = seedDataset("fault-injection", "v2", "PRIVATE", "HOLDOUT");
+        seedCase(tuning, "case-1", "family-f1", "TUNING",
+                Instant.parse("2026-09-01T00:00:00Z"), null);
+        seedCase(holdout, "case-h1", "family-f2", "HOLDOUT",
+                Instant.parse("2026-09-01T00:00:00Z"), null);
 
-        // Agent/RAG/调优界面身份（control_app 族）：零 grant（V20 revoke）+ RLS 零策略
-        // 双保险——查询在授权层直接拒绝（42501），不存在"侥幸可见"
-        assertThatExceptionOfType(DataAccessException.class)
-                .isThrownBy(() -> controlJdbc.sql("select count(*) from case_version")
-                        .query(Long.class).single());
+        // control_app 与 case_version 的契约自 V45 翻面：UI-5 评测只读投影授予 SELECT，
+        // 隔离语义由 RLS 承载——pol_case_version_control_app_select 与评分身份同构
+        // （partition_class <> 'HOLDOUT'），封存面恒不可见（INV-AM5-1 纵深不变）。
+        // 旧断言「零 grant 查询必 42501」是 V20 时代前提，V45 起失效——本类 docker 门
+        // 内从未真跑，195 全仓 verify 首次真值执行暴露，按真契约重钉。
+        assertThat(controlJdbc.sql("select count(*) from case_version")
+                        .query(Long.class).single())
+                .as("control_app 只见非 HOLDOUT 行（与评分身份同构）").isEqualTo(1L);
+        assertThat(controlJdbc.sql("select count(*) from case_version "
+                        + "where partition_class = 'HOLDOUT'")
+                        .query(Long.class).single())
+                .as("HOLDOUT 封存面对 control_app 恒 0（RLS 行级过滤非行删除）").isZero();
+        // 行真实存在（admin owner 视角全貌 = 2）：不可见是策略面不是数据面
+        assertThat(count("case_version")).isEqualTo(2L);
     }
 
     @Test

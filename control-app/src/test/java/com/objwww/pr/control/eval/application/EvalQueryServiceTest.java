@@ -19,6 +19,7 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.PartitionCou
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -705,6 +706,128 @@ class EvalQueryServiceTest {
         assertThat(service.evidenceSummary(UUID.randomUUID())).isEmpty();
     }
 
+    // ------------------------------------------------------------------ R6/EV-06 usage 投影
+
+    @Test
+    void usageGroupsByRoleStateStatusAndCurrency_neverSumsAcrossGroups() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.usageCalls = List.of(
+                usageRow("primary", "SUCCESS", 100, 20, 120, 1500L, "pv-2026-09", "CNY", false),
+                usageRow("primary", "SUCCESS", 50, 10, 60, 750L, "pv-2026-09", "CNY", false),
+                usageRow("primary", "SUCCESS", 30, 5, 35, null, "unpriced", null, false),
+                usageRow("logs", "SUCCESS", null, null, null, null, null, null, true),
+                usageRow("logs", "FAILED", null, null, null, null, null, null, false),
+                usageRow("metrics", "SUCCESS", 10, 4, 14, 90L, "pv-2026-09", "USD", false));
+
+        EvalQueryService.UsageResponse out = service.usage(runId).orElseThrow();
+
+        assertThat(out.totalCalls()).isEqualTo(6);
+        assertThat(out.usageMissingCalls()).isEqualTo(2);
+        // priced CNY 组聚合同组两行（150/30, cost 2250），绝不与 USD 组相加（EU20）
+        EvalQueryService.UsageGroup pricedCny = groupOf(out, "primary", "priced");
+        assertThat(pricedCny.calls()).isEqualTo(2);
+        assertThat(pricedCny.promptTokens()).isEqualTo(150);
+        assertThat(pricedCny.completionTokens()).isEqualTo(30);
+        assertThat(pricedCny.costMicros()).isEqualTo(2250L);
+        assertThat(pricedCny.currency()).isEqualTo("CNY");
+        assertThat(pricedCny.pricingVersion()).isEqualTo("pv-2026-09");
+        // unpriced 组：tokens 在场、cost 恒 null（不猜零，R4/EU19）
+        EvalQueryService.UsageGroup unpriced = groupOf(out, "primary", "unpriced");
+        assertThat(unpriced.calls()).isEqualTo(1);
+        assertThat(unpriced.promptTokens()).isEqualTo(30);
+        assertThat(unpriced.costMicros()).isNull();
+        // usage_missing 面：SUCCESS+usage_missing 与 FAILED 分属两组（state 入键），
+        // 组内 tokens/cost 恒 null
+        EvalQueryService.UsageGroup missingOk =
+                groupOf(out, "logs", "SUCCESS", "usage_missing");
+        assertThat(missingOk.calls()).isEqualTo(1);
+        assertThat(missingOk.promptTokens()).isNull();
+        assertThat(missingOk.costMicros()).isNull();
+        assertThat(groupOf(out, "logs", "FAILED", "usage_missing").calls()).isEqualTo(1);
+        // USD 独立组
+        assertThat(groupOf(out, "metrics", "priced").costMicros()).isEqualTo(90L);
+    }
+
+    @Test
+    void usageOfUnknownRunIsEmpty() {
+        reader.run = null;
+        assertThat(service.usage(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void listRunsWiresUsageAndCostFacetsFromRcaChain_worstCaseRollup() {
+        UUID pricedRun = UUID.randomUUID();
+        UUID unpricedRun = UUID.randomUUID();
+        UUID missingRun = UUID.randomUUID();
+        UUID bareRun = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(
+                runRow(pricedRun, NOW, "SUCCEEDED"),
+                runRow(unpricedRun, NOW, "SUCCEEDED"),
+                runRow(missingRun, NOW, "SUCCEEDED"),
+                runRow(bareRun, NOW, "SUCCEEDED")), false);
+        List<EvalQueryReader.UsageCallRow> usage = new ArrayList<>();
+        usage.add(usageRow(pricedRun, "primary", "SUCCESS", 10, 2, 12, 100L,
+                "pv-2026-09", "CNY", false));
+        usage.add(usageRow(unpricedRun, "primary", "SUCCESS", 8, 2, 10, null,
+                "unpriced", null, false));
+        usage.add(usageRow(missingRun, "primary", "SUCCESS", null, null, null, null,
+                "pv-2026-09", "CNY", true));
+        reader.usageCallsForRuns = Map.of(pricedRun,
+                List.of(usage.get(0)), unpricedRun, List.of(usage.get(1)),
+                missingRun, List.of(usage.get(2)));
+
+        List<EvalQueryService.EvalRunListItem> items =
+                service.listRuns(null, null, 50).items();
+
+        assertThat(items).hasSize(4);
+        assertThat(facetsOf(items, pricedRun).usageStatus()).isEqualTo("OK");
+        assertThat(facetsOf(items, pricedRun).costStatus()).isEqualTo("OK");
+        // unpriced：用量在场、价目缺 → 未定价（R4/EU19，绝不显 0）
+        assertThat(facetsOf(items, unpricedRun).usageStatus()).isEqualTo("OK");
+        assertThat(facetsOf(items, unpricedRun).costStatus()).isEqualTo("UNPRICED");
+        // usage_missing 压倒一切：整 run 用量未知，费用随之 UNKNOWN（不猜）
+        assertThat(facetsOf(items, missingRun).usageStatus()).isEqualTo("USAGE_MISSING");
+        assertThat(facetsOf(items, missingRun).costStatus()).isEqualTo("UNKNOWN");
+        // 无 rca 链/无已结算调用 → 双 UNKNOWN 如实
+        assertThat(facetsOf(items, bareRun).usageStatus()).isEqualTo("UNKNOWN");
+        assertThat(facetsOf(items, bareRun).costStatus()).isEqualTo("UNKNOWN");
+    }
+
+    private static EvalQueryService.RunFacets facetsOf(
+            List<EvalQueryService.EvalRunListItem> items, UUID runId) {
+        return items.stream().filter(i -> i.runId().equals(runId)).findFirst()
+                .orElseThrow().facets();
+    }
+
+    private static EvalQueryService.UsageGroup groupOf(EvalQueryService.UsageResponse out,
+            String roleId, String usageStatus) {
+        return groupOf(out, roleId, null, usageStatus);
+    }
+
+    private static EvalQueryService.UsageGroup groupOf(EvalQueryService.UsageResponse out,
+            String roleId, String state, String usageStatus) {
+        return out.groups().stream()
+                .filter(g -> g.roleId().equals(roleId) && g.usageStatus().equals(usageStatus)
+                        && (state == null || g.state().equals(state)))
+                .findFirst().orElseThrow();
+    }
+
+    private static EvalQueryReader.UsageCallRow usageRow(String roleId, String state,
+            Integer prompt, Integer completion, Integer total, Long costMicros,
+            String pricingVersion, String currency, boolean usageMissing) {
+        return usageRow(UUID.randomUUID(), roleId, state, prompt, completion, total,
+                costMicros, pricingVersion, currency, usageMissing);
+    }
+
+    private static EvalQueryReader.UsageCallRow usageRow(UUID evalRunId, String roleId,
+            String state, Integer prompt, Integer completion, Integer total,
+            Long costMicros, String pricingVersion, String currency, boolean usageMissing) {
+        return new EvalQueryReader.UsageCallRow(evalRunId, UUID.randomUUID(),
+                UUID.randomUUID(), roleId, state, prompt, completion, total, costMicros,
+                pricingVersion, currency, usageMissing);
+    }
+
     // ------------------------------------------------------------------ EV-05 受限日志比较
 
     private static CaseLogEvidenceRow logRow(UUID caseId, String scenarioId, int round,
@@ -948,6 +1071,25 @@ class EvalQueryServiceTest {
         @Override
         public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
             throw new UnsupportedOperationException();
+        }
+
+        List<EvalQueryReader.UsageCallRow> usageCalls = List.of();
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCalls(UUID evalRunId) {
+            return usageCalls;
+        }
+
+        java.util.Map<UUID, List<EvalQueryReader.UsageCallRow>> usageCallsForRuns = java.util.Map.of();
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCallsForRuns(
+                Iterable<UUID> evalRunIds) {
+            List<EvalQueryReader.UsageCallRow> out = new ArrayList<>();
+            for (UUID id : evalRunIds) {
+                out.addAll(usageCallsForRuns.getOrDefault(id, List.of()));
+            }
+            return out;
         }
     }
 }

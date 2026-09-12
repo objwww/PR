@@ -50,9 +50,16 @@ class EvalCompareServiceTest {
 
     private static CompareCaseRow caseRow(String scenarioId, int roundNo, String verdict,
                                           boolean hit, String family) {
+        return caseRow(scenarioId, roundNo, verdict, hit, family, null, null);
+    }
+
+    /** R12 逐例差值输入面：rcaRunId（费用链）/ latencyMs 可注入 */
+    private static CompareCaseRow caseRow(String scenarioId, int roundNo, String verdict,
+                                          boolean hit, String family, UUID rcaRunId,
+                                          Long latencyMs) {
         return new CompareCaseRow(UUID.randomUUID(), scenarioId, roundNo, verdict, hit,
                 "{\"component\":\"redis\",\"fault_type\":\"oom\",\"reason_code\":\"x\"}",
-                "policy-v1", "digest-" + scenarioId, family);
+                "policy-v1", "digest-" + scenarioId, family, rcaRunId, latencyMs);
     }
 
     private void setupComparableRuns() {
@@ -219,6 +226,59 @@ class EvalCompareServiceTest {
                 .containsExactly("s2", "s4");
     }
 
+    // ------------------------------------------------------------------ R12 逐例差值
+
+    @Test
+    void perCaseDeltaCarriesScoreCostLatencyWithHonestUnknowns() {
+        setupComparableRuns();
+        UUID baselineRca = UUID.randomUUID();
+        UUID candidateRca = UUID.randomUUID();
+        List<CompareCaseRow> b = List.of(
+                caseRow("s1", 1, "DECIDABLE", false, "f1", baselineRca, 1_000L),
+                caseRow("s2", 1, "DECIDABLE", true, "f1", null, null));
+        List<CompareCaseRow> c = List.of(
+                caseRow("s1", 1, "DECIDABLE", true, "f1", candidateRca, 800L),
+                caseRow("s2", 1, "DECIDABLE", true, "f1", null, null));
+        reader.casesByRun.put(BASELINE, b);
+        reader.casesByRun.put(CANDIDATE, c);
+        // s1 链路：基线 priced 500_000；候选链路含 unpriced（cost NULL）→ Δcost UNKNOWN
+        reader.usageRows = List.of(
+                usage(BASELINE, baselineRca, 500_000L, "cny", false),
+                usage(CANDIDATE, candidateRca, null, null, false));
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        assertThat(out.cases().get(0).scenarioId()).isEqualTo("s1");
+        EvalCompareService.CaseDelta delta1 = out.cases().get(0).delta();
+        assertThat(delta1.score().delta()).as("miss→hit = +1").isEqualTo(1L);
+        assertThat(delta1.score().direction())
+                .isEqualTo(EvalCompareService.MetricDelta.HIGHER_IS_BETTER);
+        assertThat(delta1.score().group()).isEqualTo("IMPROVED");
+        assertThat(delta1.cost().delta()).as("候选链路 unpriced → 不折算不为 0（R4）")
+                .isNull();
+        assertThat(delta1.cost().group()).isEqualTo("UNKNOWN");
+        assertThat(delta1.costNote()).isEqualTo("CANDIDATE_COST_UNKNOWN");
+        assertThat(delta1.latency().delta()).isEqualTo(-200L);
+        assertThat(delta1.latency().direction())
+                .isEqualTo(EvalCompareService.MetricDelta.LOWER_IS_BETTER);
+        assertThat(delta1.latency().group()).as("latency 更短 = 改善").isEqualTo("IMPROVED");
+
+        EvalCompareService.CaseDelta delta2 = out.cases().get(1).delta();
+        assertThat(delta2.score().delta()).isZero();
+        assertThat(delta2.score().group()).isEqualTo("FLAT");
+        assertThat(delta2.cost().delta()).isNull();
+        assertThat(delta2.costNote()).isEqualTo("BOTH_COST_UNKNOWN");
+        assertThat(delta2.latency().group()).as("任一侧缺值如实 UNKNOWN").isEqualTo("UNKNOWN");
+    }
+
+    private static EvalQueryReader.UsageCallRow usage(UUID evalRunId, UUID rcaRunId,
+            Long costMicros, String currency, boolean usageMissing) {
+        return new EvalQueryReader.UsageCallRow(evalRunId, rcaRunId, UUID.randomUUID(),
+                "primary", "SUCCESS", 100, 50, 150, costMicros,
+                costMicros == null ? "unpriced" : "pv-1", currency, usageMissing);
+    }
+
     // ------------------------------------------------------------------ 落档面（POST）
 
     @Test
@@ -330,6 +390,20 @@ class EvalCompareServiceTest {
         @Override
         public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
             return casesByRun.getOrDefault(runId, List.of());
+        }
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCalls(UUID evalRunId) {
+            return List.of();
+        }
+
+        /** R12 逐例差值注入面（默认空 = 全链路无 usage，Δcost 如实 UNKNOWN） */
+        List<EvalQueryReader.UsageCallRow> usageRows = List.of();
+
+        @Override
+        public List<EvalQueryReader.UsageCallRow> listUsageCallsForRuns(
+                Iterable<UUID> evalRunIds) {
+            return usageRows;
         }
     }
 

@@ -81,7 +81,7 @@
           </el-table-column>
           <el-table-column label="费用状态与耗时" width="140">
             <template #default="{ row }">
-              <div class="cell-main">费用：未统计（依赖 EV-06）</div>
+              <div class="cell-main">费用：{{ fmtCost(row) }}</div>
               <div class="cell-sub">耗时：{{ fmtDuration(row.startedAt, row.finishedAt) }}</div>
             </template>
           </el-table-column>
@@ -130,6 +130,8 @@
 // EV-01：固定 queryKey + 请求序号防竞态；null 显示“未统计”；“已加载 N 条”。
 // EV-03 接线：displayName/mode/totalScenarios/quality（比率三件套）/facets.phase；
 // 字段缺席（旧契约）一律“未统计”，不填 0 冒充。
+// EV-06 接线：费用列接 facets.usageStatus/costStatus（rca_model_call 身份链 rollup）；
+// usage_missing/unpriced 显“用量未知/未定价”，绝不显 0（R4 契约）。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
@@ -167,6 +169,15 @@ const pairMarked = ref(false)
 // eval 状态码 → 共享徽章词汇（SUCCEEDED 语义为成功，非 Run 的待审查）
 const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: 'FAILED' }[s] ?? s)
 const shortId = id => (id && id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id ?? '—')
+
+// EV-06 费用状态：rollup 三态 → 中文；UNKNOWN/字段缺席（旧契约或无 rca 链）→ 未统计
+function fmtCost(row) {
+  const f = row.facets ?? {}
+  if (f.usageStatus === 'USAGE_MISSING') return '用量未知'
+  if (f.costStatus === 'UNPRICED') return '未定价'
+  if (f.usageStatus === 'OK' && f.costStatus === 'OK') return '已计价'
+  return '未统计'
+}
 
 // RV05：固定 queryKey + 单调序号；失效请求（筛选已变/已有更新请求）一律不准入
 const queryKey = computed(() => JSON.stringify({ state: state.value }))

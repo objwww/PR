@@ -200,7 +200,7 @@ class EvalRunWorkerTest {
         clock = new StepClock();
         // 账本桩：evalRuns findCasesByRunId 空 → 对账走 UNMATCHED 降级面（不触网）
         ledger = new UsageLedgerService(evalRuns,
-                new com.objwww.pr.control.alert.support.AlertInMemoryStores.Investigations(),
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.ModelCalls(),
                 null, null, 0);
     }
 

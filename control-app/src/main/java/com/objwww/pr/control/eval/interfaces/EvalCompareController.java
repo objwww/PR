@@ -22,7 +22,9 @@ import java.util.UUID;
  *       ——全读面实时对比投影：可比性维度清单（comparable=false 不出配对结论）/
  *       配对计数三件套/判定变化矩阵/簇统计/故障源分桶/PairedTrialStats 溯源块/
  *       对比质量门（eval-compare-gate-v1）/同对最新落档引用/asOf。逐例列表有界
- *       （group 过滤 + (scenarioId, roundNo) 键集游标，limit 默认 200 上限 500）；
+ *       （group 过滤 + (scenarioId, roundNo) 键集游标，limit 默认 200 上限 500），
+ *       每例携带 R12 差值块 delta（Δscore/Δcost/Δlatency + 各指标方向与改善/持平/
+ *       退化分组；Δcost 仅双方链路完全 priced）；
  *       unpaired 列表上限 500（计数仍按全集）；</li>
  *   <li>POST /api/eval/comparisons——body {baselineRunId, candidateRunId}；同一计算
  *       的 insert-only 落档（V85 eval_comparison，重落档换新 id 不覆盖），201 携带
