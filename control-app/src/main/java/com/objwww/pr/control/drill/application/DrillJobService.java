@@ -101,6 +101,16 @@ public class DrillJobService {
                                  Instant stopRequestedAt) {
     }
 
+    /** 事件流条目：payload 透传 jsonb 解析值（账本原文，不做裁剪/改写，§7.2 原始账本视图） */
+    public record EventItem(String eventId, long seq, String eventType,
+                            String fromState, String toState, String actor,
+                            Object payload, Instant createdAt) {
+    }
+
+    /** nextCursor = 末条 seq（满页才给）；游标锚与仓储读面一致（identity 单调序） */
+    public record EventsResponse(List<EventItem> items, Long nextCursor, Instant asOf) {
+    }
+
     // ------------------------------------------------------------------ 装配
 
     private final DrillJobRepository jobs;
@@ -303,6 +313,25 @@ public class DrillJobService {
         return micros + "|" + job.id();
     }
 
+    /**
+     * 事件流投影（§7.2 详情页原始账本视图 / DU10 游标增量轮询）：作业不存在 →
+     * empty（404 面，与 detail 同语义）；afterSeq 之前的事件不重复下发，
+     * 满页才给 nextCursor（= 末条 seq）。limit 收敛归 Controller（同 list 面）。
+     */
+    public Optional<EventsResponse> events(UUID drillId, long afterSeq, int limit) {
+        if (jobs.findById(drillId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<DrillEvent> rows = events.listByDrillAfter(drillId, afterSeq, limit);
+        List<EventItem> items = rows.stream()
+                .map(e -> new EventItem(e.id().toString(), e.seq(), e.eventType().name(),
+                        e.fromState(), e.toState(), e.actor(),
+                        payloadValue(e.payloadJson()), e.createdAt()))
+                .toList();
+        Long nextCursor = rows.size() == limit ? rows.getLast().seq() : null;
+        return Optional.of(new EventsResponse(items, nextCursor, Instant.now()));
+    }
+
     // ------------------------------------------------------------------ 内部
 
     /** 场景解析 + 白名单校验（DU04：服务端强制，篡改即 400） */
@@ -384,6 +413,15 @@ public class DrillJobService {
             return mapper.readValue(paramsJson, Map.class);
         } catch (Exception e) {
             throw new IllegalStateException("drill params 反序列化失败", e);
+        }
+    }
+
+    /** 事件 payload 落库即冻结的 jsonb 原文；反序列化失败 = 库行损坏，与 paramsMap 同式抛出 */
+    private Object payloadValue(String payloadJson) {
+        try {
+            return mapper.readValue(payloadJson, Object.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("drill_event payload 反序列化失败", e);
         }
     }
 

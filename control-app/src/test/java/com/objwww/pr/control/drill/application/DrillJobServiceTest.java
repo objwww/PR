@@ -165,6 +165,16 @@ class DrillJobServiceTest {
         public List<DrillEvent> listByDrill(UUID drillId) {
             return stored.stream().filter(e -> e.drillId().equals(drillId)).toList();
         }
+
+        @Override
+        public List<DrillEvent> listByDrillAfter(UUID drillId, long afterSeq, int limit) {
+            return stored.stream()
+                    .filter(e -> e.drillId().equals(drillId))
+                    .filter(e -> e.seq() != null && e.seq() > afterSeq)
+                    .sorted(Comparator.comparing(DrillEvent::seq))
+                    .limit(limit)
+                    .toList();
+        }
     }
 
     /** ready 可控的测试目录（真实目录本批全 ready=false——ACCEPTED 面用 ready 夹具） */
@@ -409,5 +419,51 @@ class DrillJobServiceTest {
         assertThat(detail.related().incidentId()).isNull();
         assertThat(detail.related().runId()).isNull();
         assertThat(readyService.detail(UUID.randomUUID())).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ 事件流
+
+    /** 直接落带 seq 的账本行（正常路径 seq 由库 identity 生成，夹具显式赋值模拟） */
+    private DrillEvent storedEvent(DrillJob job, long seq, DrillEvent.EventType type) {
+        DrillEvent e = new DrillEvent(UUID.randomUUID(), job.id(), seq, type,
+                null, null, "op", "{\"note\":true}", BASE);
+        events.stored.add(e);
+        return e;
+    }
+
+    @Test
+    @DisplayName("事件流投影：游标=seq 严格大于续页、满页才给 nextCursor、payload 透传解析值")
+    void eventsCursorPaging() {
+        DrillJob job = activeJob(DrillJob.State.QUEUED, "k1");
+        storedEvent(job, 1, DrillEvent.EventType.PHASE_TRANSITION);
+        storedEvent(job, 2, DrillEvent.EventType.PRECHECK_RESULT);
+        storedEvent(job, 3, DrillEvent.EventType.WORKER_NOTE);
+
+        DrillJobService.EventsResponse page1 =
+                readyService.events(job.id(), 0, 2).orElseThrow();
+        assertThat(page1.items()).extracting(DrillJobService.EventItem::seq)
+                .containsExactly(1L, 2L);
+        assertThat(page1.nextCursor()).isEqualTo(2L);
+        assertThat(page1.items().getFirst().eventType()).isEqualTo("PHASE_TRANSITION");
+        assertThat(page1.items().getFirst().payload()).isInstanceOf(Map.class);
+
+        DrillJobService.EventsResponse page2 =
+                readyService.events(job.id(), page1.nextCursor(), 2).orElseThrow();
+        assertThat(page2.items()).extracting(DrillJobService.EventItem::seq)
+                .containsExactly(3L);
+        assertThat(page2.nextCursor()).isNull(); // 未满页 = 没有更多
+
+        // 归属隔离：他作业事件不混入（k3/k4 同 env 不同行，夹具绕过占位约束）
+        DrillJob other = activeJob(DrillJob.State.QUEUED, "k9");
+        storedEvent(other, 4, DrillEvent.EventType.WORKER_NOTE);
+        assertThat(readyService.events(job.id(), 0, 50).orElseThrow().items())
+                .extracting(DrillJobService.EventItem::seq)
+                .containsExactly(1L, 2L, 3L);
+    }
+
+    @Test
+    @DisplayName("事件流 404 面：未知作业 empty（与 detail 同语义，不返回空账本冒充存在）")
+    void eventsUnknownDrill() {
+        assertThat(readyService.events(UUID.randomUUID(), 0, 50)).isEmpty();
     }
 }

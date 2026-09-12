@@ -59,6 +59,26 @@ public class PostgresDrillEventRepository implements DrillEventRepository {
                 .query(this::map).list();
     }
 
+    /**
+     * {@inheritDoc}
+     * 读面只加 WHERE seq 下界 + LIMIT，排序键不变——与 listByDrill 同一有序面，
+     * 游标续页不重不漏。
+     */
+    @Override
+    public List<DrillEvent> listByDrillAfter(UUID drillId, long afterSeq, int limit) {
+        return jdbc.sql("""
+                        SELECT id, drill_id, seq, event_type, from_state, to_state,
+                            actor, payload::text as payload, created_at
+                        FROM drill_event
+                        WHERE drill_id = :drillId AND seq > :afterSeq
+                        ORDER BY seq LIMIT :limit
+                        """)
+                .param("drillId", drillId)
+                .param("afterSeq", afterSeq)
+                .param("limit", limit)
+                .query(this::map).list();
+    }
+
     private DrillEvent map(ResultSet rs, int rowNum) throws SQLException {
         return new DrillEvent(
                 rs.getObject("id", UUID.class),

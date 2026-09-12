@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -126,6 +127,31 @@ class PostgresDrillIT extends PostgresITBase {
                 DELETE FROM drill_event WHERE drill_id = :id
                 """).param("id", job.id()).update())
                 .hasStackTraceContaining("permission denied");
+    }
+
+    @Test
+    @DisplayName("事件流游标查询（§7.2）：seq 严格大于 afterSeq 升序限量，续页不重不漏")
+    void eventsCursorPaging() {
+        DrillJob job = job("arena-195", "it-k4");
+        controlJobs.insert(job);
+        controlEvents.insert(DrillEvent.phaseTransition(job.id(), DrillJob.State.QUEUED,
+                DrillJob.State.PRECHECK, "it-worker", "{}", Instant.now()));
+        evalEvents.insert(DrillEvent.of(job.id(), DrillEvent.EventType.PRECHECK_RESULT,
+                "it-worker", "{}", Instant.now()));
+        controlEvents.insert(DrillEvent.of(job.id(), DrillEvent.EventType.WORKER_NOTE,
+                "it-worker", "{}", Instant.now()));
+        List<DrillEvent> all = controlEvents.listByDrillAfter(job.id(), 0, 50);
+        assertThat(all).hasSize(3);
+        assertThat(all).extracting(DrillEvent::seq).isSorted();
+        // 游标续页：严格大于锚点，首页事件不重复下发
+        List<DrillEvent> after =
+                controlEvents.listByDrillAfter(job.id(), all.getFirst().seq(), 50);
+        assertThat(after).hasSize(2);
+        assertThat(after.getFirst().seq()).isGreaterThan(all.getFirst().seq());
+        // 限量：limit=2 只回最早两条（满页 = 还有下一页的服务端判定锚）
+        assertThat(controlEvents.listByDrillAfter(job.id(), 0, 2)).hasSize(2);
+        // 归属隔离：他作业事件不混入
+        assertThat(controlEvents.listByDrillAfter(UUID.randomUUID(), 0, 50)).isEmpty();
     }
 
     // ------------------------------------------------------------------ 约束面

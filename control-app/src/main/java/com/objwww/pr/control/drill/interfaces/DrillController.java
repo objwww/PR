@@ -27,6 +27,9 @@ import java.util.UUID;
  *       症状/时间参数/参数白名单/可执行性如实标记；GT 面不属于本端点）；</li>
  *   <li>GET /api/drills/{drillId}——详情：八阶段时间线（enteredAt 只取真实事件）+
  *       冻结参数审计 + 关联告警/Run（未回填 = null 如实"尚未关联"）；未知 id 404；</li>
+ *   <li>GET /api/drills/{drillId}/events——事件流：drill_event 原始账本（§7.2），
+ *       seq 游标增量（afterSeq 严格大于，limit 默认 50 上限 200，满页才给
+ *       nextCursor），支撑 DU10 有界轮询/浏览器重开状态一致；未知 id 404；</li>
  *   <li>POST /api/drills/preview——服务端预检（真实可查信号 OK/FAIL，查不了的项
  *       如实 UNKNOWN）+ 后端计算 TTL/窗口（前端不各算一套）；</li>
  *   <li>POST /api/drills——body {idempotencyKey, scenarioId, targetEnv,
@@ -80,6 +83,25 @@ public class DrillController {
             return ResponseEntity.badRequest().body(Map.of("error", "drillId 非法"));
         }
         return service.detail(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "演练作业不存在")));
+    }
+
+    @GetMapping("/{drillId}/events")
+    public ResponseEntity<?> events(@PathVariable String drillId,
+                                    @RequestParam(required = false, defaultValue = "0")
+                                    long afterSeq,
+                                    @RequestParam(required = false, defaultValue = "50")
+                                    int limit) {
+        UUID id = parseId(drillId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "drillId 非法"));
+        }
+        if (afterSeq < 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "afterSeq 非法"));
+        }
+        return service.events(id, afterSeq, Math.clamp(limit, 1, 200))
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(404)
                         .body(Map.of("error", "演练作业不存在")));

@@ -175,6 +175,11 @@ class DrillWorkerTest {
         public List<DrillEvent> listByDrill(UUID drillId) {
             return stored.stream().filter(e -> e.drillId().equals(drillId)).toList();
         }
+
+        @Override
+        public List<DrillEvent> listByDrillAfter(UUID drillId, long afterSeq, int limit) {
+            throw new UnsupportedOperationException("service 面");
+        }
     }
 
     private static final class FixedClock implements DrillWorker.DrillClock {
