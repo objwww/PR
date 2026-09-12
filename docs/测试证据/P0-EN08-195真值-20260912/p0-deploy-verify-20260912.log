@@ -1,0 +1,58 @@
+== [1/6] flyway 最新两行
+97 | en08 skill candidate | success=true
+96 | mc2123 receipt and operator material | success=true
+== [2/6] V96 两表存在
+incident_operator_material
+rca_delegation_receipt
+== [3/6] CHECK/唯一约束
+ck_mc21_receipt_admission
+ck_mc21_receipt_child_status
+ck_mc21_receipt_failed_gap
+ck_mc21_receipt_oversized_bounded
+ck_mc21_receipt_payload_size
+ck_mc21_receipt_round
+ck_mc31_material_admission
+ck_mc31_material_content
+ck_mc31_material_kind
+ck_mc31_material_source
+uq_mc32_material_revision
+== [4/6] 授权面（control_app 只读+插；publisher 零授权）
+control_app:INSERT
+control_app:SELECT
+publisher_grants=0
+== [5/6] 压缩指令资产登记（release_asset 内容寻址）
+PROMPT | ff846b82fbaeeee3 | {"kind": "context-compaction-directive", "policy":
+== [6/6] 人工材料端点路由（认证面 401/403 而非 404/500）
+GET /api/v1/incidents/{id}/materials -> HTTP 401
+POST /api/v1/incidents/{id}/materials -> HTTP 403
+== 启动日志关键行（资产登记/ERROR 计数）
+0
+MC_P0_DEPLOY_VERIFY_DONE
+=== ASSET-CHECK ===
+ff846b82fbaeeee3b8d90a5005dd65acdb2b5a866b0f1b5d351ea6f546897c26|t|["source_snapshot_digest", "event_seq_from", "event_seq_to", "required_refs"]
+--- WARN scan ---
+0
+=== FLYWAY 96/97 ===
+96|true
+97|true
+=== TABLES ===
+incident_operator_material
+rca_delegation_receipt
+rca_skill_candidate
+=== SKILL-CANDIDATE CONSTRAINTS ===
+2200_40333_15_not_null
+2200_40333_16_not_null
+2200_40333_1_not_null
+2200_40333_2_not_null
+2200_40333_3_not_null
+2200_40333_4_not_null
+2200_40333_5_not_null
+2200_40333_7_not_null
+2200_40333_9_not_null
+ck_rca_skill_candidate_activation
+ck_rca_skill_candidate_asset
+ck_rca_skill_candidate_retire
+ck_rca_skill_candidate_status
+ck_rca_skill_candidate_verification
+=== APP ERROR COUNT ===
+0
