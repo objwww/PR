@@ -123,6 +123,22 @@ class ControlArchitectureTest {
     }
 
     /**
+     * B4/INV-AM6-9（落码方案 :248 "有规无则"补钉）：canary 样本写入唯一入口 =
+     * 生产采集适配器 CanaryEvidenceSampleCollector（LIVE_CANARY 必须可追到生产事实，
+     * 禁脚本补数）。insert 的调用点只许在 release.application 内（仓储实现类是
+     * implements 非 call，窗口任务只读）；RcaRunOrchestrator 等调查面只经适配器。
+     */
+    @Test
+    void canarySampleInsertOnlyThroughCollector() {
+        noClasses().that().resideOutsideOfPackage("..control.release.application..")
+                .should().callMethod(
+                        com.objwww.pr.control.release.domain.repository.CanaryEvidenceSampleRepository.class,
+                        "insert",
+                        com.objwww.pr.control.release.domain.repository.CanaryEvidenceSampleRepository.SampleRow.class)
+                .check(classes);
+    }
+
+    /**
      * INV-AM5-1 / M5-01：AM5 数据集域模型与端口（eval.domain.model /
      * eval.domain.port）零框架——Spring/Jackson/JDBC/HTTP 一律禁入；三适配器落
      * infrastructure.adapter（纯转换亦不触网），JSON 落库面归

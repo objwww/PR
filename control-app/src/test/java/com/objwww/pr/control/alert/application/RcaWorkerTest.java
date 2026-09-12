@@ -130,7 +130,7 @@ class RcaWorkerTest {
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier, stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP, nativeRouter, stores.winners);
+                AlertMetrics.NOOP, nativeRouter, stores.winners, null);
     }
 
     private RcaWorker newWorker(String owner) {
@@ -147,7 +147,7 @@ class RcaWorkerTest {
                         executor),
                 orchestrator, TransactionOperations.withoutTransaction(), clock, owner, "rca",
                 Duration.ofMinutes(5), Duration.ofSeconds(30), pollInterval,
-                Duration.ofMinutes(1), Duration.ofMinutes(10), 2, runConfigSwitchService);
+                Duration.ofMinutes(1), Duration.ofMinutes(10), 2, runConfigSwitchService, null);
     }
 
     /** percent=100 canary 段（全桶 NATIVE 意愿；NativeEngineWiringTest.canaryBundle 同构） */

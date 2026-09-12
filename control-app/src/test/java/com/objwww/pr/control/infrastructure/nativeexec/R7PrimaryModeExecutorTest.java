@@ -531,7 +531,7 @@ class R7PrimaryModeExecutorTest {
                 stores.cas, com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
                 clock, "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                stores.winners);
+                stores.winners, null);
     }
 
     private static AgentRegistry buildRegistry(boolean withPrimary) {

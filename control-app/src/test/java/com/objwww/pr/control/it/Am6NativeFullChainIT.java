@@ -182,7 +182,7 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 AlertClock.system(), "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(jdbc));
+                        .PostgresReportWinnerRepository(jdbc), null);
     }
 
     // ------------------------------------------------------------------ 案① 全链

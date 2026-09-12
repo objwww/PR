@@ -93,6 +93,9 @@ public class RcaRunOrchestrator {
     private final AlertMetrics metrics;
     private final CanaryRouter canaryRouter;
     private final com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners;
+    /** B4 采集适配器（可空=legacy 零漂移）：run 终态样本采集（观测面，不阻断收尾） */
+    private final com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector
+            canaryCollector;
 
     /**
      * 生产装配面（M6-07 收瘦）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
@@ -115,7 +118,8 @@ public class RcaRunOrchestrator {
                               String slotScope,
                               AlertMetrics metrics,
                               CanaryRouter canaryRouter,
-                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners) {
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
+                              com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -132,6 +136,35 @@ public class RcaRunOrchestrator {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
         this.winners = Objects.requireNonNull(winners, "winners");
+        this.canaryCollector = canaryCollector;
+    }
+
+    /**
+     * B4 canary 采集（run 终态；RETRY 非终态不采）。failed = DEAD（调查未交付有效
+     * 报告）；observed 存原始事实不预聚合（V30 重评回放面）。采集失败仅 log-warn——
+     * 观测面不得阻断调查收尾事务。
+     */
+    private void collectCanarySample(RcaRun run, FinishOutcome outcome, Instant now) {
+        if (canaryCollector == null || outcome == FinishOutcome.RETRY_SCHEDULED) {
+            return;
+        }
+        try {
+            String stickinessKey = incidents.findById(run.incidentId())
+                    .map(Incident::incidentKey)
+                    .orElse("incident:" + run.incidentId());
+            Map<String, Object> provenance = Map.of(
+                    "source", "inbox",
+                    "engine", engineOf(run),
+                    "generation", run.generation());
+            Map<String, Object> observed = Map.of(
+                    "failed", outcome == FinishOutcome.DEAD,
+                    "outcome", outcome.name());
+            canaryCollector.collectLive(new com.objwww.pr.control.release.application
+                    .CanaryEvidenceSampleCollector.LiveObservation(
+                    run.id(), run.incidentId(), stickinessKey, provenance, observed));
+        } catch (RuntimeException e) {
+            log.warn("canary 样本采集失败（不阻断收尾）: run={} 原因={}", run.id(), e.getMessage());
+        }
     }
 
     /**
@@ -216,6 +249,9 @@ public class RcaRunOrchestrator {
                 Map.entry("decision", outcome.name()),
                 Map.entry("latency_ms", Duration.between(startedAttempt.startedAt(), now).toMillis())));
         metrics.taskDecision(outcome.name(), engineOf(run));
+
+        // B4：canary 采集样本（观测面——try/catch 不阻断收尾；RETRY 非终态不采）
+        collectCanarySample(run, outcome, now);
 
         if (slotEpoch >= 0) {
             slots.release(slotScope, slotNo, owner, slotEpoch);

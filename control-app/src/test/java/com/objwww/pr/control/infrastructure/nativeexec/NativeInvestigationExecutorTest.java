@@ -151,7 +151,7 @@ class NativeInvestigationExecutorTest {
                 stores.cas, com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
                 clock, "rca", com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
-                stores.winners);
+                stores.winners, null);
         incidentId = UUID.randomUUID();
         stores.incidents.insert(new Incident(incidentId, "alertname=HighErrorRate|service=checkout",
                 IncidentStatus.FIRING, 0, NOW, NOW, null, null, null, 0, 0, 0, null,

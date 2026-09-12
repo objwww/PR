@@ -105,7 +105,7 @@ class ExA2LeaseCancelFenceIT extends PostgresITBase {
                 new AlertInMemoryStores.Cas(), SlaPolicy.defaults(),
                 com.objwww.pr.control.alert.application.AlertClock.system(), "rca",
                 AlertMetrics.NOOP, CanaryRouter.holmesOnly(),
-                new PostgresReportWinnerRepository(jdbc));
+                new PostgresReportWinnerRepository(jdbc), null);
     }
 
     // ------------------------------------------------ F10：四条件原子回收

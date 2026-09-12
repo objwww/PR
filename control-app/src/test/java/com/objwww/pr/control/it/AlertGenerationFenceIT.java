@@ -82,7 +82,7 @@ class AlertGenerationFenceIT extends PostgresITBase {
                 Instant::now, "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(controlJdbc));
+                        .PostgresReportWinnerRepository(controlJdbc), null);
     }
 
     @Test

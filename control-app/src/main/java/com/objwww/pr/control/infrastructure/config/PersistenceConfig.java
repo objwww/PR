@@ -500,6 +500,14 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    // B4 Canary 采集样本追加面（V30；run_id 唯一=幂等；消费方 = 采集适配器/窗口任务）
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.CanaryEvidenceSampleRepository canaryEvidenceSampleRepository(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresCanaryEvidenceSampleRepository(
+                jdbc, objectMapper);
+    }
+
     // M6-02 引擎对照结论追加面（V32；消费方 = EngineComparisonRecorder，M6-05 反向影子复用）
     @Bean
     public com.objwww.pr.control.release.domain.repository.EngineComparisonRepository engineComparisonRepository(

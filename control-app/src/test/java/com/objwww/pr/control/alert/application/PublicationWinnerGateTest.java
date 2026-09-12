@@ -97,7 +97,7 @@ class PublicationWinnerGateTest {
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier(), stores.cas, SlaPolicy.defaults(), clock,
-                "rca", AlertMetrics.NOOP, nativeRouter, stores.winners);
+                "rca", AlertMetrics.NOOP, nativeRouter, stores.winners, null);
         worker = new RcaWorker(stores.tasks, stores.runs, stores.attempts,
                 stores.investigations, stores.incidents, stores.slots, stores.invocations,
                 stores.toolLedger,
@@ -108,7 +108,7 @@ class PublicationWinnerGateTest {
                 clock, "worker-a", "rca", Duration.ofMinutes(5), Duration.ofSeconds(30),
                 Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
                 org.mockito.Mockito.mock(
-                        com.objwww.pr.control.alert.application.RunConfigSwitchService.class));
+                        com.objwww.pr.control.alert.application.RunConfigSwitchService.class), null);
     }
 
     private ReportCompletedNotifier notifier() {

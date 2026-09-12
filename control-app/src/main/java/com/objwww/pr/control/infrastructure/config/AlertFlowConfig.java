@@ -206,11 +206,47 @@ public class AlertFlowConfig {
                                                  CanaryRouter canaryRouter,
                                                  com.objwww.pr.control.alert.domain.repository
                                                          .ReportWinnerRepository winners,
+                                                 com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         // M6-07：fallback 与 holmesShadowSampler 参数已随退场摘除（铸造点拆面）
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
-                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter, winners);
+                sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter, winners,
+                canaryCollector);
+    }
+
+    /** B4：canary 采集适配器（NATIVE run 收尾链唯一写入方；LIVE 生产溯源门） */
+    @Bean
+    public com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector
+    canaryEvidenceSampleCollector(
+            com.objwww.pr.control.release.domain.repository.CanaryEvidenceSampleRepository
+                    canaryEvidenceSampleRepository) {
+        return new com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector(
+                canaryEvidenceSampleRepository, java.time.Clock.systemUTC());
+    }
+
+    /** B4：bundle 派生窗口身份/策略源（capability not ready = 诚实缺席，任务空转） */
+    @Bean
+    public BundleBackedCanarySources bundleBackedCanarySources(
+            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository bundles,
+            NativeCapabilityProbe probe) {
+        return new BundleBackedCanarySources(bundles, probe);
+    }
+
+    /** B4：canary 周期评窗任务（worker 拍内独立容错调用） */
+    @Bean
+    public com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask(
+            com.objwww.pr.control.release.domain.repository.CanaryEvidenceSampleRepository
+                    canaryEvidenceSampleRepository,
+            com.objwww.pr.control.release.domain.repository.CanaryWindowVerdictRepository
+                    canaryWindowVerdictRepository,
+            BundleBackedCanarySources bundleBackedCanarySources) {
+        return new com.objwww.pr.control.release.application.CanaryWindowTask(
+                canaryEvidenceSampleRepository, canaryWindowVerdictRepository,
+                new com.objwww.pr.control.release.domain.service.CanaryWindowEvaluator(),
+                bundleBackedCanarySources,
+                (from, to) -> java.util.List.of(), // 对照组：M6-07 Holmes 退场后暂缺 → INCONCLUSIVE 诚实面
+                bundleBackedCanarySources, java.time.Clock.systemUTC());
     }
 
     // M6-07 Holmes 退场：fallbackService（M6-04 HOLMES RERUN 铸造面）、
@@ -455,7 +491,8 @@ public class AlertFlowConfig {
                                @Value("${app.alert.worker.retry-backoff:PT1M}") Duration retryBackoff,
                                @Value("${app.alert.worker.hanging-grace:PT10M}") Duration hangingGrace,
                                @Value("${app.alert.worker.investigation-schema-version:2}") int investigationSchemaVersion,
-                               RunConfigSwitchService runConfigSwitchService) {
+                               RunConfigSwitchService runConfigSwitchService,
+                               com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask) {
         Map<RcaEngine, RcaTaskExecutor> executors = new java.util.EnumMap<>(RcaEngine.class);
         NativeInvestigationExecutor nativeExecutorInstance = nativeExecutor.getIfAvailable();
         if (nativeExecutorInstance != null) {
@@ -464,7 +501,8 @@ public class AlertFlowConfig {
         return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
                 invocations, toolLedger, executors, orchestrator, tx, AlertClock.system(),
                 owner, slotScope, taskLease, heartbeatInterval, pollInterval, retryBackoff,
-                hangingGrace, investigationSchemaVersion, runConfigSwitchService);
+                hangingGrace, investigationSchemaVersion, runConfigSwitchService,
+                canaryWindowTask);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */

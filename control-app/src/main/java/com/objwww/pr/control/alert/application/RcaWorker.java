@@ -85,6 +85,7 @@ public class RcaWorker {
     private final int investigationSchemaVersion;
     /** EN-04 调度接线（A 批 A2）：loop 每拍巡回翻转过期 WAITING 切换命令（独立容错，不炸 recover 循环） */
     private final RunConfigSwitchService runConfigSwitchService;
+    private final com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
 
@@ -115,7 +116,7 @@ public class RcaWorker {
                 Map.of(RcaEngine.HOLMES, Objects.requireNonNull(executor, "executor 不得为 null")),
                 orchestrator, tx, clock, owner, slotScope, taskLease, heartbeatInterval,
                 pollInterval, retryBackoff, hangingGrace, investigationSchemaVersion,
-                runConfigSwitchService);
+                runConfigSwitchService, null);
     }
 
     /** 引擎映射表构造（M6-01）：Map 分派面唯一权威，未知引擎 fail-closed 不回退 */
@@ -139,7 +140,9 @@ public class RcaWorker {
                      Duration retryBackoff,
                      Duration hangingGrace,
                      int investigationSchemaVersion,
-                     RunConfigSwitchService runConfigSwitchService) {
+                     RunConfigSwitchService runConfigSwitchService,
+                     com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask) {
+        this.canaryWindowTask = canaryWindowTask; // B4 可选（null=legacy 零漂移）
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -358,6 +361,14 @@ public class RcaWorker {
                     runConfigSwitchService.expireOverdue();
                 } catch (RuntimeException e) {
                     log.error("expireOverdue 拍失败，下拍重试", e);
+                }
+                // B4：canary 周期评窗（拍内独立容错，沿 expireOverdue 同式；任务缺席=零漂移）
+                if (canaryWindowTask != null) {
+                    try {
+                        canaryWindowTask.evaluateCurrentWindow();
+                    } catch (RuntimeException e) {
+                        log.error("canary 评窗拍失败，下拍重试", e);
+                    }
                 }
                 CycleOutcome outcome = runOneCycle();
                 if (outcome != CycleOutcome.EXECUTED) {

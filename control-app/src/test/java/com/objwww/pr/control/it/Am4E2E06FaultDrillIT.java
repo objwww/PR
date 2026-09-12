@@ -307,7 +307,7 @@ class Am4E2E06FaultDrillIT extends PostgresITBase {
                 AlertClock.system(), "rca", AlertMetrics.NOOP,
                 com.objwww.pr.control.release.application.CanaryRouter.holmesOnly(),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresReportWinnerRepository(controlJdbc));
+                        .PostgresReportWinnerRepository(controlJdbc), null);
     }
 
     private AgentRegistry agentRegistry() {

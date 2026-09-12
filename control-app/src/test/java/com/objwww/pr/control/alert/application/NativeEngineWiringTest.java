@@ -125,7 +125,7 @@ class NativeEngineWiringTest {
         return new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls, notifier(), stores.cas, SlaPolicy.defaults(), clock, "rca",
-                AlertMetrics.NOOP, nativeRouter, stores.winners);
+                AlertMetrics.NOOP, nativeRouter, stores.winners, null);
     }
 
     private ReportCompletedNotifier notifier() {
@@ -141,7 +141,7 @@ class NativeEngineWiringTest {
                 TransactionOperations.withoutTransaction(), clock, owner, "rca",
                 Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
                 Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
-                org.mockito.Mockito.mock(RunConfigSwitchService.class));
+                org.mockito.Mockito.mock(RunConfigSwitchService.class), null);
     }
 
     private void deliver(String service, String severity, String status,
