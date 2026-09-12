@@ -170,7 +170,9 @@ class ExA3DriverRecoveryIT extends PostgresITBase {
                         .PostgresTaskExecutionBindingRepository(jdbc, MAPPER),
                 agentRegistry(), compatRunners(metrics, logs, change),
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresPrimaryCheckpointRepository(jdbc, MAPPER), null);
+                        .PostgresPrimaryCheckpointRepository(jdbc, MAPPER),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresRcaModelCallLedger(jdbc, MAPPER, controlTx), null);
     }
 
     /** R7-X2：兼容适配运行器目录（role→Agent 映射，与生产装配 AlertFlowConfig 同形） */

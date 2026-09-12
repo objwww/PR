@@ -151,6 +151,17 @@ class DrillJobServiceTest {
         public boolean requeue(UUID id, long expectedRevision, Instant updatedAt) {
             throw new UnsupportedOperationException("worker 面");
         }
+
+        @Override
+        public List<DrillJob> findActiveInStates(List<DrillJob.State> states) {
+            throw new UnsupportedOperationException("worker 面");
+        }
+
+        @Override
+        public boolean linkRelated(UUID id, long expectedRevision, UUID incidentId,
+                                   UUID runId, Instant updatedAt) {
+            throw new UnsupportedOperationException("worker 面");
+        }
     }
 
     private static final class FakeEvents implements DrillEventRepository {

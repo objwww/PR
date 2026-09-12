@@ -61,4 +61,14 @@ public interface DrillJobRepository {
 
     /** 孤儿重排队（QUEUED/PRECHECK——尚未触及注入零副作用；身份稳定不换 id） */
     boolean requeue(UUID id, long expectedRevision, Instant updatedAt);
+
+    /** DR-05/DR-06 worker 扫描面：指定相位集的活动中作业（flagd 作业级截止对账与
+     *  OBSERVING 关联回填的读取面；eval_app 列级授权内，select 无新开口） */
+    List<DrillJob> findActiveInStates(List<DrillJob.State> states);
+
+    /** DR-06 关联回填 CAS（§7.5）：仅当 related_incident_id 仍为空才落（重复回填
+     *  幂等；state+revision 对账之外的第二重保险）；runId 可空（incident 的
+     *  currentRcaRunId 存在才回填） */
+    boolean linkRelated(UUID id, long expectedRevision, UUID incidentId, UUID runId,
+                        Instant updatedAt);
 }

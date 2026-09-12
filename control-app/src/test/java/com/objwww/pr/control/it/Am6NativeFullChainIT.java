@@ -166,7 +166,9 @@ class Am6NativeFullChainIT extends PostgresITBase {
                 // R7-X2：分派面 = 持久绑定 + 兼容适配运行器目录
                 new PostgresTaskExecutionBindingRepository(jdbc, MAPPER), agentRegistry(),
                 compatRunners(metrics, logs, change),
-                new PostgresPrimaryCheckpointRepository(jdbc, MAPPER), null);
+                new PostgresPrimaryCheckpointRepository(jdbc, MAPPER),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresRcaModelCallLedger(jdbc, MAPPER, controlTx), null);
         orchestrator = new RcaRunOrchestrator(tasks, runs, attempts,
                 new PostgresRcaReportRepository(jdbc), incidents,
                 new PostgresSchedulerSlotRepository(jdbc),

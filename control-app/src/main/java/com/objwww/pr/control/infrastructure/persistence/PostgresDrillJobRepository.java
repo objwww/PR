@@ -271,6 +271,43 @@ public class PostgresDrillJobRepository implements DrillJobRepository {
                 .update() > 0;
     }
 
+    @Override
+    public List<DrillJob> findActiveInStates(List<DrillJob.State> states) {
+        if (states.isEmpty()) {
+            return List.of();
+        }
+        String in = states.stream().map(s -> "'" + s.name() + "'")
+                .collect(java.util.stream.Collectors.joining(","));
+        return jdbc.sql("SELECT " + COLS + " FROM drill_job WHERE state IN (" + in
+                        + ") ORDER BY created_at, id")
+                .query(this::map).list();
+    }
+
+    /**
+     * DR-06 关联回填 CAS（eval_app 面；V86 列级授权 related_incident_id/related_run_id/
+     * revision/updated_at 内）：related_incident_id 仍为空才落——重复回填与并发
+     * 回填恰一方生效（幂等），不覆盖既有关联。
+     */
+    @Override
+    public boolean linkRelated(UUID id, long expectedRevision, UUID incidentId, UUID runId,
+                               Instant updatedAt) {
+        JdbcClient.StatementSpec spec = jdbc.sql("""
+                        UPDATE drill_job SET related_incident_id = :incident,
+                            related_run_id = :run, revision = revision + 1,
+                            updated_at = :at
+                        WHERE id = :id AND revision = :rev
+                          AND related_incident_id IS NULL
+                        """)
+                .param("incident", incidentId)
+                .param("at", Timestamp.from(updatedAt))
+                .param("id", id)
+                .param("rev", expectedRevision);
+        spec = runId == null
+                ? spec.param("run", null, java.sql.Types.OTHER)
+                : spec.param("run", runId);
+        return spec.update() > 0;
+    }
+
     private DrillJob map(ResultSet rs, int rowNum) throws SQLException {
         return new DrillJob(
                 rs.getObject("id", UUID.class),

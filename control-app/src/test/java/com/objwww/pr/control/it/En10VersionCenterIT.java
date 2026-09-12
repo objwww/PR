@@ -35,6 +35,12 @@ class En10VersionCenterIT extends PostgresITBase {
 
     @BeforeEach
     void wire() {
+        // config 两表不在基座 TRUNCATE 清单（V24 种子行自管，BA-43 惯例）：全量跑时
+        // 他类残留行（同 rev 1/2）会被 listRecent 全量捞出——共享库污染必须自清，
+        // 与 PostgresConfigBundleRepositoryTest 同构（pointer 先删再重种未激活行）
+        adminJdbc.sql("DELETE FROM config_bundle_active").update();
+        adminJdbc.sql("DELETE FROM config_bundle").update();
+        adminJdbc.sql("INSERT INTO config_bundle_active (id) VALUES (1)").update();
         assets = new PostgresReleaseAssetRepository(controlDataSource());
         bundles = new PostgresConfigBundleRepository(controlDataSource());
         jdbc = controlJdbc;

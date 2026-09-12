@@ -142,4 +142,92 @@ class EnMigrationContractTest {
                 .contains("'prompt', 'skill', 'tool_schema'")
                 .contains("'runbook_doc', 'runbook_catalog'");
     }
+
+    /**
+     * V90（R2）：输入捕获档三档 CHECK 两向钉 + append-only 授权面——Docker 不可用
+     * 时的本地静态门（真 PG 行为由 PostgresRcaModelInputIT 覆盖，195 补真证据）。
+     */
+    @Test
+    void v90InputCapturePinsThreeLevelCheckAndAppendOnlyFace() throws IOException {
+        Path v90 = Path.of(
+                "src/main/resources/db/migration/V90__r2_input_capture.sql");
+        String sql = normalized(v90);
+
+        assertThat(sql)
+                .contains("create table rca_model_input")
+                .contains("capture_level text not null")
+                .contains("prompt_digest char(64) not null")
+                .contains("constraint ck_rca_model_input_capture check")
+                .contains("capture_level in ('full','redacted','digest_only')")
+                .contains("(capture_level <> 'digest_only' or prompt_text is null)")
+                .contains("(capture_level <> 'full' or prompt_text is not null)")
+                // append-only：control_app 只 select,insert
+                .contains("grant select, insert on rca_model_input to control_app")
+                .contains("revoke all on rca_model_input from publisher_app")
+                .contains("revoke all on rca_model_input from public");
+    }
+
+    /**
+     * V91（R10）：工作记忆快照 append-only 深冻结（同修订唯一 = 重放不覆盖）+
+     * 检查点记忆关联列——Docker 不可用时的本地静态门（真 PG 行为由
+     * PostgresWorkingMemoryIT 覆盖，195 补真证据）。
+     */
+    @Test
+    void v91WorkingMemoryPinsAppendOnlyShapeAndCheckpointAnchor() throws IOException {
+        Path v91 = Path.of(
+                "src/main/resources/db/migration/V91__r10_working_memory.sql");
+        String sql = normalized(v91);
+
+        assertThat(sql)
+                .contains("create table rca_working_memory")
+                .contains("checkpoint_revision bigint not null")
+                .contains("memory_json jsonb not null")
+                .contains("memory_digest char(64) not null")
+                // append-only 深冻结：同修订唯一 = 重放返回既有行（MC06/MC08）
+                .contains("constraint uq_rca_working_memory_revision unique "
+                        + "(run_id, task_id, checkpoint_revision)")
+                // 记忆不是新证据：独立表（零 evidence/validRefs 关联），双 FK 钉 RCA 链
+                .contains("references rca_run(id)")
+                .contains("references rca_task(id)")
+                .contains("grant select, insert on rca_working_memory to control_app")
+                .contains("revoke all on rca_working_memory from publisher_app")
+                .contains("revoke all on rca_working_memory from public")
+                // 检查点只存引用不复制历史（MC07 恢复读同快照）
+                .contains("alter table rca_primary_checkpoint add column memory_id uuid")
+                .contains("alter table rca_primary_checkpoint add column memory_digest char(64)");
+    }
+
+    /**
+     * V92（R11）：上下文压缩摘要不可变档（§19.4 L444 字段清单 + 正文两列补全）——
+     * Docker 不可用时的本地静态门（真 PG 行为由 PostgresContextSummaryIT 覆盖，
+     * 195 补真证据）。
+     */
+    @Test
+    void v92ContextSummaryPinsImmutableCasShape() throws IOException {
+        Path v92 = Path.of(
+                "src/main/resources/db/migration/V92__r11_context_summary.sql");
+        String sql = normalized(v92);
+
+        assertThat(sql)
+                .contains("create table rca_context_summary")
+                .contains("source_snapshot_digest char(64) not null")
+                .contains("event_seq_from bigint not null")
+                .contains("event_seq_to bigint not null")
+                .contains("summary_prompt_digest char(64) not null")
+                .contains("token_before int not null")
+                .contains("token_after int not null")
+                .contains("required_refs jsonb not null")
+                .contains("omitted_refs jsonb not null")
+                .contains("summary_text text not null")
+                .contains("summary_digest char(64) not null")
+                // 同源唯一 = CAS 提交语义（并发同源双写一胜一拒 + 幂等重放）
+                .contains("constraint uq_rca_context_summary_source "
+                        + "unique (run_id, task_id, source_snapshot_digest)")
+                .contains("references rca_run(id)")
+                .contains("references rca_task(id)")
+                // 不可变档：control_app 只 select,insert；他角色零授
+                .contains("grant select, insert on rca_context_summary to control_app")
+                .contains("revoke all on rca_context_summary from publisher_app")
+                .contains("revoke all on rca_context_summary from public");
+    }
 }
