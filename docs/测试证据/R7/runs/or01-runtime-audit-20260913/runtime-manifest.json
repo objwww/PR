@@ -1,0 +1,494 @@
+{
+  "schema": "or01-runtime-manifest/1",
+  "meta": {
+    "collected_at_utc": "2026-09-12T22:14:11Z",
+    "host_name": "VM-0-4-centos",
+    "host_kernel": "Linux-3.10.0-1160.119.1.el7.x86_64",
+    "timezone": "UNKNOWN",
+    "ntp_sync": "UNKNOWN"
+  },
+  "containers": [
+    {
+      "name": "deploy-control-app-1",
+      "image_ref": "pr-agent/control-app:0.0.1-SNAPSHOT",
+      "image_id": "sha256:3449003a14b3",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 805306368,
+      "nanocpus": 1000000000,
+      "started_at": "2026-09-12T21:58:24.119734886Z"
+    },
+    {
+      "name": "deploy-loki-1",
+      "image_ref": "grafana/loki:3.4.2",
+      "image_id": "sha256:428173b122b4",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 402653184,
+      "nanocpus": 500000000,
+      "started_at": "2026-09-10T00:03:07.968648561Z"
+    },
+    {
+      "name": "deploy-notify-app-1",
+      "image_ref": "pr-agent/notify-app:0.0.1-SNAPSHOT",
+      "image_id": "sha256:599d5608dc95",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 402653184,
+      "nanocpus": 500000000,
+      "started_at": "2026-09-10T08:13:23.880123299Z"
+    },
+    {
+      "name": "deploy-otelcol-control-1",
+      "image_ref": "otel/opentelemetry-collector-contrib:0.104.0",
+      "image_id": "sha256:dd3edc30f393",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 402653184,
+      "nanocpus": 500000000,
+      "started_at": "2026-09-09T23:52:44.965381078Z"
+    },
+    {
+      "name": "deploy-postgres-1",
+      "image_ref": "postgres:16-alpine",
+      "image_id": "sha256:75f5a96988cd",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 536870912,
+      "nanocpus": 1000000000,
+      "started_at": "2026-09-04T19:56:45.184975884Z"
+    },
+    {
+      "name": "deploy-web-1",
+      "image_ref": "pr-agent/alert-web:0.0.1-SNAPSHOT",
+      "image_id": "sha256:ff3f58055697",
+      "state": "running",
+      "restart": "unless-stopped",
+      "mem_limit": 134217728,
+      "nanocpus": 0,
+      "started_at": "2026-09-12T20:56:11.536948517Z"
+    }
+  ],
+  "app_build": {
+    "jar_md5": "8bb553e9f31ddf7b9008caf97e230d4d",
+    "git_commit": "UNKNOWN",
+    "note": "镜像未嵌 commit 标签时记 UNKNOWN——发布资格须绑定构建来源（OR-11）"
+  },
+  "flyway": {
+    "rows": [
+      {
+        "version": "1",
+        "description": "m0 schema",
+        "success": "t"
+      },
+      {
+        "version": "2",
+        "description": "grants",
+        "success": "t"
+      },
+      {
+        "version": "3",
+        "description": "m1 inbox reconcile",
+        "success": "t"
+      },
+      {
+        "version": "4",
+        "description": "m2 checkpoint repair",
+        "success": "t"
+      },
+      {
+        "version": "5",
+        "description": "m3 model governance",
+        "success": "t"
+      },
+      {
+        "version": "6",
+        "description": "m4 sandbox",
+        "success": "t"
+      },
+      {
+        "version": "7",
+        "description": "am1 alert domain",
+        "success": "t"
+      },
+      {
+        "version": "8",
+        "description": "am1 dag reserve",
+        "success": "t"
+      },
+      {
+        "version": "9",
+        "description": "am3 eval notify",
+        "success": "t"
+      },
+      {
+        "version": "10",
+        "description": "am3 eval run",
+        "success": "t"
+      },
+      {
+        "version": "11",
+        "description": "am3 eval readonly",
+        "success": "t"
+      },
+      {
+        "version": "12",
+        "description": "am4 state expansion",
+        "success": "t"
+      },
+      {
+        "version": "13",
+        "description": "am4 budget ledger",
+        "success": "t"
+      },
+      {
+        "version": "14",
+        "description": "am4 rca event",
+        "success": "t"
+      },
+      {
+        "version": "15",
+        "description": "am4 tool invocation ledger",
+        "success": "t"
+      },
+      {
+        "version": "16",
+        "description": "am4 evidence snapshot",
+        "success": "t"
+      },
+      {
+        "version": "17",
+        "description": "am4 claim",
+        "success": "t"
+      },
+      {
+        "version": "18",
+        "description": "am4 task edge run scope",
+        "success": "t"
+      },
+      {
+        "version": "19",
+        "description": "am4 tool replay",
+        "success": "t"
+      },
+      {
+        "version": "20",
+        "description": "am5 dataset version",
+        "success": "t"
+      },
+      {
+        "version": "21",
+        "description": "am5 dataset partition",
+        "success": "t"
+      },
+      {
+        "version": "22",
+        "description": "am5 golden candidate",
+        "success": "t"
+      },
+      {
+        "version": "23",
+        "description": "am5 sampling fingerprint",
+        "success": "t"
+      },
+      {
+        "version": "24",
+        "description": "am5 config bundle",
+        "success": "t"
+      },
+      {
+        "version": "25",
+        "description": "am5 canary route",
+        "success": "t"
+      },
+      {
+        "version": "26",
+        "description": "am5 operator case",
+        "success": "t"
+      },
+      {
+        "version": "27",
+        "description": "am5 operator command",
+        "success": "t"
+      },
+      {
+        "version": "28",
+        "description": "am5 monthly partition",
+        "success": "t"
+      },
+      {
+        "version": "29",
+        "description": "am5 retention archive",
+        "success": "t"
+      },
+      {
+        "version": "30",
+        "description": "am6 canary window verdict",
+        "success": "t"
+      },
+      {
+        "version": "31",
+        "description": "ba52 canary decision fk deferred",
+        "success": "t"
+      },
+      {
+        "version": "32",
+        "description": "am6 engine comparison",
+        "success": "t"
+      },
+      {
+        "version": "33",
+        "description": "am6 run fallback",
+        "success": "t"
+      },
+      {
+        "version": "34",
+        "description": "am6 engine shadow work",
+        "success": "t"
+      },
+      {
+        "version": "35",
+        "description": "m607 holmes wish decision run id nullable",
+        "success": "t"
+      },
+      {
+        "version": "36",
+        "description": "exa0 investigation identity",
+        "success": "t"
+      },
+      {
+        "version": "37",
+        "description": "exa4a claim kind",
+        "success": "t"
+      },
+      {
+        "version": "38",
+        "description": "exa3 tool invocation result ref",
+        "success": "t"
+      },
+      {
+        "version": "39",
+        "description": "b21 operator command state widen",
+        "success": "t"
+      },
+      {
+        "version": "40",
+        "description": "exb1 change event",
+        "success": "t"
+      },
+      {
+        "version": "41",
+        "description": "exa4b incident waiting reason",
+        "success": "t"
+      },
+      {
+        "version": "42",
+        "description": "exc3a auth event",
+        "success": "t"
+      },
+      {
+        "version": "43",
+        "description": "am7 duty",
+        "success": "t"
+      },
+      {
+        "version": "44",
+        "description": "auth1 platform user",
+        "success": "t"
+      },
+      {
+        "version": "45",
+        "description": "ui5 eval readonly grants",
+        "success": "t"
+      },
+      {
+        "version": "46",
+        "description": "r7x1 task execution binding",
+        "success": "t"
+      },
+      {
+        "version": "47",
+        "description": "r7x4 primary state",
+        "success": "t"
+      },
+      {
+        "version": "48",
+        "description": "r7a1 rca model call",
+        "success": "t"
+      },
+      {
+        "version": "80",
+        "description": "ev03 eval projection contract",
+        "success": "t"
+      },
+      {
+        "version": "81",
+        "description": "ev04 eval lifecycle",
+        "success": "t"
+      },
+      {
+        "version": "82",
+        "description": "ux01 incident classification",
+        "success": "t"
+      },
+      {
+        "version": "83",
+        "description": "ux02 duty bot",
+        "success": "t"
+      },
+      {
+        "version": "85",
+        "description": "ev07 eval comparison",
+        "success": "t"
+      },
+      {
+        "version": "86",
+        "description": "dr02 drill job",
+        "success": "t"
+      },
+      {
+        "version": "88",
+        "description": "r7 checkpoint last error",
+        "success": "t"
+      },
+      {
+        "version": "60",
+        "description": "en01 release asset",
+        "success": "t"
+      },
+      {
+        "version": "61",
+        "description": "en02 release qualification",
+        "success": "t"
+      },
+      {
+        "version": "62",
+        "description": "en09 eval grader version",
+        "success": "t"
+      },
+      {
+        "version": "63",
+        "description": "en04 run config epoch",
+        "success": "t"
+      },
+      {
+        "version": "64",
+        "description": "en06 mcp server registry",
+        "success": "t"
+      },
+      {
+        "version": "87",
+        "description": "ev08 eval review",
+        "success": "t"
+      },
+      {
+        "version": "89",
+        "description": "en07 release asset kinds",
+        "success": "t"
+      },
+      {
+        "version": "90",
+        "description": "r2 input capture",
+        "success": "t"
+      },
+      {
+        "version": "91",
+        "description": "r10 working memory",
+        "success": "t"
+      },
+      {
+        "version": "92",
+        "description": "r11 context summary",
+        "success": "t"
+      },
+      {
+        "version": "93",
+        "description": "r6 eval app model call grant",
+        "success": "t"
+      },
+      {
+        "version": "96",
+        "description": "mc2123 receipt and operator material",
+        "success": "t"
+      },
+      {
+        "version": "97",
+        "description": "en08 skill candidate",
+        "success": "t"
+      },
+      {
+        "version": "98",
+        "description": "context policy asset",
+        "success": "t"
+      },
+      {
+        "version": "94",
+        "description": "ux03 case incident link",
+        "success": "t"
+      },
+      {
+        "version": "95",
+        "description": "dr05 flagd restore ledger",
+        "success": "t"
+      },
+      {
+        "version": "99",
+        "description": "cl01 checkpoint commit fence",
+        "success": "t"
+      },
+      {
+        "version": "100",
+        "description": "cl05 run skill binding",
+        "success": "t"
+      },
+      {
+        "version": "101",
+        "description": "cl06 working memory accumulation",
+        "success": "t"
+      },
+      {
+        "version": "102",
+        "description": "cl07 compaction attempt",
+        "success": "t"
+      },
+      {
+        "version": "103",
+        "description": "op04 report feedback",
+        "success": "t"
+      },
+      {
+        "version": "104",
+        "description": "op01 regression candidate",
+        "success": "t"
+      },
+      {
+        "version": "105",
+        "description": "op03 action assessment",
+        "success": "t"
+      },
+      {
+        "version": "106",
+        "description": "op01 dataset version grant",
+        "success": "t"
+      },
+      {
+        "version": "107",
+        "description": "op01 case version rls insert",
+        "success": "t"
+      }
+    ],
+    "query_ok": true
+  },
+  "config": {
+    "AGENT_MODEL": "qwen3-max-preview",
+    "APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES": "0",
+    "APP_ALERT_AM4_BUDGET_TOOL_CALLS": "12",
+    "APP_ALERT_AM4_BUDGET_STEP": "ABSENT",
+    "APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST": "control-app,checkout,frontend,recommendation",
+    "prompt_sha256": "498fd17fc23d5790ede6d4a5c0b62608ac85621983a09330a9ace1351f287cf4",
+    "prompt_len": "848",
+    "model_route_host": "litellm-am3"
+  },
+  "release_assets": [],
+  "skill_binding_rows": "9"
+}

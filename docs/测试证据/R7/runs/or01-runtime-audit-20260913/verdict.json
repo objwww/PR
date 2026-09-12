@@ -1,0 +1,33 @@
+{
+  "schema": "or01-verdict/1",
+  "overall": "UNKNOWN",
+  "manifest_out": "/opt/build/or01/runtime-manifest.json",
+  "expect_file": "/opt/build/or01/test-manifest.json",
+  "verdicts": [
+    {
+      "key": "flyway",
+      "verdict": "MATCH",
+      "detail": "80 版本一致"
+    },
+    {
+      "key": "app_git_commit",
+      "verdict": "UNKNOWN",
+      "detail": "镜像未嵌 commit 身份——无法对拍（OR-11 补构建来源绑定）"
+    },
+    {
+      "key": "config_whitelist",
+      "verdict": "UNKNOWN",
+      "detail": "部署层未钉（走应用默认）=['APP_ALERT_AM4_BUDGET_STEP']"
+    },
+    {
+      "key": "container_mem_limits",
+      "verdict": "MATCH",
+      "detail": "6 容器全有上限"
+    },
+    {
+      "key": "skill_binding_rows",
+      "verdict": "MATCH",
+      "detail": "rows=9"
+    }
+  ]
+}
