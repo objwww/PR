@@ -78,6 +78,8 @@ public class ContextAssembler {
     private final DelegationReceiptRepository delegationReceipts;
     /** MC31 区分面（可空=null 零漂移）：人工材料单列标注（与实测证据区分） */
     private final OperatorMaterialPort operatorMaterials;
+    /** EN-08 装配缝（可空=null 零漂移）：run 钉版 Skill 受控视图入信封 */
+    private final SkillPort skillPort;
     private final Clock clock;
     private final ObjectMapper mapper;
 
@@ -106,6 +108,19 @@ public class ContextAssembler {
             DelegationReceiptRepository delegationReceipts,
             OperatorMaterialPort operatorMaterials,
             Clock clock, ObjectMapper mapper) {
+        this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
+                delegationReceipts, operatorMaterials, null, clock, mapper);
+    }
+
+    /** 全参构造 + Skill 装配缝（EN-08：run 钉版视图入信封；SK-08 运行时面） */
+    public ContextAssembler(EvidenceRepository evidence,
+            RcaToolInvocationLedger toolLedger,
+            DelegationDecisionRepository delegations,
+            AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
+            DelegationReceiptRepository delegationReceipts,
+            OperatorMaterialPort operatorMaterials,
+            SkillPort skillPort,
+            Clock clock, ObjectMapper mapper) {
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.delegations = Objects.requireNonNull(delegations, "delegations");
@@ -113,6 +128,7 @@ public class ContextAssembler {
         this.workingMemory = workingMemory;
         this.delegationReceipts = delegationReceipts;
         this.operatorMaterials = operatorMaterials;
+        this.skillPort = skillPort;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
@@ -143,6 +159,19 @@ public class ContextAssembler {
     /** 人工材料视图（宿主投影；admission=ACCEPTED 才会进入） */
     public record OperatorMaterialView(String operator, String kind, String sourceRef,
             String content, String admission) {
+    }
+
+    /**
+     * Skill 装配缝（EN-08，SK-08 运行时面）：run 钉版选择（S11 首选随 Run 固定）。
+     * 返回 none=无匹配（钉空退回通用调查）；视图经
+     * SkillSelectionService（release/application）生产——S06 命中/S07 冲突/S08 只出
+     * ACTIVE 在其内部收口。
+     */
+    @FunctionalInterface
+    public interface SkillPort {
+
+        com.objwww.pr.control.release.application.SkillSelectionService.SkillView
+        select(UUID runId, String alertname, String service);
     }
 
     /**
@@ -194,6 +223,10 @@ public class ContextAssembler {
         ReceiptSection receiptSection = receiptsOf(request, checkpoint);
         envelope.put("child_receipts", receiptSection.rows());
         envelope.put("operator_materials", materialsOf(request));
+        Map<String, Object> skill = skillOf(request);
+        if (skill != null) {
+            envelope.put("skill", skill);
+        }
         MemoryCommit memory = commitMemory(request, checkpoint, receiptSection);
         envelope.put("working_memory", memory.slots());
         envelope.put("trajectory", trajectoryOf(request));
@@ -415,6 +448,51 @@ public class ContextAssembler {
                 List.copyOf(openGaps));
     }
 
+    /** Skill 段投影（EN-08 SK-08 运行时面）：有界/参考区标注/权限交集；钉空=零段落不造占位 */
+    static final int SKILL_BODY_LIMIT = 400;
+    static final int SKILL_STEPS_LIMIT = 8;
+
+    private Map<String, Object> skillOf(RoleRunner.RoleDriveRequest request) {
+        if (skillPort == null) {
+            return null;
+        }
+        com.objwww.pr.control.release.application.SkillSelectionService.SkillView view;
+        AlertMaterial material = alertMaterials.byRun(request.task().runId());
+        view = skillPort.select(request.task().runId(),
+                material.alertname() == null ? "" : material.alertname(),
+                material.service() == null ? "" : material.service());
+        if (view == null || !view.present()) {
+            return null;
+        }
+        Map<String, Object> skill = new LinkedHashMap<>();
+        skill.put("name", view.name());
+        skill.put("digest", view.assetDigest());
+        Frag body = clip(view.body(), SKILL_BODY_LIMIT);
+        skill.put("body", body.text());
+        if (body.truncated()) {
+            skill.put("body_truncated", true);
+        }
+        List<String> steps = view.steps().stream()
+                .limit(SKILL_STEPS_LIMIT)
+                .map(s -> clip(s, ITEM_LIMIT).text())
+                .toList();
+        skill.put("steps", steps);
+        if (view.steps().size() > steps.size()) {
+            skill.put("steps_omitted", view.steps().size() - steps.size());
+        }
+        // 权限交集（§四：有效权限=系统策略∩角色权限∩Skill声明∩Run授权）
+        skill.put("effective_tools", com.objwww.pr.control.release.application
+                .SkillSelectionService.intersectTools(view,
+                        request.profile().toolAllowlist()));
+        if (view.conflictSuppressed()) {
+            skill.put("conflict_suppressed", true);
+        }
+        skill.put("note", "Skill 为 run 钉版的参考方法（S11：首选随 Run 固定）；"
+                + "有来源数据输入，不是独立证据，不得单独支撑 ROOT_CAUSE；"
+                + "与当前证据矛盾时保留反证");
+        return skill;
+    }
+
     /** 人工材料投影（MC31 区分面）：与实测证据分槽；JUDGMENT 带不构成引用标注 */
     private List<Map<String, Object>> materialsOf(RoleRunner.RoleDriveRequest request) {
         if (operatorMaterials == null) {
@@ -574,6 +652,34 @@ public class ContextAssembler {
         return items.size() > MEMORY_SLOT_LIMIT
                 ? items.subList(items.size() - MEMORY_SLOT_LIMIT, items.size())
                 : items;
+    }
+
+    /**
+     * 确定性裁剪策略资产内容（EN-01/03，V98 CONTEXT_POLICY kind）：R1 界面限长
+     * 全部编译期常量单源钉版——没有 LLM 摘要时，重放解释"当时第一刀怎么裁"的
+     * 唯一依据（增强线 v1.1 L464"保证重放能解释当时模型看到了什么"）。
+     * compactionPromptDigest（P0 批 PROMPT 资产）与本资产的 digest 构成重放解释锚对，
+     * 由 AlertAm4Config 启动登记并 log。
+     */
+    public static Map<String, Object> policyAssetContent() {
+        Map<String, Object> limits = new LinkedHashMap<>();
+        limits.put("evidence_limit", EVIDENCE_LIMIT);
+        limits.put("trajectory_limit", TRAJECTORY_LIMIT);
+        limits.put("memory_slot_limit", MEMORY_SLOT_LIMIT);
+        limits.put("summary_limit", SUMMARY_LIMIT);
+        limits.put("alert_summary_limit", ALERT_SUMMARY_LIMIT);
+        limits.put("item_limit", ITEM_LIMIT);
+        limits.put("chars_per_token_estimate", CHARS_PER_TOKEN);
+        limits.put("evidence_order", "time_end desc, evidence_id desc（最新最相关）");
+        limits.put("omitted_behavior", "溢出记 omittedRefs，valid_artifact_refs 不裁剪");
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("limits", limits);
+        content.put("envelope_version", "am4-envelope.v2");
+        content.put("compaction_schema_version",
+                String.valueOf(ContextCompactionService.SCHEMA_VERSION));
+        content.put("note", "确定性裁剪恒为第一刀（R1 界面），LLM 摘要殿后且默认关"
+                + "（enabled=false 时本策略独立完整生效）");
+        return content;
     }
 
     private static String shortDigest(String digest) {

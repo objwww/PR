@@ -69,6 +69,15 @@ class ContextAssemblerTest {
                 run -> alertMaterial, memoryPort, CLOCK, MAPPER);
     }
 
+    /** EN-08 装配缝（10 参构造）：run 钉版 Skill 视图入信封 */
+    private ContextAssembler assemblerWithSkill(
+            ContextAssembler.AlertMaterial alertMaterial,
+            com.objwww.pr.control.release.application.SkillSelectionService.SkillView view) {
+        return new ContextAssembler(evidence, toolLedger, delegations,
+                run -> alertMaterial, null, null, null,
+                (runId, alertname, service) -> view, CLOCK, MAPPER);
+    }
+
     // ------------------------------------------------------------- 夹具
 
     private AgentProfile profile() {
@@ -577,5 +586,60 @@ class ContextAssemblerTest {
                             r.identity.actionDigest(), r.state, r.resultRef))
                     .toList();
         }
+    }
+
+    // ------------------------------------------------------------- EN-08 装配缝（SK-08 运行时面）
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("skill 段入信封：digest/note/权限交集/截断留痕/conflict 标注；钉空零段落")
+    void skillSectionBoundedAndPinned() {
+        ContextAssembler.AlertMaterial alert =
+                new ContextAssembler.AlertMaterial("JvmHeapHigh", "svc-a", "P1", "heap");
+        var view = new com.objwww.pr.control.release.application.SkillSelectionService
+                .SkillView("heap-runbook", "c".repeat(64), "方法正文".repeat(200),
+                List.of("查 heap", "比对 GC"), List.of("logs.query", "deploy.prod"),
+                true);
+        ContextAssembler.Assembly assembly =
+                assemblerWithSkill(alert, view).assemble(request(), checkpoint(), 1);
+        assertThat(assembly.prompt())
+                .contains("\"skill\"").contains("heap-runbook")
+                .contains("c".repeat(16))
+                .contains("conflict_suppressed")
+                .contains("effective_tools")
+                .contains("logs.query")
+                .as("越权工具被权限交集收口（Skill 声明 ∩ 角色 allowlist）")
+                .doesNotContain("deploy.prod")
+                .as("body 超 400 截断留痕").contains("body_truncated")
+                .as("参考区标注在位").contains("不是独立证据")
+                .contains("run 钉版");
+
+        // 钉空（无匹配）：零段落不造占位
+        ContextAssembler none = assemblerWithSkill(alert,
+                com.objwww.pr.control.release.application.SkillSelectionService
+                        .SkillView.none());
+        assertThat(none.assemble(request(), checkpoint(), 1).prompt())
+                .doesNotContain("\"skill\"");
+
+        // skill 是参考输入不是证据：不入 includedRefs（证据窗独立分槽）
+        assertThat(assembly.includedRefs()).isEmpty();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("EN-01/03（V98）：policyAssetContent 过 CONTEXT_POLICY 形状校验，限长与装配常量同源")
+    void policyAssetContentContract() {
+        var content = ContextAssembler.policyAssetContent();
+        var asset = com.objwww.pr.control.release.domain.model.ReleaseAsset.of(
+                com.objwww.pr.control.release.domain.model.ReleaseAsset.KIND_CONTEXT_POLICY,
+                content, "test", NOW);
+        @SuppressWarnings("unchecked")
+        var limits = (java.util.Map<String, Object>) content.get("limits");
+        assertThat(limits)
+                .containsEntry("evidence_limit", 20).containsEntry("trajectory_limit", 8)
+                .containsEntry("memory_slot_limit", 10).containsEntry("summary_limit", 200)
+                .containsEntry("item_limit", 100).containsEntry("chars_per_token_estimate", 2);
+        assertThat(content.get("envelope_version")).isEqualTo("am4-envelope.v2");
+        assertThat(content.get("compaction_schema_version"))
+                .isEqualTo(String.valueOf(ContextCompactionService.SCHEMA_VERSION));
+        assertThat(asset.assetDigest().hex()).hasSize(64);
     }
 }

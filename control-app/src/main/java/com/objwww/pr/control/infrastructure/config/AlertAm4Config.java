@@ -740,6 +740,8 @@ public class AlertAm4Config {
                     delegationReceiptRepository,
             com.objwww.pr.control.alert.domain.repository.OperatorMaterialRepository
                     operatorMaterialRepository,
+            com.objwww.pr.control.release.application.SkillSelectionService
+                    skillSelectionService,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -762,10 +764,15 @@ public class AlertAm4Config {
                         .OperatorMaterialView(m.operator(), m.kind().name(),
                                 m.sourceRef(), m.content(), m.admission().name()))
                 .toList();
+        // EN-08 装配缝（SK-08 运行时面）：run 钉版 Skill 选择——告警材料投影出
+        // alertname/service 供 selector 双维命中；钉版/隔离/冲突在 SkillSelectionService 收口
+        com.objwww.pr.control.alert.application.agent.ContextAssembler.SkillPort
+                skillPort = (runId, alertname, service) ->
+                skillSelectionService.select(runId, alertname, service);
         return new com.objwww.pr.control.alert.application.agent.ContextAssembler(
                 evidenceRepository, rcaToolInvocationLedger, delegationDecisionRepository,
                 alertMaterialPort, workingMemoryPort, delegationReceiptRepository,
-                operatorMaterialPort, Clock.systemUTC(), objectMapper);
+                operatorMaterialPort, skillPort, Clock.systemUTC(), objectMapper);
     }
 
     /** 最新告警事件 → 告警材料（labels/annotations 确定性投影；缺项 null） */
@@ -880,6 +887,25 @@ public class AlertAm4Config {
             }
         } catch (RuntimeException e) {
             log.warn("压缩指令资产登记失败（不阻断启动）: {}", e.getMessage());
+        }
+        // EN-01/03（V98）：确定性裁剪策略独立资产——compactionPromptDigest 与
+        // contextPolicyDigest 构成重放解释锚对（"当时模型看到了什么"：第一刀怎么裁
+        // + LLM 摘要指令长什么样），双 digest 启动 log 固定。
+        try {
+            var policy = com.objwww.pr.control.release.domain.model.ReleaseAsset.of(
+                    com.objwww.pr.control.release.domain.model.ReleaseAsset
+                            .KIND_CONTEXT_POLICY,
+                    com.objwww.pr.control.alert.application.agent.ContextAssembler
+                            .policyAssetContent(),
+                    "am4-config", java.time.Clock.systemUTC().instant());
+            assets.insert(policy);
+            log.info("上下文策略资产登记（EN-01/03 重放解释锚对）：contextPolicyDigest={} "
+                            + "compactionSchemaVersion=v{}",
+                    policy.assetDigest().hex(),
+                    com.objwww.pr.control.alert.application.agent.ContextCompactionService
+                            .SCHEMA_VERSION);
+        } catch (RuntimeException e) {
+            log.warn("上下文策略资产登记失败（不阻断启动）: {}", e.getMessage());
         }
     }
 

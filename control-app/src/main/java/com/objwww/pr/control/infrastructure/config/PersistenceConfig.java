@@ -293,6 +293,21 @@ public class PersistenceConfig {
                 java.time.Clock.systemUTC());
     }
 
+    /**
+     * EN-08 装配缝：Skill 生产选择面（run 钉版 S11/S08 只出 ACTIVE/S06+S07 匹配与
+     * 冲突）——调查 Run 信封经 ContextAssembler.SkillPort 消费。
+     */
+    @Bean
+    public com.objwww.pr.control.release.application.SkillSelectionService
+    skillSelectionService(
+            com.objwww.pr.control.release.domain.repository.SkillCandidateRepository
+                    skillCandidateRepository,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
+        return new com.objwww.pr.control.release.application.SkillSelectionService(
+                skillCandidateRepository, releaseAssetRepository);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository rcaAttemptRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository(jdbc);

@@ -40,10 +40,12 @@ public record ReleaseAsset(String kind,
     public static final String KIND_RUNBOOK_DOC = "RUNBOOK_DOC";
     /** EN-07 固定语料：目录快照——登记 runbook_id→doc_digest + 有效期窗（R07 固定锚） */
     public static final String KIND_RUNBOOK_CATALOG = "RUNBOOK_CATALOG";
+    /** EN-01/03（V98）：确定性裁剪策略资产——重放解释"当时第一刀怎么裁"的 digest 锚 */
+    public static final String KIND_CONTEXT_POLICY = "CONTEXT_POLICY";
 
     private static final Set<String> KINDS =
             Set.of(KIND_PROMPT, KIND_SKILL, KIND_TOOL_SCHEMA,
-                    KIND_RUNBOOK_DOC, KIND_RUNBOOK_CATALOG);
+                    KIND_RUNBOOK_DOC, KIND_RUNBOOK_CATALOG, KIND_CONTEXT_POLICY);
 
     private static final Pattern ASSET_DIGEST = Pattern.compile("[0-9a-f]{64}");
 
@@ -133,8 +135,19 @@ public record ReleaseAsset(String kind,
             case KIND_TOOL_SCHEMA -> validateToolSchema(content);
             case KIND_RUNBOOK_DOC -> validateRunbookDoc(content);
             case KIND_RUNBOOK_CATALOG -> validateRunbookCatalog(content);
+            case KIND_CONTEXT_POLICY -> validateContextPolicy(content);
             default -> throw new IllegalArgumentException("未知资产 kind: " + kind);
         }
+    }
+
+    /** EN-01/03：确定性裁剪策略形状 = 非空 limits 映射 + envelope/摘要 schema 版本标识 */
+    private static void validateContextPolicy(Map<String, Object> content) {
+        if (!(content.get("limits") instanceof Map<?, ?> limits) || limits.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "CONTEXT_POLICY limits 必须为非空映射（确定性限长单源）");
+        }
+        nonBlankString(content.get("envelope_version"), "envelope_version");
+        nonBlankString(content.get("compaction_schema_version"), "compaction_schema_version");
     }
 
     /** EN-07：runbook 文档最小形状 = runbook_id + title/description（模型匹配面）+ text */
