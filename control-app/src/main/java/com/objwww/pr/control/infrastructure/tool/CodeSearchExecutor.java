@@ -117,10 +117,11 @@ public class CodeSearchExecutor implements ToolExecutor {
         String prefix = query.pathPrefix() == null ? null
                 : query.pathPrefix().endsWith("/") ? query.pathPrefix()
                         : query.pathPrefix() + "/";
-        List<Match> matches = new ArrayList<>();
-        long[] filesScanned = {0};
-        long[] bytesScanned = {0};
-        boolean[] exhausted = {true};
+        // 两段式：先收集 prefix 过滤后的候选路径（目录流序无字典序保证，大树触限
+        // 顺序不确定——195 真树 1.2 万文件实证），排序后顺序扫描 = 确定性结果
+        List<Path> candidates = new ArrayList<>();
+        List<String> relativePaths = new ArrayList<>();
+        boolean[] truncated = {false};
         try {
             Files.walkFileTree(repoRoot, new java.nio.file.SimpleFileVisitor<>() {
                 @Override
@@ -136,43 +137,17 @@ public class CodeSearchExecutor implements ToolExecutor {
                 @Override
                 public java.nio.file.FileVisitResult visitFile(Path file,
                         java.nio.file.attribute.BasicFileAttributes attrs) {
-                    if (matches.size() >= MAX_MATCHES) {
-                        exhausted[0] = false;
-                        return java.nio.file.FileVisitResult.TERMINATE;
-                    }
-                    if (filesScanned[0] >= MAX_FILES_SCANNED
-                            || bytesScanned[0] >= MAX_TOTAL_BYTES
-                            || attrs.size() > MAX_FILE_BYTES) {
-                        exhausted[0] = false;
-                        return java.nio.file.FileVisitResult.TERMINATE;
-                    }
-                    filesScanned[0]++;
                     String relative = repoRoot.relativize(file).toString()
                             .replace('\\', '/');
                     if (prefix != null && !relative.startsWith(prefix)) {
                         return java.nio.file.FileVisitResult.CONTINUE;
                     }
-                    try {
-                        byte[] bytes = Files.readAllBytes(file);
-                        bytesScanned[0] += bytes.length;
-                        if (isBinary(bytes)) {
-                            return java.nio.file.FileVisitResult.CONTINUE;
-                        }
-                        String[] lines = new String(bytes, StandardCharsets.UTF_8)
-                                .split("\n", -1);
-                        for (int i = 0; i < lines.length; i++) {
-                            if (matchesLine(lines[i], lowerQuery)) {
-                                matches.add(new Match(relative, i + 1L,
-                                        redact(clip(lines[i]))));
-                                if (matches.size() >= MAX_MATCHES) {
-                                    exhausted[0] = false;
-                                    return java.nio.file.FileVisitResult.TERMINATE;
-                                }
-                            }
-                        }
-                    } catch (IOException e) {
-                        return java.nio.file.FileVisitResult.CONTINUE;
+                    if (candidates.size() >= MAX_FILES_SCANNED) {
+                        truncated[0] = true;
+                        return java.nio.file.FileVisitResult.TERMINATE;
                     }
+                    candidates.add(file);
+                    relativePaths.add(relative);
                     return java.nio.file.FileVisitResult.CONTINUE;
                 }
             });
@@ -180,7 +155,51 @@ public class CodeSearchExecutor implements ToolExecutor {
             throw new ToolModelVisibleException(ToolModelVisibleReason.SOURCE_UNAVAILABLE,
                     "SOURCE_UNAVAILABLE: 源树扫描不可用（数据面异常已脱敏）");
         }
-        return new Scan(List.copyOf(matches), !exhausted[0]);
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) {
+            order.add(i);
+        }
+        order.sort((a, b) -> relativePaths.get(a).compareTo(relativePaths.get(b)));
+        List<Match> matches = new ArrayList<>();
+        long bytesScanned = 0;
+        for (int index : order) {
+            Path file = candidates.get(index);
+            if (matches.size() >= MAX_MATCHES) {
+                truncated[0] = true;
+                break;
+            }
+            try {
+                if (Files.size(file) > MAX_FILE_BYTES) {
+                    continue;
+                }
+                byte[] bytes = Files.readAllBytes(file);
+                bytesScanned += bytes.length;
+                if (bytesScanned > MAX_TOTAL_BYTES) {
+                    truncated[0] = true;
+                    break;
+                }
+                if (isBinary(bytes)) {
+                    continue;
+                }
+                String[] lines = new String(bytes, StandardCharsets.UTF_8)
+                        .split("\n", -1);
+                for (int i = 0; i < lines.length; i++) {
+                    if (matchesLine(lines[i], lowerQuery)) {
+                        matches.add(new Match(relativePaths.get(index), i + 1L,
+                                redact(clip(lines[i]))));
+                        if (matches.size() >= MAX_MATCHES) {
+                            break;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                continue;
+            }
+        }
+        if (matches.size() >= MAX_MATCHES) {
+            truncated[0] = true;
+        }
+        return new Scan(List.copyOf(matches), truncated[0]);
     }
 
     /** 二进制探针：头部 8KB 出现 NUL 即非文本（取证面只走文本） */
