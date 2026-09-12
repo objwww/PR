@@ -358,11 +358,113 @@
           </el-table-column>
         </el-table>
       </div>
+
+      <!-- ============ EV-10 配置切换（方案 §4.4 高级操作「在安全点更新此调查」）============ -->
+      <div class="card panel">
+        <div class="lbl">配置切换</div>
+        <el-alert
+          v-if="cfgState === 'not-ready'" type="warning" :closable="false" show-icon
+          title="配置代际查询接口不可用"
+          :description="cfgNotReadyText"
+        />
+        <template v-else-if="cfgState === 'error'">
+          <div class="muted">配置代际历史加载失败——本页不猜测切换状态。</div>
+          <el-button size="small" :loading="cfgLoading" @click="loadCfgEpochs">重试</el-button>
+        </template>
+        <template v-else-if="cfgState === 'ok'">
+          <div class="cfg-line">
+            <el-tag :type="cfgMixed ? 'warning' : 'success'" effect="plain" size="small">
+              {{ cfgMixed ? '混合配置（MIXED_CONFIG）' : '单一配置' }}
+            </el-tag>
+            <span v-if="cfgMixed" class="mini">此调查跨多个配置版本，不作为单版本质量样本（改造方案 §4.4）</span>
+            <span class="flex-spacer" />
+            <el-button size="small" :loading="cfgLoading" @click="loadCfgEpochs">刷新</el-button>
+            <el-button
+              size="small" type="primary" plain
+              :disabled="!canCfgSwitch" :title="cfgSwitchHint"
+              @click="openSwitchDialog"
+            >在安全点更新此调查</el-button>
+          </div>
+          <div v-if="cfgSwitchHint" class="mini cfg-hint">{{ cfgSwitchHint }}</div>
+          <el-table :data="cfgEpochs.epochs ?? []" size="small" v-loading="cfgLoading">
+            <el-table-column prop="config_epoch" label="epoch" width="80" align="center" />
+            <el-table-column label="release digest" min-width="200">
+              <template #default="{ row }"><code>{{ row.release_digest }}</code></template>
+            </el-table-column>
+            <el-table-column label="来源命令" min-width="110">
+              <template #default="{ row }">
+                <code v-if="row.source_command_id">{{ shortId(row.source_command_id) }}</code>
+                <span v-else class="muted">准入播种</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="applied_by" label="操作者" width="120">
+              <template #default="{ row }">{{ row.applied_by ?? '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="reason" label="原因" min-width="140" show-overflow-tooltip />
+            <el-table-column label="时间" width="165">
+              <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
+            </el-table-column>
+            <template #empty>
+              <span class="muted">无配置代际史——此调查铸造于 EN-04 之前，服务端不支持热切（fail-closed）</span>
+            </template>
+          </el-table>
+          <!-- 最近一次热切命令的真实状态：受理≠生效，生效以 epoch 历史出现新行（source_command_id 匹配）为准 -->
+          <div v-if="switchCmd" class="cfg-cmd">
+            <el-tag
+              :type="{ WAITING_SAFE_POINT: 'warning', APPLIED: 'success', REJECTED: 'danger', EXPIRED: 'info' }[switchCmd.state] ?? 'info'"
+              effect="plain" size="small"
+            >{{ switchCmdStateText }}</el-tag>
+            <span class="mini">命令 {{ shortId(switchCmd.commandId) }} → epoch {{ switchCmd.targetEpoch }}（{{ shortId(switchCmd.targetDigest) }}…）</span>
+            <span v-if="switchCmd.reason" class="mini">原因：{{ switchCmd.reason }}</span>
+          </div>
+        </template>
+        <div v-else class="muted" v-loading="cfgLoading">配置代际历史加载中…</div>
+      </div>
     </template>
   </div>
 
   <div v-else-if="loadError" class="card"><EmptyState kind="error" :description="loadError" @retry="loadDetail" /></div>
   <div v-else class="loading card" v-loading="true" />
+
+  <!-- EV-10 热切对话框：目标 bundle 复用 /api/release-assets/bundles；兼容性由服务端
+       核验（H13：DAG 形状/角色/输出 schema/工具权限不扩），前端只展示不预判 -->
+  <el-dialog v-model="switchVisible" title="在安全点更新此调查" width="640px">
+    <div v-loading="switchBundlesLoading">
+      <template v-if="switchBundlesError">
+        <el-alert type="error" :closable="false" show-icon title="版本清单加载失败" :description="switchBundlesError" />
+      </template>
+      <template v-else>
+        <div class="mini dlg-note">
+          目标版本将在<b>安全点</b>（完整 round 结束 + 无在飞模型动作 + driver 持租）才生效；
+          服务端会核验兼容性，不兼容（DAG 漂移/扩工具权限/输出 schema 变更）将被拒绝并建议关联新调查。
+          命令等待期限 15 分钟，超时未达安全点由后端翻牌过期。
+        </div>
+        <el-select
+          v-model="switchTarget" class="dlg-select" placeholder="选择目标配置包版本"
+          filterable :disabled="switchPending"
+        >
+          <el-option
+            v-for="b in switchBundles" :key="b.digest"
+            :value="b.digest"
+            :label="`revision ${b.revision} · ${b.digest.slice(0, 16)}…${b.active ? '（当前激活）' : ''}${b.digest === cfgCurrentDigest ? '（此调查当前版本）' : ''}`"
+            :disabled="b.digest === cfgCurrentDigest"
+          />
+        </el-select>
+        <el-input
+          v-model="switchReason" type="textarea" :rows="2" maxlength="512" show-word-limit
+          placeholder="切换原因（必填，≤512 字，随命令与 epoch 历史留痕）" :disabled="switchPending"
+        />
+      </template>
+    </div>
+    <template #footer>
+      <el-button :disabled="switchPending" @click="switchVisible = false">取消</el-button>
+      <el-button
+        type="primary" :loading="switchPending"
+        :disabled="!switchTarget || !switchReason.trim() || !!switchBundlesError"
+        @click="submitSwitch"
+      >提交切换命令</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -377,14 +479,17 @@
 //  5) FUT-33：断线不得改变 Run 状态；票单次有效——ES onerror 统一关流重新换票
 //
 // ===== 命令真接线（POST /api/rca-runs/{id}/commands）=====
-//  命令体 {type: CANCEL|HINT|FEEDBACK, idempotencyKey, expectedRevision, payload}；
+//  命令体 {type: CANCEL|HINT|FEEDBACK|CONFIG_SWITCH, idempotencyKey, expectedRevision, payload}；
 //  expectedRevision 锚 rca_run.last_event_seq——详情投影不暴露该字段，但事件端点
 //  返回 latestSeq（同一计数器），以此作为修订号；SSE 每事件推进 revision。
 //  409=修订过期（零副作用）→ 提示并刷新；403=终态越权。按钮仅在 Run 活动态显示。
+//  CONFIG_SWITCH（EV-10）：payload 白名单四键（expected_config_epoch/target_release_digest/
+//  reason/deadline），202=WAITING_SAFE_POINT 仅受理，生效以 config-epochs 读面为准。
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Loading } from '@element-plus/icons-vue'
 import { api } from '../api/client'
+import { ApiNotReadyError, getRunConfigEpochs, listBundles } from '../api/versions'
 import RunDag from '../components/RunDag.vue'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
@@ -719,10 +824,199 @@ async function submitFeedback() {
   if (text) submitCommand('FEEDBACK', { text })
 }
 
+// ===== EV-10 配置切换（改造方案 §4.4 / 体验方案 §4.3：高级操作「在安全点更新此调查」）=====
+// 读面 = GET /api/rca-runs/{id}/config-epochs（RunConfigEpochController，OPERATOR 矩阵）；
+// 写面 = POST .../commands type=CONFIG_SWITCH（RunCommandController:73 接线 EN-04 切换服务）。
+// 诚实面：提交返回的 WAITING_SAFE_POINT（202）只是受理，生效以 epoch 历史出现
+// source_command_id 匹配的新行为准；EXPIRED 无命令状态查询端点，期限过后如实标注。
+const cfgEpochs = ref({})
+const cfgState = ref('idle') // idle | loading | ok | not-ready | error
+const cfgLoading = ref(false)
+const cfgNotReadyText = ref('')
+
+const cfgMixed = computed(() => !!cfgEpochs.value.mixed_config)
+const cfgCurrentEpoch = computed(() => {
+  const list = cfgEpochs.value.epochs ?? []
+  return list.length ? list[list.length - 1].config_epoch : null
+})
+const cfgCurrentDigest = computed(() => {
+  const list = cfgEpochs.value.epochs ?? []
+  return list.length ? list[list.length - 1].release_digest : null
+})
+
+// 仅 RUNNING 可点（服务端对非活跃 Run 一律 REJECTED_FORBIDDEN）；无代际史 = 存量 run
+// 服务端 fail-closed；权限不在前端裁定，403 由服务端返回后如实展示
+const canCfgSwitch = computed(() =>
+  run.value?.status === 'RUNNING' && cfgState.value === 'ok'
+  && (cfgEpochs.value.epochs ?? []).length > 0 && !cmdPending.value && !switchPending.value)
+const cfgSwitchHint = computed(() => {
+  if (cfgState.value !== 'ok') return ''
+  if (run.value?.status !== 'RUNNING') return `仅进行中（RUNNING）的调查可发起安全点热切；当前状态 ${run.value?.status ?? '—'}`
+  if (!(cfgEpochs.value.epochs ?? []).length) return '该调查无配置代际史（EN-04 前铸造的存量 run），服务端不支持热切'
+  if (!canCfgSwitch.value) return ''
+  return ''
+})
+
+async function loadCfgEpochs() {
+  cfgLoading.value = true
+  try {
+    cfgEpochs.value = await getRunConfigEpochs(route.params.runId)
+    cfgState.value = 'ok'
+  } catch (e) {
+    cfgState.value = e instanceof ApiNotReadyError ? 'not-ready' : 'error'
+    if (cfgState.value === 'not-ready') {
+      cfgNotReadyText.value = e.status === 403
+        ? '当前账号无权访问（HTTP 403）：配置代际查询沿 /api/rca-runs/** OPERATOR 权限矩阵。'
+        : '接口不存在（HTTP 404）：后端未以 docker profile 部署 RunConfigEpochController（EN-10）。'
+    }
+  } finally {
+    cfgLoading.value = false
+  }
+}
+
+// ----- 热切对话框 -----
+const switchVisible = ref(false)
+const switchBundles = ref([])
+const switchBundlesLoading = ref(false)
+const switchBundlesError = ref('')
+const switchTarget = ref('')
+const switchReason = ref('')
+const switchPending = ref(false)
+const switchCmd = ref(null) // {commandId, state, reason, targetDigest, targetEpoch, deadlineAt}
+let cfgPollTimer = null
+
+const SWITCH_WAIT_MS = 15 * 60 * 1000 // §227 命令等待安全点期限（命令自身 deadline，非 Run 期限）
+
+async function openSwitchDialog() {
+  switchVisible.value = true
+  switchTarget.value = ''
+  switchReason.value = ''
+  switchBundlesError.value = ''
+  switchBundlesLoading.value = true
+  try {
+    const d = await listBundles()
+    switchBundles.value = d.items ?? []
+  } catch (e) {
+    switchBundlesError.value = e instanceof ApiNotReadyError
+      ? `版本清单接口不可用（${e.message}）——无法选择目标版本，未提交任何命令`
+      : '版本清单加载失败（网络或服务端错误），未提交任何命令'
+  } finally {
+    switchBundlesLoading.value = false
+  }
+}
+
+const switchCmdStateText = computed(() => ({
+  WAITING_SAFE_POINT: '等待安全点',
+  APPLIED: '已应用',
+  REJECTED: '已拒绝',
+  EXPIRED: '已过期（等待期限内未达安全点）',
+}[switchCmd.value?.state] ?? switchCmd.value?.state))
+
+function stopCfgPoll() {
+  clearInterval(cfgPollTimer)
+  cfgPollTimer = null
+}
+
+// WAITING 后无命令状态查询端点（EN-10 仅暴露 epoch 历史）——轮询 epoch 史，
+// 出现 source_command_id 匹配的新行 = 已应用；过命令期限未出现 = 如实按过期展示
+function startCfgPoll() {
+  stopCfgPoll()
+  cfgPollTimer = setInterval(async () => {
+    const cmd = switchCmd.value
+    if (!cmd || cmd.state !== 'WAITING_SAFE_POINT') { stopCfgPoll(); return }
+    if (Date.now() >= cmd.deadlineAt || !runActive.value) {
+      switchCmd.value = { ...cmd, state: 'EXPIRED', reason: runActive.value
+        ? '已过命令等待期限仍未应用（EXPIRED 翻牌由后端巡回任务执行，以 epoch 历史为准）'
+        : '调查已离开活动态，等待中的切换命令不会再应用' }
+      stopCfgPoll()
+      return
+    }
+    try {
+      const d = await getRunConfigEpochs(route.params.runId)
+      cfgEpochs.value = d
+      const hit = (d.epochs ?? []).find(r => r.source_command_id === cmd.commandId)
+      if (hit) {
+        switchCmd.value = { ...cmd, state: 'APPLIED', reason: null }
+        stopCfgPoll()
+        await reload()
+      }
+    } catch { /* 轮询失败不改动状态，下一轮再试 */ }
+  }, 5000)
+}
+
+async function submitSwitch() {
+  const target = switchTarget.value
+  const reason = switchReason.value.trim()
+  if (!target || !reason || switchPending.value) return
+  if (revision.value == null || cfgCurrentEpoch.value == null) {
+    ElMessage.warning('事件游标或配置代际尚未就绪，请刷新后重试')
+    return
+  }
+  switchPending.value = true
+  const deadlineAt = Date.now() + SWITCH_WAIT_MS
+  try {
+    const res = await api(`/rca-runs/${route.params.runId}/commands`, {
+      method: 'POST',
+      body: {
+        type: 'CONFIG_SWITCH',
+        // 幂等锚 (run_id, CONFIG_SWITCH, idempotency_key)：runId+目标 digest 稳定可重放
+        idempotencyKey: `cfg-switch-${route.params.runId}-${target}`,
+        expectedRevision: revision.value,
+        payload: {
+          expected_config_epoch: cfgCurrentEpoch.value,
+          target_release_digest: target,
+          reason,
+          deadline: new Date(deadlineAt).toISOString(),
+        },
+      },
+    })
+    switchVisible.value = false
+    switchCmd.value = {
+      commandId: res.commandId, state: res.state, reason: res.reason ?? null,
+      targetDigest: target, targetEpoch: cfgCurrentEpoch.value + 1, deadlineAt,
+    }
+    if (res.state === 'WAITING_SAFE_POINT') {
+      ElMessage.success(`切换命令已受理（等待安全点）${res.reason ? '：' + res.reason : ''}——生效以 epoch 历史为准`)
+      startCfgPoll()
+    } else if (res.state === 'APPLIED') {
+      ElMessage.success('切换已应用——epoch 历史已追加新行')
+      await loadCfgEpochs()
+    } else {
+      ElMessage.warning(`命令状态 ${res.state}${res.reason ? '：' + res.reason : ''}`)
+    }
+  } catch (e) {
+    const st = e?.response?.status
+    const data = e?.response?.data ?? {}
+    const why = data.reason || data.error || ''
+    // 快败拒绝（REJECTED_*/EXPIRED 随 4xx 同步返回）同样记入面板状态，如实显示「已拒绝+原因」
+    if (data.commandId && data.state && data.state !== 'WAITING_SAFE_POINT') {
+      switchCmd.value = {
+        commandId: data.commandId, state: 'REJECTED', reason: why || data.state,
+        targetDigest: target, targetEpoch: cfgCurrentEpoch.value + 1, deadlineAt,
+      }
+    }
+    if (st === 403) {
+      // 两种 403 同源展示：安全链（无 OPERATOR 角色）或命令面 REJECTED_FORBIDDEN（终态/资格/兼容拒绝）
+      ElMessage.error(`服务端拒绝（403）：${why || '无 OPERATOR 权限或调查已终态'}——未产生任何变更`)
+    } else if (st === 409) {
+      ElMessage.warning(`修订/代际已变化（409）${why ? '：' + why : ''}——已为你刷新，请确认后重试`)
+      await reload()
+      await loadCfgEpochs()
+    } else if (st === 400) {
+      ElMessage.error(`命令参数被服务端拒绝：${why || '请检查目标版本与原因'}`)
+    } else {
+      ElMessage.error(`切换命令提交失败：${why || '网络异常'}`)
+    }
+  } finally {
+    switchPending.value = false
+  }
+}
+
 // ===== 交互 =====
 function switchTab(key) {
   viewTab.value = key
   if (key === 'events') nextTick(scrollEvToBottom)
+  if (key === 'meta' && cfgState.value === 'idle') loadCfgEpochs() // 配置切换区懒加载
 }
 
 function onSelectTask(id) {
@@ -788,7 +1082,7 @@ onMounted(async () => {
   openStream(route.params.runId)
 })
 
-onBeforeUnmount(() => closeStream())
+onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 </script>
 
 <style scoped>
@@ -899,6 +1193,16 @@ onBeforeUnmount(() => closeStream())
 .ev-status { margin-top: 10px; font-size: var(--fs-aux); color: var(--ink-2); }
 
 .ev-refs { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line); line-height: 1.8; }
+
+/* ===== EV-10 配置切换 ===== */
+.cfg-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.cfg-hint { margin: -4px 0 8px; }
+.cfg-cmd {
+  margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  border-top: 1px dashed var(--line); padding-top: 8px;
+}
+.dlg-note { line-height: 1.7; margin-bottom: 12px; }
+.dlg-select { width: 100%; margin-bottom: 10px; }
 
 .loading { height: 320px; }
 </style>

@@ -9,11 +9,11 @@
       </template>
     </PageHeader>
 
-    <!-- 配置包（config_bundle）：当前指针 + 版本列表；发布/激活仍走 RELEASE 机器线，本页只读 -->
+    <!-- 配置包（config_bundle）：当前指针 + 版本列表 + 发布/回滚命令（EV-10；ROLE_RELEASE 服务端裁定） -->
     <div class="card zone">
       <div class="zone-head">
         <h2 class="zone-title">配置包版本</h2>
-        <span class="zone-note">发布与激活不在此页操作（RELEASE 机器线）；此处只如实展示版本与当前指针</span>
+        <span class="zone-note">发布/回滚只提交服务端命令（需 RELEASE 角色，前端不裁定资格）；生效与否以「当前激活」指针为准，受理不等于已生效</span>
       </div>
       <template v-if="bundlesState === 'ok'">
         <div class="pointer-line">
@@ -44,6 +44,23 @@
             <template #default="{ row }">
               <el-tag v-if="row.active" type="success" effect="plain" size="small">激活中</el-tag>
               <el-tag v-else type="info" effect="plain" size="small">历史版本</el-tag>
+            </template>
+          </el-table-column>
+          <!-- EV-10（方案 §4.3 / 体验方案 §4.3）：仅非 active 行给出命令入口；
+               资格由服务端 RELEASE 角色裁定，按钮不做前端隐藏式权限替代 -->
+          <el-table-column label="操作" width="230" fixed="right">
+            <template #default="{ row }">
+              <template v-if="!row.active">
+                <el-button
+                  size="small" type="primary" plain
+                  :disabled="bundleCmdPending" @click="confirmActivate(row)"
+                >发布到新调查</el-button>
+                <el-button
+                  size="small" plain
+                  :disabled="bundleCmdPending" @click="confirmRollback(row)"
+                >回滚到此版本</el-button>
+              </template>
+              <span v-else class="cell-sub">当前指针，无需操作</span>
             </template>
           </el-table-column>
           <template #empty>
@@ -195,14 +212,19 @@
 </template>
 
 <script setup>
-// 版本中心（/versions，EN-10 O06~O08）：三区只读——bundle 指针/版本、发布资产摘要、
-// 运行配置 epoch 历史。三区各自独立三态（ok / not-ready / error）：接口 404/403 就地
-// 解释（403 区分权限拒绝），不渲染成空数据；epoch 查询失败时保留输入草稿。
+// 版本中心（/versions，EN-10 O06~O08 + EV-10 操作面）：配置包指针/版本（含发布与回滚
+// 命令）、发布资产摘要、运行配置 epoch 历史。三区各自独立三态（ok / not-ready / error）：
+// 接口 404/403 就地解释（403 区分权限拒绝），不渲染成空数据；epoch 查询失败时保留输入草稿。
+// EV-10（改造方案 §4.2/§4.3、体验方案 §4.3）：发布/回滚只提交服务端命令——activate 与
+// rollback 均为 ConfigBundleController 的 EN-02 CAS 端点（expectedActiveRevision 必带，
+// 0=从未激活），资格门（422 QUALIFICATION_*）与 RELEASE 角色（403）由服务端裁定，前端
+// 不预判、不绕过；成功后刷新指针区，生效以服务端指针为准，不宣称「已生效」。
 import { onMounted, ref } from 'vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import {
   ApiNotReadyError, listAssets, listBundles, getAssetDetail, getRunConfigEpochs,
+  activateBundle, rollbackBundle,
 } from '../api/versions'
 import { fmtTime } from '../utils/format'
 
@@ -283,6 +305,77 @@ async function loadEpochs() {
 function reload() {
   loadBundles()
   loadAssets()
+}
+
+// ===== EV-10 发布/回滚命令（二次确认讲清影响面；幂等键 = digest+动作+目标 revision 稳定散列）=====
+const bundleCmdPending = ref(false)
+
+async function bundleCmdKey(action, digest, expectedRevision) {
+  const canonical = ['cfg-bundle-ui/v1', action, digest, String(expectedRevision)].join('|')
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical))
+  return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('')
+}
+
+// 影响面文案（体验方案 §4.3「必须把范围讲清楚」）：指针切换只影响之后新发起的调查，
+// 进行中的调查固定在原版本——热切须到调查详情「配置切换」走安全点流程
+async function confirmActivate(row) {
+  try {
+    await ElMessageBox.confirm(
+      `将激活指针切换到 revision ${row.revision}（digest ${row.digest.slice(0, 12)}…）。`
+      + '影响面：之后新发起的调查固定为此版本；进行中的调查不受影响、仍用原版本。'
+      + '该操作经服务端资格门核验并留痕审计。',
+      '发布到新调查',
+      { type: 'warning', confirmButtonText: '发布到新调查', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  submitBundleCmd('activate', row)
+}
+
+async function confirmRollback(row) {
+  try {
+    await ElMessageBox.confirm(
+      `将激活指针回滚到 revision ${row.revision}（digest ${row.digest.slice(0, 12)}…）。`
+      + '影响面：之后新发起的调查固定为此历史版本；进行中的调查不受影响。'
+      + '回滚目标同样过服务端资格门，历史版本零改写。',
+      '回滚到此版本',
+      { type: 'warning', confirmButtonText: '回滚到此版本', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  submitBundleCmd('rollback', row)
+}
+
+async function submitBundleCmd(action, row) {
+  // CAS 锚 = 本页刚查到的当前指针 revision（从未激活 → 0）；服务端不替用户推算（P06）
+  const expected = bundles.value.active?.revision ?? 0
+  bundleCmdPending.value = true
+  try {
+    const key = await bundleCmdKey(action, row.digest, expected)
+    const res = action === 'activate'
+      ? await activateBundle(row.digest, expected, key)
+      : await rollbackBundle(row.digest, expected, key)
+    ElMessage.success(res.replayed
+      ? '该版本已是当前激活版本（幂等重放，未产生新变更）'
+      : `命令已受理：激活指针已指向 revision ${res.revision}——以刷新后的「当前激活」为准`)
+    await loadBundles()
+  } catch (e) {
+    const st = e?.response?.status
+    const msg = e?.response?.data?.error
+    if (st === 403) {
+      ElMessage.error('无发布权限（需 RELEASE 角色），未产生任何变更')
+    } else if (st === 409) {
+      ElMessage.warning('激活指针已被他人变更（CAS 冲突，零副作用），已为你刷新——请确认当前指针后重试')
+      await loadBundles()
+    } else if (st === 404) {
+      ElMessage.error('目标版本不存在（digest 未找到），可能清单已过期——已刷新')
+      await loadBundles()
+    } else if (st === 422) {
+      ElMessage.error(`资格门拒绝：${msg ?? '目标版本无有效资格证明'}（服务端原文，未做任何变更）`)
+    } else {
+      ElMessage.error(`命令提交失败：${msg ?? '网络异常'}`)
+    }
+  } finally {
+    bundleCmdPending.value = false
+  }
 }
 
 function summaryTitle(summary) {
