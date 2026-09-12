@@ -1,0 +1,12 @@
+# R7-X10 部署版本代码取证：override compose（不改 base 文件）
+# 用法：docker compose -f docker-compose.yml -f docker-compose.x10.yml up -d control-app
+# 语义：把宿主部署源树只读挂进容器（/opt/src/pr:ro）+ 注入 checkout 根与
+# service=repo@commit 绑定映射（均配置才注册，fail-closed）。ro 挂载=OS 级只读，
+# 与执行器只读面双保险。绑定 commit=ac7c28e（/opt/build/pr 同步树对应分支提交）。
+services:
+  control-app:
+    environment:
+      APP_ALERT_R7_CODE_CHECKOUT_ROOT: /opt/src
+      APP_ALERT_R7_CODE_MAPPING: "control-app=pr@ac7c28e"
+    volumes:
+      - /opt/build/pr:/opt/src/pr:ro
