@@ -117,6 +117,7 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
     private final AgentRegistry agents;
     private final RunnerDirectory runners;
     private final PrimaryCheckpointRepository checkpoints;
+    private final com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger modelCalls;
     /** R7-X6：主模式 Profile（null = 主模式关闭，旧兼容路由行为零变化） */
     private final AgentProfile primaryProfile;
 
@@ -132,6 +133,7 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
             TaskExecutionBindingRepository bindings, AgentRegistry agents,
             RunnerDirectory runners, PrimaryCheckpointRepository checkpoints,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger modelCalls,
             AgentProfile primaryProfile) {
         this.bundles = Objects.requireNonNull(bundles, "bundles");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
@@ -159,6 +161,8 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         this.runners = Objects.requireNonNull(runners, "runners");
         // R7-X6：主模式 FINAL 提案的报告相位消费面（检查点读回）
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
+        // R6/EV-06：主模式终态化 usage_json 回填源（rca_model_call attempt 聚合）
+        this.modelCalls = Objects.requireNonNull(modelCalls, "modelCalls");
         this.primaryProfile = primaryProfile;
     }
 
@@ -270,6 +274,14 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                 run.id(), assembled.outcome(),
                 primaryProfile == null ? nativeResult.verdicts().size() : projected,
                 validated.status(), snapshotDigest, primaryProfile != null);
+        // R6/EV-06：usage_json 回填（原写死 null/usage_missing=true）——本 attempt 的
+        // rca_model_call 行聚合（RcaAttemptUsage 诚实规则：UNKNOWN/usage_missing 行
+        // taint 整 attempt；FAILED/无行不编数）
+        com.objwww.pr.control.alert.domain.agent.RcaAttemptUsage.Aggregated usage =
+                com.objwww.pr.control.alert.domain.agent.RcaAttemptUsage.aggregate(
+                        modelCalls.listSettledUsageByRunId(run.id()).stream()
+                                .filter(row -> attempt.id().equals(row.attemptId()))
+                                .toList());
         AttemptArtifact artifact = new AttemptArtifact(
                 validated.schemaVersion() > 0
                         ? validated.schemaVersion() : EvidencePackageV2.SCHEMA_VERSION,
@@ -277,7 +289,8 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
                 validated.redactedRawText(), validated.typedPackage(), List.of(),
                 Digest.sha256Of(validated.redactedRawText() != null
                         ? validated.redactedRawText() : adapted.outerJson()),
-                null, MODEL, null, null, null, true, null);
+                null, MODEL, usage.promptTokens(), usage.completionTokens(),
+                usage.totalTokens(), usage.usageMissing(), null);
         return ok ? ExecutionResult.success(artifact)
                 : ExecutionResult.terminalWithArtifact("ADAPTER_PACKAGE_REJECTED",
                         String.join("; ", validated.errors()), artifact);

@@ -92,6 +92,11 @@ public final class ModelRouter {
         if (failure instanceof ModelCallFailure.ProtocolError) {
             return new RouteDecision.Fail("PROTOCOL_ERROR", false);
         }
+        // R5/BA-120：输出预算耗尽——同参重试必然同败，终态不重试不 fallback
+        // （driver 层若放大 max_tokens 再试属新签名，由上层自行决定）
+        if (failure instanceof ModelCallFailure.OutputBudgetExhausted) {
+            return new RouteDecision.Fail("OUTPUT_BUDGET_EXHAUSTED", false);
+        }
         if (failure instanceof ModelCallFailure.UnknownError unknown) {
             return new RouteDecision.Fail("UNKNOWN_ERROR:" + unknown.reason(), false);
         }

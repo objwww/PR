@@ -39,12 +39,14 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 INSERT INTO rca_primary_checkpoint (
                     task_id, run_id, round_id, phase,
                     decision_seq, steps_used, batches_used,
-                    input_snapshot_digest, final_claims, final_missing_information,
+                    input_snapshot_digest, memory_id, memory_digest,
+                    final_claims, final_missing_information,
                     last_error, updated_at
                 ) VALUES (
                     :taskId, :runId, :roundId, :phase,
                     :decisionSeq, :stepsUsed, :batchesUsed,
-                    :snapshotDigest, cast(:finalClaims as jsonb),
+                    :snapshotDigest, :memoryId, :memoryDigest,
+                    cast(:finalClaims as jsonb),
                     cast(:missing as jsonb), :lastError, :updatedAt
                 )
                 ON CONFLICT (task_id) DO UPDATE SET
@@ -54,6 +56,8 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                     steps_used = EXCLUDED.steps_used,
                     batches_used = EXCLUDED.batches_used,
                     input_snapshot_digest = EXCLUDED.input_snapshot_digest,
+                    memory_id = EXCLUDED.memory_id,
+                    memory_digest = EXCLUDED.memory_digest,
                     final_claims = EXCLUDED.final_claims,
                     final_missing_information = EXCLUDED.final_missing_information,
                     last_error = EXCLUDED.last_error,
@@ -67,6 +71,8 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 .param("stepsUsed", cp.stepsUsed())
                 .param("batchesUsed", cp.batchesUsed())
                 .param("snapshotDigest", cp.inputSnapshotDigest())
+                .param("memoryId", cp.memoryId())
+                .param("memoryDigest", cp.memoryDigest())
                 .param("finalClaims", jsonOf(cp.finalClaims()))
                 .param("missing", jsonOf(cp.finalMissingInformation()))
                 .param("lastError", cp.lastError())
@@ -114,6 +120,8 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 rs.getInt("steps_used"),
                 rs.getInt("batches_used"),
                 rs.getString("input_snapshot_digest"),
+                rs.getObject("memory_id", UUID.class),
+                rs.getString("memory_digest"),
                 claimsJson == null ? List.of() : claimsOf(claimsJson),
                 missingJson == null ? List.of() : stringsOf(missingJson),
                 rs.getString("last_error"),

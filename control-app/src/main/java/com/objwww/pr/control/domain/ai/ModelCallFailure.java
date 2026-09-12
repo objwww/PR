@@ -39,6 +39,18 @@ public sealed interface ModelCallFailure {
         }
     }
 
+    /**
+     * 输出预算耗尽（R5/BA-120）：HTTP 200 且 content 空、带推理/截断终止痕迹
+     * （finish_reason=length 或 completion_tokens&gt;0——推理模式把 max_tokens 烧在
+     * reasoning_content）。同参数重试必然同败（请求形状问题），消费方按终态处置；
+     * 不进熔断计数（模型/端点并未坏）。
+     */
+    record OutputBudgetExhausted(FaultScope faultScope) implements ModelCallFailure {
+        public OutputBudgetExhausted {
+            if (faultScope == null) faultScope = FaultScope.MODEL;
+        }
+    }
+
     /** 限流（429 RateQuota/BurstRate 模型级；通用 Throttling 保守归账号级），可重试 */
     record RateLimitedTransient(FaultScope faultScope, Duration retryAfter) implements ModelCallFailure {
         public RateLimitedTransient {

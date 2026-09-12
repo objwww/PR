@@ -20,6 +20,7 @@ import com.objwww.pr.control.domain.ai.RouteCallOutcome;
 import com.objwww.pr.control.domain.ai.RouteClientPort;
 import com.objwww.pr.control.domain.ai.TokenUsage;
 import com.objwww.pr.control.domain.service.ExecutionLedger;
+import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +54,7 @@ class R7ModelGatewayTest {
     private ScriptedRouteClient client;
     private PlatformLedgerFake platformLedger;
     private AlertInMemoryStores stores;
+    private AlertInMemoryStores.InputCaptures inputCaptures;
     private RcaModelGateway rcaGateway;
 
     private final UUID runId = UUID.randomUUID();
@@ -70,8 +72,10 @@ class R7ModelGatewayTest {
                         stores.rcaEvents, new com.fasterxml.jackson.databind.ObjectMapper()));
         ModelGateway platform = new ModelGateway(ROUTE, null, client, null,
                 params(), platformLedger, new PricingService(Map.of()), rcaSinkLedger, CLOCK);
+        inputCaptures = new AlertInMemoryStores.InputCaptures(
+                com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.DIGEST_ONLY);
         rcaGateway = new RcaModelGateway(platform, stores.modelCalls,
-                new PricingService(Map.of()), CLOCK);
+                new PricingService(Map.of()), inputCaptures, CLOCK);
     }
 
     private static ModelGatewayParams params() {
@@ -153,7 +157,9 @@ class R7ModelGatewayTest {
         assertThat(row.state()).isEqualTo("SUCCESS");
         assertThat(row.usage()).isNotNull();
         assertThat(row.usage().totalTokens()).isEqualTo(30);
-        assertThat(row.usage().costMicros()).isNull(); // 测试无价目表：NOT_PRICED，不猜钱数
+        assertThat(row.usage().costMicros()).isNull(); // 测试无价目表：不猜钱数
+        assertThat(row.usage().pricingVersion()).as("R4：有 usage 无价 = unpriced 显式语义")
+                .isEqualTo("unpriced");
         assertThat(row.usage().gatewayInvocationId()).isEqualTo(outcome.gatewayInvocationId());
         assertThat(platformLedger.rows).as("平台账本同铸").hasSize(1);
     }
@@ -170,6 +176,24 @@ class R7ModelGatewayTest {
         assertThat(row.state()).as("响应成功不伪称失败").isEqualTo("SUCCESS");
         assertThat(row.usage().usageMissing()).isTrue();
         assertThat(row.usage().costMicros()).as("费用未决不猜零").isNull();
+        assertThat(row.usage().pricingVersion()).as("usage 缺失 = NOT_PRICED 全 null，与 unpriced 可区分")
+                .isNull();
+    }
+
+    /** R4/BA-115：有 usage 无价目 = 账行 pricing_version='unpriced' + cost NULL（不填 0 不编价） */
+    @Test
+    void 有usage无价目_UNPRICED落账_与usage缺失账面可区分() {
+        client.enqueue(new RouteCallOutcome.Ok("内容", new TokenUsage(10, 20, 30),
+                false, "model-rca", null, Duration.ofMillis(5)));
+
+        rcaGateway.call(ctx(), "prompt", 100);
+
+        var row = stores.modelCalls.all().get(0);
+        assertThat(row.state()).isEqualTo("SUCCESS");
+        assertThat(row.usage().usageMissing()).isFalse();
+        assertThat(row.usage().pricingVersion()).isEqualTo("unpriced");
+        assertThat(row.usage().costMicros()).as("unpriced 不猜钱数（红线：不填 0）").isNull();
+        assertThat(row.usage().currency()).isNull();
     }
 
     // ------------------------------------------------------- 失败映射
@@ -248,7 +272,149 @@ class R7ModelGatewayTest {
         assertThat(client.calls()).isZero();
     }
 
+    // ------------------------------------------------------- R2 输入捕获与回放
+
+    @Test
+    void r2_full档_原文落行_digest与账本对账() {
+        inputCaptures = new AlertInMemoryStores.InputCaptures(
+                com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.FULL);
+        rcaGateway = new RcaModelGateway(gatewayOf(client, platformLedger), stores.modelCalls,
+                new PricingService(Map.of()), inputCaptures, CLOCK);
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", "req-abc", Duration.ofMillis(7)));
+
+        rcaGateway.call(ctx(), "prompt-with-secret", 100);
+
+        assertThat(inputCaptures.all()).hasSize(1);
+        var row = inputCaptures.all().get(0);
+        assertThat(row.promptText()).as("FULL 档落原文（回放面完整）").isEqualTo("prompt-with-secret");
+        assertThat(row.promptDigest())
+                .as("promptDigest 恒为原文摘要，与 rca_model_call 账行对账")
+                .isEqualTo(Digest.sha256Of("prompt-with-secret").value());
+        assertThat(row.messageBytes()).isPositive();
+        assertThat(row.approxTokens()).isPositive();
+        assertThat(stores.modelCalls.all().get(0).open().promptDigest())
+                .isEqualTo(row.promptDigest());
+    }
+
+    @Test
+    void r2_digestOnly档_零原文_摘要可对账() {
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", "req-abc", Duration.ofMillis(7)));
+
+        rcaGateway.call(ctx(), "prompt", 100);
+
+        var row = inputCaptures.all().get(0);
+        assertThat(row.promptText()).as("digest-only 默认面不落原文").isNull();
+        assertThat(row.promptDigest()).isEqualTo(Digest.sha256Of("prompt").value());
+        assertThat(row.redactionNote()).isNull();
+    }
+
+    @Test
+    void r2_redacted档_密钥词形零出现_掩文留痕() {
+        inputCaptures = new AlertInMemoryStores.InputCaptures(
+                com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.REDACTED);
+        rcaGateway = new RcaModelGateway(gatewayOf(client, platformLedger), stores.modelCalls,
+                new PricingService(Map.of()), inputCaptures, CLOCK);
+        String prompt = "call api with Authorization: Bearer sk-abcdef1234567890 and "
+                + "{\"api_key\":\"verysecret\"}";
+        client.enqueue(new RouteCallOutcome.Ok("ok", new TokenUsage(20, 10, 30),
+                false, "model-rca", null, Duration.ofMillis(7)));
+
+        rcaGateway.call(ctx(), prompt, 100);
+
+        String stored = inputCaptures.all().get(0).promptText();
+        assertThat(stored).as("掩文非原文").isNotEqualTo(prompt);
+        assertThat(stored).as("Bearer 凭据值零出现").doesNotContain("sk-abcdef1234567890");
+        assertThat(stored).as("secret 值零出现").doesNotContain("verysecret");
+        assertThat(stored).as("掩码锚在场").contains("***");
+        assertThat(inputCaptures.all().get(0).redactionNote()).contains("masked");
+        assertThat(inputCaptures.all().get(0).promptDigest())
+                .as("摘要仍为原文摘要（掩文不可反推原文=回放诚实'不完整'）")
+                .isEqualTo(Digest.sha256Of(prompt).value());
+    }
+
+    @Test
+    void r2_捕获写失败_LEDGER_WRITE_FAILED零触网() {
+        inputCaptures.failure = new IllegalStateException("模拟 rca_model_input 不可写");
+        int platformRowsBefore = platformLedger.rows.size();
+
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), "prompt", 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "LEDGER_WRITE_FAILED");
+
+        assertThat(client.calls()).as("回放链断裂的调用不发给模型（零触网）").isZero();
+        assertThat(platformLedger.rows).as("平台账本零行").hasSize(platformRowsBefore);
+        var row = stores.modelCalls.all().get(0);
+        assertThat(row.state()).isEqualTo("FAILED");
+        assertThat(row.errorCode()).isEqualTo("LEDGER_WRITE_FAILED");
+    }
+
+    // ------------------------------------------------------- R10 输入限额（MA-03/MC10~11）
+
+    @Test
+    void mc10_输入超限_零触网能力错误_账与捕获零足迹() {
+        rcaGateway = new RcaModelGateway(gatewayOf(client, platformLedger), stores.modelCalls,
+                new PricingService(Map.of()), inputCaptures, CLOCK, 100);
+        int platformRowsBefore = platformLedger.rows.size();
+        // len=200 → 估算 200/2+1=101 > V=100 → 拒绝
+        String oversized = "x".repeat(200);
+
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), oversized, 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode",
+                        RcaModelGateway.CAPABILITY_INPUT_TOO_LARGE)
+                .hasMessageContaining("V=100");
+
+        assertThat(client.calls()).as("MC10 零远端请求").isZero();
+        assertThat(stores.modelCalls.all()).as("MC10 在 ledger.open 之前拒绝=零账行").isEmpty();
+        assertThat(inputCaptures.all()).as("MC10 零捕获行").isEmpty();
+        assertThat(platformLedger.rows).as("MC10 平台账本零行").hasSize(platformRowsBefore);
+    }
+
+    @Test
+    void mc11_估算边界_恰在限内放行_超一字符即拒() {
+        rcaGateway = new RcaModelGateway(gatewayOf(client, platformLedger), stores.modelCalls,
+                new PricingService(Map.of()), inputCaptures, CLOCK, 100);
+        // len=198 → 估算 198/2+1=100 = V → 不超限，放行入模
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", "req-abc", Duration.ofMillis(7)));
+        rcaGateway.call(ctx(), "x".repeat(198), 100);
+        assertThat(client.calls()).as("恰在 V 内不误杀").isEqualTo(1);
+
+        // len=199 → 估算 199/2+1=100 仍 = V（保守取整）→ 放行；len=200 → 101 > V → 拒
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), "x".repeat(200), 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode",
+                        RcaModelGateway.CAPABILITY_INPUT_TOO_LARGE);
+        assertThat(client.calls()).isEqualTo(1);
+    }
+
+    @Test
+    void r10_遗留五参构造_默认无上限_配置非法值failFast() {
+        // 5-arg 构造 = maxInputTokens=Integer.MAX_VALUE（存量装配零行为漂移）
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), "x".repeat(8_000), 100))
+                .as("默认构造下超大输入走平台预算闸而非能力错误")
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "BUDGET_EXCEEDED");
+
+        assertThatThrownBy(() -> new RcaModelGateway(gatewayOf(client, platformLedger),
+                stores.modelCalls, new PricingService(Map.of()), inputCaptures, CLOCK, 0))
+                .as("max-input-tokens ≤ 0 启动期 fail-fast")
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ------------------------------------------------------- 夹具
+
+    /** 平台侧网关组装（R2 用例换捕获档位时复用） */
+    private ModelGateway gatewayOf(ScriptedRouteClient client,
+            PlatformLedgerFake platformLedger) {
+        ExecutionLedger rcaSinkLedger = new ExecutionLedger(
+                new com.objwww.pr.control.infrastructure.persistence.RcaModelEventSink(
+                        stores.rcaEvents, new com.fasterxml.jackson.databind.ObjectMapper()));
+        return new ModelGateway(ROUTE, null, client, null, params(), platformLedger,
+                new PricingService(Map.of()), rcaSinkLedger, CLOCK);
+    }
 
     /** 脚本化路由客户端（零真网） */
     private static final class ScriptedRouteClient implements RouteClientPort {

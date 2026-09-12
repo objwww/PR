@@ -28,6 +28,14 @@ public interface RcaModelCallLedger {
     /** 恢复对账读：某 run 未结算（PENDING/UNKNOWN）行——不盲重发的判定输入（EX-A3 同律） */
     List<UnsettledRow> findUnsettledByRun(UUID runId);
 
+    /**
+     * R6 评测费用链接线（EV-06）：某 run 全部已结算行（SUCCESS/FAILED/UNKNOWN）的
+     * 逐调用读面（只读 SELECT，select,insert 授权内）。评测对账按 attempt 聚合
+     * （§6.6 冻结语义，聚合规则见 RcaAttemptUsage）；逐物理调用行经评测 usage
+     * 端点透出，不在对账输入里展开。
+     */
+    List<CallUsage> listSettledUsageByRunId(UUID runId);
+
     /** PENDING 落账行（身份五元组+role 身份+预算/快照锚；prompt 只落 digest） */
     record OpenRow(UUID id, UUID runId, UUID taskId, UUID attemptId, long actionSeq,
             int physicalSeq, int roundId, String roleId, String roleVersion,
@@ -46,5 +54,13 @@ public interface RcaModelCallLedger {
     /** 恢复对账投影：未结算行的最小面 */
     record UnsettledRow(UUID id, UUID taskId, long actionSeq, int physicalSeq,
             String state, String errorCode) {
+    }
+
+    /** R6 已结算行投影（usage/cost 仅 SUCCESS 行可能在场；pricingVersion 含
+     * 'unpriced' 显式态——R4 契约，与 usage 缺失可区分） */
+    record CallUsage(UUID attemptId, String roleId, long actionSeq, int physicalSeq,
+            Integer promptTokens, Integer completionTokens, Integer totalTokens,
+            Long costMicros, String pricingVersion, String currency,
+            boolean usageMissing, String state) {
     }
 }

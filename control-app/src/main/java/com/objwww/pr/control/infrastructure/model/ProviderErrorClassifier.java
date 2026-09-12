@@ -97,6 +97,13 @@ public final class ProviderErrorClassifier {
             return new ModelCallFailure.RateLimitedTransient(FaultScope.ACCOUNT, retryAfter);
         }
 
+        // LiteLLM 代理预算耗尽（195 真机实证：HTTP 429 + type=budget_exceeded，无
+        // Retry-After）——持续性额度耗尽，归账号级 QuotaExhausted（A4：异 quota_scope
+        // 备路由可切，同 scope 终态不切）
+        if (errorCode.contains("budget_exceeded")) {
+            return new ModelCallFailure.QuotaExhausted(FaultScope.ACCOUNT);
+        }
+
         // 模型级 RPM/RPS
         if (errorCode.contains("RateQuota") || errorCode.contains("limit_requests")) {
             return new ModelCallFailure.RateLimitedTransient(FaultScope.MODEL, retryAfter);
@@ -144,6 +151,14 @@ public final class ProviderErrorClassifier {
     public ModelCallFailure classifyProtocolError(String reason) {
         Objects.requireNonNull(reason, "reason");
         return new ModelCallFailure.ProtocolError(FaultScope.ENDPOINT);
+    }
+
+    /**
+     * 输出预算耗尽（R5/BA-120，MC25/26）：HTTP 200 但 content 空且带推理/截断终止
+     * 痕迹——max_tokens 被推理烧穿，同参重试必然同败。终态处置，不进熔断计数。
+     */
+    public ModelCallFailure classifyOutputBudgetExhausted() {
+        return new ModelCallFailure.OutputBudgetExhausted(FaultScope.MODEL);
     }
 
     /**

@@ -160,6 +160,11 @@ services:
       APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}
       AGENT_MODEL: ${AGENT_MODEL:-glm-5}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      # R4/用户裁定（2026-09-12）：模型额度不足自动切换——备用路由三键透传（缺省空=
+      # 不启用回退，行为不变）；.env 置 AGENT_MODEL_FALLBACK 即生效（真窗实测见 §18）
+      AGENT_MODEL_FALLBACK: ${AGENT_MODEL_FALLBACK:-}
+      OPENAI_COMPAT_BASE_URL_FALLBACK: ${OPENAI_COMPAT_BASE_URL_FALLBACK:-}
+      AGENT_MODEL_API_KEY_FALLBACK: ${AGENT_MODEL_API_KEY_FALLBACK:-}
       # M6-07 Holmes 退场：HOLMES_BASE_URL/HOLMES_API_KEY/APP_ALERT_HOLMES_MODEL、
       # APP_ALERT_FALLBACK_*（M6-04 铸造面已拆）、APP_ALERT_SHADOW_HOLMES_*（M6-05
       # 观察面 bean 已拆）九映射随退场摘除——密钥回收以 .env 摘键 + 全库扫描零命中收口。

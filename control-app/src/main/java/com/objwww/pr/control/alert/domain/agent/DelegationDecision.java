@@ -19,6 +19,8 @@ public record DelegationDecision(
         String gapId,
         String roleId,
         String roleVersion,
+        /** R3 路线B 语义钉面：仅台账审计（模型自述的信息缺口追问）；子任务执行面
+         * 不消费——专家按绑定 profile 的固定查询+冻结窗+input_refs 执行。 */
         String question,
         Status status,
         String rejectReason,

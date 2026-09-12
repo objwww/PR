@@ -264,6 +264,10 @@ public class DeterministicSupervisor {
      *
      * <p>校验顺序（§三）：批形状 → 委派批预算 → 逐请求去重（批内/run 台账）→
      * 角色目录（requireByName 钉唯一版本，歧义=拒绝）→ run 任务上限。
+     *
+     * <p>R3 路线B 诚实面：请求的 {@code question}/{@code scope}/{@code requested_budget}
+     * 仅入台账审计（DelegationDecision），子任务执行面不消费——专家按绑定 profile
+     * 的固定查询+冻结时间窗+input_refs 确定性执行（与 PROTOCOL_SUFFIX 委派文案一致）。
      */
     public Adjudication adjudicateDelegation(UUID runId, UUID primaryTaskId,
             PrimaryDecision decision) {
@@ -358,6 +362,7 @@ public class DeterministicSupervisor {
                         PrimaryCheckpoint.Phase.WAITING_CHILDREN, checkpoint.decisionSeq()
                                 + requests.size(), checkpoint.stepsUsed(),
                         checkpoint.batchesUsed() + 1, checkpoint.inputSnapshotDigest(),
+                        checkpoint.memoryId(), checkpoint.memoryDigest(),
                         checkpoint.finalClaims(), checkpoint.finalMissingInformation(),
                         checkpoint.lastError(), now));
             }

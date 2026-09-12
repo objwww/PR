@@ -48,6 +48,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     /** 单步 max_tokens（有界输出；Decision 是小对象，不允许长文） */
     static final int MAX_TOKENS_PER_STEP = 1_000;
 
+    /** R5 同签名熔断签名前缀（与模型可见反馈文本同槽共存，按前缀+值精确比对） */
+    static final String MODEL_FAILURE_SIGNATURE_PREFIX = "MODEL_FAILURE_SIGNATURE:";
+
     /**
      * 输出协议后缀（BA-110：runner 拥有的硬契约，不依赖可配置 prompt 记得携带——
      * 195 真窗实证：缺省 prompt 零协议描述时 glm-5 全程自然语言作答，8 步
@@ -65,7 +68,15 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             + "\"missing_information\":[\"...\"]}}\n"
             + "规则：args 形状严格遵守 tool_schemas 的 properties/required；evidence_refs"
             + " 只允许引用 valid_artifact_refs 中的 id；证据不足时用"
-            + " HYPOTHESIS 并在 missing_information 写明缺口；每步只输出一个决策对象。";
+            + " HYPOTHESIS 并在 missing_information 写明缺口；每步只输出一个决策对象；"
+            + "委派=按冻结时间窗+input_refs 的固定查询专家（确定性执行，不接受自由文本"
+            + " 指令；question 仅入台账审计，不进子任务执行面）。";
+
+    /** R3/MC 一致性断言面：委派请求的模型可见字段集（与 PrimaryDecision.DelegateRequest
+     * 分量集、supervisor 透传面三方可账；协议文案漂移=新决策字段无协议描述） */
+    static final List<String> DELEGATE_REQUEST_FIELDS =
+            List.of("gap_id", "role_id", "question", "input_refs", "scope",
+                    "requested_budget");
 
     /** 主 Agent 受限直接取证口（§六 工具路径归既有受控面，X6 装配 ToolGateway 实现） */
     @FunctionalInterface
@@ -80,20 +91,34 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     private final DeterministicSupervisor supervisor;
     private final PrimaryCheckpointRepository checkpoints;
     private final EvidenceRepository evidence;
+    private final ContextAssembler assembler;
     private final PrimaryToolPort toolPort;
     private final ObjectMapper mapper;
     private final Clock clock;
+    /** R11/MA-04 一步边界压缩（可空=null 零压缩姿态，既有装配零行为漂移） */
+    private final ContextCompactionService compaction;
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
-            PrimaryToolPort toolPort, ObjectMapper mapper, Clock clock) {
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock) {
+        this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
+                clock, null);
+    }
+
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock, ContextCompactionService compaction) {
         this.guard = Objects.requireNonNull(guard, "guard");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
         this.evidence = Objects.requireNonNull(evidence, "evidence");
+        this.assembler = Objects.requireNonNull(assembler, "assembler");
         this.toolPort = Objects.requireNonNull(toolPort, "toolPort");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.compaction = compaction;
     }
 
     @Override
@@ -124,9 +149,30 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             return deterministicFinal(request, checkpoint);
         }
 
-        RcaModelOutcome outcome = guard.guardedModelCall(
-                actionOf(request, checkpoint), promptOf(request, checkpoint),
-                MAX_TOKENS_PER_STEP, TOKEN_ESTIMATE_PER_STEP);
+        // 信封装配委托 ContextAssembler（R1 am4-envelope.v2：真实内容入模）；
+        // snapshotDigest = 稳定面（不含 last_error 反馈）——R5 签名键 + 快照回填共用
+        int batchesRemaining = Math.max(0, supervisor.maxDelegationBatches()
+                - checkpoint.batchesUsed());
+        ContextAssembler.Assembly assembly =
+                assembler.assemble(request, checkpoint, batchesRemaining);
+        maybeCompact(request, checkpoint, assembly);
+        RcaModelOutcome outcome;
+        try {
+            outcome = guard.guardedModelCall(actionOf(request, checkpoint), assembly.prompt(),
+                    MAX_TOKENS_PER_STEP, TOKEN_ESTIMATE_PER_STEP);
+        } catch (com.objwww.pr.control.alert.domain.agent.RcaModelCallException e) {
+            // R5 同签名熔断（BA-120/MC25）：模型面终态失败（零触网栅栏/步级可重试除外）
+            // 同 (errorCode+稳定信封) 连续第 2 次 → 确定性未决收敛，不再同参重发
+            if (!e.zeroNetwork() && !e.retryable()) {
+                String signature = e.errorCode() + "|" + assembly.snapshotDigest();
+                if (isSameFailureSignature(checkpoint.lastError(), signature)) {
+                    return modelFailureFinal(request, checkpoint, e.errorCode());
+                }
+                checkpoints.upsert(checkpoint.withLastError(
+                        MODEL_FAILURE_SIGNATURE_PREFIX + signature, clock.instant()));
+            }
+            throw e;
+        }
 
         PrimaryDecision decision;
         try {
@@ -134,7 +180,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                     mapper.readValue(jsonOf(outcome.content()),
                             new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
         } catch (Exception e) {
-            advanceStep(request, checkpoint, null,
+            advanceStep(request, checkpoint, assembly.snapshotDigest(), assembly.memory(),
                     "DECISION_UNPARSEABLE: 上一步输出不是合法决策 JSON。严格按协议输出"
                             + "恰一个纯 JSON 对象（tool_call/delegate/final 三形状选一），"
                             + "禁 markdown 围栏、禁思考过程、禁多余文字。");
@@ -143,7 +189,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             return RoleRunner.RoleDriveResult.failed("DECISION_UNPARSEABLE");
         }
         return switch (decision.branch()) {
-            case TOOL_CALL -> driveToolCall(request, checkpoint, decision);
+            case TOOL_CALL -> driveToolCall(request, checkpoint, decision,
+                    assembly.snapshotDigest(), assembly.memory());
             case DELEGATE -> driveDelegate(request, checkpoint, decision);
             case FINAL -> driveFinal(request, checkpoint, decision);
         };
@@ -152,10 +199,11 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     // ------------------------------------------------------------------ 分支
 
     private RoleRunner.RoleDriveResult driveToolCall(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+            PrimaryCheckpoint checkpoint, PrimaryDecision decision, String stableDigest,
+            com.objwww.pr.control.alert.domain.agent.WorkingMemory memory) {
         PrimaryDecision.ToolCall tool = decision.toolCall();
         if (!request.profile().toolAllowlist().contains(tool.toolId())) {
-            advanceStep(request, checkpoint, null,
+            advanceStep(request, checkpoint, stableDigest, memory,
                     "TOOL_NOT_ALLOWED: 工具 " + tool.toolId()
                             + " 不在 tool_allowlist。只能从白名单工具中选择，"
                             + "按 tool_schemas 的形状重发 tool_call 或改走 final。");
@@ -168,7 +216,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
         } catch (com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException e) {
             // 模型可见族（超时/限流/远端故障/零数据）：计步重驱，步数耗尽兜底保终止
-            advanceStep(request, checkpoint, null,
+            advanceStep(request, checkpoint, stableDigest, memory,
                     "TOOL_FAILED " + e.reason().name() + ": 工具 " + tool.toolId()
                             + " 调用未成功。可修正查询（时间窗/service 过滤/指标名）后重试，"
                             + "或换用白名单内其他工具，或基于已有证据走 final。");
@@ -183,7 +231,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             // 会被当不可重试 → DEAD）；其余控制面终止族原样上抛降级 DEAD
             if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
                     .INVALID_ARGS) {
-                advanceStep(request, checkpoint, null,
+                advanceStep(request, checkpoint, stableDigest, memory,
                         "INVALID_ARGS: 工具 " + tool.toolId()
                                 + " 的 args 未通过校验。严格对照 tool_schemas 里该工具的"
                                 + " JSON Schema（字段名/类型/取值域）修正 args 后重发 tool_call。");
@@ -193,7 +241,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             }
             throw e;
         }
-        advanceStep(request, checkpoint, null, null);
+        advanceStep(request, checkpoint, stableDigest, memory, null);
         return new RoleRunner.RoleDriveResult(
                 RoleRunner.RoleDriveOutcome.EVIDENCE_PRODUCED, List.of(evidenceId), null);
     }
@@ -267,13 +315,43 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     }
 
     /**
-     * 计步推进 + 反馈环（V88）：lastError = 本步结束后留给下一步模型的修正指引
-     * （A0 八跑实证盲重驱=连猜同错；信封 last_error 面下发，成功步传 null 清空）
+     * R11/MA-04 一步边界压缩（工具结果入库后、下一模型发送前，§19.3 触发时点）。
+     * 默认关（compaction=null 或 enabled=false 零开销）；任何结果都不改变本步输入
+     * ——已装配信封按确定性有界材料照发，压缩产物只落档供消费面（MC34 后启用）。
+     * 异常不打断主路径（压缩是优化，有界回退=按原材料继续）。
      */
-    private void advanceStep(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint, String snapshotDigest, String lastError) {
-        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest, lastError,
-                clock.instant()));
+    private void maybeCompact(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly) {
+        if (compaction == null) {
+            return;
+        }
+        try {
+            ContextCompactionService.CompactionOutcome outcome =
+                    compaction.afterToolResults(request, checkpoint, assembly);
+            if (outcome.committed()) {
+                log.info("R11 压缩已提交 task={} summaryId={} token {}→{}",
+                        request.task().id(), outcome.summary().id(),
+                        outcome.summary().tokenBefore(), outcome.summary().tokenAfter());
+            }
+        } catch (RuntimeException e) {
+            log.warn("R11 压缩边界异常（不打断主路径）task={} {}",
+                    request.task().id(), e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * 计步推进 + 反馈环（V88）：lastError = 本步结束后留给下一步模型的修正指引
+     * （A0 八跑实证盲重驱=连猜同错；信封 last_error 面下发，成功步传 null 清空）。
+     * R10：本步所用工作记忆快照随检查点钉面（memory_id/digest），DECISION_UNPARSEABLE
+     * 重驱读同快照不另生成（MC07）。
+     */    private void advanceStep(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, String snapshotDigest,
+            com.objwww.pr.control.alert.domain.agent.WorkingMemory memory,
+            String lastError) {
+        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest,
+                memory == null ? null : memory.id(),
+                memory == null ? null : memory.memoryDigest(),
+                lastError, clock.instant()));
     }
 
     /** §六 模型动作身份：绑定三元组 + 检查点计数（decision_seq 为账本动作序） */
@@ -291,40 +369,27 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 checkpoint.inputSnapshotDigest(), () -> true);
     }
 
-    /** 有界任务信封（§十一.3）：固定版本上下文+窗口+剩余步数+合法引用，不广播历史 */
-    private String promptOf(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint) {
-        try {
-            Map<String, Object> envelope = new LinkedHashMap<>();
-            envelope.put("role", request.profile().name() + "@" + request.profile().version());
-            envelope.put("run_id", request.task().runId().toString());
-            envelope.put("task_id", request.task().id().toString());
-            envelope.put("round_id", checkpoint.roundId());
-            envelope.put("steps_remaining",
-                    Math.max(0, request.profile().maxSteps() - checkpoint.stepsUsed()));
-            envelope.put("delegation_batches_remaining",
-                    // 与裁决同源：读 Supervisor 注入的运行时旋钮值（臂A 前置债清偿），
-                    // 禁止各自读配置导致漂移；0=零委派姿态时余量恒 0
-                    Math.max(0, supervisor.maxDelegationBatches()
-                            - checkpoint.batchesUsed()));
-            envelope.put("time_window", request.startEpoch() + "/" + request.endEpoch());
-            envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
-                    .sorted().toList());
-            // BA-112：allowlist 工具的 args JSON Schema 钉版下发（Profile inputSchema
-            // 进 digest，模型首发的参数形状依据；空=旧 Profile 无 schema 面）
-            envelope.put("tool_schemas", request.profile().inputSchema());
-            envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted()
-                    .toList());
-            // 反馈环（V88）：上一步可重试失败的原因与修正指引随信封回喂——A0 八跑
-            // 实证盲重驱=模型连猜同错 4 次；成功步该面缺席（检查点已清空）
-            if (checkpoint.lastError() != null) {
-                envelope.put("last_error", checkpoint.lastError());
-            }
-            return request.profile().prompt() + "\n"
-                    + mapper.writeValueAsString(envelope) + PROTOCOL_SUFFIX;
-        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new IllegalStateException("任务信封序列化失败", e);
-        }
+    /** R5：lastError 是否本签名的前次落痕（前缀识别——反馈文本与机器签名同槽共存） */
+    private static boolean isSameFailureSignature(String lastError, String signature) {
+        return lastError != null && lastError.startsWith(MODEL_FAILURE_SIGNATURE_PREFIX)
+                && lastError.substring(MODEL_FAILURE_SIGNATURE_PREFIX.length()).equals(signature);
+    }
+
+    /**
+     * R5 同签名熔断收敛：同 (errorCode+稳定信封) 连续第 2 次失败 → 确定性未决 FINAL
+     * （零模型调用；"流程终止≠根因确认"，缺口如实入 missing_information）。
+     */
+    private RoleRunner.RoleDriveResult modelFailureFinal(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, String errorCode) {
+        checkpoints.upsert(checkpoint.withFinal(List.of(),
+                List.of("MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code=" + errorCode
+                        + "，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；"
+                        + "已有事实由报告相位从工件面补集"),
+                clock.instant()));
+        log.warn("主任务同签名模型失败 ×2 → 确定性未决 FINAL（零模型调用）task={} code={}",
+                request.task().id(), errorCode);
+        return new RoleRunner.RoleDriveResult(RoleRunner.RoleDriveOutcome.FINAL_READY,
+                List.of(), "MODEL_FAILURE_" + errorCode);
     }
 
     /**

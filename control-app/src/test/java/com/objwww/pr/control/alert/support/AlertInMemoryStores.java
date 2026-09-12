@@ -1639,5 +1639,172 @@ public final class AlertInMemoryStores {
                             r.errorCode()))
                     .toList();
         }
+
+        /**
+         * R6/EV-06 读面镜像：已结算行（SUCCESS 带回报 / FAILED / UNKNOWN）→ CallUsage，
+         * usage 缺失（usageMissing/FAILED/UNKNOWN）时 tokens/cost 为 null——按 attempt
+         * 聚合语义（§6.6 冻结）由消费方 RcaAttemptUsage 承担。
+         */
+        @Override
+        public synchronized List<CallUsage> listSettledUsageByRunId(UUID runId) {
+            return rows.values().stream()
+                    .filter(r -> r.open().runId().equals(runId))
+                    .filter(r -> !"PENDING".equals(r.state()))
+                    .sorted(java.util.Comparator.comparing((CallRow r) -> r.open().taskId())
+                            .thenComparing(r -> r.open().actionSeq())
+                            .thenComparing(r -> r.open().physicalSeq()))
+                    .map(r -> {
+                        boolean missing = !"SUCCESS".equals(r.state())
+                                || r.usage() == null || r.usage().usageMissing();
+                        UsageOutcome u = r.usage();
+                        return new CallUsage(r.open().attemptId(), r.open().roleId(),
+                                r.open().actionSeq(), r.open().physicalSeq(),
+                                missing ? null : Integer.valueOf((int) u.promptTokens()),
+                                missing ? null : Integer.valueOf((int) u.completionTokens()),
+                                missing ? null : Integer.valueOf((int) u.totalTokens()),
+                                missing ? null : u.costMicros(),
+                                missing ? null : u.pricingVersion(),
+                                missing ? null : u.currency(),
+                                missing, r.state());
+                    })
+                    .toList();
+        }
+    }
+
+    // --------------------------------- R2 输入捕获假件（append-only 同构）
+
+    /** rca_model_input 同构假件：档位钉定 + failure 注入面（捕获写失败零触网测试） */
+    public static final class InputCaptures implements
+            com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture {
+
+        /** 注入即 capture 抛出（模拟 rca_model_input 不可写） */
+        public volatile RuntimeException failure;
+
+        private final com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level level;
+        private final List<com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.CaptureRow>
+                captured = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        public InputCaptures(
+                com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level level) {
+            this.level = level;
+        }
+
+        @Override
+        public com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level level() {
+            return level;
+        }
+
+        @Override
+        public void capture(com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.CaptureRow row) {
+            RuntimeException boom = failure;
+            if (boom != null) {
+                throw boom;
+            }
+            captured.add(row);
+        }
+
+        public List<com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.CaptureRow> all() {
+            return List.copyOf(captured);
+        }
+    }
+
+    // --------------------------------- R10 工作记忆快照假件（append-only 同构）
+
+    /** rca_working_memory 同构假件：同 (run,task,revision) 冲突返回既有行（MC07/MC08 幂等重放） */
+    public static final class WorkingMemories implements
+            com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort {
+
+        private final Map<UUID, com.objwww.pr.control.alert.domain.agent.WorkingMemory> rows =
+                new LinkedHashMap<>();
+
+        public synchronized List<com.objwww.pr.control.alert.domain.agent.WorkingMemory> all() {
+            return List.copyOf(rows.values());
+        }
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.agent.WorkingMemory append(
+                com.objwww.pr.control.alert.domain.agent.WorkingMemory candidate) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(candidate.runId())
+                            && r.taskId().equals(candidate.taskId())
+                            && r.checkpointRevision() == candidate.checkpointRevision())
+                    .findFirst()
+                    .orElseGet(() -> {
+                        rows.put(candidate.id(), candidate);
+                        return candidate;
+                    });
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.WorkingMemory>
+                latestByTask(UUID runId, UUID taskId) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.taskId().equals(taskId))
+                    .max(java.util.Comparator.comparingLong(
+                            com.objwww.pr.control.alert.domain.agent.WorkingMemory
+                                    ::checkpointRevision));
+        }
+    }
+
+    // --------------------------------- R11 上下文摘要假件（不可变档同构）
+
+    /** rca_context_summary 同构假件：同 (run,task,source) 冲突返回既有行（CAS 提交语义） */
+    public static final class ContextSummaries implements
+            com.objwww.pr.control.alert.domain.repository.ContextSummaryPort {
+
+        private final Map<UUID, com.objwww.pr.control.alert.domain.agent.ContextSummary>
+                rows = new LinkedHashMap<>();
+
+        public synchronized List<com.objwww.pr.control.alert.domain.agent.ContextSummary>
+                all() {
+            return List.copyOf(rows.values());
+        }
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.agent.ContextSummary append(
+                com.objwww.pr.control.alert.domain.agent.ContextSummary candidate) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(candidate.runId())
+                            && r.taskId().equals(candidate.taskId())
+                            && r.sourceSnapshotDigest()
+                                    .equals(candidate.sourceSnapshotDigest()))
+                    .findFirst()
+                    .orElseGet(() -> {
+                        rows.put(candidate.id(), candidate);
+                        return candidate;
+                    });
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.ContextSummary>
+                findBySource(UUID runId, UUID taskId, String sourceDigest) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.taskId().equals(taskId)
+                            && r.sourceSnapshotDigest().equals(sourceDigest))
+                    .findFirst();
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.ContextSummary>
+                latestByTask(UUID runId, UUID taskId) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.taskId().equals(taskId))
+                    .max(java.util.Comparator.comparing(
+                            com.objwww.pr.control.alert.domain.agent.ContextSummary
+                                    ::createdAt));
+        }
+
+        @Override
+        public synchronized long countByRun(UUID runId) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId)).count();
+        }
+
+        @Override
+        public synchronized long countByTask(UUID runId, UUID taskId) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.taskId().equals(taskId))
+                    .count();
+        }
     }
 }

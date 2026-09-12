@@ -169,6 +169,38 @@ public class PostgresRcaModelCallLedger implements RcaModelCallLedger {
                 .list();
     }
 
+    /** R6 评测费用链接线：run 全部已结算行逐调用读面（FAILED/UNKNOWN 行 usage/cost 恒空）。
+     *  usage 是 V48 jsonb 列（{prompt_tokens,completion_tokens,total_tokens}）——
+     *  195 真机 R4 探针首证：裸列名 SELECT 在真 PG 直接 BadSqlGrammar，必须从 jsonb 取键。 */
+    @Override
+    public List<CallUsage> listSettledUsageByRunId(UUID runId) {
+        return jdbc.sql("""
+                SELECT attempt_id, role_id, action_seq, physical_seq,
+                       (usage->>'prompt_tokens')::int AS prompt_tokens,
+                       (usage->>'completion_tokens')::int AS completion_tokens,
+                       (usage->>'total_tokens')::int AS total_tokens,
+                       cost_micros, pricing_version, currency, usage_missing, state
+                  FROM rca_model_call
+                 WHERE run_id = :runId AND state <> 'PENDING'
+                 ORDER BY attempt_id, action_seq, physical_seq
+                """)
+                .param("runId", runId)
+                .query((rs, rowNum) -> new CallUsage(
+                        rs.getObject("attempt_id", UUID.class),
+                        rs.getString("role_id"),
+                        rs.getLong("action_seq"),
+                        rs.getInt("physical_seq"),
+                        (Integer) rs.getObject("prompt_tokens"),
+                        (Integer) rs.getObject("completion_tokens"),
+                        (Integer) rs.getObject("total_tokens"),
+                        (Long) rs.getObject("cost_micros"),
+                        rs.getString("pricing_version"),
+                        rs.getString("currency"),
+                        rs.getBoolean("usage_missing"),
+                        rs.getString("state")))
+                .list();
+    }
+
     private String jsonOf(Map<String, Object> value) {
         try {
             return mapper.writeValueAsString(value);

@@ -1,0 +1,5 @@
+[R7] suite=r12fb-20260911T212356Z runs=/opt/build/pr/r12-runs/r12fb-20260911T212356Z scene=service:checkout alertname:E2EA0CheckoutProbe primary=qwen3-max-preview fallback=deepseek-v4-flash-0731
+[R7] phase1 姿态：health 200 + 注入 E2EA0CheckoutProbe@checkout
+[R7] phase1 PASS（run=8aeb9ff0-9b05-4287-a876-66fb843e5ab2）
+[R7] phase2 等 run 终态（真模型 900s 上限）
+[R7] FAIL: phase2 run 终态=FAILED（切换失败或链路未收敛；取证 /opt/build/pr/r12-runs/r12fb-20260911T212356Z）

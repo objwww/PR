@@ -1,0 +1,97 @@
+R12 真机证据 dump——R4 模型额度耗尽自动切换（195 = 146.56.195.225，2026-09-12）
+操作员 SQL 面实测（docker exec deploy-postgres-1 psql -d pr_agent；只读 SELECT）
+汇总人：R12 修补批（批一/三/四 真机验证窗）
+
+==============================================================================
+① R4 正证主面（SUITE PASS run4；run=d21815de-73d6-4137-a2e3-7efa48ebeef7）
+   姿态：主路由 qwen3-max-preview@litellm 预算钥匙（sk-4K49…yy0g，max_budget=1e-6，
+   首笔真实花费即 429 budget_exceeded）；备路由 qwen3-max-preview@master 钥匙
+   （异 quota_scope=A4 资格矩阵可切；五元组非全同=EX-42 启动面通过）。
+------------------------------------------------------------------------------
+rca_model_call（全部行；6 笔全部 SUCCESS 且 route_id=fallback，主路由直达 0）：
+  SUCCESS|fallback|qwen3-max-preview|   ×6（physical_seq 1..6）
+rca_event 决策事件（GATEWAY_MODEL_FALLBACK% 全量，run1 亦同形）：
+  GATEWAY_MODEL_FALLBACK_SELECTED|QUOTA_EXHAUSTED|ACCOUNT|primary|fallback
+  （payload: reason=QUOTA_EXHAUSTED, fault_scope=ACCOUNT,
+    from_route=primary, to_route=fallback；RcaModelEventSink 汇聚写面）
+探针套件断言（e2e-r12-quota-fallback.sh，SUITE PASS）：
+  phase1 注入+原子对 PASS（run=d21815de）
+  phase2 run 终态 SUCCEEDED PASS（真收敛）
+  phase3 R4 账本 PASS（QUOTA_EXHAUSTED 决策事件 1 笔；备路由接管 5/5 笔；
+        账行全 SUCCESS；主路由直达 0 笔）
+  phase4 R2/R1 PASS（SUCCESS 恰一行捕获+digest 对账 0 锤；检查点快照回填非空）
+  phase5 INFO（ACTIVE Claim=0；evidence=0——结论语义归 A0 健康路径断言，
+        与基线 run 2871fb3b 行为一致，见④）
+
+==============================================================================
+② R4 负证面（fail-closed；run3=a0-20260911T205934Z，run=8aeb9ff0）
+------------------------------------------------------------------------------
+姿态：AGENT_MODEL=fallback-probe-nonexistent（模型不存在）。
+wire：litellm → HTTP 404 → RequestInvalid(FaultScope.MODEL) → A1 终态族
+→ 不重试不 fallback（ModelRouter L72）→ run FAILED。
+结论：非额度类故障不触发切换，fail-closed 语义保持——切换不是无条件兜底。
+
+==============================================================================
+③ litellm 预算耗尽 wire 形状（真机 curl 实证，2026-09-11T21:07Z）
+------------------------------------------------------------------------------
+CALL1（钥匙 spend 0 < budget）：HTTP 200 成功（花费 7e-06 > max_budget 1e-06）
+CALL2/3：HTTP 429
+  {"error":{"message":"Budget has been exceeded! Current cost: 7.000000000000001e-06,
+   Max budget: 1e-06","type":"budget_exceeded","param":null,"code":"429"}}
+分类缺口修复（ProviderErrorClassifier/SpringAiRouteClient）：
+  修复前：error.code="429" 数字回显无判别力 → UnknownError 终态不切（fail-closed）
+  修复后：code 为纯数字时取 error.type → classify429 认 "budget_exceeded"
+        → QuotaExhausted(ACCOUNT) → A4 异 quota_scope 备路由可切
+  OpenAI "insufficient_quota"/百炼 "Throttling" 等既有形状字节级不变
+
+==============================================================================
+④ 基线对齐（无回归证据；基线=2871fb3b，2026-09-11T15:17Z，执行者 jar 时代）
+------------------------------------------------------------------------------
+基线 run：prometheus.query SUCCESS×2 + logs.query FAILED(INVALID_INPUT)×6
+        + prometheus.instant FAILED(INVALID_INPUT)；rca_evidence=0；rca_claim=0
+本次 A0（b9383950）：prometheus.query SUCCESS + prometheus.instant
+        FAILED(INVALID_INPUT)；rca_evidence=0；rca_claim=0 —— 与基线同形
+结论面（evidence/claims=0）为已登记的「第九跑 phase5 FAIL（案面重调归主会话
+裁定禁改口径）」同一张脸，非本批回归；本批不动 phase5 口径。
+
+==============================================================================
+⑤ A0 final（常备姿态全量回归；suite=a0-20260911T214319Z，run=b9383950）
+------------------------------------------------------------------------------
+phase1 PASS（health 200 + qualification SQL 桥授予 id=8cab6b85 + CAS 激活
+      digest=74c4109c…）
+phase2 PASS（WHITELISTED 原子对；run=b9383950）
+phase3 PASS（run SUCCEEDED——R6 jsonb 修复后 run 收尾恢复）
+phase4 PASS（恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定三元组 /
+      检查点 final_claims 在场）
+phase5 FAIL——已登记已知脸（见④；禁改口径，主会话裁定未决）
+phase6 三断言（手工对同一 run 执行，等价 in-suite SQL）：
+  R2_nocap=0（每笔 SUCCESS 恰一行 rca_model_input）
+  R2_digmis=0（捕获 digest 与账行 prompt_digest 全对账）
+  R1_nosnap=0（steps_used>0 检查点 input_snapshot_digest 全非空）
+  PLAT_cross=0（平台 model_call_ledger 对 RCA 调用恒零行，BA-109）
+  SETTLE_bad=0（usage/pricing/invocation 全结清；unpriced 显式态合法）
+
+==============================================================================
+⑥ 真雷档案（本窗发现并修复）
+------------------------------------------------------------------------------
+[R6]listSettledUsageByRunId 裸列名读 rca_model_call.prompt_tokens —— V48 usage 是
+  jsonb，真 PG BadSqlGrammar，NativeInvestigationExecutor:282 收尾路径每次必炸
+  → 任务 RETRY×2→DEAD → run FAILED(EXECUTOR_ERROR)。修复：usage jsonb 取键；
+  回归 IT：PostgresRcaModelCallUsageReaderIT.settledUsageExportRoundTripsFromJsonbUsage
+  （本机 skip，195 真值可跑）。修复后 A0 phase3（run SUCCEEDED）恢复绿。
+[EN-02]activate 双合同缺口：脚本 r7_activate 发空 body（缺 expectedActiveRevision
+  → 400）且未过资格门（无未撤销 PASS 证明 → 422 QUALIFICATION_ABSENT）。
+  修复：r7_activate 先 GET /active 取 revision（404→0）再 CAS 激活；
+  r7_qualify SQL 桥授予（provenance='e2e-r7-operator(sql-grant;EN0910-pending)'，
+  grant/revoke HTTP 面归 EN-09/10 未建）。
+
+==============================================================================
+⑦ 姿态恢复
+------------------------------------------------------------------------------
+.env 已从 .env.bak-fallbackprobe-20260912 恢复执行者常备姿态：
+  AGENT_MODEL=qwen3-max-preview @ master 钥匙，无 fallback 键（能力已验证，
+  常备化=运维决策：compose 三键透传已在，加 AGENT_MODEL_FALLBACK+
+  AGENT_MODEL_API_KEY_FALLBACK（须异于主钥匙，否则 A4 不放行）即启用）。
+健康检查：restore 后 /actuator/health TRY1=200。
+litellm 探针钥匙 sk-4K49pySD95ggWlK4P_yy0g（alias=r12-quota-probe-20260912）保留
+（预算 1e-6 已耗尽，仅作回归夹具；清理归运维）。

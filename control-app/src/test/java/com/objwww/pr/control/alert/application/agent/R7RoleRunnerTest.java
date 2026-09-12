@@ -9,6 +9,7 @@ import com.objwww.pr.control.alert.domain.agent.AgentPhase;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
 import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.agent.PrimaryDecision;
+import com.objwww.pr.control.alert.domain.agent.RcaModelCallException;
 import com.objwww.pr.control.alert.domain.agent.RoleRuntimeKind;
 import com.objwww.pr.control.alert.domain.budget.BudgetKind;
 import com.objwww.pr.control.alert.domain.dag.DependencyType;
@@ -25,6 +26,8 @@ import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.infrastructure.InMemoryRunBudgetLedger;
 import com.objwww.pr.control.alert.support.AlertInMemoryStores;
 import com.objwww.pr.control.application.ModelGateway;
+import com.objwww.pr.control.domain.ai.FaultScope;
+import com.objwww.pr.control.domain.ai.ModelCallFailure;
 import com.objwww.pr.control.domain.ai.ModelCallLedgerEntry;
 import com.objwww.pr.control.domain.ai.ModelCallLedgerRepository;
 import com.objwww.pr.control.domain.ai.ModelGatewayParams;
@@ -110,14 +113,20 @@ class R7RoleRunnerTest {
         ModelGateway platform = new ModelGateway(ROUTE, null, client, null,
                 params(), platformLedger, new PricingService(Map.of()), rcaSinkLedger, CLOCK);
         RcaModelGateway rcaGateway = new RcaModelGateway(platform, stores.modelCalls,
-                new PricingService(Map.of()), CLOCK);
+                new PricingService(Map.of()),
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.InputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.DIGEST_ONLY),
+                CLOCK);
         RunBudgetGate gate = new RunBudgetGate(new InMemoryRunBudgetLedger());
         gate.openRun(runId, Map.of(BudgetKind.TOKEN, 1_000_000L));
         RcaActionGuard guard = new RcaActionGuard(stores.runs, stores.tasks, agents,
                 gate, rcaGateway, CLOCK);
 
+        ContextAssembler assembler = new ContextAssembler(evidence, stores.toolLedger,
+                stores.delegationDecisions,
+                run -> ContextAssembler.AlertMaterial.unknown(), MAPPER);
         boundedRunner = new BoundedLlmRoleRunner(guard, supervisor, stores.checkpoints,
-                evidence, toolPort, MAPPER, CLOCK);
+                evidence, assembler, toolPort, MAPPER, CLOCK);
         singleToolRunner = new SingleToolRoleRunner(Map.of("metrics-expert",
                 (ctx, start, end) -> null));
         directory = new RunnerDirectory(List.of(boundedRunner, singleToolRunner));
@@ -278,7 +287,7 @@ class R7RoleRunnerTest {
         // steps 已耗尽（maxSteps=1，已用 1）：重驱不花模型调用直接兜底
         stores.checkpoints.upsert(
                 stores.checkpoints.findByTask(primaryId).orElseThrow().withStepAdvanced(
-                        null, null, NOW));
+                        null, null, null, null, NOW));
 
         RoleRunner.RoleDriveResult result = boundedRunner.drive(
                 request(primaryId, primaryProfile()));
@@ -418,6 +427,83 @@ class R7RoleRunnerTest {
                 .contains("final");
     }
 
+    // ------------------------------------------------- R5 同签名模型失败熔断（BA-120/MC25）
+
+    @Test
+    void 同签名模型失败两次_第二次确定性未决收敛_不再重发() {
+        UUID primaryId = startPrimary();
+        // 两脚本行 = 同参同败两次（PROTOCOL_ERROR 终态族，retryable=false）
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.ProtocolError(FaultScope.ENDPOINT),
+                null, null, null, Duration.ofMillis(3)));
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.ProtocolError(FaultScope.ENDPOINT),
+                null, null, null, Duration.ofMillis(3)));
+
+        // 第 1 次：原样上抛（现有重驱语义不动），检查点留失败签名、零计数推进
+        assertThatThrownBy(() -> boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID())))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "PROTOCOL_ERROR");
+        var afterFirst = stores.checkpoints.findByTask(primaryId).orElseThrow();
+        assertThat(afterFirst.lastError()).startsWith("MODEL_FAILURE_SIGNATURE:");
+        assertThat(afterFirst.stepsUsed()).as("失败步不耗步数").isZero();
+
+        // 第 2 次（重驱=新 attempt）：同签名 → 确定性未决 FINAL（零第三次模型调用）
+        RoleRunner.RoleDriveResult result = boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID()));
+
+        assertThat(result.outcome()).isEqualTo(RoleRunner.RoleDriveOutcome.FINAL_READY);
+        assertThat(result.reason()).isEqualTo("MODEL_FAILURE_PROTOCOL_ERROR");
+        var checkpoint = stores.checkpoints.findByTask(primaryId).orElseThrow();
+        assertThat(checkpoint.finalClaims()).isEmpty();
+        assertThat(checkpoint.finalMissingInformation())
+                .singleElement().asString().contains("MODEL_FAILURE_UNRESOLVED")
+                .contains("PROTOCOL_ERROR");
+        assertThat(client.calls()).as("恰两次模型调用，无风暴").isEqualTo(2);
+    }
+
+    @Test
+    void 不同失败码_不判同签名_熔断不误触发() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.ProtocolError(FaultScope.ENDPOINT),
+                null, null, null, Duration.ofMillis(3)));
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.RequestInvalid(FaultScope.MODEL),
+                400, null, null, Duration.ofMillis(3)));
+
+        assertThatThrownBy(() -> boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID())))
+                .hasFieldOrPropertyWithValue("errorCode", "PROTOCOL_ERROR");
+        assertThatThrownBy(() -> boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID())))
+                .as("码不同 = 非同签名，第 2 次仍上抛不收敛")
+                .hasFieldOrPropertyWithValue("errorCode", "REQUEST_INVALID");
+        assertThat(client.calls()).isEqualTo(2);
+    }
+
+    @Test
+    void 步级可重试失败_DEFERRED_不进熔断() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.QuotaTemporary(FaultScope.ACCOUNT, NOW.plusSeconds(60)),
+                429, null, null, Duration.ofMillis(3)));
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.QuotaTemporary(FaultScope.ACCOUNT, NOW.plusSeconds(60)),
+                429, null, null, Duration.ofMillis(3)));
+
+        // DEFERRED（retryable=true）两次同样上抛——配额冷却属正常运营，不判终态
+        assertThatThrownBy(() -> boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID())))
+                .hasFieldOrPropertyWithValue("errorCode", "DEFERRED");
+        assertThatThrownBy(() -> boundedRunner.drive(
+                request(primaryId, primaryProfile(), UUID.randomUUID())))
+                .hasFieldOrPropertyWithValue("errorCode", "DEFERRED");
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().lastError())
+                .as("可重试失败不留熔断签名").isNull();
+    }
+
     // ------------------------------------------------- 夹具
 
     /** 主模式启动（PlanCompiler 编译事务写绑定+检查点），返回主任务 id */
@@ -446,15 +532,24 @@ class R7RoleRunnerTest {
     }
 
     private RoleRunner.RoleDriveRequest request(UUID taskId, AgentProfile profile) {
+        return request(taskId, profile, attemptId);
+    }
+
+    /** attempt 显式注入面（R5 熔断面：重驱=新 attempt，预算键随之新开不撞旧结算） */
+    private RoleRunner.RoleDriveRequest request(UUID taskId, AgentProfile profile, UUID attempt) {
         RcaTask task = stores.tasks.findById(taskId).orElseThrow();
         TaskExecutionBinding binding = stores.bindings.findByTask(taskId).orElseThrow();
-        return new RoleRunner.RoleDriveRequest(task, binding, profile, callCtx(),
+        return new RoleRunner.RoleDriveRequest(task, binding, profile, callCtx(attempt),
                 "1757574000", "1757577600");
     }
 
     private SingleToolEvidenceAgent.CallContext callCtx() {
+        return callCtx(attemptId);
+    }
+
+    private SingleToolEvidenceAgent.CallContext callCtx(UUID attempt) {
         return new SingleToolEvidenceAgent.CallContext(runId, UUID.randomUUID(),
-                attemptId, 0, 0, null, "1757574000/1757577600");
+                attempt, 0, 0, null, "1757574000/1757577600");
     }
 
     private RcaTask leasedTask(UUID taskId) {

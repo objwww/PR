@@ -1,0 +1,12 @@
+[R7] suite=r12fb-20260911T214136Z runs=/opt/build/pr/r12-runs/r12fb-20260911T214136Z scene=service:checkout alertname:E2EA0CheckoutProbe primary=qwen3-max-preview fallback=qwen3-max-preview
+[R7] phase1 姿态：health 200 + 注入 E2EA0CheckoutProbe@checkout
+[R7] phase1 PASS（run=d21815de-73d6-4137-a2e3-7efa48ebeef7）
+[R7] phase2 等 run 终态（真模型 900s 上限）
+[R7] phase2 PASS（run SUCCEEDED）
+[R7] phase3 R4 账本：额度败点决策事件 + 备路由 SUCCESS 接管
+[R7] phase3 PASS（QUOTA_EXHAUSTED 决策事件 1 笔；备路由接管 5/5 笔；主路由直达 0 笔）
+[R7] phase4 R2 捕获恰一行+digest 对账；R1 检查点快照回填
+[R7] phase4 PASS
+[R7] phase5 结论面计数（信息性）
+[R7] phase5 INFO（ACTIVE Claim=0；evidence=0）
+[R7] SUITE PASS（R4 真机正证：额度耗尽→QUOTA_EXHAUSTED→备路由 qwen3-max-preview 接管→链路真收敛；run=d21815de-73d6-4137-a2e3-7efa48ebeef7）

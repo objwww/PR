@@ -120,6 +120,18 @@ class ProviderErrorClassifierTest {
         assertThat(u.faultScope()).isNull();
     }
 
+    @Test
+    void status429LiteLlmBudgetExceededIsAccountQuotaExhausted() {
+        // 195 真机实证（2026-09-12）：litellm key 预算耗尽 wire 形状 = HTTP 429 +
+        // error.type=budget_exceeded（code 为数字回显，经提取面换成 type 传入）——
+        // 持续性额度耗尽、无 Retry-After，归账号级 QuotaExhausted（A4：异 quota_scope
+        // 备路由可切；同 scope 终态不切）
+        ModelCallFailure f = classifier.classify(429, "budget_exceeded", null);
+        assertThat(f).isInstanceOf(ModelCallFailure.QuotaExhausted.class);
+        assertThat(((ModelCallFailure.QuotaExhausted) f).faultScope())
+                .isEqualTo(FaultScope.ACCOUNT);
+    }
+
     // ------------------------------------------------------------------ 5xx / 非标准码
 
     @Test

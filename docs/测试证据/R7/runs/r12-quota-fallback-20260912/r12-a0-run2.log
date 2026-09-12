@@ -1,0 +1,3 @@
+[R7] suite=a0-20260911T205135Z runs=/opt/build/pr/r12-runs/a0-20260911T205135Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] FAIL: activate(5886be431b198206767a508c02b37d5e1a897b9d9425d2cf319d1c4134cc8b98) HTTP 422: {"error":"QUALIFICATION_ABSENT: 无未撤销评测证明，激活/回滚拒绝（候选 5886be431b198206767a508c02b37d5e1a897b9d9425d2cf319d1c4134cc8b98）"}

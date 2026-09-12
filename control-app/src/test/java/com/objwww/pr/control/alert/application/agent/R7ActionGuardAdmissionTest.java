@@ -86,7 +86,10 @@ class R7ActionGuardAdmissionTest {
         ModelGateway platform = new ModelGateway(ROUTE, null, client, null, params(),
                 platformLedger, new PricingService(Map.of()), rcaSink, CLOCK);
         RcaModelGateway rcaGateway = new RcaModelGateway(platform, stores.modelCalls,
-                new PricingService(Map.of()), CLOCK);
+                new PricingService(Map.of()),
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.InputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.DIGEST_ONLY),
+                CLOCK);
         RunBudgetGate gate = new RunBudgetGate(budgetLedger);
         gate.openRun(runId, Map.of(BudgetKind.TOKEN, 1_000L));
         guard = new RcaActionGuard(stores.runs, stores.tasks,

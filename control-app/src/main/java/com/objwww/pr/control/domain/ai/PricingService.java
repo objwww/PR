@@ -14,7 +14,8 @@ import java.util.Objects;
  * <p>规则：long 精确算术（溢出 → fail-closed 返回 {@link CostCalculation#NOT_PRICED}）；
  * 除法向零取整（单次除法，不分项预除）；每条调用落当时生效的单价快照
  * （pricing_version + currency + 两个单价），配置改价后历史账单不被重新解释（I32/ST-61）；
- * 单价未配置或 usage 缺失 → 不估算（cost=null，不造数）。
+ * usage 缺失 → NOT_PRICED（全 null）；单价未配置 → UNPRICED（pricing_version='unpriced'，
+ * cost 仍 null 不造数——R4/BA-115：两态账面可区分）。
  */
 public final class PricingService {
 
@@ -37,7 +38,9 @@ public final class PricingService {
     }
 
     /**
-     * 计算一次成功调用的成本。usage 缺失 / 模型无单价配置 / 算术溢出 → {@link CostCalculation#NOT_PRICED}。
+     * 计算一次成功调用的成本。usage 缺失/算术溢出 → {@link CostCalculation#NOT_PRICED}
+     * （全 null）；模型无单价配置 → {@link CostCalculation#UNPRICED}
+     * （pricingVersion='unpriced'，钱数仍 null——R4：有 usage 无价与 usage 缺失账面可区分）。
      */
     public CostCalculation calculate(String requestedModel, TokenUsage usage, boolean usageMissing) {
         Objects.requireNonNull(requestedModel, "requestedModel");
@@ -46,7 +49,7 @@ public final class PricingService {
         }
         PriceEntry price = prices.get(requestedModel);
         if (price == null) {
-            return CostCalculation.NOT_PRICED;
+            return CostCalculation.UNPRICED;
         }
         try {
             long inputCost = Math.multiplyExact(usage.promptTokens(), price.inputMicrosPer1k());

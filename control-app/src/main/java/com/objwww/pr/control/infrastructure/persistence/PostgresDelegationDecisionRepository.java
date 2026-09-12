@@ -28,7 +28,7 @@ public class PostgresDelegationDecisionRepository implements DelegationDecisionR
         jdbc.sql("""
                 INSERT INTO rca_delegation_decision (
                     id, run_id, primary_task_id, round_id, seq,
-                    gap_id, role_id, role_version, question,
+                    gap_id, role_id, role_version, question, -- question 仅台账审计，执行面不消费（R3 路线B）
                     status, reject_reason, child_task_id, created_at
                 ) VALUES (
                     :id, :runId, :primaryTaskId, :roundId, :seq,

@@ -1,0 +1,16 @@
+[R7] suite=r4p-20260912T025309Z runs=/opt/build/pr/r4p-runs/r4p-20260912T025309Z scene=service:checkout alertname:E2ER4PricingProbe expect_pv=op-inject-20260912 expect_cur=CNY
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=f8c026fc-1698-4bba-80c6-c7290cca3484（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（digest=680837bcf50dfb512b620b6b1e8e690116f3c51e8bf27bd9921b9d595efb3ce6）
+[R7] phase2 注入 checkout 合成告警（E2ER4PricingProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=9649ba40-da99-4a4e-954d-e1297dca30f9）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 价目断言：pricing_version=op-inject-20260912 / currency=CNY / cost 全非零
+[R7] phase4 落账样例（model|pv|cur|cost_micros|tokens）:
+qwen3-max-preview|op-inject-20260912|CNY|2578|1009+70
+qwen3-max-preview|op-inject-20260912|CNY|2588|1090+51
+qwen3-max-preview|op-inject-20260912|CNY|2776|1108+70
+qwen3-max-preview|op-inject-20260912|CNY|2604|1138+41
+qwen3-max-preview|op-inject-20260912|CNY|3218|1165+111
+[R7] SUITE PASS（pv=op-inject-20260912 rows=5 run=9649ba40-da99-4a4e-954d-e1297dca30f9 evidence=/opt/build/pr/r4p-runs/r4p-20260912T025309Z）

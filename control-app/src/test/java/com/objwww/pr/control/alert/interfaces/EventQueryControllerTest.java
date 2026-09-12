@@ -67,7 +67,8 @@ class EventQueryControllerTest {
         runId = UUID.randomUUID();
         runs.put(run(runId, RcaRunState.RUNNING));
         EventQueryService events = new EventQueryService(eventRows, new EventPayloadSanitizer(200));
-        RunQueryService runQuery = new RunQueryService(runs, new StubTasks(), new StubEdges(), CLOCK);
+        RunQueryService runQuery = new RunQueryService(runs, new StubTasks(), new StubEdges(),
+                new StubBindings(), new StubUsage(), CLOCK);
         SseStreamService sse = new SseStreamService(events, Duration.ofSeconds(30));
         mvc = MockMvcBuilders.standaloneSetup(
                         new EventQueryController(runQuery, events, sse, runs))
@@ -100,7 +101,8 @@ class EventQueryControllerTest {
                 .andExpect(jsonPath("$.run.id").value(runId.toString()))
                 .andExpect(jsonPath("$.run.severity").value(nullValue()))
                 .andExpect(jsonPath("$.tasks").isArray())
-                .andExpect(jsonPath("$.edges").isArray());
+                .andExpect(jsonPath("$.edges").isArray())
+                .andExpect(jsonPath("$.usage").value(nullValue()));
         mvc.perform(get("/api/rca-runs/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound());
     }
@@ -330,6 +332,34 @@ class EventQueryControllerTest {
         @Override
         public List<com.objwww.pr.control.alert.domain.dag.TaskEdge> findByRunId(UUID runId) {
             return List.of();
+        }
+    }
+
+    // §三.5：旧版单角色 stub 面——无绑定 / 无模型调用账本（detail 降级 null）
+    static final class StubBindings implements
+            com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository {
+        @Override
+        public void insert(com.objwww.pr.control.alert.domain.model.TaskExecutionBinding binding) {
+        }
+
+        @Override
+        public Optional<com.objwww.pr.control.alert.domain.model.TaskExecutionBinding> findByTask(
+                UUID taskId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<com.objwww.pr.control.alert.domain.model.TaskExecutionBinding> findByRun(
+                UUID runId) {
+            return List.of();
+        }
+    }
+
+    static final class StubUsage implements
+            com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader {
+        @Override
+        public Optional<RunUsage> summarizeByRun(UUID runId) {
+            return Optional.empty();
         }
     }
 }

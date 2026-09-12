@@ -365,4 +365,22 @@ class ModelRouterTest {
                 .isFalse();
         assertThat(ModelRouter.countsForBreaker(new ModelCallFailure.UnknownError("x"))).isFalse();
     }
+
+    // ------------------------------------------------------------------ R5/BA-120 输出预算耗尽
+
+    /** 输出预算耗尽：同参重试必然同败（推理烧预算是请求形状问题）→ 终态不重试不 fallback */
+    @Test
+    void outputBudgetExhaustedIsTerminalWithoutRetryOrFallback() {
+        RouteDecision d = router(FB_DIFF_ALL).decide(
+                new ModelCallFailure.OutputBudgetExhausted(FaultScope.MODEL),
+                PRIMARY, 1, false, generousBudget(), NOW);
+        assertThat(d).isEqualTo(new RouteDecision.Fail("OUTPUT_BUDGET_EXHAUSTED", false));
+    }
+
+    /** 输出预算耗尽不进熔断计数（模型/端点并未坏——熔断会误伤后续正常请求） */
+    @Test
+    void outputBudgetExhaustedDoesNotCountForBreaker() {
+        assertThat(ModelRouter.countsForBreaker(
+                new ModelCallFailure.OutputBudgetExhausted(FaultScope.MODEL))).isFalse();
+    }
 }

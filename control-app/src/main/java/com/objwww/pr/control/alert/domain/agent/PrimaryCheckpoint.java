@@ -23,6 +23,11 @@ import java.util.UUID;
  * <p>lastError（V88，反馈环）：上一步可重试失败的原因与修正指引，随信封
  * last_error 面回喂模型（A0 八跑实证：盲重驱无反馈=模型连猜同错 4 次）；成功步
  * 清空。崩溃恢复后仍在检查点上，重驱动信封同样携带——反馈不丢。
+ *
+ * <p>memoryId/memoryDigest（V91，R10/§19.2）：本步输入所用工作记忆快照的关联锚
+ * （current_memory_id 面；context_snapshot 锚即 inputSnapshotDigest）。快照本体
+ * 落 rca_working_memory（append-only 深冻结），检查点只存引用不复制历史——
+ * 崩溃恢复重驱读同快照，不额外生成另一版（MC07）。
  */
 public record PrimaryCheckpoint(
         UUID taskId,
@@ -33,6 +38,8 @@ public record PrimaryCheckpoint(
         int stepsUsed,
         int batchesUsed,
         String inputSnapshotDigest,
+        UUID memoryId,
+        String memoryDigest,
         List<Map<String, Object>> finalClaims,
         List<String> finalMissingInformation,
         String lastError,
@@ -49,6 +56,12 @@ public record PrimaryCheckpoint(
                     + " decisionSeq=" + decisionSeq + " stepsUsed=" + stepsUsed
                     + " batchesUsed=" + batchesUsed);
         }
+        if (memoryId == null && memoryDigest != null) {
+            throw new IllegalArgumentException("memoryDigest 必须与 memoryId 成对出现");
+        }
+        if (memoryId != null && memoryDigest == null) {
+            throw new IllegalArgumentException("memoryId 必须与 memoryDigest 成对出现");
+        }
         finalClaims = finalClaims == null ? List.of() : List.copyOf(finalClaims);
         finalMissingInformation = finalMissingInformation == null
                 ? List.of() : List.copyOf(finalMissingInformation);
@@ -57,26 +70,29 @@ public record PrimaryCheckpoint(
     /** 初始检查点：PRIMARY_READY、零计数（主任务起跑时一次性 upsert） */
     public static PrimaryCheckpoint initial(UUID taskId, UUID runId, int roundId, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, Phase.PRIMARY_READY,
-                0, 0, 0, null, List.of(), List.of(), null, now);
+                0, 0, 0, null, null, null, List.of(), List.of(), null, now);
     }
 
     public PrimaryCheckpoint withPhase(Phase newPhase, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, newPhase, decisionSeq,
-                stepsUsed, batchesUsed, inputSnapshotDigest, finalClaims,
-                finalMissingInformation, lastError, now);
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                finalClaims, finalMissingInformation, lastError, now);
     }
 
     /**
      * 推进累计：decision_seq +1、steps +1（R7-X6 语义收紧：每步模型动作占一个决策序
      * ——guard 预算预留键与 rca_model_call.action_seq 的单调身份面，重复键 = 预算
-     * 结算踩已结算条目）；可选搭带快照摘要回填（快照冻结恰在首步前发生一次）。
-     * lastError 为本步结束后留给下一步的反馈（null=成功/无反馈，清空旧值）。
+     * 结算踩已结算条目）；可选搭带快照摘要回填（快照冻结恰在首步前发生一次）与本步
+     * 所用工作记忆快照关联（R10：装配时点已 append 深冻结的快照）。lastError 为本步
+     * 结束后留给下一步的反馈（null=成功/无反馈，清空旧值）。
      */
-    public PrimaryCheckpoint withStepAdvanced(String snapshotDigest, String lastError,
-            Instant now) {
+    public PrimaryCheckpoint withStepAdvanced(String snapshotDigest, UUID memoryId,
+            String memoryDigest, String lastError, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq + 1,
                 stepsUsed + 1, batchesUsed,
                 snapshotDigest != null ? snapshotDigest : inputSnapshotDigest,
+                memoryId != null ? memoryId : this.memoryId,
+                memoryDigest != null ? memoryDigest : this.memoryDigest,
                 finalClaims, finalMissingInformation, lastError, now);
     }
 
@@ -88,15 +104,27 @@ public record PrimaryCheckpoint(
      */
     public PrimaryCheckpoint withDecisionAdvanced(String lastError, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq + 1,
-                stepsUsed, batchesUsed, inputSnapshotDigest, finalClaims,
-                finalMissingInformation, lastError, now);
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                finalClaims, finalMissingInformation, lastError, now);
+    }
+
+    /**
+     * 零推进留痕（R5 同签名熔断锚）：模型调用失败（无决策产出）时持久失败签名——
+     * 计数/相位/快照全部不动（失败步不耗步数），重驱读到同签名即判"同失败重发"。
+     * lastError 字段在本入口作机器签名载体（重驱成功后由 withStepAdvanced 正常覆写）。
+     */
+    public PrimaryCheckpoint withLastError(String failureSignature, Instant now) {
+        return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                finalClaims, finalMissingInformation,
+                Objects.requireNonNull(failureSignature, "failureSignature"), now);
     }
 
     /** FINAL 落账：提案进检查点，phase 就地固化（后续只被报告相位消费） */
     public PrimaryCheckpoint withFinal(List<Map<String, Object>> claims,
             List<String> missingInformation, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
-                stepsUsed, batchesUsed, inputSnapshotDigest, claims, missingInformation,
-                lastError, now);
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                claims, missingInformation, lastError, now);
     }
 }

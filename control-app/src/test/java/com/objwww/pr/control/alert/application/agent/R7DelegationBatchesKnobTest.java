@@ -112,13 +112,19 @@ class R7DelegationBatchesKnobTest {
         ModelGateway platform = new ModelGateway(ROUTE, null, client, null,
                 params(), platformLedger, new PricingService(Map.of()), rcaSinkLedger, CLOCK);
         RcaModelGateway rcaGateway = new RcaModelGateway(platform, stores.modelCalls,
-                new PricingService(Map.of()), CLOCK);
+                new PricingService(Map.of()),
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.InputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.DIGEST_ONLY),
+                CLOCK);
         RunBudgetGate gate = new RunBudgetGate(new InMemoryRunBudgetLedger());
         gate.openRun(runId, Map.of(BudgetKind.TOKEN, 1_000_000L));
         RcaActionGuard guard = new RcaActionGuard(stores.runs, stores.tasks, agents,
                 gate, rcaGateway, CLOCK);
+        ContextAssembler assembler = new ContextAssembler(evidence, stores.toolLedger,
+                stores.delegationDecisions,
+                run -> ContextAssembler.AlertMaterial.unknown(), MAPPER);
         return new BoundedLlmRoleRunner(guard, supervisor, stores.checkpoints,
-                evidence, toolPort, MAPPER, CLOCK);
+                evidence, assembler, toolPort, MAPPER, CLOCK);
     }
 
     // ------------------------------------------------- ① 缺省=2 行为不变

@@ -393,6 +393,7 @@ public class ModelGateway implements ModelGatewayPort, ModelRouteCatalog {
             case ModelCallFailure.Timeout ignored -> "TIMEOUT";
             case ModelCallFailure.NetworkError ignored -> "NETWORK_ERROR";
             case ModelCallFailure.ProtocolError ignored -> "PROTOCOL_ERROR";
+            case ModelCallFailure.OutputBudgetExhausted ignored -> "OUTPUT_BUDGET_EXHAUSTED";
             case ModelCallFailure.RateLimitedTransient ignored -> "RATE_LIMITED_TRANSIENT";
             case ModelCallFailure.QuotaTemporary ignored -> "QUOTA_TEMPORARY";
             case ModelCallFailure.QuotaExhausted ignored -> "QUOTA_EXHAUSTED";

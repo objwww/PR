@@ -227,16 +227,26 @@ public class PostgresConfigBundleRepository implements ConfigBundleRepository {
         return updated != null && updated == 1;
     }
 
-    /** 资格化激活（无事实面） */
+    /**
+     * 资格化激活（无事实面）：接口契约（P07）要求本面与事实面同锁序——资格行
+     * FOR UPDATE 先行（与撤销互斥的第一道），语句级 EXISTS 重验仍兜底（第二道）。
+     * 无资格行时锁零命中、CAS 由 EXISTS 拒绝，语义不变。
+     */
     @Override
     public boolean activateQualified(Digest toDigest, long expectedActiveRevision,
             String by, Instant at) {
-        Integer updated = tx.execute(status -> jdbc.sql(QUALIFIED_ACTIVATE_SQL)
-                .param("toDigest", toDigest.hex())
-                .param("expectedRevision", expectedActiveRevision)
-                .param("at", Timestamp.from(at))
-                .param("by", by)
-                .update());
+        Integer updated = tx.execute(status -> {
+            jdbc.sql(LOCK_QUALIFICATION_SQL)
+                    .param("toDigest", toDigest.hex())
+                    .query((rs, i) -> rs.getString("id"))
+                    .list();
+            return jdbc.sql(QUALIFIED_ACTIVATE_SQL)
+                    .param("toDigest", toDigest.hex())
+                    .param("expectedRevision", expectedActiveRevision)
+                    .param("at", Timestamp.from(at))
+                    .param("by", by)
+                    .update();
+        });
         return updated != null && updated == 1;
     }
 

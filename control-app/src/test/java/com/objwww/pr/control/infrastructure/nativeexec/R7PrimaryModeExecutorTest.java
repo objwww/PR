@@ -439,7 +439,7 @@ class R7PrimaryModeExecutorTest {
         UUID e1 = seedEvidence("prometheus");
         UUID e2 = seedEvidence("loki");
         PrimaryCheckpoint checkpoint = new PrimaryCheckpoint(UUID.randomUUID(), UUID.randomUUID(),
-                0, PrimaryCheckpoint.Phase.PRIMARY_READY, 3, 2, 0, null,
+                0, PrimaryCheckpoint.Phase.PRIMARY_READY, 3, 2, 0, null, null, null,
                 List.of(Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
                                 "statement", "双源", "evidence_refs", List.of(e1, e2)),
                         Map.of("claim_key", "c2", "kind", "EXCLUSION",
@@ -491,12 +491,20 @@ class R7PrimaryModeExecutorTest {
         ModelGateway platform = new ModelGateway(ROUTE, null, client, null, params(),
                 platformLedger, new PricingService(Map.of()), rcaSinkLedger, CLOCK);
         RcaModelGateway rcaGateway = new RcaModelGateway(platform, stores.modelCalls,
-                new PricingService(Map.of()), CLOCK);
+                new PricingService(Map.of()),
+                new com.objwww.pr.control.alert.support.AlertInMemoryStores.InputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.Level.DIGEST_ONLY),
+                CLOCK);
         RunBudgetGate gate = new RunBudgetGate(budgetLedger);
         RcaActionGuard guard = new RcaActionGuard(stores.runs, stores.tasks, agents, gate,
                 rcaGateway, CLOCK);
+        com.objwww.pr.control.alert.application.agent.ContextAssembler assembler =
+                new com.objwww.pr.control.alert.application.agent.ContextAssembler(evidence,
+                        stores.toolLedger, stores.delegationDecisions,
+                        run -> com.objwww.pr.control.alert.application.agent.ContextAssembler
+                                .AlertMaterial.unknown(), MAPPER);
         BoundedLlmRoleRunner bounded = new BoundedLlmRoleRunner(guard, supervisor,
-                stores.checkpoints, evidence, toolPort, MAPPER, CLOCK);
+                stores.checkpoints, evidence, assembler, toolPort, MAPPER, CLOCK);
         SingleToolRoleRunner compat = new SingleToolRoleRunner(Map.of(
                 "metrics", (ctx, start, end) -> produceEvidence(ctx, "prometheus"),
                 "logs", (ctx, start, end) -> produceEvidence(ctx, "loki"),
@@ -511,7 +519,7 @@ class R7PrimaryModeExecutorTest {
                 claims, new EvidencePackageValidator(65_536, 32, 4_096),
                 TOOL_REGISTRY_DIGEST, clock, AlertMetrics.NOOP, gate, openRunLimits,
                 stores.toolLedger, stores.bindings, agents, directory,
-                stores.checkpoints, primary);
+                stores.checkpoints, stores.modelCalls, primary);
     }
 
     private RcaRunOrchestrator buildOrchestrator() {

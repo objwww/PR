@@ -5,6 +5,7 @@ import com.objwww.pr.control.alert.domain.agent.RcaModelCallContext;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallException;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallFenceException;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger;
+import com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture;
 import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
 import com.objwww.pr.control.domain.ai.CostCalculation;
 import com.objwww.pr.control.domain.ai.ModelBudgetExceededException;
@@ -48,29 +49,68 @@ public class RcaModelGateway {
 
     private static final Logger log = LoggerFactory.getLogger(RcaModelGateway.class);
 
+    /** MA-03/MC10 能力错误码（封闭原因码面；步级不可重试，零触网） */
+    public static final String CAPABILITY_INPUT_TOO_LARGE = "CAPABILITY_INPUT_TOO_LARGE";
+
+    /** token 保守估算分母（中文混合上限档；与 ContextAssembler 装配口径一致） */
+    private static final int CHARS_PER_TOKEN_ESTIMATE = 2;
+
     private final ModelGateway gateway;
     private final RcaModelCallLedger ledger;
     private final PricingService pricing;
+    private final RcaModelInputCapture inputCapture;
     private final Clock clock;
+    /** 可变材料硬限 V（token 估算上限；V=C−R−H−M 首期静态折算配置，待 MC34 评测调参） */
+    private final int maxInputTokens;
 
     /** RCA 侧组装（gateway 必须挂 RcaModelEventSink 事件汇——由装配点保证） */
     public RcaModelGateway(ModelGateway gateway, RcaModelCallLedger ledger,
-            PricingService pricing, Clock clock) {
+            PricingService pricing, RcaModelInputCapture inputCapture, Clock clock) {
+        this(gateway, ledger, pricing, inputCapture, clock, Integer.MAX_VALUE);
+    }
+
+    public RcaModelGateway(ModelGateway gateway, RcaModelCallLedger ledger,
+            PricingService pricing, RcaModelInputCapture inputCapture, Clock clock,
+            int maxInputTokens) {
         this.gateway = Objects.requireNonNull(gateway, "gateway");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.pricing = Objects.requireNonNull(pricing, "pricing");
+        this.inputCapture = Objects.requireNonNull(inputCapture, "inputCapture");
         this.clock = Objects.requireNonNull(clock, "clock");
+        if (maxInputTokens <= 0) {
+            throw new IllegalArgumentException("max-input-tokens 须为正: " + maxInputTokens);
+        }
+        this.maxInputTokens = maxInputTokens;
     }
 
     /**
      * 一次逻辑模型动作（平台内联物理重试在平台账本逐行记账，RCA 账本每逻辑动作
      * 一行 physical_seq=1，经 invocation_id 关联跨账对账）。
      *
+     * <p>输入限额（R10/MA-03，§19.3）：可变材料上限 V = C − R − H − M（C=模型窗、
+     * R=输出预留、H=不可裁宿主/schema 开销、M=估算与封装安全余量）；生产配置以
+     * {@code app.alert.r7.max-input-tokens} 直接折算 V（首期 24000，待 MC34 调参）。
+     * tokenizer 不可用 → 保守估算（中文混合按字符/2 上限档，与信封装配同一估算
+     * 口径，不称精确 token）。估算超 V → 零触网能力错误
+     * {@link #CAPABILITY_INPUT_TOO_LARGE}（步级不可重试；tool schema 本身超额同码，
+     * MC10——schema 随信封 prompt 入限）。在 ledger.open 之前拒绝：无发送资格、
+     * 无账本行、零远端请求。
+     *
      * @throws RcaModelCallException 封闭原因码；LEDGER_WRITE_FAILED 时零触网成立
      */
     public RcaModelOutcome call(RcaModelCallContext ctx, String prompt, int maxTokens) {
         Objects.requireNonNull(ctx, "ctx");
         Objects.requireNonNull(prompt, "prompt");
+        int approxTokens = prompt.length() / CHARS_PER_TOKEN_ESTIMATE + 1;
+        if (approxTokens > maxInputTokens) {
+            log.warn("输入超模型可用窗硬限，零触网（{}）: approxTokens={} maxInputTokens={}",
+                    ctx.roleId(), approxTokens, maxInputTokens);
+            throw new RcaModelCallException(CAPABILITY_INPUT_TOO_LARGE,
+                    "模型输入估算超限（含 tool_schemas 信封）：估算 ~" + approxTokens
+                            + " tokens > 硬限 V=" + maxInputTokens
+                            + "（V=C−R−H−M 首期静态折算，待 MC34 评测调参）",
+                    false, true, null);
+        }
         UUID operationId = UUID.randomUUID();
         String promptDigest = Digest.sha256Of(prompt).value();
         try {
@@ -102,6 +142,19 @@ public class RcaModelGateway {
             ledger.fail(operationId, "DEADLINE_EXCEEDED");
             throw new RcaModelCallException("DEADLINE_EXCEEDED",
                     "run/task deadline 已耗尽，未发送", false, true, null);
+        }
+        // R2 输入捕获：open 取得发送资格后、发送前落 rca_model_input（append-only）；
+        // promptDigest 恒为原文摘要（REDACTED 掩文 ≠ 摘要 = 回放面诚实"不完整"）。
+        // 捕获不可写 = 与账本同律零触网（回放链断裂的调用不发给模型）。
+        try {
+            inputCapture.capture(RcaModelInputCapture.buildRow(
+                    operationId, inputCapture.level(), prompt, promptDigest));
+        } catch (RuntimeException e) {
+            log.warn("rca_model_input 捕获写失败，零触网（{}）: {}",
+                    ctx.roleId(), e.getClass().getSimpleName());
+            ledger.fail(operationId, "LEDGER_WRITE_FAILED");
+            throw new RcaModelCallException("LEDGER_WRITE_FAILED",
+                    "输入捕获不可写，零触网", false, true, e);
         }
         try {
             RoutedModelResult r = gateway.complete(

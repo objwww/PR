@@ -56,6 +56,9 @@ cat > "$RUNS/bundle-a0.content" <<EOF
 {"policy_version":"r7-e2e-a0-${SUITE}","canary":{"percent":0,"whitelist":["alertname=${AN}|service=${SVC}"],"max_native_runs":500},"native":{"proposal":{"schema_version":"am4-plan.v1","tasks":[{"key":"investigate-metrics","type":"metrics@1","inputs":[]},{"key":"investigate-logs","type":"logs@1","inputs":[]},{"key":"investigate-change","type":"change@1","inputs":[]}],"edges":[]}}}
 EOF
 DA0="$(r7_publish_bundle "$RUNS/bundle-a0.content" a0)"
+# EN-02 资格门（227896c 起 activate 必须携带未撤销 PASS 证明；grant HTTP 面归 EN-09/10
+# 未建）——探针 bundle 先过 SQL 桥授予再激活，provenance 见 r7_qualify
+r7_qualify "$DA0" "$RUNS"
 r7_activate "$DA0" "$RUNS"
 r7_log "phase1 PASS（health 200；digest=$DA0）"
 
@@ -150,11 +153,32 @@ r7_psql_ro R7_PG_URL "SELECT state||'|'||action_seq||'|'||coalesce(route_id,'')|
 _bad="$(grep -vcE '^SUCCESS\|' "$RUNS/phase6-model-calls.txt")" || _bad=0
 [ "${_bad:-0}" = "0" ] || r7_fail "phase6 存在非 SUCCESS 模型调用行（UNKNOWN=对账破口）:\
 $(grep -vE '^SUCCESS\|' "$RUNS/phase6-model-calls.txt" | tr '\n' ' ')"
+# R4 定价显式语义：有 usage 无价 = pricing_version='unpriced' + cost NULL（合法账面，
+# 不填 0 不编价）；usage 缺失（usage IS NULL / usage_missing=true）仍算未结清。
 _nosettled="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call
     WHERE run_id='${RUNID}' AND (usage IS NULL OR usage_missing=true
-      OR cost_micros IS NULL OR pricing_version IS NULL
+      OR pricing_version IS NULL
+      OR (cost_micros IS NULL AND pricing_version <> 'unpriced')
       OR invocation_id IS NULL OR settled_at IS NULL)" '-At')"
-[ "$_nosettled" = "0" ] || r7_fail "phase6 ${_nosettled} 行 usage/cost/invocation 未结清"
+[ "$_nosettled" = "0" ] || r7_fail "phase6 ${_nosettled} 行 usage/pricing/invocation 未结清"
+# R2 输入捕获（V90）：每笔 SUCCESS 调用恰一行 rca_model_input（append-only）且捕获
+# prompt_digest 与账行对账一致。默认 digest-only 档=零原文仅 digest；评测环境
+# app.alert.r7.input-capture=full 时 sha256(prompt_text)=prompt_digest 即原文可复盘。
+_nocap="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call m
+    WHERE m.run_id='${RUNID}' AND m.state='SUCCESS'
+      AND (SELECT count(*) FROM rca_model_input i
+           WHERE i.model_call_id=m.id) <> 1" '-At')"
+[ "${_nocap:-0}" = "0" ] || r7_fail "phase6 R2: ${_nocap} 笔 SUCCESS 调用捕获行数≠1（恰一行捕获）"
+_digmis="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_model_call m
+    JOIN rca_model_input i ON i.model_call_id=m.id
+    WHERE m.run_id='${RUNID}' AND m.prompt_digest <> i.prompt_digest" '-At')"
+[ "${_digmis:-0}" = "0" ] || r7_fail "phase6 R2: ${_digmis} 行捕获 digest 与账行 prompt_digest 不对账"
+# R1 输入快照回填（G3 接线）：主检查点有模型步推进（steps_used>0）则
+# input_snapshot_digest 必非空（装配器经 withStepAdvanced 回填；全量信封重建复算
+# 由 InputReplayVerifier 在 Java 面承载，脚本面钉"回填已接线"）。
+_nosnap="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM rca_primary_checkpoint
+    WHERE run_id='${RUNID}' AND steps_used > 0 AND input_snapshot_digest IS NULL" '-At')"
+[ "${_nosnap:-0}" = "0" ] || r7_fail "phase6 R1: ${_nosnap} 个已推进主检查点 input_snapshot_digest 为空（快照未回填）"
 # BA-109 裁定（设计修正，非口径放行；RUNBOOK §四.1 预登记候选形态①RCA 侧独立账本）：
 # 平台 model_call_ledger 深绑 PR 域（V5 三列 NOT NULL+FK），RCA 唯一账本山=rca_model_call，
 # 平台写面装配旁路（NoOpModelCallLedgerRepository）。对账断言翻面=平台账本对 RCA 调用
@@ -163,7 +187,7 @@ _platpoll="$(r7_psql_ro R7_PG_URL "SELECT count(*) FROM model_call_ledger p
     WHERE p.invocation_id IN (SELECT invocation_id FROM rca_model_call
       WHERE run_id='${RUNID}' AND invocation_id IS NOT NULL)" '-At')"
 [ "$_platpoll" = "0" ] || r7_fail "phase6 平台账本出现 RCA 调用行 ${_platpoll} 笔（跨域污染，BA-109 裁定面被破）"
-r7_log "phase6 PASS（$(wc -l < "$RUNS/phase6-model-calls.txt" | tr -d ' ') 笔调用全 SUCCESS 结清；平台账本零交叉）"
+r7_log "phase6 PASS（$(wc -l < "$RUNS/phase6-model-calls.txt" | tr -d ' ') 笔调用全 SUCCESS 结清；捕获恰一行+digest 对账一致（R2）；快照回填非空（R1）；平台账本零交叉）"
 
 # ---------------------------------------------------------------------------
 # phase7 报告生产链

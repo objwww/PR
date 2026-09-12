@@ -9,6 +9,7 @@ import com.objwww.pr.control.domain.ai.TokenUsage;
 import com.objwww.pr.shared.RetryAfterParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -112,6 +113,22 @@ public class SpringAiRouteClient implements RouteClientPort {
         }
         String content = response.getResult().getOutput().getText();
         if (content == null || content.isEmpty()) {
+            // R5/BA-120 终止信号分类（MC25）：空正文 + 推理/截断痕迹（finish_reason=length
+            // 或 completion_tokens>0——推理模式把 max_tokens 烧在 reasoning_content）=
+            // 输出预算耗尽，同参重试必然同败；纯空无痕迹保持 PROTOCOL_ERROR 原语义
+            ChatGenerationMetadata genMeta = response.getResult().getMetadata();
+            String finishReason = genMeta == null ? null : genMeta.getFinishReason();
+            ChatResponseMetadata metadata = response.getMetadata();
+            long completionTokens = metadata != null && metadata.getUsage() != null
+                    && metadata.getUsage().getCompletionTokens() != null
+                    ? metadata.getUsage().getCompletionTokens() : 0;
+            boolean truncated = "length".equalsIgnoreCase(finishReason);
+            if (truncated || completionTokens > 0) {
+                log.warn("route={} 空 content 带终止痕迹（finishReason={}, completionTokens={}）"
+                        + "→ OUTPUT_BUDGET_EXHAUSTED", routeId, finishReason, completionTokens);
+                return new RouteCallOutcome.Failed(
+                        classifier.classifyOutputBudgetExhausted(), null, null, null, latency);
+            }
             log.warn("route={} 返回空 content", routeId);
             return new RouteCallOutcome.Failed(
                     classifier.classifyProtocolError("EMPTY_CONTENT"), null, null, null, latency);
@@ -173,16 +190,29 @@ public class SpringAiRouteClient implements RouteClientPort {
      * 百炼错误体双结构解析（§4.2）：OpenAI 兼容嵌套 {@code {"error":{"code",...}}}
      * + DashScope 原生顶层 {@code {"code",...}}；不做单一结构假设；解析失败返回 null
      * （code 缺失走 fail-closed 分类）。
+     *
+     * <p>litellm 代理形（195 真机 R4 探针实证）：{@code error.code} 是状态码数字回显
+     * （如 budget 耗尽回 "429"，无判别力），语义在 {@code error.type}（budget_exceeded）——
+     * code 缺失或纯数字时回退取 type；字符串 code（OpenAI/百炼形）原样保留。
      */
-    private String extractErrorCode(String body) {
+    String extractErrorCode(String body) {
         if (body == null || body.isBlank()) {
             return null;
         }
         try {
             JsonNode root = objectMapper.readTree(body);
-            JsonNode nested = root.path("error").path("code");
-            if (nested.isTextual()) {
-                return nested.asText();
+            JsonNode error = root.path("error");
+            JsonNode nested = error.path("code");
+            String nestedCode = nested.isTextual() ? nested.asText() : null;
+            if (nestedCode != null && !nestedCode.chars().allMatch(Character::isDigit)) {
+                return nestedCode;
+            }
+            JsonNode type = error.path("type");
+            if (type.isTextual() && !type.asText().isBlank()) {
+                return type.asText();
+            }
+            if (nestedCode != null) {
+                return nestedCode;
             }
             JsonNode top = root.path("code");
             if (top.isTextual()) {

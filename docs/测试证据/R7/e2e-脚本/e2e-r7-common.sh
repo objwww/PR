@@ -138,14 +138,51 @@ r7_publish_bundle() {
     echo "$_r7_digest"
 }
 
-# 原子激活（CAS；200 moved/replayed，409=指针被并发移走即败者面零状态改写）
+# 原子激活（EN-02 资格化 CAS：body 必带 expectedActiveRevision——客户端预期的当前
+# 激活 revision，0=从未激活；服务端不替用户推算预期——P06。
+# 200 moved/replayed，409=指针被并发移走即败者面零状态改写）
 r7_activate() {
     _r7_digest="$1"; _r7_dir="$2"
-    printf '{}' > "${_r7_dir}/activate.body"
+    _r7_code="$(r7_http GET /api/config-bundles/active R7_RELEASE_BEARER "" \
+        "${_r7_dir}/activate-active.resp")"
+    if [ "$_r7_code" = "200" ]; then
+        _r7_exp="$(sed -E 's/.*"revision":([0-9]+).*/\1/' "${_r7_dir}/activate-active.resp")"
+        echo "$_r7_exp" | grep -qE '^[0-9]+$' \
+            || r7_fail "active 响应无合法 revision: $(cat "${_r7_dir}/activate-active.resp")"
+    elif [ "$_r7_code" = "404" ]; then
+        _r7_exp=0
+    else
+        r7_fail "active(activate 前置) HTTP $_r7_code: $(cat "${_r7_dir}/activate-active.resp")"
+    fi
+    printf '{"expectedActiveRevision":%s}' "$_r7_exp" > "${_r7_dir}/activate.body"
     _r7_code="$(r7_http POST "/api/config-bundles/${_r7_digest}/activate" R7_RELEASE_BEARER \
         "${_r7_dir}/activate.body" "${_r7_dir}/activate.resp")"
     [ "$_r7_code" = "200" ] \
         || r7_fail "activate(${_r7_digest}) HTTP $_r7_code: $(cat "${_r7_dir}/activate.resp")"
+}
+
+# EN-02 资格门桥（e2e 专用）：activate 现要求未撤销 quality_verdict=PASS 证明
+# （227896c 起），而 grant/revoke 的 HTTP 端点归 EN-09/10（未建）——e2e 探针 bundle
+# 以 SQL 面如实授予。这是显式 DML（不走 r7_psql_ro 证据通道，不违其只读纪律），
+# provenance 全量落库（runner/grader/granted_by 如实标注 e2e 自证+HTTP 面未建）。
+# 用法：r7_qualify <bundle_digest> <runs_dir>；幂等：已有未撤销证明则跳过
+r7_qualify() {
+    _r7_digest="$1"; _r7_dir="$2"
+    [ -n "$R7_PG_URL" ] || r7_fail "环境变量 R7_PG_URL 未注入（资格授予需要 DB 面）"
+    _r7_have="$(r7_psql_ro R7_PG_URL \
+        "select count(*) from release_qualification where candidate_digest='${_r7_digest}' and revoked_at is null" \
+        '-At')"
+    [ "${_r7_have:-0}" -ge 1 ] && return 0
+    ${R7_PSQL_CMD:-psql} "$R7_PG_URL" -v ON_ERROR_STOP=1 -q -At \
+        -c "insert into release_qualification (id, candidate_digest, baseline_digest,
+            dataset_manifest_digest, runner_version, grader_version, quality_verdict,
+            usage_status, granted_scope, granted_by, granted_at)
+            values (gen_random_uuid(), '${_r7_digest}', null, repeat('a0',32),
+            'e2e-r7-a0', 'e2e-r7-a0', 'PASS', 'UNKNOWN', 'e2e-a0-probe',
+            'e2e-r7-operator(sql-grant;EN0910-pending)', now()) returning id" \
+        > "${_r7_dir}/qualify.txt" \
+        || r7_fail "qualify(${_r7_digest}) 授予失败: $(cat "${_r7_dir}/qualify.txt")"
+    r7_log "qualification 授予 id=$(cat "${_r7_dir}/qualify.txt")（EN-02 资格门；SQL 桥）"
 }
 
 # 当前激活 digest（从未激活 404 → echo 空串）

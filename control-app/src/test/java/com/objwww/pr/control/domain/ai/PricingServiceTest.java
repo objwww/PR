@@ -51,13 +51,35 @@ class PricingServiceTest {
                 .isEqualTo(CostCalculation.NOT_PRICED);
     }
 
+    /**
+     * R4/BA-115：模型无价目配置 ≠ usage 缺失——"有 usage 无价"落 UNPRICED
+     * （pricingVersion='unpriced'，钱数仍 null 不猜），账面可与 usage_missing 区分；
+     * NOT_PRICED（全 null）只留给 usage 缺失/溢出。
+     */
     @Test
-    void missingPriceConfigIsNotPriced() {
-        assertThat(serviceWith(PRICE).calculate("model-unknown", new TokenUsage(1, 1, 2), false))
-                .isEqualTo(CostCalculation.NOT_PRICED);
-        // 空价格表（含 null 入参）同样 NOT_PRICED
-        assertThat(new PricingService(null).calculate("model-a", new TokenUsage(1, 1, 2), false))
-                .isEqualTo(CostCalculation.NOT_PRICED);
+    void missingPriceConfigIsUnpricedWithUsagePresent() {
+        CostCalculation cost = serviceWith(PRICE)
+                .calculate("model-unknown", new TokenUsage(1, 1, 2), false);
+        assertThat(cost.priced()).as("钱数仍缺省不猜").isFalse();
+        assertThat(cost.costMicros()).isNull();
+        assertThat(cost.currency()).isNull();
+        assertThat(cost.pricingVersion()).as("显式 unpriced 语义").isEqualTo("unpriced");
+        assertThat(cost.inputPriceMicrosPer1k()).isNull();
+        assertThat(cost.outputPriceMicrosPer1k()).isNull();
+        // 空价格表（含 null 入参）同语义
+        CostCalculation empty = new PricingService(null)
+                .calculate("model-a", new TokenUsage(1, 1, 2), false);
+        assertThat(empty.pricingVersion()).isEqualTo("unpriced");
+        assertThat(empty.costMicros()).isNull();
+    }
+
+    /** 双零价目：配置装配面（M3）已过滤不进单价表；若直达服务，0 token 成本 0 属定价事实（行为保持） */
+    @Test
+    void zeroPriceEntryYieldsZeroCostAsPricingFact() {
+        PricingService s = serviceWith(new PricingService.PriceEntry("v", "CNY", 0, 0));
+        CostCalculation cost = s.calculate("model-a", new TokenUsage(100, 100, 200), false);
+        assertThat(cost.priced()).isTrue();
+        assertThat(cost.costMicros()).isZero();
     }
 
     @Test

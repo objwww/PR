@@ -1,0 +1,1 @@
+SPRING_APPLICATION_JSON={"app":{"model":{"price":{"qwen3-max-preview":{"pricing-version":"op-inject-20260912","currency":"CNY","input-micros-per-1k":2000,"output-micros-per-1k":8000}}}}}

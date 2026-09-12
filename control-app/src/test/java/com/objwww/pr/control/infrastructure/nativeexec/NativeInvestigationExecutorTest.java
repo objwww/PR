@@ -141,7 +141,8 @@ class NativeInvestigationExecutorTest {
                 com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                 new RunBudgetGate(new InMemoryRunBudgetLedger()), generousLimits(),
                 stores.toolLedger, stores.bindings, agentRegistry(),
-                compatRunners(metrics, logs, change), stores.checkpoints, null);
+                compatRunners(metrics, logs, change), stores.checkpoints,
+                stores.modelCalls, null);
         orchestrator = new RcaRunOrchestrator(stores.tasks, stores.runs, stores.attempts,
                 stores.reports, stores.incidents, stores.slots, stores.investigations,
                 stores.toolCalls,
@@ -226,7 +227,7 @@ class NativeInvestigationExecutorTest {
                 com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP,
                 gate, generousLimits(), stores.toolLedger,
                 stores.bindings, agentRegistry(), compatRunners(metrics, logs, change),
-                stores.checkpoints, null);
+                stores.checkpoints, stores.modelCalls, null);
     }
 
     /** R7-X2：兼容适配运行器目录（role→Agent 映射，与生产装配 AlertFlowConfig 同形） */

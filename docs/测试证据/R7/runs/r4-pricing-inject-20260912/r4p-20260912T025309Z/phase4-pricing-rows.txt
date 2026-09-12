@@ -1,0 +1,5 @@
+qwen3-max-preview|op-inject-20260912|CNY|2578|1009+70
+qwen3-max-preview|op-inject-20260912|CNY|2588|1090+51
+qwen3-max-preview|op-inject-20260912|CNY|2776|1108+70
+qwen3-max-preview|op-inject-20260912|CNY|2604|1138+41
+qwen3-max-preview|op-inject-20260912|CNY|3218|1165+111
