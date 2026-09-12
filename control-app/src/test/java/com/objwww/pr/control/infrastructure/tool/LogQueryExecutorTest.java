@@ -26,7 +26,8 @@ import static org.assertj.core.api.Assertions.catchThrowableOfType;
 /**
  * LogQueryExecutor L0（EX-B2）：allowlist fail-closed 次序（B-24 律）、参数语义、
  * 无数据三态（EMPTY=NO_DATA / SOURCE_UNAVAILABLE / QUERY_FAILED——卡面硬要求）、
- * 401/429/超大各确定结局、Loki 响应 → 统一形状 render + 201 截断（B-27 同纪律）。
+ * 401/429 确定结局、Loki 响应 → 统一形状流式 render + 201 截断与突发窗行级
+ * 诚实截断（B-27 同纪律；run24 后超大不再终止而是 truncated 交付）。
  */
 class LogQueryExecutorTest {
 
@@ -180,14 +181,41 @@ class LogQueryExecutorTest {
     }
 
     @Test
-    void oversizeResponseIsBoundedReadResultOversize() {
+    void oversizedBurstTruncatesInsteadOfTerminalOversize() throws Exception {
+        // run24 复现面：突发窗长栈行——原始体远超 resultLimit，旧整包有界读必抛终止族
+        // RESULT_OVERSIZE 炸死主任务；新律=流式渲染行级到限即止 + truncated=true。
         status.set(200);
-        body.set(lokiBody(new String[][]{{"1", "x".repeat(4_096)}}));
-        assertThat(catchThrowableOfType(() -> executor().execute(
-                        new ToolExecutor.ToolExecution(window(),
-                                System.currentTimeMillis() + 4_000, 512)),
-                ToolControlPlaneException.class).reason())
-                .isEqualTo(ToolControlReason.RESULT_OVERSIZE);
+        String[][] entries = new String[120][2];
+        for (int i = 0; i < 120; i++) {
+            entries[i] = new String[]{String.valueOf(
+                    NOW.minusSeconds(120 - i).toEpochMilli() * 1_000_000L),
+                    "x".repeat(300)};
+        }
+        body.set(lokiBody(entries));
+        byte[] out = executor().execute(new ToolExecutor.ToolExecution(window(),
+                System.currentTimeMillis() + 4_000, 8_192));
+        Map<?, ?> payload = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue(out, Map.class);
+        assertThat(payload.get("status")).isEqualTo("success");
+        Map<?, ?> data = (Map<?, ?>) payload.get("data");
+        assertThat(data.get("truncated")).isEqualTo(Boolean.TRUE);
+        List<?> result = (List<?>) data.get("result");
+        assertThat(result.size()).isBetween(1, 200);
+        // 单行不裁字（行长保真），预算闸在行间
+        assertThat((String) ((Map<?, ?>) result.get(0)).get("line")).hasSize(300);
+    }
+
+    @Test
+    void singleOversizedLineYieldsOneRowTruncated() throws Exception {
+        status.set(200);
+        body.set(lokiBody(new String[][]{{String.valueOf(
+                NOW.toEpochMilli() * 1_000_000L), "x".repeat(4_096)}}));
+        byte[] out = executor().execute(new ToolExecutor.ToolExecution(window(),
+                System.currentTimeMillis() + 4_000, 512));
+        Map<?, ?> data = (Map<?, ?>) new com.fasterxml.jackson.databind.ObjectMapper()
+                .readValue(out, Map.class).get("data");
+        assertThat(data.get("truncated")).isEqualTo(Boolean.TRUE);
+        assertThat((List<?>) data.get("result")).hasSize(1);
     }
 
     @Test
@@ -197,7 +225,8 @@ class LogQueryExecutorTest {
             entries[i] = new String[]{String.valueOf(
                     NOW.minusSeconds(200 - i).toEpochMilli() * 1_000_000L), "line-" + i};
         }
-        byte[] out = executor().render(lokiBody(entries).getBytes(StandardCharsets.UTF_8),
+        byte[] out = executor().render(new java.io.ByteArrayInputStream(
+                        lokiBody(entries).getBytes(StandardCharsets.UTF_8)),
                 "checkout", 65_536);
         Map<?, ?> data = (Map<?, ?>) new com.fasterxml.jackson.databind.ObjectMapper()
                 .readValue(out, Map.class).get("data");
@@ -208,8 +237,10 @@ class LogQueryExecutorTest {
     @Test
     void renderEmptyThrowsNoData() {
         assertThat(catchThrowableOfType(() -> executor().render(
-                        "{\"status\":\"success\",\"data\":{\"result\":[]}}"
-                                .getBytes(StandardCharsets.UTF_8), "control-app", 65_536),
+                        new java.io.ByteArrayInputStream(
+                                "{\"status\":\"success\",\"data\":{\"result\":[]}}"
+                                        .getBytes(StandardCharsets.UTF_8)),
+                        "control-app", 65_536),
                 ToolModelVisibleException.class).reason())
                 .isEqualTo(ToolModelVisibleReason.NO_DATA);
     }

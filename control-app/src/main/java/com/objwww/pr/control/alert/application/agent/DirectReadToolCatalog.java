@@ -39,6 +39,12 @@ public final class DirectReadToolCatalog {
     /** R7-X10 代码取证（§二 L64/L209）：部署版本代码只读双工具 */
     public static final String TOOL_CODE_SEARCH = "code.search";
     public static final String TOOL_CODE_READ = "code.read";
+    /** B 批后续（路径一补全）：全参数化即时值——零自由 PromQL 残留面 */
+    public static final String TOOL_METRIC_VALUE = "prometheus.metric_value";
+
+    /** Prometheus 指标名形状（冒号/字母数字下划线；服务端拼 selector 防注入） */
+    private static final String METRIC_NAME_PATTERN =
+            "^[a-zA-Z_:][a-zA-Z0-9_:]*$";
 
     /** 路径形状：相对路径（'/' 分隔，禁反斜杠；'..' 段由执行器沙箱复判） */
     private static final String PATH_PATTERN =
@@ -62,11 +68,14 @@ public final class DirectReadToolCatalog {
                 timeoutMillis, resultLimitBytes);
     }
 
-    /** metric_catalog_search：match 过滤 → 指标名+type+unit（先目录后查询，治乱猜） */
+    /** metric_catalog_search：service 过滤 → 指标名+type+unit（先目录后查询，治乱猜；
+     * 2026-09-12 路径一改参：match→service 必填（服务器拼选择器，模型零语法面）） */
     public static ToolDefinition prometheusCatalog(long timeoutMillis, long resultLimitBytes) {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("match", Map.of("type", "string", "maxLength", 256));
-        return definition(TOOL_CATALOG, properties, List.of(), timeoutMillis, resultLimitBytes);
+        properties.put("service", Map.of("type", "string",
+                "pattern", "^[a-zA-Z0-9_-]{1,63}$"));
+        return definition(TOOL_CATALOG, properties, List.of("service"),
+                timeoutMillis, resultLimitBytes);
     }
 
     /** label_values_query：label,selector → 值列表（先发现 label 再拼 PromQL） */
@@ -190,6 +199,17 @@ public final class DirectReadToolCatalog {
                 "pattern", "^\\d{1,7}$"));
         return definition(TOOL_CODE_READ, properties, List.of("service", "path"),
                 timeoutMillis, resultLimitBytes);
+    }
+
+    /** prometheus.metric_value：metric+service+time → 全参数化即时值（零自由 PromQL） */
+    public static ToolDefinition metricValue(long timeoutMillis, long resultLimitBytes) {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("metric", Map.of("type", "string",
+                "pattern", METRIC_NAME_PATTERN, "maxLength", 128));
+        properties.put("service", Map.of("type", "string", "maxLength", 128));
+        properties.put("time", Map.of("type", "string", "pattern", "^\\d{1,10}$"));
+        return definition(TOOL_METRIC_VALUE, properties,
+                List.of("metric", "service", "time"), timeoutMillis, resultLimitBytes);
     }
 
     private static ToolDefinition definition(String name, Map<String, Object> properties,

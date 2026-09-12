@@ -1,0 +1,12 @@
+[R7] suite=a0-20260912T200125Z runs=/opt/build/runs-r7batch3/a0-20260912T200125Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=da0e83f1-1701-49f0-8195-3b92e76bc840（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=73e24cee8eb42ad7638c252f860815184ca4637f470299a43ea6943a583108b0）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=cf379d83-da42-4e0b-acb4-c2553afd8c37）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定 / 检查点
+[R7] phase4 PASS（零子 Agent/绑定三元组/检查点 final_claims 在场）
+[R7] phase5 受限直查：allowlist=prometheus.catalog,prometheus.metric_value,prometheus.instant,logs.aggregate；evidence_refs 全可解析
+[R7] FAIL: phase5 无带引用的 ACTIVE TRUE Claim

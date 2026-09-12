@@ -158,6 +158,16 @@ services:
       # （"直接受限取证，按需委派专家"——195 真窗实证该默认过保守，qwen/glm 均
       #  零委派致 RX02/RD09/armC 前提不成立）；覆写文本只描述调查策略，不携带场景答案
       APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}
+      # 委派批上限透传（armA 旋钮，执行者 2026-09-12 增补）：缺省 2=现行为；
+      # A0 直查车辆 .env 置 0=零委派姿态（phase4 断言零 DELEGATE，与车辆口径一致）
+      APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: ${APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES:-2}
+      # Prometheus 工具服务范围面透传（执行者 2026-09-12 增补）：catalog/metric_value
+      # 必填 service 的 allowlist（R10 范围纪律）；旧 SPRING_APPLICATION_JSON 退场后
+      # 显式钉死，缺省回落 control-app 单服务
+      APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST:-control-app}
+      # 单工具 Agent 的 TOOL_CALL 预算透传（执行者 2026-09-12 增补）：缺省 4 与 8 步
+      # 主预算错配（真窗实证 NO_DATA 重试 3 次即耗尽——上调至 12 留反馈环重试余量）
+      APP_ALERT_AM4_BUDGET_TOOL_CALLS: ${APP_ALERT_AM4_BUDGET_TOOL_CALLS:-4}
       AGENT_MODEL: ${AGENT_MODEL:-glm-5}
       OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       # R4/用户裁定（2026-09-12）：模型额度不足自动切换——备用路由三键透传（缺省空=

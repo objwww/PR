@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.objwww.pr.control.alert.application.tool.ToolExecutor;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
+import com.objwww.pr.control.alert.domain.tool.ToolControlReason;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException;
 import com.objwww.pr.control.alert.domain.tool.ToolModelVisibleReason;
 import org.junit.jupiter.api.AfterAll;
@@ -141,12 +142,14 @@ class PrometheusApiExecutorTest {
     // ------------------------------------------------------- catalog（T01 第一跳）
 
     @Test
-    @DisplayName("catalog 契约：指标名 + metadata type/unit 合并；match[] 过滤透传")
+    @DisplayName("catalog 契约：series 端点流式抽名 + metadata 合并；service→match[] 选择器服务器拼装")
     void catalogMergesNamesWithMetadata() throws Exception {
-        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/label/__name__/values"))
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/series"))
                 .willReturn(aResponse().withStatus(200).withBody("""
                         {"status":"success",
-                         "data":["http_server_requests_seconds_count","up"]}
+                         "data":[{"__name__":"http_server_requests_seconds_count",
+                                   "service":"checkout"},
+                                  {"__name__":"up","job":"prometheus"}]}
                         """)));
         WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/metadata"))
                 .willReturn(aResponse().withStatus(200).withBody("""
@@ -157,7 +160,7 @@ class PrometheusApiExecutorTest {
                         """)));
 
         byte[] body = api().catalogSearch(exec(Map.of(
-                "match", "http_server_requests_seconds_count")));
+                "service", "checkout")));
 
         Map<?, ?> payload = JSON.readValue(body, Map.class);
         assertThat(payload.get("status")).isEqualTo("success");
@@ -170,23 +173,42 @@ class PrometheusApiExecutorTest {
                 .findFirst().orElseThrow();
         assertThat(http.get("type")).isEqualTo("counter");
         assertThat(http.get("unit")).isEqualTo("requests");
-        WIREMOCK.verify(getRequestedFor(urlPathEqualTo("/api/v1/label/__name__/values"))
-                .withQueryParam("match", equalTo("http_server_requests_seconds_count")));
+        WIREMOCK.verify(getRequestedFor(urlPathEqualTo("/api/v1/series"))
+                .withQueryParam("match[]", equalTo("{service=\"checkout\"}")));
     }
 
     @Test
-    @DisplayName("T04：catalog 响应超 resultLimit → 有界流读 RESULT_OVERSIZE（超大响应不进内存）")
+    @DisplayName("T04：catalog 名单产出超 resultLimit → 流式组装即断 RESULT_OVERSIZE（结果有界）")
     void oversizeCatalogIsBoundedAbort() {
-        char[] junk = new char[70_000];
-        java.util.Arrays.fill(junk, 'x');
-        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/label/__name__/values"))
+        // series body 本身不再受字节闸（流式抽名）——有界闸移到"名单产出"：
+        // 300 个 250 字符名 > 64KB resultLimit，emit 循环即断
+        StringBuilder data = new StringBuilder("{\"status\":\"success\",\"data\":[");
+        String name = "m_" + "x".repeat(240);
+        for (int i = 0; i < 300; i++) {
+            if (i > 0) {
+                data.append(',');
+            }
+            data.append("{\"__name__\":\"").append(name).append(i).append("\"}");
+        }
+        data.append("]}");
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/series"))
+                .willReturn(aResponse().withStatus(200).withBody(data.toString())));
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/metadata"))
                 .willReturn(aResponse().withStatus(200)
-                        .withBody("{\"status\":\"success\",\"data\":[\""
-                                + new String(junk) + "\"]}")));
+                        .withBody("{\"status\":\"success\",\"data\":{}}")));
 
-        assertThatThrownBy(() -> api().catalogSearch(exec(Map.of())))
+        assertThatThrownBy(() -> api().catalogSearch(exec(Map.of("service", "checkout"))))
                 .isInstanceOf(ToolControlPlaneException.class)
                 .hasMessageContaining("RESULT_OVERSIZE");
+    }
+
+    @Test
+    @DisplayName("catalog 越界 service：allowlist 外前置拒（R10 范围纪律，参数化改参后同律）")
+    void catalogServiceOutsideAllowlistIsRejected() {
+        assertThatThrownBy(() -> api().catalogSearch(exec(Map.of("service", "frontend"))))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasFieldOrPropertyWithValue("reason", ToolControlReason.INVALID_ARGS)
+                .hasMessageContaining("allowlist");
     }
 
     // ------------------------------------------------------------- label_values

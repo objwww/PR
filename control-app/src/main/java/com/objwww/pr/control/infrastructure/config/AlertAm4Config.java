@@ -124,7 +124,7 @@ public class AlertAm4Config {
             "${app.alert.am4.docker.container-allowlist:}";
     private static final String ALLOWED_TOOLS_KEY =
             "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query,"
-                    + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
                     + "prometheus.rules,logs.aggregate,change.diff,alert.history,"
                     + "runbook.catalog,runbook.fetch,rca_history.search,"
                     + "code.search,code.read}";
@@ -247,6 +247,9 @@ public class AlertAm4Config {
                 new ToolRegistry.Registration(
                         DirectReadToolCatalog.prometheusInstant(timeoutMillis, resultLimitBytes),
                         prometheusApi::instantQuery),
+                new ToolRegistry.Registration(
+                        DirectReadToolCatalog.metricValue(timeoutMillis, resultLimitBytes),
+                        prometheusApi::metricValue),
                 new ToolRegistry.Registration(
                         DirectReadToolCatalog.prometheusCatalog(timeoutMillis, resultLimitBytes),
                         prometheusApi::catalogSearch),
@@ -598,6 +601,29 @@ public class AlertAm4Config {
     // ------------------------------------------------------------------ R7-X6 主模式
 
     /**
+     * CL-01 检查点提交围栏（告警-Agent闭环修复 §2）：run/task/checkpoint 统一锁序 +
+     * revision 条件写 + 动作身份去重，运行路径检查点唯一提交口。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.PrimaryCheckpointCommitService
+            am4CheckpointCommitFence(
+            RcaRunRepository rcaRunRepository,
+            RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository
+                    primaryCheckpointRepository,
+            com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
+                    runConfigEpochRepository,
+            com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
+                    workingMemoryPort,
+            TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.agent
+                .PrimaryCheckpointCommitService(rcaRunRepository, rcaTaskRepository,
+                primaryCheckpointRepository, runConfigEpochRepository,
+                com.objwww.pr.control.alert.application.AlertClock.system(), tx,
+                workingMemoryPort);
+    }
+
+    /**
      * 主 Agent Profile（R7-X6，BOUNDED_LLM/PRIMARY 相位）：enabled=false 返回 null
      * （NullBean——注册表/运行器目录/执行器全部走旧兼容路由，行为零变化）。预算
      * STEP=MaxSteps、TOOL_CALL=兼容上限、TOKEN=主模式新增维（R7a-1 账本计费面对齐）。
@@ -608,7 +634,7 @@ public class AlertAm4Config {
             @Value("${app.alert.r7.primary.prompt:你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}")
             String prompt,
             @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
-                    + "prometheus.instant,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
                     + "prometheus.rules,logs.aggregate}")
             String toolAllowlist,
             @Value("${app.alert.r7.primary.max-steps:8}") int maxSteps,
@@ -742,6 +768,8 @@ public class AlertAm4Config {
                     operatorMaterialRepository,
             com.objwww.pr.control.release.application.SkillSelectionService
                     skillSelectionService,
+            com.objwww.pr.control.alert.domain.repository.ContextSummaryPort
+                    contextSummaryPort,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -764,19 +792,26 @@ public class AlertAm4Config {
                         .OperatorMaterialView(m.operator(), m.kind().name(),
                                 m.sourceRef(), m.content(), m.admission().name()))
                 .toList();
-        // EN-08 装配缝（SK-08 运行时面）：run 钉版 Skill 选择——告警材料投影出
-        // alertname/service 供 selector 双维命中；钉版/隔离/冲突在 SkillSelectionService 收口
+        // EN-08 装配缝 + CL-05 持久绑定：roleId/configEpoch/releaseDigest 取自冻结
+        // 任务绑定（可信身份），alertname/service 供 selector 双维命中；钉版/允许集/
+        // 冲突/RETIRED 阻断在 SkillSelectionService 收口
         com.objwww.pr.control.alert.application.agent.ContextAssembler.SkillPort
-                skillPort = (runId, alertname, service) ->
-                skillSelectionService.select(runId, alertname, service);
+                skillPort = (runId, roleId, configEpoch, releaseDigest, alertname, service) ->
+                skillSelectionService.selectPinned(runId, roleId, configEpoch,
+                        releaseDigest, alertname, service);
+        // CL-08 消费读缝：按检查点 current_summary_id 精确读已提交摘要（未钉面时槽省略）
+        com.objwww.pr.control.alert.application.agent.ContextAssembler.SummaryMaterialPort
+                summaryMaterialPort = contextSummaryPort::findById;
         return new com.objwww.pr.control.alert.application.agent.ContextAssembler(
                 evidenceRepository, rcaToolInvocationLedger, delegationDecisionRepository,
                 alertMaterialPort, workingMemoryPort, delegationReceiptRepository,
-                operatorMaterialPort, skillPort, Clock.systemUTC(), objectMapper);
+                operatorMaterialPort, skillPort, summaryMaterialPort,
+                Clock.systemUTC(), objectMapper);
     }
 
-    /** 最新告警事件 → 告警材料（labels/annotations 确定性投影；缺项 null） */
-    private static com.objwww.pr.control.alert.application.agent.ContextAssembler.AlertMaterial
+    /** 最新告警事件 → 告警材料（labels/annotations 确定性投影；缺项 null）。
+     * CL-05 热切预生成适配器（PersistenceConfig）复用同款投影。 */
+    public static com.objwww.pr.control.alert.application.agent.ContextAssembler.AlertMaterial
             materialOf(com.objwww.pr.control.alert.domain.model.AlertEvent event) {
         Map<String, String> labels = event.labels();
         Map<String, String> annotations = event.annotations() == null
@@ -825,7 +860,10 @@ public class AlertAm4Config {
                     primaryToolPort,
             com.objwww.pr.control.alert.domain.repository.ContextSummaryPort
                     contextSummaryPort,
+            com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort
+                    compactionAttemptPort,
             @Value("${app.alert.r7.compaction.enabled:false}") boolean compactionEnabled,
+            @Value("${app.alert.r7.compaction.mode:}") String compactionMode,
             @Value("${app.alert.r7.compaction.soft-threshold:0.7}")
             double compactionSoftThreshold,
             @Value("${app.alert.r7.compaction.target-ratio:0.55}")
@@ -834,6 +872,9 @@ public class AlertAm4Config {
             @Value("${app.alert.r7.max-input-tokens:24000}") int compactionMaxInputTokens,
             com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
                     releaseAssetRepository,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent
+                            .PrimaryCheckpointCommitService> checkpointCommitFenceProvider,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -848,6 +889,40 @@ public class AlertAm4Config {
                 new com.objwww.pr.control.alert.application.agent.RcaActionGuard(
                         rcaRunRepository, rcaTaskRepository, am4AgentRegistry,
                         runBudgetGate, gateway, Clock.systemUTC());
+        // CL-07：模式解析——显式 mode 优先；空串回退旧 enabled 布尔语义（兼容存量配置）
+        com.objwww.pr.control.alert.application.agent.ContextCompactionService.Mode mode =
+                compactionMode == null || compactionMode.isBlank()
+                        ? (compactionEnabled
+                                ? com.objwww.pr.control.alert.application.agent
+                                        .ContextCompactionService.Mode.SHADOW_GENERATE
+                                : com.objwww.pr.control.alert.application.agent
+                                        .ContextCompactionService.Mode.OFF)
+                        : com.objwww.pr.control.alert.application.agent
+                                .ContextCompactionService.Mode.valueOf(compactionMode.trim()
+                                        .toUpperCase(java.util.Locale.ROOT));
+        com.objwww.pr.control.alert.application.agent
+                .PrimaryCheckpointCommitService commitFence =
+                java.util.Objects.requireNonNull(checkpointCommitFenceProvider.getIfAvailable(),
+                        "检查点提交围栏缺件（压缩消费面必要件，CL-01）");
+        // CL-07 消费口：经 CL-01 围栏 SUMMARY_CONSUMED 钉 current_summary_id；
+        // APPLIED/REPLAYED 均视为已收敛，其余态保留旧指针
+        com.objwww.pr.control.alert.application.agent.ContextCompactionService.SummaryConsumer
+                summaryConsumer = (runId, taskId, owner, leaseEpoch, configEpoch,
+                        expectedRevision, actionKey, summaryId) -> {
+            var st = commitFence.commit(
+                    new com.objwww.pr.control.alert.application.agent
+                            .PrimaryCheckpointCommitService.CommitFence(
+                            runId, taskId, owner, leaseEpoch, configEpoch,
+                            expectedRevision),
+                    actionKey,
+                    com.objwww.pr.control.alert.application.agent
+                            .PrimaryCheckpointCommitService.CommitMutation.SUMMARY_CONSUMED,
+                    cp -> cp.withSummaryConsumed(summaryId, java.time.Instant.now()));
+            return st.status() == com.objwww.pr.control.alert.application.agent
+                    .PrimaryCheckpointCommitService.CommitStatus.APPLIED
+                    || st.status() == com.objwww.pr.control.alert.application.agent
+                    .PrimaryCheckpointCommitService.CommitStatus.REPLAYED;
+        };
         com.objwww.pr.control.alert.application.agent.ContextCompactionService compaction =
                 new com.objwww.pr.control.alert.application.agent.ContextCompactionService(
                         // token 估算 = 输入保守估值 + 输出预留（与网关口径同律）
@@ -855,14 +930,17 @@ public class AlertAm4Config {
                                 prompt, maxTokens, (long) prompt.length() / 2 + maxTokens),
                         contextSummaryPort,
                         primaryCheckpointRepository, evidenceRepository, objectMapper,
-                        Clock.systemUTC(), compactionEnabled, compactionSoftThreshold,
+                        Clock.systemUTC(), mode, compactionSoftThreshold,
                         compactionTargetRatio, compactionMaxPerRun,
-                        compactionMaxInputTokens);
+                        compactionMaxInputTokens, compactionAttemptPort, summaryConsumer);
         registerCompactionDirectiveAsset(releaseAssetRepository, compaction);
         return new com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner(
                 guard, am4DeterministicSupervisor, primaryCheckpointRepository,
                 evidenceRepository, assembler, port, objectMapper, Clock.systemUTC(),
-                compaction);
+                compaction,
+                java.util.Objects.requireNonNull(
+                        checkpointCommitFenceProvider.getIfAvailable(),
+                        "检查点提交围栏缺件（CL-01 运行路径必要件）"));
     }
 
     /**
@@ -921,6 +999,11 @@ public class AlertAm4Config {
                         "metrics.instant", "prometheus"),
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_CATALOG,
                         "metrics.catalog", "prometheus"),
+                // 2026-09-12 路径一补位：metric_value 全参数化即时值（曾漏此行——
+                // 执行器/schema/allowlist 三面已注而 Agent 装配缺席 → run16/17 主任务
+                // 配方第二步 UNKNOWN_TOOL→DEAD 的直接根因）
+                DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_METRIC_VALUE,
+                        "metrics.metric_value", "prometheus"),
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_LABEL_VALUES,
                         "metrics.label_values", "prometheus"),
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RULES,

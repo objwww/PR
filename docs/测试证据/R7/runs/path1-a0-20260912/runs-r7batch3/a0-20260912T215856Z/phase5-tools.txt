@@ -1,0 +1,4 @@
+logs.aggregate
+logs.query
+prometheus.catalog
+prometheus.metric_value

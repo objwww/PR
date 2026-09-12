@@ -48,6 +48,8 @@ public class PrometheusApiExecutor {
 
     private static final long CLIENT_TIMEOUT_BUFFER_MILLIS = 2_000;
     private static final int COPY_BUFFER_SIZE = 8 * 1_024;
+    /** catalog 名字集合上限（防御性：内存与 series body 大小解耦） */
+    private static final int CATALOG_MAX_NAMES = 300;
     private static final ObjectMapper JSON = new ObjectMapper();
     /** PromQL 标签匹配器提取：key 操作符 "value"（值内允许转义引号） */
     private static final Pattern LABEL_MATCHER =
@@ -77,6 +79,35 @@ public class PrometheusApiExecutor {
 
     // ------------------------------------------------- 四工具入口（ToolExecutor 同形）
 
+    /**
+     * prometheus.metric_value（B 批后续/路径一补全，r7batch4 十一跑定谳）：全参数化
+     * 即时值——模型只填指标名+service+time，selector 由服务端拼装（零自由 PromQL 面：
+     * 自由表达式是双模型工具调用失败的最后残留面）。service 必在 allowlist（R10）。
+     */
+    public byte[] metricValue(ToolExecution execution) throws Exception {
+        Map<String, Object> args = execution.validatedArgs();
+        String metric = textArg(args.get("metric"), "metric");
+        String service = textArg(args.get("service"), "service");
+        if (!serviceAllowlist.contains(service)) {
+            throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
+                    "INVALID_ARGS: service 越出 allowlist: " + service);
+        }
+        long time = epochSecondsArg(args.get("time"));
+        if (time > System.currentTimeMillis() / 1_000 + 60) {
+            throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
+                    "INVALID_ARGS: time 不得指向未来（冻结窗纪律）");
+        }
+        String query = metric + "{service=\"" + service + "\"}";
+        byte[] body = getForBody("/api/v1/query?" + param("query", query)
+                + "&" + param("time", String.valueOf(time)), execution);
+        JsonNode result = parse(body).path("data").path("result");
+        if (!result.isValueNode() && result.isEmpty()) {
+            throw new ToolModelVisibleException(ToolModelVisibleReason.NO_DATA,
+                    "NO_DATA: 该指标在当前服务零序列（可换指标名重试，空结果如实呈现）");
+        }
+        return body;
+    }
+
     /** prometheus.instant：expr,time → 向量（time 不得指向未来——冻结窗纪律的执行器面） */
     public byte[] instantQuery(ToolExecution execution) throws Exception {
         Map<String, Object> args = execution.validatedArgs();
@@ -97,19 +128,23 @@ public class PrometheusApiExecutor {
         return body;
     }
 
-    /** prometheus.catalog：match 过滤 → 指标名+type+unit（label 值 + metadata 两跳合并） */
+    /** prometheus.catalog：service 过滤 → 指标名+type+unit（series 流式抽名 + metadata 合并）。
+     * 2026-09-12 路径一改参：match 自由选择器 → 必填 service（服务器拼 {service="X"}，
+     * 模型零语法面）。2026-09-12 真窗二次修：prometheus v3.13 的 label values 端点
+     * 忽略 match[]（实证全量 dump 被截断，服务相关名不可见）——改走 series 端点
+     * （match[] 真过滤，实证 631KB 全为该服务系列），流式抽 __name__ 去重排序，
+     * 内存只持名字集合（上限 {@link #CATALOG_MAX_NAMES}），body 大小≠结果大小。 */
     public byte[] catalogSearch(ToolExecution execution) throws Exception {
         Map<String, Object> args = execution.validatedArgs();
-        Object match = args.get("match");
-        String matchText = match == null ? null : String.valueOf(match);
-        if (matchText != null) {
-            checkServiceScope(matchText);
+        String service = textArg(args.get("service"), "service");
+        if (!serviceAllowlist.contains(service)) {
+            throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
+                    "INVALID_ARGS: service 越出 allowlist: " + service);
         }
-        String namesPath = "/api/v1/label/__name__/values"
-                + (matchText == null ? "" : "?" + param("match", matchText));
-        JsonNode names = parse(getForBody(namesPath, execution));
-        if (!names.has("data") || !names.path("data").isArray()
-                || names.path("data").isEmpty()) {
+        String selector = "{service=\"" + service + "\"}";
+        List<String> sorted = seriesMetricNames(
+                "/api/v1/series?" + param("match[]", selector), execution);
+        if (sorted.isEmpty()) {
             throw new ToolModelVisibleException(ToolModelVisibleReason.NO_DATA,
                     "NO_DATA: 目录无匹配指标（空结果如实呈现，不伪造名称）");
         }
@@ -124,9 +159,6 @@ public class PrometheusApiExecutor {
             gen.writeStringField("status", "success");
             gen.writeObjectFieldStart("data");
             gen.writeArrayFieldStart("result");
-            List<String> sorted = new ArrayList<>();
-            names.path("data").forEach(n -> sorted.add(n.asText()));
-            java.util.Collections.sort(sorted);
             for (String name : sorted) {
                 JsonNode m = meta.get(name);
                 gen.writeStartObject();
@@ -146,6 +178,29 @@ public class PrometheusApiExecutor {
             gen.writeEndObject();
         }
         return out.toByteArray();
+    }
+
+    /** series 端点流式抽指标名：TreeSet 去重排序 + 数量上限（防御性），内存与 body 大小解耦 */
+    private List<String> seriesMetricNames(String pathAndQuery, ToolExecution execution)
+            throws Exception {
+        HttpResponse<InputStream> response = exchange(pathAndQuery, execution);
+        java.util.TreeSet<String> names = new java.util.TreeSet<>();
+        try (InputStream body = response.body()) {
+            try (var parser = JSON.getFactory().createParser(body)) {
+                while (parser.nextToken() != null) {
+                    if (parser.currentToken() == com.fasterxml.jackson.core.JsonToken.FIELD_NAME
+                            && "__name__".equals(parser.currentName())
+                            && parser.nextToken() == com.fasterxml.jackson.core.JsonToken.VALUE_STRING
+                            && names.size() < CATALOG_MAX_NAMES) {
+                        names.add(parser.getText());
+                    }
+                }
+            } catch (IOException e) {
+                throw new ToolModelVisibleException(ToolModelVisibleReason.REMOTE_UNAVAILABLE,
+                        "工具响应不可解析（临时故障，可重试）");
+            }
+        }
+        return new ArrayList<>(names);
     }
 
     /** prometheus.label_values：label[,match] → 值列表（先发现 label 再拼 PromQL） */
@@ -247,8 +302,9 @@ public class PrometheusApiExecutor {
 
     // ---------------------------------------------------------------- 共用调用面
 
-    /** GET + 有界流读 + 错误两族映射（PrometheusQueryExecutor 同律） */
-    private byte[] getForBody(String pathAndQuery, ToolExecution execution) throws Exception {
+    /** GET + 状态两族映射（错误在 body 消费前抛出，body 由调用方关闭） */
+    private HttpResponse<InputStream> exchange(String pathAndQuery, ToolExecution execution)
+            throws Exception {
         long remaining = Math.max(1,
                 execution.deadlineEpochMillis() - System.currentTimeMillis());
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + pathAndQuery))
@@ -285,6 +341,17 @@ public class PrometheusApiExecutor {
                 throw new ToolControlPlaneException(ToolControlReason.QUERY_FAILED,
                         "QUERY_FAILED: 指标源拒绝良构查询（HTTP " + status + "）");
             }
+            return response;
+        } catch (RuntimeException e) {
+            response.body().close();
+            throw e;
+        }
+    }
+
+    /** GET + 有界流读 + 错误两族映射（PrometheusQueryExecutor 同律） */
+    private byte[] getForBody(String pathAndQuery, ToolExecution execution) throws Exception {
+        HttpResponse<InputStream> response = exchange(pathAndQuery, execution);
+        try {
             return readBounded(response.body(), execution.resultLimitBytes());
         } finally {
             response.body().close();

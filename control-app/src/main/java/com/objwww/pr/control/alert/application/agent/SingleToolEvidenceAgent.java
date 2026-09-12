@@ -244,6 +244,14 @@ public class SingleToolEvidenceAgent {
                     null);
         } catch (ToolModelVisibleException e) {
             doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, false);
+            if (e.reason() == ToolModelVisibleReason.NO_DATA) {
+                // 零数据=查询成功的诚实面（与上方空序列分支同律：账本 SUCCESS + NO_DATA
+                // 结局）。2026-09-12 真窗实证失真链：执行器 NO_DATA 被折成 FAILED →
+                // 端口再折 REMOTE_UNAVAILABLE → 模型听到"传输故障可重试"同形重试×3
+                // 烧穿 tool-calls 预算——NO_DATA 必须按原名透传（"换指标名重试"）。
+                ledger.succeed(operationId);
+                return new AgentResult(AgentOutcome.NO_DATA, List.of(), null);
+            }
             ledger.fail(operationId, ToolInvocationState.FAILED, ledgerCode(e.reason()));
             return new AgentResult(AgentOutcome.FAILED, List.of(), e.reason().name());
         } catch (ToolControlPlaneException e) {

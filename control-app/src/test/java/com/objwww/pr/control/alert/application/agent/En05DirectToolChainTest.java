@@ -86,7 +86,7 @@ class En05DirectToolChainTest {
 
         // 观测驱动顺序：目录 →（目录内名称喂给下一步查询面）标签 → 即时值
         SingleToolEvidenceAgent.AgentResult hop1 = catalog.investigate(
-                context(1), Map.of("match", "http_server_requests"));
+                context(1), Map.of("service", "checkout"));
         SingleToolEvidenceAgent.AgentResult hop2 = labels.investigate(
                 context(2), Map.of("label", "service"));
         SingleToolEvidenceAgent.AgentResult hop3 = instant.investigate(
@@ -123,7 +123,7 @@ class En05DirectToolChainTest {
                 DirectReadToolCatalog.TOOL_CATALOG, "metrics.catalog");
 
         SingleToolEvidenceAgent.AgentResult result = catalog.investigate(
-                context(1), Map.of("match", "ghost_metric"));
+                context(1), Map.of("service", "checkout"));
 
         assertThat(result.outcome()).isEqualTo(SingleToolEvidenceAgent.AgentOutcome.NO_DATA);
         assertThat(result.errorClass()).as("正常空结果非故障").isNull();

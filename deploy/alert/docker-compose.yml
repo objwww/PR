@@ -36,7 +36,9 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-    mem_limit: 300m
+    mem_limit: 768m   # 2026-09-12 A0 真窗实证上调：300m 稳态已耗 72%（215/300MiB），
+                      # 查询双峰时延（8ms vs 14s，GC 压力期）致工具面 REMOTE_UNAVAILABLE
+                      # 风暴烧穿 8 步预算（run12/13 六次计步重驱）——取证链被基础设施卡死
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro

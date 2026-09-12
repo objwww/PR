@@ -1,7 +1,9 @@
 package com.objwww.pr.control.infrastructure.tool;
 
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.alert.application.tool.ToolExecutor;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
@@ -20,7 +22,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -28,8 +29,11 @@ import java.util.Set;
 /**
  * Loki query_range 日志工具执行器（EX-B2：logs 真实源，盘点门签字后落码）：
  * GET {base}/loki/api/v1/query_range?query={service_name="<service>"}&start&end(ns)
- * &limit=201——响应有界读（resultLimit+1 超大即断）后流式转统一响应形状
+ * &limit=201——响应<b>流式</b>转统一响应形状
  * {@code {"status":"success","data":{"result":[{ts,service,line}…],"truncated":bool}}}。
+ * 原始体大小与结果预算解耦（2026-09-12 run24 教训：错误突发窗 200 行×长栈行原文
+ * 恒超 resultLimit，整包有界读必抛终止族 RESULT_OVERSIZE 炸死主任务）——行渲染到
+ * 预算即止 + truncated=true，有界诚实截断；单行可越限一个行幅（行长保真不裁字）。
  *
  * <p>无数据三态（卡面硬要求，契约 §2）：EMPTY → 模型可见 NO_DATA；
  * SOURCE_UNAVAILABLE → 连接/超时/半包/5xx（模型可见可重试，与 PROMETHEUS 面
@@ -46,7 +50,6 @@ public class LogQueryExecutor implements ToolExecutor {
     static final int ROW_LIMIT = 200;
     static final String DEFAULT_SERVICE = "control-app";
     private static final long CLIENT_TIMEOUT_BUFFER_MILLIS = 2_000;
-    private static final int COPY_BUFFER_SIZE = 8 * 1_024;
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -119,8 +122,11 @@ public class LogQueryExecutor implements ToolExecutor {
             throw new ToolControlPlaneException(ToolControlReason.QUERY_FAILED,
                     "QUERY_FAILED: 日志源拒绝良构查询（HTTP " + status + "）");
         }
-        byte[] body = readBounded(response.body(), execution.resultLimitBytes());
-        return render(body, query.service, execution.resultLimitBytes());
+        // 200：流式渲染——原始体与结果预算解耦（run24：整包有界读在突发窗恒爆
+        // resultLimit，终止族炸死主任务；行级截断才是"先聚合后读行"的本义）
+        try (InputStream body = response.body()) {
+            return render(body, query.service, execution.resultLimitBytes());
+        }
     }
 
     // ------------------------------------------------------------ 参数语义
@@ -158,46 +164,92 @@ public class LogQueryExecutor implements ToolExecutor {
     // ------------------------------------------------------------ 响应映射
 
     /**
-     * Loki 响应 → 统一形状：遍历 streams.values（[nsEpoch, line, …]），行数 201 =
-     * 截断标记交 200 行；0 行 = 模型可见 EMPTY(NO_DATA)；行渲染字节流式超限即断。
+     * Loki 响应 → 统一形状（纯流式）：Jackson 流式解析 data.result[].values[]，
+     * 行数 201 = 截断标记交 200 行；行渲染字节到预算即止 + truncated=true；
+     * 0 行 = 模型可见 EMPTY(NO_DATA)；原始体消费超 {@value #RAW_READ_CAP_FACTOR}×
+     * limit（无行可渲染的巨型垃圾流防御）= 止读，已渲染行以 truncated 交付。
+     * 半包/不合约（未触防御上限）= SOURCE_UNAVAILABLE 不投递半成品。
      */
-    byte[] render(byte[] lokiResponse, String service, long resultLimitBytes)
+    byte[] render(InputStream lokiBody, String service, long resultLimitBytes)
             throws IOException {
-        JsonNode root;
-        try (InputStream in = new java.io.ByteArrayInputStream(lokiResponse)) {
-            root = JSON.readTree(in);
-        }
+        CountingInputStream in = new CountingInputStream(lokiBody,
+                Math.max(resultLimitBytes, 1) * RAW_READ_CAP_FACTOR);
         ByteArrayOutputStream out = new ByteArrayOutputStream(
-                (int) Math.min(resultLimitBytes + 1, 1 << 20));
+                (int) Math.min(resultLimitBytes + 1_024, 1 << 20));
         int kept = 0;
         boolean truncated = false;
-        try (JsonGenerator gen = JSON.getFactory().createGenerator(out)) {
+        try (JsonGenerator gen = JSON.getFactory().createGenerator(out);
+             JsonParser parser = JSON.getFactory().createParser(in)) {
             gen.writeStartObject();
             gen.writeStringField("status", "success");
             gen.writeObjectFieldStart("data");
             gen.writeArrayFieldStart("result");
-            Iterator<JsonNode> streams = root.path("data").path("result").elements();
-            while (streams.hasNext() && !truncated) {
-                Iterator<JsonNode> values = streams.next().path("values").elements();
-                while (values.hasNext()) {
-                    JsonNode entry = values.next();
-                    if (kept >= ROW_LIMIT) {
-                        truncated = true;
-                        break;
+            try {
+                if (parser.nextToken() != JsonToken.START_OBJECT) {
+                    throw new ToolModelVisibleException(
+                            ToolModelVisibleReason.SOURCE_UNAVAILABLE,
+                            "日志源响应不合约（半包不投递，可重试）");
+                }
+                parsing:
+                while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                    String topName = parser.currentName();
+                    JsonToken topValue = parser.nextToken();
+                    if (!"data".equals(topName) || topValue != JsonToken.START_OBJECT) {
+                        parser.skipChildren();
+                        continue;
                     }
-                    Instant ts = Instant.ofEpochMilli(
-                            Long.parseLong(entry.get(0).asText()) / 1_000_000L);
-                    gen.writeStartObject();
-                    gen.writeStringField("ts", ts.toString());
-                    gen.writeStringField("service", service);
-                    gen.writeStringField("line", entry.get(1).asText());
-                    gen.writeEndObject();
-                    kept++;
-                    gen.flush();
-                    if (out.size() > resultLimitBytes) {
-                        throw new ToolControlPlaneException(ToolControlReason.RESULT_OVERSIZE,
-                                "RESULT_OVERSIZE: 响应超过 " + resultLimitBytes + " 字节上限");
+                    while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                        String dataName = parser.currentName();
+                        JsonToken dataValue = parser.nextToken();
+                        if (!"result".equals(dataName) || dataValue != JsonToken.START_ARRAY) {
+                            parser.skipChildren();
+                            continue;
+                        }
+                        while (parser.nextToken() == JsonToken.START_OBJECT) {
+                            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                                String streamName = parser.currentName();
+                                JsonToken streamValue = parser.nextToken();
+                                if (!"values".equals(streamName)
+                                        || streamValue != JsonToken.START_ARRAY) {
+                                    parser.skipChildren();
+                                    continue;
+                                }
+                                while (parser.nextToken() == JsonToken.START_ARRAY) {
+                                    parser.nextToken();          // nsEpoch
+                                    String ns = parser.getText();
+                                    parser.nextToken();          // line
+                                    String line = parser.getText();
+                                    parser.nextToken();          // END_ARRAY
+                                    if (kept >= ROW_LIMIT) {
+                                        truncated = true;
+                                        break parsing;
+                                    }
+                                    Instant ts = Instant.ofEpochMilli(
+                                            Long.parseLong(ns) / 1_000_000L);
+                                    gen.writeStartObject();
+                                    gen.writeStringField("ts", ts.toString());
+                                    gen.writeStringField("service", service);
+                                    gen.writeStringField("line", line);
+                                    gen.writeEndObject();
+                                    kept++;
+                                    gen.flush();
+                                    if (out.size() > resultLimitBytes || in.hitCap()) {
+                                        truncated = true;
+                                        break parsing;
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+            } catch (JsonProcessingException | NumberFormatException e) {
+                if (in.hitCap() && kept > 0) {
+                    // 防御上限止读：行样本身份诚实，交 truncated 语义
+                    truncated = true;
+                } else {
+                    throw new ToolModelVisibleException(
+                            ToolModelVisibleReason.SOURCE_UNAVAILABLE,
+                            "日志源响应不合约（半包不投递，可重试）");
                 }
             }
             gen.writeEndArray();
@@ -212,28 +264,54 @@ public class LogQueryExecutor implements ToolExecutor {
         return out.toByteArray();
     }
 
-    /** 有界读：至多 limit+1 字节，读到即断（超大响应不进内存；流断 = 半包即弃） */
-    private static byte[] readBounded(InputStream body, long limitBytes) throws IOException {
-        try (body) {
-            long cap = Math.max(1, limitBytes) + 1;
-            ByteArrayOutputStream out = new ByteArrayOutputStream(
-                    (int) Math.min(cap, 1 << 20));
-            byte[] buffer = new byte[COPY_BUFFER_SIZE];
-            long total = 0;
-            int read;
-            while ((read = body.read(buffer)) != -1) {
-                long allowed = cap - total;
-                if (read > allowed) {
-                    throw new ToolControlPlaneException(ToolControlReason.RESULT_OVERSIZE,
-                            "RESULT_OVERSIZE: 响应超过 " + limitBytes + " 字节上限（有界流读即断）");
-                }
-                out.write(buffer, 0, read);
-                total += read;
+    /** 原始体消费上限系数（防御面：无 values 的巨型垃圾流不进整包内存） */
+    private static final long RAW_READ_CAP_FACTOR = 16;
+
+    /** 计数止读流：消费过 cap 后返回 EOF（行间检查 + 硬停读双保险） */
+    private static final class CountingInputStream extends InputStream {
+        private final InputStream delegate;
+        private final long cap;
+        private long count;
+        private boolean hitCap;
+
+        CountingInputStream(InputStream delegate, long cap) {
+            this.delegate = delegate;
+            this.cap = cap;
+        }
+
+        @Override
+        public int read() throws IOException {
+            if (hitCap) {
+                return -1;
             }
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new ToolModelVisibleException(ToolModelVisibleReason.SOURCE_UNAVAILABLE,
-                    "日志源响应中断（半包不投递，可重试）");
+            int r = delegate.read();
+            if (r >= 0) {
+                tally(1);
+            }
+            return r;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (hitCap) {
+                return -1;
+            }
+            int r = delegate.read(b, off, len);
+            if (r > 0) {
+                tally(r);
+            }
+            return r;
+        }
+
+        private void tally(int n) {
+            count += n;
+            if (count > cap) {
+                hitCap = true;
+            }
+        }
+
+        boolean hitCap() {
+            return hitCap;
         }
     }
 

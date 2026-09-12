@@ -1,0 +1,6 @@
+[R7] suite=a0-20260912T183241Z runs=/opt/build/runs-r7batch3/a0-20260912T183241Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=0d4a1fa5-9e1b-4800-a2a4-b2af88738207（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=9ec75fe877c9332051de0f5bfe43783a6e52688ef325618b86645ce609f93645）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] FAIL: DB 轮询超时(120s): phase2 WHITELISTED 审计行（run_id 非空=原子对）（last=0）

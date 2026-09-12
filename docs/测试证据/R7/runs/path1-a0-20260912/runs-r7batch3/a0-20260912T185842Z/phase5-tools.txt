@@ -1,0 +1,4 @@
+logs.aggregate
+prometheus.catalog
+prometheus.label_values
+prometheus.rules
