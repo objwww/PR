@@ -1073,6 +1073,12 @@ class EvalQueryServiceTest {
             throw new UnsupportedOperationException();
         }
 
+        @Override
+        public EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor,
+                                                  int limit) {
+            throw new UnsupportedOperationException();
+        }
+
         List<EvalQueryReader.UsageCallRow> usageCalls = List.of();
 
         @Override

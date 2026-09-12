@@ -393,6 +393,12 @@ class EvalCompareServiceTest {
         }
 
         @Override
+        public EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor,
+                                                  int limit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<EvalQueryReader.UsageCallRow> listUsageCalls(UUID evalRunId) {
             return List.of();
         }

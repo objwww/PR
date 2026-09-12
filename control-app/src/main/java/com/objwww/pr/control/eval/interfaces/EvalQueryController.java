@@ -27,6 +27,9 @@ import java.util.UUID;
  *   <li>GET /api/eval/runs/{runId}/cases——逐案例评分（verdict 过滤 + 键集游标，
  *       排序 scenario_id/round_no ASC）；EV-03 起携带 caseExecutionId（= 案例行
  *       稳定 uuid）与 rcaRunId/scoredReportId 关联链；未知 run → 404；</li>
+ *   <li>GET /api/eval/runs/{runId}/events——A3 阶段事件游标读面（eval_phase_event
+ *       键集 (entered_at, id) 升序，表无 seq 列；limit 默认 50 上限 200；
+ *       游标畸形 400，未知 run → 404）；</li>
  *   <li>GET /api/eval/datasets——数据集版本清单（case_version 计数 + 族聚合；
  *       RLS 面下只含 control_app 可见的非 HOLDOUT 行）。</li>
  *   <li>GET /api/eval/runs/{runId}/cases/{caseExecutionId}——EV-05 案例详情
@@ -87,6 +90,26 @@ public class EvalQueryController {
         }
         try {
             return query.listCases(id, verdict, cursor, Math.clamp(limit, 1, 200))
+                    .<ResponseEntity<?>>map(ResponseEntity::ok)
+                    .orElseGet(() -> ResponseEntity.status(404)
+                            .body(Map.of("error", "eval run 不存在")));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** A3 阶段事件游标读面（§5.3；eval_phase_event 键集 (entered_at, id)，
+     *  limit 钳 [1,200] 默认 50；游标畸形 400，未知 run → 404） */
+    @GetMapping("/runs/{runId}/events")
+    public ResponseEntity<?> events(@PathVariable String runId,
+                                    @RequestParam(required = false) String cursor,
+                                    @RequestParam(required = false, defaultValue = "50") int limit) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        try {
+            return query.phaseEvents(id, cursor, Math.clamp(limit, 1, 200))
                     .<ResponseEntity<?>>map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.status(404)
                             .body(Map.of("error", "eval run 不存在")));

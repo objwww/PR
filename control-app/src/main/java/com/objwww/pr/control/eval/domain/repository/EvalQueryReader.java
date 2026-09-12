@@ -241,4 +241,20 @@ public interface EvalQueryReader {
                         Integer totalTokens, Long costMicros, String pricingVersion,
                         String currency, boolean usageMissing) {
     }
+
+    // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
+
+    /** eval_phase_event 投影行（V80 全列减去 created_at；detail 为 jsonb ::text 原文
+     *  上抛——事件自有载荷白名单透传，解析归应用服务。表无 seq 列，游标走
+     *  (entered_at, id) 键集，不照抄 rca_event 的 after_seq 数字游标） */
+    record EvalPhaseEventRow(UUID id, String phase, Instant enteredAt, String workerId,
+                             String detail) {
+    }
+
+    /** 一页阶段事件；hasMore 同 runs 惯例（实现方内部取 limit+1 判） */
+    record EvalPhaseEventPage(List<EvalPhaseEventRow> items, boolean hasMore) {
+    }
+
+    /** run 阶段事件页（(entered_at, id) 严格大于续页，升序；cursor=null 首页） */
+    EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor, int limit);
 }

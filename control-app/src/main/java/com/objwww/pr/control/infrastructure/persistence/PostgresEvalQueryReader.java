@@ -512,6 +512,40 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    // ------------------------------------------------------------------ A3 阶段事件读面
+
+    /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；
+     *  detail jsonb ::text 原文上抛，不读 model_call_ledger/rca_model_call——RV08） */
+    @Override
+    public EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor, int limit) {
+        Map<String, Object> params = new LinkedHashMap<>();
+        String where = " where eval_run_id = :runId";
+        params.put("runId", runId);
+        if (cursor != null) {
+            where += " and (entered_at, id) > (:cursorAt, cast(:cursorId as uuid))";
+            params.put("cursorAt", Timestamp.from(cursor.at()));
+            params.put("cursorId", cursor.id().toString());
+        }
+        params.put("lim", limit + 1);
+        List<EvalPhaseEventRow> rows = new ArrayList<>(jdbc.sql("""
+                        select id, phase, entered_at, worker_id, detail::text as detail
+                        from eval_phase_event
+                        """ + where + " order by entered_at asc, id asc limit :lim")
+                .params(params)
+                .query((rs, i) -> new EvalPhaseEventRow(
+                        rs.getObject("id", UUID.class),
+                        rs.getString("phase"),
+                        rs.getTimestamp("entered_at").toInstant(),
+                        rs.getString("worker_id"),
+                        rs.getString("detail")))
+                .list());
+        boolean hasMore = rows.size() > limit;
+        if (hasMore) {
+            rows = new ArrayList<>(rows.subList(0, limit));
+        }
+        return new EvalPhaseEventPage(rows, hasMore);
+    }
+
     /** usage 行映射（单 run / 批量两查询共用同一列面） */
     private static final class EvalQueryReaderUsageRows {
         private EvalQueryReaderUsageRows() {

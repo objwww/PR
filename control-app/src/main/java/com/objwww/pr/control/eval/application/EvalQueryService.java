@@ -13,6 +13,8 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCaseDeta
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvidenceMetaRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCasePage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalCaseRow;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalPhaseEventPage;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalPhaseEventRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunPage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.DatasetRow;
@@ -190,6 +192,19 @@ public class EvalQueryService {
     }
 
     public record EvalCaseListResponse(List<EvalCaseItem> items, String nextCursor) {
+    }
+
+    // ------------------------------------------------------------------ A3 阶段事件 DTO
+
+    /** 阶段事件项（A3/§5.3 events 读面；detail 为事件自有 jsonb 载荷原文解析透传，
+     *  无/解析失败如实 null——白名单：非证据正文，不进 canonicalPayload 纪律） */
+    public record EvalPhaseEventItem(UUID id, String phase, Instant enteredAt,
+                                     String workerId, JsonNode detail) {
+    }
+
+    /** 一页阶段事件；nextCursor = 末行 (enteredAt|eventId) 键集明文，末页 null */
+    public record EvalPhaseEventListResponse(List<EvalPhaseEventItem> items,
+                                             String nextCursor, Instant asOf) {
     }
 
     /**
@@ -391,6 +406,35 @@ public class EvalQueryService {
             nextCursor = last.scenarioId() + "/" + last.roundNo();
         }
         return Optional.of(new EvalCaseListResponse(List.copyOf(items), nextCursor));
+    }
+
+    // ------------------------------------------------------------------ A3 阶段事件
+
+    /**
+     * run 阶段事件页（A3/§5.3；eval_phase_event 键集游标 (entered_at, id) 升序，
+     * 表无 seq 列不照抄 rca_event after_seq）。run 不存在 → empty（controller 404 面）；
+     * cursor 无法解析 → IllegalArgumentException（400 面）。游标明文期形
+     * {@code <enteredAt-ISO>|<eventId>}。
+     */
+    public Optional<EvalPhaseEventListResponse> phaseEvents(UUID runId, String cursor,
+                                                            int limit) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        EvalPhaseEventPage page =
+                reader.listPhaseEvents(runId, parsePhaseEventCursor(cursor), limit);
+        List<EvalPhaseEventItem> items = new ArrayList<>(page.items().size());
+        for (EvalPhaseEventRow row : page.items()) {
+            items.add(new EvalPhaseEventItem(row.id(), row.phase(), row.enteredAt(),
+                    row.workerId(), parseJsonNode(row.detail())));
+        }
+        String nextCursor = null;
+        if (page.hasMore() && !page.items().isEmpty()) {
+            EvalPhaseEventRow last = page.items().get(page.items().size() - 1);
+            nextCursor = last.enteredAt() + "|" + last.id();
+        }
+        return Optional.of(new EvalPhaseEventListResponse(List.copyOf(items), nextCursor,
+                Instant.now()));
     }
 
     // ------------------------------------------------------------------ datasets（EV-08 增强）
@@ -1050,6 +1094,35 @@ public class EvalQueryService {
                     UUID.fromString(cursor.substring(slash + 1)));
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("cursor 非法（期形 <startedAt>/<runId>）");
+        }
+    }
+
+    /** 阶段事件游标（A3；期形 <enteredAt-ISO>|<eventId>，与键集 (entered_at, id) 对应） */
+    private static KeysetCursor parsePhaseEventCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return null;
+        }
+        int bar = cursor.lastIndexOf('|');
+        if (bar <= 0 || bar == cursor.length() - 1) {
+            throw new IllegalArgumentException("cursor 非法（期形 <enteredAt>|<eventId>）");
+        }
+        try {
+            return new KeysetCursor(Instant.parse(cursor.substring(0, bar)),
+                    UUID.fromString(cursor.substring(bar + 1)));
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("cursor 非法（期形 <enteredAt>|<eventId>）");
+        }
+    }
+
+    /** jsonb 原文 → 结构节点透传（任意形态保留；null/解析失败如实 null） */
+    private JsonNode parseJsonNode(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return mapper.readTree(json);
+        } catch (Exception e) {
+            return null;
         }
     }
 }
