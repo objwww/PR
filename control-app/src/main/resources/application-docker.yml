@@ -8,15 +8,26 @@ spring:
     url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:pr_agent}
     username: control_app
     password: ${CONTROL_DB_PASSWORD}
-    # BA-12④ Hikari 显式预算（§15 连接预算 12）：默认 10 池 + 30s 连接超时在告警洪峰下
+    # BA-12④ Hikari 显式预算（§13 连接预算 12）：默认 10 池 + 30s 连接超时在告警洪峰下
     # 会拖垮 slot/task 领取短事务——快速失败给 5s，拿不到连接立即让出而不是排队挂死
     hikari:
       maximum-pool-size: 12
       connection-timeout: 5000
+      # FUT-26 步 1（会话级超时，B 批）：锁等待与空闲事务按架构 v1.2 §13 预算快速收口——
+      # 防单条坏查询/漏提交事务占住连接放大洪峰。statement_timeout 暂不落：Worker 长投影
+      # 事务需留量，档值待 195 压测窗定（B 批偏差登记）。
+      connection-init-sql: SET lock_timeout='2s'; SET idle_in_transaction_session_timeout='30s'
   flyway:
     # 迁移由 compose 独立 one-shot 服务 migrate（flyway/flyway，owner 身份）执行；
     # control 容器不持 DDL 凭证，compose 以 SPRING_FLYWAY_ENABLED=false 关闭此处自动迁移
     enabled: true
+
+# FUT-26 附带项（§13 :968）：Tomcat 工作线程 16（Boot 默认 200 与 §13 预算失配——
+# 线程远多于连接只会把等待堆进池排队，16=应用侧总预算对齐）
+server:
+  tomcat:
+    threads:
+      max: 16
 
 # docker 栈内 CAS 目录挂卷（独立于应用只读 rootfs 的可写卷）
 app:
