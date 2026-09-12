@@ -27,3 +27,14 @@ EN-08 一期 +13（1660）、EN-08 二期 +4（**1664=当前 HEAD 9ec227c 代码
 - 本包不覆盖：R2/R10/R11/R6 等 IT 的真窗原始日志在审计已引用的 it-21batch-final-green.log
   与 full-verify-round3（2044 例六模块）；L/B/浏览器/完整 E2E 按用例文档 §七 三批次计划
   NOT_RUN，不在本包补跑范围。
+
+## 追加（2026-09-12 晚，EN-08 装配缝 + V98）
+
+| 文件 | 内容 | 结果 |
+|---|---|---|
+| skill-wiring-v98-full-ut-20260912.log | Skill→Run 装配接线（SkillSelectionService run 钉版+ContextAssembler skill 段+权限交集）+V98 全量 UT | **1669/1669**（0 失败 0 错误 1 门控跳过），BUILD SUCCESS |
+| v98-deploy-verify-20260912.log | V98 迁移部署+CONTEXT_POLICY 资产核验 | flyway **98\|true**；release_asset CONTEXT_POLICY 行 **71054842c1d49f33**；启动 log 双 digest 锚（contextPolicyDigest=71054842…+compactionSchemaVersion=v1，compactionPromptDigest=ff846b82…同前）；**ERROR=0** |
+
+EN-01/03"登记并固定 contextPolicyDigest、compactionPromptDigest"自此完整：确定性裁剪策略
+独立资产（V98 CONTEXT_POLICY kind）+ 压缩指令资产（P0 批 PROMPT kind）构成重放解释锚对，
+双 digest 启动 log 固定、版本中心可反查。

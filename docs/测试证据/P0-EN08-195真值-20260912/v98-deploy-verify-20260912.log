@@ -1,0 +1,13 @@
+[INFO] BUILD SUCCESS
+#9 DONE 0.1s
+migrate-1  | Successfully applied 1 migration to schema "public", now at version v98 (execution time 00:00.042s)
+[Kmigrate-1 exited with code 0
+ Container deploy-control-app-1  Started
+=== 双 digest 锚（启动 log） ===
+2026-09-12T11:00:20.863Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.AlertAm4Config          : 上下文策略资产登记（EN-01/03 重放解释锚对）：contextPolicyDigest=71054842c1d49f33ae0061e6c7bb82ce2b79f0fee97890ef75d7be9fdb92a9b5 compactionSchemaVersion=v1
+=== CONTEXT_POLICY 资产行 ===
+CONTEXT_POLICY|71054842c1d49f33
+=== flyway 98 ===
+98|true
+=== ERROR count ===
+0
