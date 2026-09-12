@@ -515,7 +515,7 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；
-     *  detail jsonb ::text 原文上抛，不读 model_call_ledger/rca_model_call——RV08） */
+     *  detail jsonb ::text 原文上抛；RV08：不读 PR 域账本，也不读 rca_model_call） */
     @Override
     public EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor, int limit) {
         Map<String, Object> params = new LinkedHashMap<>();
