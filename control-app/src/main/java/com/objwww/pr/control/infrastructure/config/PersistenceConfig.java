@@ -252,6 +252,30 @@ public class PersistenceConfig {
                 .PostgresOperatorMaterialRepository(jdbc, objectMapper);
     }
 
+    /**
+     * EN-08：Skill 候选生命周期持久面（V97 rca_skill_candidate）——uq(source_digest,
+     * name) = S14 幂等锚；生命周期行 update 授权。
+     */
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.SkillCandidateRepository
+    skillCandidateRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresSkillCandidateRepository(jdbc);
+    }
+
+    /**
+     * EN-08：Skill 候选服务——生成器仅写 DRAFT，资格门/人工授权面见类注（§八拟议面）。
+     */
+    @Bean
+    public com.objwww.pr.control.release.application.SkillCandidateService skillCandidateService(
+            com.objwww.pr.control.release.domain.repository.SkillCandidateRepository
+                    skillCandidateRepository,
+            com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
+                    releaseAssetRepository) {
+        return new com.objwww.pr.control.release.application.SkillCandidateService(
+                skillCandidateRepository, releaseAssetRepository, java.time.Clock.systemUTC());
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository rcaAttemptRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository(jdbc);

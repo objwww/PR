@@ -113,7 +113,10 @@ public abstract class PostgresITBase {
             "rca_context_summary",
             // V96（MC21~23 回执台账 + MC31/32 人工材料）——BA-41 同律：
             // PostgresDelegationReceiptIT / PostgresOperatorMaterialIT 起成为真 PG 消费者
-            "rca_delegation_receipt", "incident_operator_material");
+            "rca_delegation_receipt", "incident_operator_material",
+            // V97（EN-08 Skill 候选生命周期）——BA-41 同律：
+            // PostgresSkillCandidateIT 起成为真 PG 消费者
+            "rca_skill_candidate");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =
