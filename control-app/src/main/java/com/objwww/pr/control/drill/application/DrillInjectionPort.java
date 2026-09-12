@@ -7,13 +7,14 @@ import com.objwww.pr.control.drill.domain.model.DrillJob;
  * <ul>
  *   <li>{@link Kind#NOT_PERFORMED}：注入确定未执行（零副作用）→ INJECTING→FAILED
  *       合法，不冒进恢复路径；</li>
- *   <li>{@link Kind#PERFORMED}：激活回执已得（身份/代次稳定）→ INJECTING→OBSERVING；
- *       本批无真实接线，不可达；</li>
+ *   <li>{@link Kind#PERFORMED}：激活回执已得（身份/代次稳定）→ INJECTING→OBSERVING；</li>
  *   <li>{@link Kind#UNKNOWN}：注入结果无法判定（如 on 超时响应丢失）→ 必先进
  *       RECOVERING（一旦注入可能发生，停止/失败都先走恢复路径）。</li>
  * </ul>
- * 本批唯一实现 = {@link NotImplemented}：DR-03/DR-04 注入接线未交付，如实
- * NOT_PERFORMED（INJECTION_NOT_IMPLEMENTED）——不得假装注入成功。
+ * 实现面：{@link CompositeDrillInjection} = DR-03 真实接线（按模板 driver 分派
+ * arena-chaos/flagd 适配器，生产装配替换 EvalRunnerConfig 的 NotImplemented bean
+ * 归收口留档）；{@link NotImplemented} 保留为未接线装配面的如实拒绝——
+ * 确定零副作用，不假装注入成功。
  */
 public interface DrillInjectionPort {
 
@@ -36,7 +37,7 @@ public interface DrillInjectionPort {
 
     Outcome inject(DrillJob job);
 
-    /** DR-02 本批默认实现：注入接线未交付，确定零副作用（NOT_PERFORMED 如实卡因） */
+    /** 未接线装配面的默认实现：确定零副作用（NOT_PERFORMED 如实卡因） */
     final class NotImplemented implements DrillInjectionPort {
 
         public static final String REASON =
