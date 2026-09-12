@@ -1,5 +1,12 @@
 package com.objwww.pr.control.ops.application;
 
+import com.objwww.pr.control.alert.domain.claim.ClaimIdentity;
+import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
+import com.objwww.pr.control.alert.domain.claim.ClaimStore;
+import com.objwww.pr.control.alert.domain.claim.ClaimVerdict;
+import com.objwww.pr.control.alert.domain.claim.EvidenceBasis;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.ops.domain.model.CaseStatus;
 import com.objwww.pr.control.ops.domain.model.OperatorCase;
 import com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository;
@@ -15,11 +22,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Operator Case 只读投影（M5-12；字段级契约 = mocks/cases.js + CasesView.vue
- * 实际消费面）。证据/Claim 明细属 run 侧（RunDetailView 已承载），本最小集回
- * sourceRefs 计数 + evidenceRefs 引用列表（C-17②）；结案只读，无写路径。
+ * 实际消费面）。详情工作区 evidence/claims 经 EvidenceRepository/ClaimStore 投影
+ * 白名单摘要面（A1；禁回 canonicalPayload 正文）；结案只读，无写路径。
  */
 public class OperatorQueryService {
 
@@ -27,11 +35,58 @@ public class OperatorQueryService {
 
     private final OperatorCaseRepository repository;
     private final Supplier<Instant> clock;
+    private final EvidenceRepository evidenceRepository;
+    private final ClaimStore claimStore;
 
-    public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock) {
+    public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock,
+                                EvidenceRepository evidenceRepository, ClaimStore claimStore) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.evidenceRepository = Objects.requireNonNull(evidenceRepository, "evidenceRepository");
+        this.claimStore = Objects.requireNonNull(claimStore, "claimStore");
     }
+
+    /**
+     * 过渡兼容构造（A1 §六收口前 PersistenceConfig 旧 2 参装配用；收口切 4 参后删除本构造
+     * 与 UNWIRED_* 两个空读 shim）。空读 = 接通前行为（evidence/claims 恒空列表），不编造数据。
+     */
+    public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock) {
+        this(repository, clock, UNWIRED_EVIDENCE, UNWIRED_CLAIMS);
+    }
+
+    private static final EvidenceRepository UNWIRED_EVIDENCE = new EvidenceRepository() {
+        @Override
+        public void insert(EvidenceEnvelope envelope) {
+            throw new UnsupportedOperationException("unwired read-face shim");
+        }
+
+        @Override
+        public Optional<EvidenceEnvelope> findById(UUID evidenceId) {
+            return Optional.empty();
+        }
+
+        @Override
+        public List<EvidenceEnvelope> findByRunId(UUID runId) {
+            return List.of();
+        }
+    };
+
+    private static final ClaimStore UNWIRED_CLAIMS = new ClaimStore() {
+        @Override
+        public ClaimAppendResult append(UUID runId, ClaimVerdict verdict) {
+            throw new UnsupportedOperationException("unwired read-face shim");
+        }
+
+        @Override
+        public long markUnresolved(UUID runId, ClaimIdentity identity, String policyVersion) {
+            throw new UnsupportedOperationException("unwired read-face shim");
+        }
+
+        @Override
+        public List<ClaimRow> findByRunId(UUID runId) {
+            return List.of();
+        }
+    };
 
     /** tab 计数（view 语义：mine/all/unassigned/overdue 均排除 RESOLVED；notifyUnread 待 AM7） */
     public Map<String, Object> summary(String actor) {
@@ -119,9 +174,22 @@ public class OperatorQueryService {
                 "text", "Evidence×" + c.evidenceRefs().size()));
         map.put("snapshot", c.snapshotDigest() == null ? null : c.snapshotDigest().hex());
         map.put("generation", c.observedGeneration());
-        map.put("evidence", List.of());
-        map.put("claims", List.of());
-        map.put("conflictNote", null);
+        List<ClaimStore.ClaimRow> claims = c.runId() == null ? List.of()
+                : claimStore.findByRunId(c.runId()).stream()
+                        .sorted(Comparator.comparing(ClaimStore.ClaimRow::claimKey,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                        .toList();
+        map.put("evidence", c.runId() == null ? List.of()
+                : evidenceRepository.findByRunId(c.runId()).stream()
+                        .map(OperatorQueryService::evidenceRow)
+                        .toList());
+        map.put("claims", claims.stream().map(OperatorQueryService::claimRow).toList());
+        String conflictKeys = claims.stream()
+                .filter(r -> r.lifecycle() == ClaimLifecycle.ACTIVE
+                        && r.evidenceBasis() == EvidenceBasis.MULTI_SOURCE_CONFLICT)
+                .map(ClaimStore.ClaimRow::claimKey)
+                .collect(Collectors.joining(","));
+        map.put("conflictNote", conflictKeys.isEmpty() ? null : conflictKeys);
         map.put("activities", c.activities().stream()
                 .map(a -> a.at() + " " + a.actor() + " ｜ " + a.text())
                 .toList());
@@ -142,6 +210,32 @@ public class OperatorQueryService {
                 "note", c.resolution().note(),
                 "at", c.resolution().at().toString()));
         return map;
+    }
+
+    /** evidence 白名单摘要行（A1 映射表写死；summary 无源显 null，不回 canonicalPayload） */
+    private static Map<String, Object> evidenceRow(EvidenceEnvelope e) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", e.evidenceId().toString());
+        row.put("type", e.evidenceType());
+        row.put("source", e.source());
+        row.put("window", e.timeStart() == null || e.timeEnd() == null ? null
+                : e.timeStart() + " ~ " + e.timeEnd());
+        row.put("verify", "VERIFIED");
+        row.put("summary", null);
+        if (e.taskId() != null) {
+            row.put("taskId", e.taskId().toString());
+        }
+        return row;
+    }
+
+    /** claims 白名单摘要行（A1 映射表写死） */
+    private static Map<String, Object> claimRow(ClaimStore.ClaimRow r) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", r.id().toString());
+        row.put("text", r.reason());
+        row.put("verdict", r.status().name());
+        row.put("evidenceRefs", r.evidenceRefs());
+        return row;
     }
 
     // ------------------------------------------------------------------ SLA 面

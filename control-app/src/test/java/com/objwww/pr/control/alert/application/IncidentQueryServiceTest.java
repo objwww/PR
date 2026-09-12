@@ -10,6 +10,8 @@ import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.Inciden
 import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.KeysetCursor;
 import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.RunsStats;
 import com.objwww.pr.control.alert.domain.repository.IncidentQueryReader.TrendBucket;
+import com.objwww.pr.control.ops.application.InMemoryClaimStore;
+import com.objwww.pr.control.ops.application.InMemoryEvidenceRepository;
 import com.objwww.pr.control.ops.application.OperatorQueryService;
 import com.objwww.pr.control.ops.domain.model.CaseStatus;
 import com.objwww.pr.control.ops.domain.model.OperatorCase;
@@ -47,7 +49,8 @@ class IncidentQueryServiceTest {
     private final FakeDutyStore dutyStore = new FakeDutyStore();
     private final FakeCaseRepository caseRepository = new FakeCaseRepository();
     private final IncidentQueryService service = new IncidentQueryService(reader, dutyStore,
-            new OperatorQueryService(caseRepository, () -> NOW), () -> NOW);
+            new OperatorQueryService(caseRepository, () -> NOW,
+                    new InMemoryEvidenceRepository(), new InMemoryClaimStore()), () -> NOW);
 
     // ------------------------------------------------------------------ 列表 / 游标
 

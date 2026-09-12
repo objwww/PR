@@ -1,6 +1,8 @@
 package com.objwww.pr.control.ops.interfaces;
 
 import com.objwww.pr.control.ops.application.CaseDraft;
+import com.objwww.pr.control.ops.application.InMemoryClaimStore;
+import com.objwww.pr.control.ops.application.InMemoryEvidenceRepository;
 import com.objwww.pr.control.ops.application.InMemoryOperatorCases;
 import com.objwww.pr.control.ops.application.OperatorCaseService;
 import com.objwww.pr.control.ops.application.OperatorQueryService;
@@ -40,7 +42,8 @@ class OperatorApiControllerTest {
 
     private final InMemoryOperatorCases repo = new InMemoryOperatorCases();
     private final OperatorCaseService service = new OperatorCaseService(repo, CLOCK);
-    private final OperatorQueryService query = new OperatorQueryService(repo, CLOCK);
+    private final OperatorQueryService query = new OperatorQueryService(repo, CLOCK,
+            new InMemoryEvidenceRepository(), new InMemoryClaimStore());
     private MockMvc mvc;
 
     @BeforeEach
