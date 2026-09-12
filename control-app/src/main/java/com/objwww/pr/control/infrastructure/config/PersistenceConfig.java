@@ -276,6 +276,23 @@ public class PersistenceConfig {
                 skillCandidateRepository, releaseAssetRepository, java.time.Clock.systemUTC());
     }
 
+    /**
+     * EN-08 二期：Skill 源头提炼（用例文档 §五封存资格/候选生成）——确定性提炼，
+     * 零模型调用；来源契约拒绝零落库；自动触发点（调查后异步作业）归运营决策待裁定。
+     */
+    @Bean
+    public com.objwww.pr.control.release.application.SkillCuratorService skillCuratorService(
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger ledger,
+            com.objwww.pr.control.release.application.SkillCandidateService
+                    skillCandidateService) {
+        return new com.objwww.pr.control.release.application.SkillCuratorService(
+                rcaRunRepository::findById, evidenceRepository,
+                ledger::findSuccessfulByRun, skillCandidateService,
+                java.time.Clock.systemUTC());
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository rcaAttemptRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaAttemptRepository(jdbc);
