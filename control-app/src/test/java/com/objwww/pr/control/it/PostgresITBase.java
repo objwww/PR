@@ -103,6 +103,9 @@ public abstract class PostgresITBase {
             "eval_comparison",
             // V86（DR-02 演练作业链两表）——BA-41 同律（事件表引用作业表，序敏感）
             "drill_event", "drill_job",
+            // V95（DR-05 flagd 恢复台账）——BA-41 同律：
+            // PostgresFlagdRestoreLedgerIT 起成为真 PG 消费者
+            "flagd_restore_ledger",
             // V87（EV-08 评审两表）——BA-41 同律（结论表引用任务表，序敏感）
             "review_verdict", "review_assignment",
             // V90（R2 输入捕获档）——BA-41 同律：PostgresRcaModelInputIT 起成为真 PG 消费者

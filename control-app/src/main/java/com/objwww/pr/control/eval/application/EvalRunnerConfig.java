@@ -174,12 +174,25 @@ public class EvalRunnerConfig {
         }, runTag);
     }
 
+    /** flagd 管理面客户端提为共享 bean（DR-A 批）：driver 条件恢复与
+     *  FlagdRestoreSweeper 截止清扫经 asAdminPort() 共用同一传输面 */
+    @Bean
+    public FlagdScenarioDriver.FlagAdminClient flagAdminClient(
+            @Value("${app.alert.eval.flag-admin-url:http://flagd-admin:8081}")
+            String flagAdminUrl) {
+        return new FlagdScenarioDriver.FlagAdminClient.Http(flagAdminUrl);
+    }
+
+    /** DR-05 生产接线（DR-A 批）：四参构造——激活即落恢复台账（V95），台账 bean
+     *  与 sweeper 收口共用同一实例（写账与收口同库同表）；两参无台账过渡构造
+     *  仅留测试面对照 */
     @Bean
     public FlagdScenarioDriver flagdScenarioDriver(
-            @Value("${app.alert.eval.flag-admin-url:http://flagd-admin:8081}")
-            String flagAdminUrl, AlertProbe alertProbe) {
-        return new FlagdScenarioDriver(
-                new FlagdScenarioDriver.FlagAdminClient.Http(flagAdminUrl), alertProbe);
+            FlagdScenarioDriver.FlagAdminClient flagAdminClient, AlertProbe alertProbe,
+            com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger
+                    flagdRestoreLedger) {
+        return new FlagdScenarioDriver(flagAdminClient, alertProbe, flagdRestoreLedger,
+                java.time.Clock.systemUTC());
     }
 
     @Bean
@@ -189,17 +202,24 @@ public class EvalRunnerConfig {
         return new ArenaTrafficClient.Http(arenaBaseUrl);
     }
 
+    /** chaos-admin 客户端提为共享 bean（DR-A 批）：eval 批跑驱动与
+     *  ArenaChaosDrillInjection 演练注入面共用（token 仅 env 注入，INV-AM3-3） */
     @Bean
-    public ArenaChaosScenarioDriver arenaChaosScenarioDriver(
+    public ChaosAdminClient chaosAdminClient(
             @Value("${app.alert.eval.chaos-admin-url:http://arena-chaos-admin:8080}")
             String chaosAdminUrl,
-            @Value("${CHAOS_ADMIN_TOKEN:}") String adminToken,
+            @Value("${CHAOS_ADMIN_TOKEN:}") String adminToken) {
+        return new ChaosAdminClient.Http(chaosAdminUrl, adminToken);
+    }
+
+    @Bean
+    public ArenaChaosScenarioDriver arenaChaosScenarioDriver(
+            ChaosAdminClient chaosAdminClient,
             AlertProbe alertProbe,
             ArenaTrafficClient traffic,
             @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
             @Value("${app.alert.eval.run-tag:}") String runTag) {
-        return new ArenaChaosScenarioDriver(
-                new ChaosAdminClient.Http(chaosAdminUrl, adminToken), alertProbe, traffic,
+        return new ArenaChaosScenarioDriver(chaosAdminClient, alertProbe, traffic,
                 datasetVersion, runTag);
     }
 
@@ -351,8 +371,9 @@ public class EvalRunnerConfig {
                 workerMode);
     }
 
-    // ---------------- DR-02 演练 worker（§7.3：由已有评测执行身份所在的 worker 领取；
-    //   eval_app 授权面 V86；注入接线未交付——NotImplemented 端口如实 FAILED） ----------------
+    // ---------------- DR 演练 worker（§7.3：由已有评测执行身份所在的 worker 领取；
+    //   eval_app 授权面 V86/V95；DR-A 批接线交付：复合注入端口（DR-03）+ 恢复台账/
+    //   sweeper（DR-05）+ 关联回填（DR-06）） ----------------
 
     @Bean
     public com.objwww.pr.control.drill.application.DrillTemplateCatalog
@@ -379,11 +400,74 @@ public class EvalRunnerConfig {
                 .PostgresDrillEventRepository(jdbc);
     }
 
-    /** DR-02 本批唯一注入实现：接线未交付（DR-03/DR-04），确定零副作用如实卡因 */
+    /** DR-05 恢复台账（V95 flagd_restore_ledger）：driver 激活写账与 sweeper
+     *  截止收口共用本 bean 实例（同库同表） */
     @Bean
-    public com.objwww.pr.control.drill.application.DrillInjectionPort drillInjectionPort() {
-        return new com.objwww.pr.control.drill.application.DrillInjectionPort
-                .NotImplemented();
+    public com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger
+            flagdRestoreLedger(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresFlagdRestoreLedger(jdbc);
+    }
+
+    /** DR-05 台账级截止清扫（每拍 + 启动对账超 deadline 仍 OPEN/UNKNOWN 的台账行；
+     *  传输面与 driver 共用 flagAdminClient.asAdminPort()） */
+    @Bean
+    public com.objwww.pr.control.drill.application.FlagdRestoreSweeper
+            flagdRestoreSweeper(
+            FlagdScenarioDriver.FlagAdminClient flagAdminClient,
+            com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger
+                    flagdRestoreLedger) {
+        return new com.objwww.pr.control.drill.application.FlagdRestoreSweeper(
+                flagAdminClient.asAdminPort(), flagdRestoreLedger,
+                java.time.Instant::now);
+    }
+
+    /** DR-06 关联回填读面（eval_app 经 V11 只读 incident；匹配不到保持 null 不猜） */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillCorrelationPort
+            drillCorrelationPort(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresDrillCorrelationReader(jdbc);
+    }
+
+    /** DR-03 arena-chaos 注入适配（与 eval 批跑驱动共用 ChaosAdminClient 传输面） */
+    @Bean
+    public com.objwww.pr.control.drill.application.ArenaChaosDrillInjection
+            arenaChaosDrillInjection(
+            ChaosAdminClient chaosAdminClient,
+            AlertProbe alertProbe,
+            ArenaTrafficClient arenaTrafficClient,
+            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion) {
+        return new com.objwww.pr.control.drill.application.ArenaChaosDrillInjection(
+                chaosAdminClient, alertProbe, arenaTrafficClient, datasetVersion);
+    }
+
+    /** DR-03 flagd 注入适配（复用四参 FlagdScenarioDriver——激活即落恢复台账） */
+    @Bean
+    public com.objwww.pr.control.drill.application.FlagdDrillInjection
+            flagdDrillInjection(FlagdScenarioDriver flagdScenarioDriver) {
+        return new com.objwww.pr.control.drill.application.FlagdDrillInjection(
+                flagdScenarioDriver);
+    }
+
+    /** DR-03 复合注入端口（DR-A 批接线交付）：公共闸门（ready/白名单/参数…）+
+     *  按模板 driver 分派；NotImplemented 保留为 fail-closed 兜底与测试对照，
+     *  不再装配 */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillInjectionPort
+            drillInjectionPort(
+            com.objwww.pr.control.drill.application.DrillTemplateCatalog
+                    drillTemplateCatalog,
+            GoldenScenarioRegistry goldenScenarioRegistry,
+            com.objwww.pr.control.drill.application.ArenaChaosDrillInjection
+                    arenaChaosDrillInjection,
+            com.objwww.pr.control.drill.application.FlagdDrillInjection
+                    flagdDrillInjection,
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
+        return new com.objwww.pr.control.drill.application.CompositeDrillInjection(
+                drillTemplateCatalog, goldenScenarioRegistry,
+                splitTargetEnvs(targetEnvs), arenaChaosDrillInjection,
+                flagdDrillInjection);
     }
 
     @Bean
@@ -396,6 +480,10 @@ public class EvalRunnerConfig {
                     drillTemplateCatalog,
             com.objwww.pr.control.drill.application.DrillInjectionPort
                     drillInjectionPort,
+            com.objwww.pr.control.drill.application.DrillCorrelationPort
+                    drillCorrelationPort,
+            com.objwww.pr.control.drill.application.FlagdRestoreSweeper
+                    flagdRestoreSweeper,
             @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.drill.worker.poll-seconds:5}") long pollSeconds,
@@ -403,10 +491,16 @@ public class EvalRunnerConfig {
             long staleClaimSeconds) {
         return new com.objwww.pr.control.drill.application.DrillWorker(
                 drillJobRepository, drillEventRepository, drillTemplateCatalog,
-                drillInjectionPort, drillClock(),
-                java.util.Arrays.stream(targetEnvs.split(","))
-                        .map(String::trim).filter(s -> !s.isEmpty()).toList(),
-                workerId + "-drill", pollSeconds, staleClaimSeconds);
+                drillInjectionPort, drillClock(), splitTargetEnvs(targetEnvs),
+                workerId + "-drill", pollSeconds, staleClaimSeconds,
+                drillCorrelationPort, flagdRestoreSweeper);
+    }
+
+    /** app.drill.target-envs 拆分（worker 领取白名单与复合注入端口靶场白名单
+     *  两处共用同一配置源，防漂移） */
+    private static java.util.List<String> splitTargetEnvs(String targetEnvs) {
+        return java.util.Arrays.stream(targetEnvs.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     private static com.objwww.pr.control.drill.application.DrillWorker.DrillClock

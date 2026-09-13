@@ -19,8 +19,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * DR-02 worker：领取→预检→注入相位驱动（本批注入如实 NOT_IMPLEMENTED → FAILED，
- * 不假装注入成功）；停止面（注入前取消 CANCELLED、停止于注入执行前零副作用 FAILED）；
+ * DR-02 worker：领取→预检→注入相位驱动（NOT_PERFORMED 确定零副作用 → 如实 FAILED，
+ * 不假装注入成功）；停止面（注入前取消 CANCELLED；DR-A02 起 INJECTING 相位停止
+ * 必先进 RECOVERING 恢复路径再 RECOVERY_FAILED 保留占位）；
  * 注入 UNKNOWN 必先进恢复路径（RECOVERY_FAILED 保留占位）；崩溃孤儿两分支
  * （未触及注入重排队身份稳定 / 已触及 RECOVERY_FAILED worker_lost）。
  */
@@ -31,7 +32,7 @@ class DrillWorkerTest {
 
     // ------------------------------------------------------------------ 假件
 
-    private static final class FakeJobs implements DrillJobRepository {
+    private static class FakeJobs implements DrillJobRepository {
         final Map<UUID, DrillJob> byId = new LinkedHashMap<>();
 
         @Override
@@ -190,6 +191,21 @@ class DrillWorkerTest {
         }
     }
 
+    /** 停止竞态夹具（DR-A02）：worker 推进 PRECHECK→INJECTING 成功的同一窗口内
+     *  操作员停止到达——复现「claim 时无停止、注入执行前停止已受理」的真实时序 */
+    private static final class StopAtInjectingJobs extends FakeJobs {
+        @Override
+        public boolean advance(UUID id, long expectedRevision, DrillJob.State from,
+                               DrillJob.State to, Instant updatedAt) {
+            boolean ok = super.advance(id, expectedRevision, from, to, updatedAt);
+            if (ok && from == DrillJob.State.PRECHECK
+                    && to == DrillJob.State.INJECTING) {
+                requestStop(id, "stop-at-injecting", updatedAt);
+            }
+            return ok;
+        }
+    }
+
     private static final class FakeEvents implements DrillEventRepository {
         final List<DrillEvent> stored = new ArrayList<>();
 
@@ -313,6 +329,25 @@ class DrillWorkerTest {
         DrillJob after = jobs.findById(job.id()).orElseThrow();
         assertThat(after.state()).isEqualTo(DrillJob.State.CANCELLED);
         assertThat(after.terminalReason()).isEqualTo("cancelled_by_operator");
+    }
+
+    @Test
+    @DisplayName("DR-A02：INJECTING 相位收到 stop（真实接线后）→ 必先进 RECOVERING "
+            + "再 RECOVERY_FAILED 保留占位，不再按未接线语义直落 FAILED")
+    void stopAtInjectingEntersRecoveryPath() {
+        jobs = new StopAtInjectingJobs();
+        DrillJob job = enqueue(false);
+        worker(new DrillInjectionPort.NotImplemented(), true).tick();
+        DrillJob after = jobs.findById(job.id()).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
+        assertThat(after.terminalReason()).contains("stopped_before_injection");
+        assertThat(after.state().holdsEnvPlaceholder()).isTrue(); // 占位阻止下一场
+        List<String> transitions = events.stored.stream()
+                .filter(e -> e.eventType() == DrillEvent.EventType.PHASE_TRANSITION)
+                .map(e -> e.fromState() + "→" + e.toState()).toList();
+        assertThat(transitions).containsExactly(
+                "QUEUED→PRECHECK", "PRECHECK→INJECTING",
+                "INJECTING→RECOVERING", "RECOVERING→RECOVERY_FAILED");
     }
 
     @Test

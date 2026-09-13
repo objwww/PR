@@ -1,7 +1,14 @@
 package com.objwww.pr.control.eval.application;
 
+import com.objwww.pr.control.drill.application.CompositeDrillInjection;
+import com.objwww.pr.control.drill.application.DrillInjectionPort;
+import com.objwww.pr.control.drill.application.DrillWorker;
+import com.objwww.pr.control.drill.application.FlagdRestoreSweeper;
+import com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger;
 import com.objwww.pr.control.eval.domain.EvalRunMetadata;
 import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
+import com.objwww.pr.control.infrastructure.persistence.PostgresDrillCorrelationReader;
+import com.objwww.pr.control.infrastructure.persistence.PostgresFlagdRestoreLedger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -84,6 +91,67 @@ class EvalRunnerProfileIsolationTest {
                             .isEqualTo(registry.contentDigest().value());
                     assertThat(metadata.graderVersion()).isEqualTo("grader-test-v1");
                 });
+    }
+
+    @Test
+    @DisplayName("eval profile：DR 线 DR-A 批接线装配——复合注入端口（非 "
+            + "NotImplemented）、11 参 worker（Postgres 关联读面 + 非空 sweeper）、"
+            + "四参 driver 与 sweeper 共用同一台账实例")
+    void evalProfileAssemblesWiredDrillStack() {
+        contextRunner
+                .withPropertyValues(
+                        "spring.profiles.active=eval",
+                        "app.alert.eval.prompt-digest=" + HEX_A,
+                        "app.alert.eval.tool-registry-digest=" + HEX_B,
+                        "app.alert.eval.provider-fingerprint=fp-test",
+                        "app.alert.eval.alert-rule-digest=" + HEX_C,
+                        "app.alert.eval.grader-version=grader-test-v1")
+                .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasBean("drillTemplateCatalog");
+                    assertThat(context).hasBean("drillJobRepository");
+                    assertThat(context).hasBean("drillEventRepository");
+                    assertThat(context).hasBean("chaosAdminClient");
+                    assertThat(context).hasBean("flagAdminClient");
+                    assertThat(context).hasBean("arenaChaosDrillInjection");
+                    assertThat(context).hasBean("flagdDrillInjection");
+                    assertThat(context).hasBean("flagdRestoreLedger");
+                    assertThat(context).hasBean("flagdRestoreSweeper");
+                    assertThat(context).hasBean("drillCorrelationPort");
+
+                    // 注入端口 = 复合端口（NotImplemented 仅留 fail-closed 兜底不装配）
+                    assertThat(context.getBean(DrillInjectionPort.class))
+                            .isInstanceOf(CompositeDrillInjection.class);
+
+                    // worker = 11 参全构造：关联读面 Postgres 实现（非 disabled 语义）、
+                    // sweeper 非空
+                    DrillWorker worker = context.getBean(DrillWorker.class);
+                    assertThat(field(worker, "correlation"))
+                            .isInstanceOf(PostgresDrillCorrelationReader.class);
+                    assertThat(field(worker, "flagdSweeper"))
+                            .isInstanceOf(FlagdRestoreSweeper.class);
+
+                    // driver 四参构造落 Postgres 台账，且 driver 写账与 sweeper 收口
+                    // 共用同一台账 bean 实例（同库同表 V95）
+                    FlagdScenarioDriver driver = context.getBean(FlagdScenarioDriver.class);
+                    FlagdRestoreLedger ledger = context.getBean(FlagdRestoreLedger.class);
+                    assertThat(ledger).isInstanceOf(PostgresFlagdRestoreLedger.class);
+                    assertThat(field(driver, "restoreLedger")).isSameAs(ledger);
+                    assertThat(field(context.getBean(FlagdRestoreSweeper.class), "ledger"))
+                            .isSameAs(ledger);
+                });
+    }
+
+    /** 私有字段读面（装配断言专用：协作者类型/实例同一性，不触行为） */
+    private static Object field(Object target, String name) {
+        try {
+            java.lang.reflect.Field f = target.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return f.get(target);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("读字段失败: " + name, e);
+        }
     }
 
     @Test

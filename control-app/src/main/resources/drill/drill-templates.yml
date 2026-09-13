@@ -28,11 +28,8 @@ templates:
       traffic_scales: [RECIPE]
       linked_eval_version_allowed: true
     execution:
-      ready: false
-      reason: >-
-        Flagd 恢复所有权未交付（DR-05 卡：原值保存/条件恢复/冲突不覆盖未达标），
-        且注入执行接线未交付（DR-03 卡）——受理后执行器将在注入相位如实 FAILED
-        （INJECTION_NOT_IMPLEMENTED），故本批不开放启动
+      ready: true
+      reason: DR-03/DR-05 已接线（2026-09-13 DR-A 批）
 
   - scenario_id: S2
     name: flagd paymentUnreachable
@@ -51,8 +48,8 @@ templates:
       traffic_scales: [RECIPE]
       linked_eval_version_allowed: true
     execution:
-      ready: false
-      reason: 同 S1（DR-05 Flagd 恢复所有权未交付 + DR-03 注入接线未交付）
+      ready: true
+      reason: DR-03/DR-05 已接线（2026-09-13 DR-A 批）
 
   - scenario_id: S3
     name: F1 幂等失效

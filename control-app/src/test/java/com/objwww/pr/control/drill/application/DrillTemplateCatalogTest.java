@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * DR-02 模板目录：随 jar 封装的真实目录（drill-templates.yml，派生自
  * eval-scenarios.yml registry v2）可装载、五场景齐备、公开面字段正确、
- * 可执行性如实未交付；白名单装载天然剥离 GT 扩展键；digest 稳定可复现。
+ * 可执行性分批开放（DR-A 批：S1/S2 已接线 ready=true，S3~S5 维持 false）；白名单装载天然剥离 GT 扩展键；digest 稳定可复现。
  */
 class DrillTemplateCatalogTest {
 
@@ -57,13 +57,17 @@ class DrillTemplateCatalogTest {
     }
 
     @Test
-    @DisplayName("可执行性如实：本批五场景 ready=false 且必带原因（不展示假按钮）")
+    @DisplayName("可执行性分批开放（DR-A 批）：S1/S2（Flagd）ready=true 已接线；"
+            + "S3~S5（ArenaChaos）维持 ready=false 且必带原因（不展示假按钮）")
     void executionHonestlyUnavailable() {
         DrillTemplateCatalog catalog = loadBundled();
-        assertThat(catalog.templates()).allSatisfy(t -> {
-            assertThat(t.execution().ready()).isFalse();
-            assertThat(t.execution().reason()).isNotBlank();
-        });
+        assertThat(catalog.byScenarioId("S1").orElseThrow().execution().ready()).isTrue();
+        assertThat(catalog.byScenarioId("S2").orElseThrow().execution().ready()).isTrue();
+        assertThat(catalog.templates()).filteredOn(t -> !t.execution().ready())
+                .extracting(DrillTemplate::scenarioId)
+                .containsExactly("S3", "S4", "S5");
+        assertThat(catalog.templates()).allSatisfy(t ->
+                assertThat(t.execution().reason()).isNotBlank());
     }
 
     @Test

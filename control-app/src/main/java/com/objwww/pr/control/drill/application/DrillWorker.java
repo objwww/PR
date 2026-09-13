@@ -29,7 +29,7 @@ import java.util.UUID;
  *       双对账 CAS 并落 PHASE_TRANSITION 事件；HTTP 线程全程零执行；</li>
  *   <li><b>停止收口</b>（§7.4）：相位边界检查 stop_requested_at——注入前取消
  *       CANCELLED；注入一旦发生/可能发生，停止或失败都必先进 RECOVERING
- *       （本批注入零副作用，NOT_PERFORMED 才允许 INJECTING→FAILED）；</li>
+ *       （确定未执行 = NOT_PERFORMED 才允许 INJECTING→FAILED）；</li>
  *   <li><b>崩溃恢复</b>：启动扫超龄租约孤儿——PRECHECK（零副作用）→ 重排队
  *       QUEUED 身份稳定；INJECTING 及以后（注入/恢复状态无法判定）→
  *       RECOVERY_FAILED 保留靶场占位（worker_lost），不冒充现场干净；</li>
@@ -44,9 +44,11 @@ import java.util.UUID;
  *       related_incident_id（currentRcaRunId 存在才带 related_run_id）并落
  *       WORKER_NOTE；匹配不到/窗口已过保持 null（前端「尚未关联」），不按时间
  *       近似瞎关联；重复回填由「related_incident_id IS NULL」CAS 幂等；</li>
- *   <li><b>本批诚实边界</b>：注入接线未交付（DR-03/DR-04），执行器在注入相位
- *       如实 FAILED（INJECTION_NOT_IMPLEMENTED）——不假装注入成功；OBSERVING
- *       及以后的推进（症状等待/恢复/核验）随真实接线一并交付。</li>
+ *   <li><b>本批诚实边界</b>：注入接线已交付（DR-A 批：CompositeDrillInjection
+ *       复合端口 + DR-05 台账/sweeper + DR-06 关联回填）；NOT_PERFORMED（闸门
+ *       拒注/确定零副作用）仍允许 INJECTING→FAILED 如实卡因；OBSERVING 之后的
+ *       症状等待/恢复/核验推进（DR-04 面）未交付——活动作业由 flagd 作业级截止
+ *       对账收口，不假装注入后生命周期已完整。</li>
  * </ul>
  */
 public class DrillWorker {
@@ -179,10 +181,16 @@ public class DrillWorker {
         current = advance(current, DrillJob.State.PRECHECK, DrillJob.State.INJECTING,
                 null);
         if (current.stopRequestedAt() != null) {
-            // 注入尚未发生（NOT_PERFORMED 端口是唯一实现）：零副作用取消仍合法；
-            // 真实接线落地后此分支必须改走 RECOVERING（注入可能发生即必进恢复路径）
-            finalize(current, DrillJob.State.INJECTING, DrillJob.State.FAILED,
-                    "stopped_before_injection: 停止于注入执行前，确定零副作用", null);
+            // 真实接线已落地（DR-A 批）：注入可能发生即必走恢复路径（§7.4），
+            // 先进 RECOVERING；作业级恢复执行接线未交付（DR-04）→ RECOVERY_FAILED
+            // 保留占位待人工核验，不冒充现场干净
+            DrillJob recovering = advance(current, DrillJob.State.INJECTING,
+                    DrillJob.State.RECOVERING, null);
+            finalize(recovering, DrillJob.State.RECOVERING,
+                    DrillJob.State.RECOVERY_FAILED,
+                    "stopped_before_injection: 停止于注入相位（注入可能发生即必进恢复"
+                            + "路径），恢复执行接线未交付（DR-04）——保留占位待人工核验",
+                    null);
             return;
         }
 
