@@ -314,9 +314,17 @@ class ContextAssemblerTest {
 
     @Test
     void 工作记忆确定性重建_假设与排除方向入模() throws Exception {
-        PrimaryCheckpoint checkpoint = checkpoint().withFinal(List.of(Map.of(
-                "claim_key", "c1", "kind", "HYPOTHESIS",
-                "statement", "支付网关超时引发错误率骤增", "evidence_refs", List.of())),
+        // v3 供数：EXCLUSION+REFUTES=业务排除入 ruled_out（带可信印记）；
+        // 控制面拒绝（GAP_ALREADY_ADJUDICATED 等）退出业务排除槽
+        PrimaryCheckpoint checkpoint = checkpoint().withFinal(List.of(
+                Map.of("claim_key", "c1", "kind", "HYPOTHESIS",
+                        "statement", "支付网关超时引发错误率骤增",
+                        "evidence_refs", List.of("e-1")),
+                Map.of("claim_key", "c2", "kind", "EXCLUSION",
+                        "statement", "部署变更已回滚排除",
+                        "evidence_refs", List.of("e-2"),
+                        "evidence_roles", List.of(
+                                Map.of("ref", "e-2", "role", "REFUTES")))),
                 List.of(), NOW);
         delegations.rows.add(new DelegationDecision(UUID.randomUUID(), runId, taskId, 0, 1,
                 "g-logs", "logs-expert", "1", "查错误日志", DelegationDecision.Status.REJECTED,
@@ -326,8 +334,14 @@ class ContextAssemblerTest {
 
         JsonNode memory = envelopeOf(assembly.prompt()).get("working_memory");
         assertThat(memory.get("hypotheses").get(0).asText()).contains("支付网关超时");
-        assertThat(memory.get("ruled_out").get(0).asText()).contains("g-logs")
-                .contains("GAP_ALREADY_ADJUDICATED");
+        assertThat(memory.get("ruled_out").get(0).asText())
+                .contains(ContextAssembler.TRUSTED_EXCLUSION_MARK.strip())
+                .contains("部署变更已回滚排除");
+        assertThat(memory.get("ruled_out").toString())
+                .as("控制面拒绝不入业务排除槽（拒绝反馈归 lastError/裁决史面）")
+                .doesNotContain("GAP_ALREADY_ADJUDICATED").doesNotContain("g-logs");
+        assertThat(assembly.prompt()).as("裁决史仍在 trajectory 面可达")
+                .contains("g-logs");
     }
 
     @Test
@@ -529,6 +543,98 @@ class ContextAssemblerTest {
         assertThat(memories.all()).as("重放零副作用").hasSize(2);
         assertThat(memories.all().get(1).slots().get("counter_evidence_refs"))
                 .containsExactly("e-r1", "e-r2");
+    }
+
+    // ------------------------------------------------- ruled_out v3 污染修复（验收四测）
+
+    private static final String POLLUTED = "g-logs: GAP_ALREADY_ADJUDICATED";
+    private static final String LEGIT_EXCLUSION =
+            ContextAssembler.TRUSTED_EXCLUSION_MARK + "部署变更已回滚排除";
+
+    private PrimaryCheckpoint checkpointWithMemory(UUID memoryId, long revision,
+            List<Map<String, Object>> claims) {
+        return PrimaryCheckpoint.initial(taskId, runId, 0, NOW)
+                .withStepAdvanced(null, memoryId,
+                        memoryId == null ? null : "digest-" + memoryId, null, NOW)
+                .withRevision(revision)
+                .withFinal(claims, List.of(), NOW);
+    }
+
+    @Test
+    void v3旧污染继承_无印记父项不跨轮传播_带印记合法排除保留() throws Exception {
+        AlertInMemoryStores.WorkingMemories memories = new AlertInMemoryStores.WorkingMemories();
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), memories, new MemReceipts(),
+                null, CLOCK, MAPPER);
+        // 旧规则父版：ruled_out 混有控制面拒绝污染 + 合法排除（模拟真实历史链）
+        UUID parentId = UUID.randomUUID();
+        memories.append(WorkingMemory.ofV2(parentId, runId, taskId, 0,
+                Map.of("ruled_out", List.of(POLLUTED, LEGIT_EXCLUSION),
+                        "hypotheses", List.of(), "counter_evidence_refs", List.of(),
+                        "open_gaps", List.of()),
+                null, parentId, NOW));
+        // 本轮 checkpoint 无任何排除提案：旧污染不得经合并链继续传播
+        ContextAssembler.Assembly assembly = assembler.assemble(request(),
+                checkpointWithMemory(parentId, 1, List.of()), 2);
+
+        assertThat(assembly.memory().slots().get("ruled_out"))
+                .as("无印记父项=旧控制面污染，重建时不继承；带印记合法项保留")
+                .containsExactly(LEGIT_EXCLUSION);
+    }
+
+    @Test
+    void v3无证据EXCLUSION_零引用或零REFUTES不入排除槽() throws Exception {
+        AlertInMemoryStores.WorkingMemories memories = new AlertInMemoryStores.WorkingMemories();
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), memories, new MemReceipts(),
+                null, CLOCK, MAPPER);
+        PrimaryCheckpoint checkpoint = checkpoint().withFinal(List.of(
+                Map.of("claim_key", "c1", "kind", "EXCLUSION",
+                        "statement", "无作用面旧行", "evidence_refs", List.of("e-1")),
+                Map.of("claim_key", "c2", "kind", "EXCLUSION",
+                        "statement", "零引用行", "evidence_refs", List.of(),
+                        "evidence_roles", List.of(
+                                Map.of("ref", "e-1", "role", "REFUTES"))),
+                Map.of("claim_key", "c3", "kind", "EXCLUSION",
+                        "statement", "仅 CONTEXT 无反证", "evidence_refs", List.of("e-1"),
+                        "evidence_roles", List.of(
+                                Map.of("ref", "e-1", "role", "CONTEXT")))),
+                List.of(), NOW);
+
+        ContextAssembler.Assembly assembly = assembler.assemble(request(), checkpoint, 2);
+
+        assertThat(assembly.memory().slots().get("ruled_out"))
+                .as("无证据 EXCLUSION（无 roles/零引用/仅 CONTEXT）都不构成业务排除")
+                .isEmpty();
+        assertThat(assembly.memory().slots().get("hypotheses")).hasSize(3);
+    }
+
+    @Test
+    void v3非空排除跨轮保留_新FINAL丢弃旧EXCLUSION行不丢已入槽项() throws Exception {
+        AlertInMemoryStores.WorkingMemories memories = new AlertInMemoryStores.WorkingMemories();
+        ContextAssembler assembler = new ContextAssembler(evidence, toolLedger, delegations,
+                run -> ContextAssembler.AlertMaterial.unknown(), memories, new MemReceipts(),
+                null, CLOCK, MAPPER);
+        // round 0：合法排除入槽
+        PrimaryCheckpoint first = checkpointWithMemory(null, 0, List.of(
+                Map.of("claim_key", "c1", "kind", "EXCLUSION",
+                        "statement", "部署变更已回滚排除", "evidence_refs", List.of("e-1"),
+                        "evidence_roles", List.of(
+                                Map.of("ref", "e-1", "role", "REFUTES")))));
+        WorkingMemory row1 = assembler.assemble(request(), first, 2).memory();
+        memories.append(row1);
+
+        // round 1：模型新 FINAL 只剩无关假设（旧 EXCLUSION 行已被替换掉）
+        PrimaryCheckpoint second = checkpointWithMemory(row1.id(), 1, List.of(
+                Map.of("claim_key", "c2", "kind", "HYPOTHESIS",
+                        "statement", "新的候选假设", "evidence_refs", List.of("e-2"))));
+
+        ContextAssembler.Assembly step2 = assembler.assemble(request(), second, 2);
+
+        assertThat(step2.memory().slots().get("ruled_out"))
+                .as("合规排除跨轮保留（可信印记继承），不随 checkpoint 行替换丢失")
+                .containsExactly(LEGIT_EXCLUSION);
+        assertThat(step2.memory().slots().get("hypotheses")).contains("新的候选假设");
     }
 
     // ------------------------------------------------------------- MC21/22 回执合并面

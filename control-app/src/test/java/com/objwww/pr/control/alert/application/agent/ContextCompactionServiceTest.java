@@ -455,6 +455,29 @@ class ContextCompactionServiceTest {
                 .isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
     }
 
+    @Test
+    @DisplayName("反证保留（消费面）：记忆槽累计反证=必需引用，摘要候选漏反证整案拒绝")
+    void counterEvidenceRefsAreRequiredAndCannotBeOmitted() {
+        Map<String, List<String>> slots = new java.util.LinkedHashMap<>();
+        slots.put("hypotheses", List.of());
+        slots.put("ruled_out", List.of());
+        slots.put("counter_evidence_refs", List.of("e-counter-1"));
+        slots.put("open_gaps", List.of());
+        ContextAssembler.Assembly withCounterRefs = new ContextAssembler.Assembly(
+                "material-prompt", "src-digest-1", APPROX_OVER, List.of(), List.of(),
+                com.objwww.pr.control.alert.domain.agent.WorkingMemory.ofV2(
+                        UUID.randomUUID(), runId, taskId, 0, slots, null, null, NOW));
+        model.script.add(candidateJson("漏反证摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                enabledService.afterToolResults(request(), checkpoint(), withCounterRefs);
+
+        assertThat(outcome.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.REJECTED_MISSING_REQUIRED);
+        assertThat(outcome.detail()).as("反证引用在必需集").contains("e-counter-1");
+        assertThat(summaries.all()).as("漏反证候选不落档").isEmpty();
+    }
+
     private ContextCompactionService serviceOf(Mode mode,
             com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort ledger,
             ContextCompactionService.SummaryConsumer consumer) {

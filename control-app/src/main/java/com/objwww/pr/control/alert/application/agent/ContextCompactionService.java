@@ -244,7 +244,7 @@ public class ContextCompactionService {
                 .map(s -> s.eventSeqTo() + 1).orElse(0L);
         long eventSeqTo = checkpoint.decisionSeq();
 
-        // 引用值域全集 + 必需集（宿主生成：绑定承诺 ∪ 终局引用；模型不得删空）
+        // 引用值域全集 + 必需集（宿主生成：绑定承诺 ∪ 终局引用 ∪ 工作记忆反证；模型不得删空）
         Set<String> validRefs = new LinkedHashSet<>(request.binding().inputRefs());
         evidence.findByRunId(runId).forEach(e -> validRefs.add(e.evidenceId().toString()));
         Set<String> requiredRefs = new LinkedHashSet<>(request.binding().inputRefs());
@@ -253,6 +253,12 @@ public class ContextCompactionService {
             if (refs instanceof List<?> list) {
                 list.forEach(r -> requiredRefs.add(String.valueOf(r)));
             }
+        }
+        // MC22 反证保留（消费面）：工作记忆累计反证也是必需引用——摘要候选漏反证
+        // 等于把"已推翻方向"从模型视野删掉，与"早期反证不被挤掉"同律
+        if (assembly.memory() != null) {
+            requiredRefs.addAll(assembly.memory().slots()
+                    .getOrDefault("counter_evidence_refs", List.of()));
         }
 
         String prompt = compactionPrompt(source, eventSeqFrom, eventSeqTo,

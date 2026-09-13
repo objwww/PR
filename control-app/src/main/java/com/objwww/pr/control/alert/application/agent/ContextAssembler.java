@@ -66,6 +66,13 @@ public class ContextAssembler {
     static final int SUMMARY_LIMIT = 200;
     static final int ALERT_SUMMARY_LIMIT = 500;
     static final int ITEM_LIMIT = 100;
+
+    /**
+     * ruled_out 可信供数印记（v3 合并规则锚）：槽内仅带此前缀的项视为已验证业务
+     * 排除并跨轮继承；无前缀父项=规则前控制面拒绝污染，重建时不继承（旧快照行
+     * 原样留库供审计）。
+     */
+    static final String TRUSTED_EXCLUSION_MARK = "[EX] ";
     /** token 保守估算分母（中文混合上限档；R10 限额共用） */
     static final int CHARS_PER_TOKEN = 2;
 
@@ -722,7 +729,13 @@ public class ContextAssembler {
         return new MemoryCommit(bounded, candidate);
     }
 
-    /** 累计合并：父版槽在前（早期反证不被新轮挤掉），本轮 delta 按内容去重追加 */
+    /**
+     * 累计合并（按槽策略）：反证/假设/缺口=父版槽在前 + 本轮 delta 按内容去重追加
+     * （早期反证不被新轮挤掉，CL-06 原语义）；<b>ruled_out=可信源重建槽</b>——只
+     * 继承带 {@link #TRUSTED_EXCLUSION_MARK} 印记的父项（v3 规则前写入的父项全是
+     * 控制面拒绝污染，不继承；原父行留在库中供审计，不篡改旧快照），本轮可信 delta
+     * 追加。合规排除因此跨轮保留（新 FINAL 丢弃旧 EXCLUSION 行也不丢已入槽项）。
+     */
     private static Map<String, List<String>> mergeAccumulated(WorkingMemory previous,
             Map<String, List<String>> delta) {
         if (previous == null) {
@@ -730,8 +743,13 @@ public class ContextAssembler {
         }
         Map<String, List<String>> merged = new LinkedHashMap<>();
         for (String key : WorkingMemory.SLOT_KEYS) {
+            List<String> parentItems = previous.slots().getOrDefault(key, List.of());
             java.util.LinkedHashSet<String> items = new java.util.LinkedHashSet<>(
-                    previous.slots().getOrDefault(key, List.of()));
+                    "ruled_out".equals(key)
+                            ? parentItems.stream()
+                                    .filter(i -> i.startsWith(TRUSTED_EXCLUSION_MARK))
+                                    .toList()
+                            : parentItems);
             items.addAll(delta.getOrDefault(key, List.of()));
             merged.put(key, new ArrayList<>(items));
         }
@@ -739,30 +757,70 @@ public class ContextAssembler {
     }
 
     /**
-     * 工作记忆确定性重建（槽契约 R10 持久化后由快照承载）：假设=检查点 FINAL 提案史、
-     * ruled_out=裁决拒绝史、反证=当前轮回执 counter_refs 并集（MC22 反证可追溯）、
-     * open_gaps=回执 missing_information 并集；每槽 ≤10 项、单项 ≤100 字符。
+     * 工作记忆确定性重建（槽契约 R10 持久化后由快照承载；ruled_out 供数 v3 重定义
+     * ——控制面拒绝≠业务排除）：假设=检查点 FINAL 提案史；ruled_out=<b>已验证的
+     * 业务排除</b>=kind=EXCLUSION 且 evidence_roles 含 REFUTES 判定且引用非空的
+     * 提案行 statement（无证据 EXCLUSION 不入槽）；反证=当前轮回执 counter_refs
+     * 并集（MC22 反证可追溯）；open_gaps=回执 missing_information 并集；
+     * 每槽 ≤10 项、单项 ≤100 字符。
+     *
+     * <p>编排拒绝史退出本槽（R10 时代「ruled_out=裁决拒绝史」映射废止——六个拒绝
+     * 原因封闭集全是控制面：批形状/配额/重复 gap/已有台账/角色不可委派/任务上限，
+     * 没有一个对应证据排除）。模型对拒绝事实的可达性：裁决拒绝的当步 lastError
+     * 回喂（BA-119）+ supervisor 对重复 gap 的确定性再拒绝，见 BoundedLlmRoleRunner
+     * driveDelegate；裁决全史留 DelegationDecision 行（审计面）。
      */
     Map<String, List<String>> rebuildMemorySlots(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, ReceiptSection receiptSection) {
         List<String> hypotheses = new ArrayList<>();
+        List<String> ruledOut = new ArrayList<>();
         for (Map<String, Object> claim : checkpoint.finalClaims()) {
             Object statement = claim.get("statement");
-            if (statement != null) {
+            if (statement == null) {
+                continue;
+            }
+            if (isEvidenceBackedExclusion(claim)) {
+                ruledOut.add(trustedExclusion(clip(String.valueOf(statement),
+                        ITEM_LIMIT).text()));
+            } else {
                 hypotheses.add(clip(String.valueOf(statement), ITEM_LIMIT).text());
             }
         }
-        List<String> ruledOut = delegations.findByRunAndPrimaryTask(
-                        request.task().runId(), request.task().id()).stream()
-                .filter(d -> d.status() == DelegationDecision.Status.REJECTED)
-                .map(d -> clip(d.gapId() + ": " + d.rejectReason(), ITEM_LIMIT).text())
-                .toList();
         Map<String, List<String>> memory = new LinkedHashMap<>();
         memory.put("hypotheses", bound(hypotheses));
         memory.put("ruled_out", bound(ruledOut));
         memory.put("counter_evidence_refs", bound(receiptSection.counterRefs()));
         memory.put("open_gaps", bound(receiptSection.openGaps()));
         return memory;
+    }
+
+    /**
+     * 业务排除可信供数判据（与 PrimaryFinalClaimProjector v2 的 EXCLUSION→FALSE
+     * 判定同构）：kind=EXCLUSION 且该行 evidence_roles 存在 REFUTES 判定且引用
+     * 非空。无 evidence_roles 的 v1 旧行=支持关系未确认，不入排除槽。
+     */
+    private static boolean isEvidenceBackedExclusion(Map<String, Object> claim) {
+        if (!"EXCLUSION".equals(claim.get("kind"))) {
+            return false;
+        }
+        Object refs = claim.get("evidence_refs");
+        if (!(refs instanceof List<?> refList) || refList.isEmpty()) {
+            return false;
+        }
+        if (!(claim.get("evidence_roles") instanceof List<?> roles)) {
+            return false;
+        }
+        for (Object role : roles) {
+            if (role instanceof Map<?, ?> rv && "REFUTES".equals(rv.get("role"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 排除项入槽（可信印记，合并规则按此前缀跨轮继承） */
+    private static String trustedExclusion(String statement) {
+        return TRUSTED_EXCLUSION_MARK + statement;
     }
 
     /**
