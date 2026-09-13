@@ -5,7 +5,7 @@
 
 状态枚举：UNVERIFIED、NEEDS_CHANGE、IMPLEMENTED_NOT_VERIFIED、VERIFIED_LOCAL、VERIFIED_TARGET、BLOCKED、DEFERRED。
 
-**适用构建**：195 运行面＝2026-09-13 快照构建（jar md5 8bb553e9f31d…，无 git 身份——见 §6-G）；CL/OP 批代码在本地工作树**未提交**（commit 列标 WORKTREE），其 195 IT/Smoke 证据对应该快照。后续版本改变相关契约自动失效重验。
+**适用构建**：195 运行面＝**2026-09-13T22:18Z 起的 V99~V108 批部署**（jar md5 `fd546d26eae74689d94c37a879e86787`，含 CL-01/03/05~07/09+OP 批+SR-01 代码与迁移；构建树↔运行时对拍 81 版本 MATCH——B1 RR02 追证）；CL/OP 批代码在本地工作树**未提交**（commit 列标 WORKTREE），其 195 证据对应部署快照。后续版本改变相关契约自动失效重验。
 
 ---
 
@@ -14,7 +14,7 @@
 | 卡 | owner | current_impl→target | commit | migration | tests | evidence | status | blocker / next_trigger |
 |---|---|---|---|---|---|---|---|---|
 | CL-01/02 提交围栏+恢复接线 | CL批执行者 | 围栏已落：PrimaryCheckpointCommitService 四身份校验（owner/leaseEpoch/configEpoch/revision）+REPLAYED 收敛，全部检查点写点收口单入口（BLRR/Supervisor/NIE 八处）→目标：迟到写拒绝、失租旧 writer 无效 | WORKTREE 未提交 | V99 已应用（RR01 flyway MATCH） | 本地 1809 全绿；195 真 PG PrimaryCheckpointCommitFenceIT 7/7 | OP批 PROGRESS 05:35；A13-03 复核（本批）| **VERIFIED_TARGET** | —；A13 复核结论：实现覆盖在位 |
-| CL-03 有效证据投影 | CL批执行者 | ContextAssembler 类型前缀分派+logs 签名聚合/observations 有界投影+首末时间序解耦→目标：嵌套日志/指标原文关键内容入模 | WORKTREE 未提交 | —（无新表） | ContextAssemblerTest 19 本地绿 | A13-01 复核（本批 grep 定位）；本地测试记录 | **VERIFIED_LOCAL** | A13-01 验收残留"真实模型定位对照"→ 可复用路径一 run26 真模型链（next：MC01 重跑真件面） |
+| CL-03 有效证据投影 | CL批执行者 | ContextAssembler 类型前缀分派+logs 签名聚合/observations 有界投影+首末时间序解耦→目标：嵌套日志/指标原文关键内容入模 | WORKTREE 未提交（**已上靶**：jar fd546d26 实证 projectLogs/projectMetrics、appendTopLevel 无） | —（无新表） | ContextAssemblerTest 19 本地绿 | A13-01 复核；**B1 FULL 捕获窗待开**（DIGEST_ONLY 下 run26 五 prompt 正文未存——A13-01 验收"捕获完整模型请求"需 FULL 档真跑） | **VERIFIED_LOCAL** | FULL 捕获 run 排队（对方部署窗占用中；override/脚本已备：/opt/build/b1-fullcap-*） |
 | CL-04 原文回读+输入身份 | CL批执行者 | 并入 CL-03 实施面（受控回读/单次成员快照/digest 分离）→目标：超长有用部分可回读、循环检测 digest 与实际 prompt digest 分离 | WORKTREE 未提交 | — | 随 ContextAssemblerTest | — | **IMPLEMENTED_NOT_VERIFIED** | B1 复核独立验收用例（MC 矩阵对位） |
 | CL-05 Skill 持久绑定 | CL批执行者 | V100 rca_run_skill_binding PK(run,role,epoch) insert-if-absent 单写者+冻结允许集+SELECTED/NONE 显式+热切同事务预生成→目标：重启不漂移/发布不逃逸 | WORKTREE 未提交 | V100 已应用+运行表 9 行（RR01） | PostgresRunSkillBindingIT 3/3（195 真 PG） | A13-02 复核：SELECTED/NONE/insert-if-absent 实现在位 | **VERIFIED_TARGET** | — |
 | CL-06 累计记忆 | CL批执行者 | V101 schema_version/parent_memory_id/ofV2 真 revision+父链+跨轮反证并集保留→目标：反证跨轮可达、控制拒绝不混业务 ruled_out | WORKTREE 未提交 | V101 已应用 | ContextAssemblerTest/WorkingMemory 单测 | A13-04 复核：WorkingMemory/Port 在位 | **VERIFIED_LOCAL** | 真实跨轮 Run 验证留 B2 |
@@ -41,10 +41,10 @@
 
 | 卡 | owner | current_impl→target | tests/evidence | status | blocker / next_trigger |
 |---|---|---|---|---|---|
-| OR-01 部署事实对齐 | **B0执行者（本批）** | deploy/audit-runtime.sh（只读/脱敏白名单/三模式/UNKNOWN≠MATCH 退出码）→runtime-manifest 对拍 | RR01：195 overall=UNKNOWN 无 DRIFT（flyway 80 版本 MATCH/资源限制 MATCH/Skill 绑定 MATCH；构建身份与 BUDGET_STEP 两项诚实 UNKNOWN） | **VERIFIED_TARGET（RR01）** | RR02（DRIFT 注入）/RR03（权限缺失）/RR04（双版本消费）留 B3；镜像嵌 commit 身份归 OR-11 |
+| OR-01 部署事实对齐 | **B0/B1执行者** | deploy/audit-runtime.sh（只读/脱敏白名单/三模式/UNKNOWN≠MATCH 退出码；**B1 修复：docker 面零容器判 UNKNOWN 不冒充 MATCH** @bcda248）→runtime-manifest 对拍 | RR01：195 overall=UNKNOWN 无 DRIFT；**B1 增**：RR02 DRIFT 注入可见+阻断（附 V108 漂移定性：B0 冻结面过期，当前树↔库 81 版本 MATCH）/RR03 采集失败全 UNKNOWN 零秘密（exit 1）/RR04 双版本身份持久不被覆盖（证据 b1-or01-rr-20260913/） | **VERIFIED_TARGET（RR01~04）** | 镜像嵌 commit 身份归 OR-11；RR02 运行面注入变体（真改部署 env）并独立窗 |
 | OR-02 外部探针值班链 | B0执行者（事实核对） | **HOST2 现场已核**：gatus（digest 锁定 a8c53f9e…，09-10 起 Up）+duty-adapter（Up 2d）+node-exporter 在 117.72.208.68 运行；/srv/alert-eval 目录树在 | 本批现场探测（只读） | **CONFIGURED（深核待 B3）** | RR05~08；duty snapshot 502 瞬态（见 §6-H）；告警链实测留授权窗 |
 | OR-03 备份恢复 | — | backup.sh/restore.sh 已存在（pg_dump+指纹+TOC）→扩行为验证 | 未实测 | **UNVERIFIED** | B3：RR09~12（恢复到隔离库/RPO-RTO 实测） |
-| OR-04 身份凭据审计 | — | SecurityConfig 角色/CSRF 在 | 未实测 | **UNVERIFIED** | B1/B3：RR13~16 |
+| OR-04 身份凭据审计 | **B1执行者** | **矩阵已交付**：[OR04 身份角色端点矩阵 v1](告警-OR04身份角色端点矩阵-v1.md)（6 身份线×路径矩阵×CSRF 面，SecurityConfig+全 Controller 映射） | **RR13 11/11 PASS**（deny-by-default/四线互不越权/越权写角色层即拒/SSE 票必经）+**RR16 日志面 PASS**（10 秘密值×三容器日志=0 出现）；证据 b1-or04-rr13-20260913/ | **VERIFIED_TARGET（RR13+RR16 日志面）** | RR14（凭据轮换）/RR15（缺必填秘密 fail-closed 运行面）并独立窗；RR16 模型输入半面随 FULL 捕获断言 |
 | OR-05 外部输入与边界 | — | — | 未实测 | **UNVERIFIED** | B1/B3：RR17~20（SSE/MCP 面复测） |
 | OR-06 依赖故障有界 | — | — | 未实测 | **UNVERIFIED** | B2：RR21~24 |
 | OR-07 入口积压通知 | — | BA-126/127 已立案（影子收口/Run 对账）归本卡+CL-02 | 未实测 | **UNVERIFIED** | B2：RR25~28；SR01~12 用例集 |
@@ -56,7 +56,13 @@
 
 ## 四、RR 验收矩阵状态
 
-RR01 **VERIFIED_TARGET**（本批）；RR02~48 PENDING（B1~B3 批按归属执行；与 MC/FO/EN 重叠处复用同一证据不加计）。
+- RR01 **VERIFIED_TARGET**（B0；B1 在 V99~V108 新面上复验：fresh expect 81 版本 MATCH、无 DRIFT，诚实 UNKNOWN 同前）
+- RR02 **VERIFIED_TARGET**（B1：期望面注入→flyway DRIFT 可见+exit 1 阻断；附真实 V108 漂移当场定性）
+- RR03 **VERIFIED_TARGET**（B1：不可达 DOCKER_HOST→全 UNKNOWN、overall=UNKNOWN、exit 1、零秘密；采集器失效模式修复 @bcda248）
+- RR04 **VERIFIED_TARGET**（B1：9 绑定各钉各 release_digest/config_digest 多版本并存、停滞 run 老身份不改写；Skill ACTIVE 双版本半面 N/A——当前全 NONE 绑定，如实登记待 CL-09 链启用）
+- RR13 **VERIFIED_TARGET**（B1：11/11 探针）
+- RR16 **VERIFIED_TARGET（日志面半面）**（B1：10 秘密×3 容器日志=0；模型输入半面随 FULL 捕获）
+- RR14/RR15 PENDING（并独立运行窗）；RR05~12/17~48 PENDING（B2~B3 按归属）。
 
 ## 五、A13 复核结论（B0）
 
@@ -76,6 +82,9 @@ RR01 **VERIFIED_TARGET**（本批）；RR02~48 PENDING（B1~B3 批按归属执�
 - **I. 195 主机时钟面 UNKNOWN（→OR-09）**：CentOS 7 无 timedatectl；RR01 记 UNKNOWN。补核：chronyc tracking / ntpstat 直查。
 - **J. release_asset 表 0 行（→OR-01 基线）**：当前运行环境无 ACTIVE release 资产（A0 e2e 的 bundle 生命周期属跑内发布）；后续对拍以采集时刻状态为准。
 - **K. BUDGET_STEP 部署层未钉**：走应用内默认 8（与 8 步主预算一致，无功能漂移）；如需钉定加 compose 透传行即可。
+- **L. RunReconciler 热循环（→BA-136，对方 SR 批已立案并修复）**：本批 02:11~02:40Z 观察到对两停滞 run ~235 行/秒持续 reconcile、3h45m 未收敛——与对方 SR 收官窗立案的 BA-136（decided==0 才睡→巡逻热旋转）同源，其修复（无条件 30s 拍巡逻）随 02:30Z 重打包部署；B2 复核时观察日志节律即可，无需另案。
+- **M. 构建树同步副作用（→BA-137，对方已立案并恢复）**：本批撞见的 e2e 脚本 CRLF 化+`.env` 02:23~02:30Z 缺席=对方部署脚本 rsync --delete 误删（BA-137），其恢复含 bcrypt `$$` 转义+46 变量逐值对账，且重建 .env 吸收了本批 INPUTCAPTURE 键（compose 无映射行→容器 env 不生效属机制事实）。经验固化：e2e 驱动用树外副本+sed（本批 b1-fullcap-main.sh 已如此）。
+- **N. run26 模型输入不可回放（→R2/V90 设计事实）**：全库 230 行捕获均为 DIGEST_ONLY（默认档只存 digest+尺寸）。A13-01"捕获完整模型请求"验收必须开 FULL 档真跑（键：`app.alert.r7.input-capture: full|redacted|digest-only`）。
 - **HOST2 现场事实（修正过时假设，→OR-02）**：gatus（twinproduction/gatus digest a8c53f9e…，2026-09-10T09:08Z 起）+duty-adapter+node-exporter 均运行中；/srv/alert-eval 九目录树在；WireGuard 隧道 10.250.250.1↔.2 活跃（README 记录）。**"探针未部署"结论作废**。
 
 ## 七、台账维护纪律

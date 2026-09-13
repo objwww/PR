@@ -1,0 +1,31 @@
+{
+  "schema": "or01-runtime-manifest/1",
+  "meta": {
+    "collected_at_utc": "2026-09-12T22:26:06Z",
+    "host_name": "VM-0-4-centos",
+    "host_kernel": "Linux-3.10.0-1160.119.1.el7.x86_64",
+    "timezone": "UNKNOWN",
+    "ntp_sync": "UNKNOWN"
+  },
+  "containers": [],
+  "app_build": {
+    "jar_md5": "UNKNOWN",
+    "git_commit": "UNKNOWN",
+    "note": "镜像未嵌 commit 标签时记 UNKNOWN——发布资格须绑定构建来源（OR-11）"
+  },
+  "flyway": {
+    "rows": [],
+    "query_ok": false
+  },
+  "config": {
+    "AGENT_MODEL": "ABSENT",
+    "APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES": "ABSENT",
+    "APP_ALERT_AM4_BUDGET_TOOL_CALLS": "ABSENT",
+    "APP_ALERT_AM4_BUDGET_STEP": "ABSENT",
+    "APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST": "ABSENT",
+    "prompt_sha256": "ABSENT",
+    "model_route_host": ""
+  },
+  "release_assets": [],
+  "skill_binding_rows": "UNKNOWN"
+}

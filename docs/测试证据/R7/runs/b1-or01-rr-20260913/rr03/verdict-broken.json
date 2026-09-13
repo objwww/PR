@@ -1,0 +1,33 @@
+{
+  "schema": "or01-verdict/1",
+  "overall": "UNKNOWN",
+  "manifest_out": "/tmp/rr03/runtime-manifest-broken2.json",
+  "expect_file": "/opt/build/or01/test-manifest.json",
+  "verdicts": [
+    {
+      "key": "flyway",
+      "verdict": "UNKNOWN",
+      "detail": "采集查询失败"
+    },
+    {
+      "key": "app_git_commit",
+      "verdict": "UNKNOWN",
+      "detail": "镜像未嵌 commit 身份——无法对拍（OR-11 补构建来源绑定）"
+    },
+    {
+      "key": "config_whitelist",
+      "verdict": "UNKNOWN",
+      "detail": "部署层未钉（走应用默认）=['AGENT_MODEL', 'APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES', 'APP_ALERT_AM4_BUDGET_TOOL_CALLS', 'APP_ALERT_AM4_BUDGET_STEP', 'APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST', 'prompt_sha256']"
+    },
+    {
+      "key": "container_mem_limits",
+      "verdict": "UNKNOWN",
+      "detail": "docker 面采集失败或无运行容器——不可判一致（RR03）"
+    },
+    {
+      "key": "skill_binding_rows",
+      "verdict": "UNKNOWN",
+      "detail": "rows=UNKNOWN"
+    }
+  ]
+}

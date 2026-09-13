@@ -1,0 +1,17 @@
+RR04（OR-01）证据 1/2：rca_run_skill_binding 全量（只读，采集于 2026-09-12T22:2x UTC / 195 CST 09-13 06:2x）
+查询文件：/opt/build/q-rr04.sql（本目录 sql-rr04.sql）
+
+                run_id                | role_id | selection_status | asset |   release    | selector_version  | created_at
+--------------------------------------+---------+------------------+-------+--------------+-------------------+------------
+ eb5c6a01-9ca8-4ae0-9487-f6278b9c11db | primary | NONE             |       | cd57fda83ac8 | skill-selector.v1 | 20:24:59
+ c898e0b3-ef55-454e-9925-e160f9d94d9a | primary | NONE             |       | 0001ca5363ba | skill-selector.v1 | 20:31:28
+ fc4be38b-692e-409a-bdc7-8aafa836abba | primary | NONE             |       | 63b0cb4321a7 | skill-selector.v1 | 20:44:04
+ 852ea36b-1b99-4cb7-992b-4c316fcff1a2 | primary | NONE             |       | c6729bd17662 | skill-selector.v1 | 20:48:45
+ 91c3a106-21a9-4bee-a3c0-87093e4f8ec3 | primary | NONE             |       | bbe8ea583596 | skill-selector.v1 | 21:03:27
+ c23f9f84-5666-42ff-b86d-7ee55de83a14 | primary | NONE             |       | aedbce42a1d2 | skill-selector.v1 | 21:08:00
+ 1adce94d-3184-40d0-a690-74db18a0926c | primary | NONE             |       | 5385be16039e | skill-selector.v1 | 21:12:09
+ 654c1bef-87e9-4a27-ac2c-73b145dc0fdf | primary | NONE             |       | 4f5626bc6e0d | skill-selector.v1 | 21:24:53
+ 55e575e5-bdac-4667-8947-9da821b26980 | primary | NONE             |       | 5f0557550e74 | skill-selector.v1 | 21:59:00
+(9 rows)
+
+run26 绑定行：55e575e5-bdac-4667-8947-9da821b26980 | primary | NONE | (asset 空)

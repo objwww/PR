@@ -1,0 +1,39 @@
+RR04（OR-01）证据 2/2：rca_run.config_digest 各 run 实际消费身份 + 停滞 run 对照组
+（只读，采集于 2026-09-12T22:2x UTC / 195 CST 09-13 06:2x；查询文件 /opt/build/q-rr04b.sql）
+
+-- 各 run 实际消费的 config_digest（12 截断）--
+    config    |   state   | created_at
+--------------+-----------+------------
+              | SUCCEEDED | 22:22:34
+              | SUCCEEDED | 22:21:54
+ 2e97307edbbf | SUCCEEDED | 22:21:26
+              | SUCCEEDED | 22:18:11
+              | SUCCEEDED | 22:17:29
+ ca7687bfc5cd | SUCCEEDED | 22:17:26
+              | SUCCEEDED | 22:13:14
+              | SUCCEEDED | 22:12:35
+ ff4400820e08 | SUCCEEDED | 22:12:20
+ 5f0557550e74 | SUCCEEDED | 21:59:00
+ 74c4109ca7b1 | SUCCEEDED | 21:43:23
+ d0b54602bb86 | SUCCEEDED | 21:41:39
+(12 rows)
+
+注：config_digest 为空的行是委派子任务/非 primary 引擎 run（engine 面区分）；
+    22:12–22:22 的一串新 run = 另一执行者 SR/CL 批部署（22:18:05Z）后的验收窗，
+    各自身份（2e97307e / ca7687bf / ff440082）互不相同且与历史 run26（5f055755）并存。
+
+-- 停滞 REPORTING run 对照组（老 run 的老身份仍在，未被新部署改写）--
+   run8   | config |   state   | created_at | rdeadline
+----------+--------+-----------+------------+-----------
+ 2de23770 |        | REPORTING | 18:56:34   |
+ 37b3ef3e |        | REPORTING | 18:59:27   |
+(2 rows)
+
+RR04 断言判定：
+1. 9 条 rca_run_skill_binding 各钉各的 release_digest（prompt v8→v13 迭代 9 个不同版本），
+   无一被后续发布覆盖；selector_version=skill-selector.v1 全程稳定。
+2. run26（55e575e5…）绑定行 NONE+release=5f0557550e74 保持原样，22:18 新部署后复采不变。
+3. 各 run config_digest 多版本并存（5f055755/ff440082/ca7687bf/2e97307e…），历史身份可达。
+→ RR04 判定：PASS（持久身份面）；"新旧 Run 消费不同合法 Skill 版本"的 Skill 资产半面
+  因当前所有绑定为 NONE（无 ACTIVE skill 资产可切）不适用——如实登记为 N/A-with-reason，
+  待 CL-09 Skill 发布链启用后补双版本消费用例。
