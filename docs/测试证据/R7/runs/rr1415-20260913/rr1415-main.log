@@ -1,0 +1,36 @@
+== 0) 外联网就绪（litellm/prometheus/loki 增量挂 rriso-net；不改在栈任何面）==
+already/litellm-am3
+already/prometheus-am0
+already/deploy-loki-1
+== RR15-A：缺 AGENT_MODEL_API_KEY → compose 必须拒起 ==
+compose rc=15（非 0=拒）
+error while interpolating services.control-app.environment.AGENT_MODEL_API_KEY: required variable AGENT_MODEL_API_KEY is missing a value
+RR15-A PASS（compose :? 拒起+零容器）
+== RR15-B：AGENT_MODEL_API_KEY=placeholder → App 启动必须 fail-closed ==
+RR15-B PASS（container=running-false started=yes 观察拍=3；health=000；requireRealKey 拒启动面在；无弱默认放行）
+== RR14：K1 铸造 → 上靶 → 审计快照 → 轮换 K2 撤 K1 → 双面断言 ==
+-- 清场：删除历史 rr14-* 测试键（上次尝试的孤儿键卫生）--
+历史 rr14 键清理: 无 
+K1 铸造 ok：alias=rr14-k1-1789290818 sha12=e5f8f3ec91d5（键值不落日志）
+K1 栈 health=200
+-- K1 车：注入告警 → run 收敛 → 模型调用审计行（K1 时代）--
+run1=45d1076f-0b8b-4eab-aedd-3868c2cd6ac7
+2
+45d1076f-0b8b-4eab-aedd-3868c2cd6ac7 rows=2 states=FAILED
+-- 轮换：铸 K2 → 撤 K1 --
+K2 指纹 sha12=65ad3f7691a1
+K1 delete: ok
+-- 旧键失效断言：K1 直连 chat completion 必须 401/403 --
+K1 STATUS=401 (期望 401/403)
+-- 新键上靶：env K1→K2 重建 → health → run2 收敛 --
+K2 栈 health=200
+run2=18d95e8f-bdb5-487d-99ab-9b300e6e4c4f
+run2 rows=8 succ=5 authden=0
+-- 审计不变断言：K1 时代行逐字节复对 --
+审计不变 PASS
+旧键失效 PASS（STATUS=401）
+新键有效 PASS（run2 succ=5 真成功 authden=0 凭据面零拒）
+-- 在栈不变量（RR14 全程零触碰）--
+standing-health=200
+standing-restarts=0
+== 完成（隔离栈保留供 RR21 复用；rriso down 由后续统一执行）==

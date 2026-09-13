@@ -1,0 +1,129 @@
+# ============================================================================
+# rr-iso —— RR14/15/21 隔离栈（独立 project=rriso；不复用 deploy 任何卷/网）
+# 复用镜像：postgres:16-alpine / flyway:10-alpine / pr-agent/control-app:0.0.1-SNAPSHOT
+# 网络：rriso-int（栈内）+ rriso-net（外联 litellm-am3/prometheus-am0/loki——
+#   经 `docker network connect` 增量挂载，不改在栈容器任何一面）
+# 端口：control-app 仅 127.0.0.1:18091（18080 被他方 otel-demo 占用——2026-09-13
+#   共享主机实证 "port is already allocated"；在栈 8080 零冲突；postgres 不发布）
+# 秘密：全部来自 ./rr-iso.env（生成器铸造，600 权限，绝不入库/入证据）
+# ============================================================================
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined   # INC-09：195 内核 3.10 同款例外
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:?}
+      PUBLISHER_DB_PASSWORD: ${PUBLISHER_DB_PASSWORD:?}
+      ARENA_DB_PASSWORD: ${ARENA_DB_PASSWORD:?}
+      CHAOS_ADMIN_DB_PASSWORD: ${CHAOS_ADMIN_DB_PASSWORD:?}
+      EVAL_DB_PASSWORD: ${EVAL_DB_PASSWORD:?}
+    volumes:
+      - rriso-pg-data:/var/lib/postgresql/data
+      - ../deploy/db/01-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB:-pr_agent}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - rriso-int
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+  migrate:
+    image: flyway/flyway:10-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-pr_agent}
+      FLYWAY_USER: postgres
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:?}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_PLACEHOLDERS_NOTIFY_PASSWORD: ${NOTIFY_DB_PASSWORD:?}
+    volumes:
+      - ../control-app/src/main/resources/db/migration:/flyway/sql:ro
+    command: ["-connectRetries=30", "-outOfOrder=true", "migrate"]
+    networks:
+      - rriso-int
+
+  control-app:
+    image: pr-agent/control-app:0.0.1-SNAPSHOT
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pr_agent}
+      CONTROL_DB_PASSWORD: ${CONTROL_DB_PASSWORD:?}
+      SPRING_FLYWAY_ENABLED: "false"
+      AGENT_MODEL_API_KEY: ${AGENT_MODEL_API_KEY:?}
+      ALERTMANAGER_WEBHOOK_BEARER_TOKEN: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:?}
+      CONTROL_WEBHOOK_BEARER_TOKEN: ${CONTROL_WEBHOOK_BEARER_TOKEN:?}
+      APP_RELEASE_API_BEARER: ${APP_RELEASE_API_BEARER:?}
+      APP_OPERATOR_API_BEARER: ${APP_OPERATOR_API_BEARER:?}
+      APP_DUTY_ADAPTER_BEARER: ${APP_DUTY_ADAPTER_BEARER:?}
+      APP_ALERT_NOTIFY_CHANNELS: "test"
+      AUTH_OPERATOR_USERNAME: ${AUTH_OPERATOR_USERNAME:?}
+      AUTH_OPERATOR_PASSWORD_BCRYPT: ${AUTH_OPERATOR_PASSWORD_BCRYPT:?}
+      APP_ALERT_EVAL_PROVIDER_FINGERPRINT: ${APP_ALERT_EVAL_PROVIDER_FINGERPRINT:?}
+      APP_ALERT_NATIVE_METRICS_EXPR: ${APP_ALERT_NATIVE_METRICS_EXPR:-}
+      APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST: ${APP_ALERT_NATIVE_TOOL_REGISTRY_DIGEST:-}
+      APP_ALERT_R7_PRIMARY_ENABLED: ${APP_ALERT_R7_PRIMARY_ENABLED:-false}
+      APP_ALERT_R7_PRIMARY_RELEASE_DIGEST: ${APP_ALERT_R7_PRIMARY_RELEASE_DIGEST:-}
+      APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-}
+      APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: ${APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES:-2}
+      APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST:-control-app}
+      APP_ALERT_AM4_BUDGET_TOOL_CALLS: ${APP_ALERT_AM4_BUDGET_TOOL_CALLS:-4}
+      AGENT_MODEL: ${AGENT_MODEL:-glm-5}
+      OPENAI_COMPAT_BASE_URL: ${OPENAI_COMPAT_BASE_URL:-}
+      AGENT_MODEL_FALLBACK: ${AGENT_MODEL_FALLBACK:-}
+      OPENAI_COMPAT_BASE_URL_FALLBACK: ${OPENAI_COMPAT_BASE_URL_FALLBACK:-}
+      AGENT_MODEL_API_KEY_FALLBACK: ${AGENT_MODEL_API_KEY_FALLBACK:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      APP_TRACE_SAMPLING: ${APP_TRACE_SAMPLING:-0.1}
+      APP_CAS_DIR: /var/cas
+    ports:
+      - "127.0.0.1:18091:8080"
+    volumes:
+      - rriso-cas:/var/cas
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - rriso-int
+      - rriso-net
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
+
+networks:
+  rriso-int:
+    driver: bridge
+  # 外联织物：phase0 先 `docker network create rriso-net` 并把 litellm/prometheus/loki
+  # 增量挂入；external+定名使 control-app 直接入同一网（compose 自建网会被冠 project
+  # 前缀 rriso_rriso-net → 与挂载网不同网 → litellm DNS 不可达，2026-09-13 定谳）
+  rriso-net:
+    external: true
+    name: rriso-net
+
+volumes:
+  rriso-pg-data:
+  rriso-cas:

@@ -1,0 +1,5 @@
+审计不变 PASS
+旧键失效 PASS（STATUS=401）
+新键有效 PASS（run2 succ=5 真成功 authden=0 凭据面零拒）
+standing-health=200
+standing-restarts=0

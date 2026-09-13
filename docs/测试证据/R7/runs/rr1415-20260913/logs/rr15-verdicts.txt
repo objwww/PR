@@ -1,0 +1,2 @@
+RR15-A PASS（compose :? 拒起+零容器）
+RR15-B PASS（container=running-false started=yes 观察拍=3；health=000；requireRealKey 拒启动面在；无弱默认放行）

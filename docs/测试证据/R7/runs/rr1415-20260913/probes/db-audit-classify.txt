@@ -1,0 +1,19 @@
+== RR14 各 run 模型调用聚合（按时间倒序前 6）==
+18d95e8f-bdb5-487d-99ab-9b300e6e4c4f rows=8 succ=5 authden=0 budget=3
+45d1076f-0b8b-4eab-aedd-3868c2cd6ac7 rows=2 succ=0 authden=0 budget=2
+== 末轮 run 明细 ==
+-- run 45d1076f-0b8b-4eab-aedd-3868c2cd6ac7
+FAILED|OUTPUT_BUDGET_EXHAUSTED
+FAILED|OUTPUT_BUDGET_EXHAUSTED
+-- run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f
+FAILED|OUTPUT_BUDGET_EXHAUSTED
+SUCCESS|-
+SUCCESS|-
+FAILED|OUTPUT_BUDGET_EXHAUSTED
+SUCCESS|-
+SUCCESS|-
+SUCCESS|-
+FAILED|OUTPUT_BUDGET_EXHAUSTED
+== 末轮 run 终态 ==
+18d95e8f-bdb5-487d-99ab-9b300e6e4c4f FAILED
+45d1076f-0b8b-4eab-aedd-3868c2cd6ac7 SUCCEEDED

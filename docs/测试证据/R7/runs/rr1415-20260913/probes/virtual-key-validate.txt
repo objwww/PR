@@ -1,0 +1,9 @@
+== 1) master 直连（模型面基线）==
+master: HTTP 403: {"error":{"message":"litellm.APIError: APIError: OpenAIException - Free quota exhausted. To continue accessing the model
+== 2) 带 models 限制虚键 ==
+models-key: HTTP 403: {"error":{"message":"litellm.APIError: APIError: OpenAIException - Free quota exhausted. To continue accessing the model
+   key_info: team_id=None user_id=None models=None blocked=None
+== 3) 无限制虚键 ==
+unrestricted-key: HTTP 403: {"error":{"message":"litellm.APIError: APIError: OpenAIException - Free quota exhausted. To continue accessing the model
+== 清理探针键 ==
+ok

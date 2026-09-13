@@ -1,0 +1,4 @@
+glm-5 HTTP 403 {"error":{"message":"litellm.APIError: APIError: OpenAIException - Free quota exhausted. T
+deepseek-v4-flash-0731 OK model= deepseek-v4-flash-0731
+qwen-plus HTTP 400 {"error":{"message":"/chat/completions: Invalid model name passed in model=qwen-plus. Call
+qwen3-max-preview HTTP 403 {"error":{"message":"litellm.APIError: APIError: OpenAIException - Free quota exhausted. T

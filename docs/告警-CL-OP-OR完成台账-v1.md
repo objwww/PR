@@ -46,7 +46,7 @@
 | OR-01 部署事实对齐 | **B0/B1执行者** | deploy/audit-runtime.sh（只读/脱敏白名单/三模式/UNKNOWN≠MATCH 退出码；**B1 修复：docker 面零容器判 UNKNOWN 不冒充 MATCH** @bcda248）→runtime-manifest 对拍 | RR01：195 overall=UNKNOWN 无 DRIFT；**B1 增**：RR02 DRIFT 注入可见+阻断（附 V108 漂移定性：B0 冻结面过期，当前树↔库 81 版本 MATCH）/RR03 采集失败全 UNKNOWN 零秘密（exit 1）/RR04 双版本身份持久不被覆盖（证据 b1-or01-rr-20260913/） | **VERIFIED_TARGET（RR01~04）** | 镜像嵌 commit 身份归 OR-11；RR02 运行面注入变体（真改部署 env）并独立窗 |
 | OR-02 外部探针值班链 | B0执行者（事实核对） | **HOST2 现场已核**：gatus（digest 锁定 a8c53f9e…，09-10 起 Up）+duty-adapter（Up 2d）+node-exporter 在 117.72.208.68 运行；/srv/alert-eval 目录树在 | 本批现场探测（只读） | **CONFIGURED（深核待 B3）** | RR05~08；duty snapshot 502 瞬态（见 §6-H）；告警链实测留授权窗 |
 | OR-03 备份恢复 | — | backup.sh/restore.sh 已存在（pg_dump+指纹+TOC）→扩行为验证 | 未实测 | **UNVERIFIED** | B3：RR09~12（恢复到隔离库/RPO-RTO 实测） |
-| OR-04 身份凭据审计 | **B1执行者** | **矩阵已交付**：[OR04 身份角色端点矩阵 v1](告警-OR04身份角色端点矩阵-v1.md)（6 身份线×路径矩阵×CSRF 面，SecurityConfig+全 Controller 映射） | **RR13 11/11 PASS**（deny-by-default/四线互不越权/越权写角色层即拒/SSE 票必经）+**RR16 日志面 PASS**（10 秘密值×三容器日志=0 出现）；证据 b1-or04-rr13-20260913/ | **VERIFIED_TARGET（RR13+RR16 日志面）** | RR14（凭据轮换）/RR15（缺必填秘密 fail-closed 运行面）并独立窗；RR16 模型输入半面随 FULL 捕获断言 |
+| OR-04 身份凭据审计 | **B1执行者** | **矩阵已交付**：[OR04 身份角色端点矩阵 v1](告警-OR04身份角色端点矩阵-v1.md)（6 身份线×路径矩阵×CSRF 面，SecurityConfig+全 Controller 映射） | **RR13 11/11 PASS**（deny-by-default/四线互不越权/越权写角色层即拒/SSE 票必经）+**RR16 日志面 PASS**（10 秘密值×三容器日志=0 出现）+**RR14/15 195 真机 PASS**（RR14 键轮换：K1 撤销直连 401/K2 时代 succ=5 真成功 authden=0/K1 时代模型调用审计逐字节不变；RR15 双门：compose `:?` 拒起零容器+App requireRealKey 拒启动无弱默认；全程在栈零触碰 standing 200/restarts=0）；证据 b1-or04-rr13-20260913/、rr1415-20260913/ | **VERIFIED_TARGET（RR13+RR16+RR14/15 凭据轮换与 fail-closed 面）** | RR14/15 已收官（隔离栈 rriso 留存供 RR21 复用，端口 18091）；RR16 模型输入半面随 FULL 捕获断言 |
 | OR-05 外部输入与边界 | — | — | 未实测 | **UNVERIFIED** | B1/B3：RR17~20（SSE/MCP 面复测） |
 | OR-06 依赖故障有界 | — | — | 未实测 | **UNVERIFIED** | B2：RR21~24 |
 | OR-07 入口积压通知 | — | BA-126/127 已立案（影子收口/Run 对账）归本卡+CL-02 | 未实测 | **UNVERIFIED** | B2：RR25~28；SR01~12 用例集 |
@@ -65,7 +65,7 @@
 - RR13 **VERIFIED_TARGET**（B1：11/11 探针）
 - RR16 **VERIFIED_TARGET（两面全收）**（B1：10 秘密×3 容器日志=0；B1-1 模型输入面：5 prompt 全文（5.5~15.6KB×5）0 秘密出现，rr16-promptscan 真集合复扫）
 - R2/V90 输入捕获 FULL 档 **VERIFIED_TARGET**（B1-1：compose override 开 full→run 6b607ec9 5/5 行 FULL 原文落库+digest=sha256(原文) 逐行对账全 PASS+phase6 账面"捕获恰一行+digest 对账一致"；CHECK 约束 FULL⇒原文必在双向钉；复原后回 DIGEST_ONLY 默认已验证（env 复核无 INPUTCAPTURE））
-- RR14/RR15 PENDING（并独立运行窗）；RR05~12/17~48 PENDING（B2~B3 按归属）。
+- RR14/RR15 **VERIFIED_TARGET**（2026-09-13 195 真机：隔离栈 rriso 六断言全 PASS，RR14 键轮换三断言+RR15 双门+在栈不变量；执行记录见 rr1415-20260913/）；RR05~12/17~48 PENDING（B2~B3 按归属）。
 
 ## 五、A13 复核结论（B0）
 

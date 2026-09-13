@@ -1,0 +1,16 @@
+== litellm 日志 08:54-08:58 窗（run1 403 面）==
+== run2 模型调用明细 ==
+FAILED|-|AUTH_DENIED
+FAILED|-|AUTH_DENIED
+== run1 错误码复核 ==
+FAILED|-|AUTH_DENIED
+FAILED|-|AUTH_DENIED
+== control-app 403 时间窗（K1 时代 vs K2 时代）==
+2026-09-13T08:55:56.396Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary HTTP 403 errorCode=403
+2026-09-13T08:57:00.936Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary HTTP 403 errorCode=403
+== iso env AGENT_MODEL 面（脱敏：只看模型名行）==
+AGENT_MODEL=qwen3-max-preview
+AGENT_MODEL_FALLBACK=
+OPENAI_COMPAT_BASE_URL=http://litellm-am3:4000
+OPENAI_COMPAT_BASE_URL_FALLBACK=
+done

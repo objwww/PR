@@ -1,0 +1,83 @@
+== main log å…¨æ–‡ ==
+== 0) ÍâÁªÍø¾ÍĞ÷£¨litellm/prometheus/loki ÔöÁ¿¹Ò rriso-net£»²»¸ÄÔÚÕ»ÈÎºÎÃæ£©==
+already/litellm-am3
+already/prometheus-am0
+already/deploy-loki-1
+== RR15-A£ºÈ± AGENT_MODEL_API_KEY ¡ú compose ±ØĞë¾ÜÆğ ==
+compose rc=15£¨·Ç 0=¾Ü£©
+error while interpolating services.control-app.environment.AGENT_MODEL_API_KEY: required variable AGENT_MODEL_API_KEY is missing a value
+RR15-A PASS£¨compose :? ¾ÜÆğ+ÁãÈİÆ÷£©
+== RR15-B£ºAGENT_MODEL_API_KEY=placeholder ¡ú App Æô¶¯±ØĞë fail-closed ==
+RR15-B FAIL£¨container=running-false health=000 ¾ÜÆô¶¯ĞĞ=0¡ª¡ª¼û rr15b-app.log£©
+== RR14£ºK1 ÖıÔì ¡ú ÉÏ°Ğ ¡ú Éó¼Æ¿ìÕÕ ¡ú ÂÖ»» K2 ³· K1 ¡ú Ë«Ãæ¶ÏÑÔ ==
+-- Çå³¡£ºÉ¾³ıÀúÊ· rr14-* ²âÊÔ¼ü£¨ÉÏ´Î³¢ÊÔµÄ¹Â¶ù¼üÎÀÉú£©--
+ï¿½ï¿½Ê· rr14 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ 
+K1 ÖıÔì ok£ºalias=rr14-k1-1789289624 sha12=c26c3678342d£¨¼üÖµ²»ÂäÈÕÖ¾£©
+K1 Õ» health=200
+-- K1 ³µ£º×¢Èë¸æ¾¯ ¡ú run ÊÕÁ² ¡ú Ä£ĞÍµ÷ÓÃÉó¼ÆĞĞ£¨K1 Ê±´ú£©--
+run1=388d9a4d-bc0b-4eaa-882d-1c836bd7655a
+2
+388d9a4d-bc0b-4eaa-882d-1c836bd7655a rows=2 states=FAILED
+-- ÂÖ»»£ºÖı K2 ¡ú ³· K1 --
+K2 Ö¸ÎÆ sha12=2fb075d002c2
+K1 delete: ok
+-- ¾É¼üÊ§Ğ§¶ÏÑÔ£ºK1 Ö±Á¬ chat completion ±ØĞë 401/403 --
+K1 STATUS=401 (ï¿½ï¿½ï¿½ï¿½ 401/403)
+-- ĞÂ¼üÉÏ°Ğ£ºenv K1¡úK2 ÖØ½¨ ¡ú health ¡ú run2 ÊÕÁ² --
+K2 Õ» health=200
+run2=be274179-d1aa-4253-a454-d83d25c44059
+be274179-d1aa-4253-a454-d83d25c44059 rows=2
+-- Éó¼Æ²»±ä¶ÏÑÔ£ºK1 Ê±´úĞĞÖğ×Ö½Ú¸´¶Ô --
+Éó¼Æ²»±ä PASS
+¾É¼üÊ§Ğ§ PASS£¨STATUS=401£©
+ĞÂ¼üÓĞĞ§ PASS£¨run2 Ä£ĞÍµ÷ÓÃ rows=2£©
+-- ÔÚÕ»²»±äÁ¿£¨RR14 È«³ÌÁã´¥Åö£©--
+standing-health=200
+standing-restarts=0
+== Íê³É£¨¸ôÀëÕ»±£Áô¹© RR21 ¸´ÓÃ£»rriso down ÓÉºóĞøÍ³Ò»Ö´ĞĞ£©==
+== rr15b-app.log å°¾éƒ¨ï¼ˆæœ¬æ¬¡ placeholder è½¦ç°åœºï¼‰==
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1362) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1351) ~[spring-boot-3.4.5.jar!/:3.4.5]
+	at com.objwww.pr.control.ControlApplication.main(ControlApplication.java:14) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:102) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:64) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:40) ~[app.jar:0.0.1-SNAPSHOT]
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [com.objwww.pr.control.alert.application.agent.RcaModelGateway]: Factory method 'am4RcaModelGateway' threw exception with message: AGENT_MODEL_API_KEY ç¼ºå¤±æˆ–ä¸ºå ä½ç¬¦ï¼Œæ‹’ç»å¯åŠ¨ï¼ˆä¸å›æ˜¾å¯†é’¥ï¼‰
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:199) ~[spring-beans-6.2.6.jar!/:6.2.6]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:88) ~[spring-beans-6.2.6.jar!/:6.2.6]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:168) ~[spring-beans-6.2.6.jar!/:6.2.6]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653) ~[spring-beans-6.2.6.jar!/:6.2.6]
+	... 26 common frames omitted
+Caused by: java.lang.IllegalStateException: AGENT_MODEL_API_KEY ç¼ºå¤±æˆ–ä¸ºå ä½ç¬¦ï¼Œæ‹’ç»å¯åŠ¨ï¼ˆä¸å›æ˜¾å¯†é’¥ï¼‰
+	at com.objwww.pr.control.infrastructure.config.M3ModelGatewayConfig.requireRealKey(M3ModelGatewayConfig.java:223) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.config.M3ModelGatewayConfig.buildModelGateway(M3ModelGatewayConfig.java:133) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.config.AlertAm4Config.am4RcaModelGateway(AlertAm4Config.java:718) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.config.AlertAm4Config$$SpringCGLIB$$0.CGLIB$am4RcaModelGateway$23(<generated>) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.config.AlertAm4Config$$SpringCGLIB$$FastClass$$1.invoke(<generated>) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.cglib.proxy.MethodProxy.invokeSuper(MethodProxy.java:258) ~[spring-core-6.2.6.jar!/:6.2.6]
+	at org.springframework.context.annotation.ConfigurationClassEnhancer$BeanMethodInterceptor.intercept(ConfigurationClassEnhancer.java:393) ~[spring-context-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.config.AlertAm4Config$$SpringCGLIB$$0.am4RcaModelGateway(<generated>) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:171) ~[spring-beans-6.2.6.jar!/:6.2.6]
+	... 29 common frames omitted
+
+== rr15b-app.log æ‹’å¯åŠ¨ grep ==
+8
+== V48 rca_model_call é”™è¯¯é¢åˆ— ==
+48:    error_code             text,                   -- FAILED/UNKNOWN åŸå› ç ï¼ˆè„±æ•ï¼Œéä¾›åº”å•†åŸæ–‡ï¼‰
+== run1 æ¨¡å‹è°ƒç”¨æ˜ç»†ï¼ˆè„±æ•ï¼šä¸æŸ¥è¯·æ±‚ä½“ï¼‰==
+FAILED|-|
+FAILED|-|
+== run1 ç»ˆæ€ ==
+state
+== control-app æ—¥å¿—ä¸­ litellm æŠ¥é”™é¢ ==
+2026-09-13T08:55:56.396Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary HTTP 403 errorCode=403
+Caused by: com.objwww.pr.control.domain.ai.ModelCallFailedException: æ¨¡å‹è°ƒç”¨ç»ˆæ€å¤±è´¥: AUTH_DENIED
+2026-09-13T08:57:00.936Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary HTTP 403 errorCode=403
+2026-09-13T08:57:00.945Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.n.NativeInvestigationExecutor  : ä¸»ä»»åŠ¡ FINAL ææ¡ˆå°±ç»ª â†’ DONE task=cdabdd30-5ba2-4814-9a2e-e77d28fdb940 reason=MODEL_FAILURE_AUTH_DENIED
+done
