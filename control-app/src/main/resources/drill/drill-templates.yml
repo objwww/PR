@@ -68,11 +68,11 @@ templates:
       traffic_scales: [RECIPE]
       linked_eval_version_allowed: true
     execution:
-      ready: false
+      ready: true
       reason: >-
-        注入执行接线未交付（DR-03/DR-04 卡：activate 回执先持久化/中断即退出
-        settleSwitchboard 等源码债务未清）——受理后执行器将在注入相位如实 FAILED
-        （INJECTION_NOT_IMPLEMENTED），故本批不开放启动
+        DR-03 注入接线已交付（2026-09-13 DR-A 批：ArenaChaosDrillInjection 经
+        CompositeDrillInjection 分派）；chaos-admin 连通+鉴权已实测（195 探针：
+        对令牌 404 未知场景/无令牌 401/错令牌 401）；注入链真机验收归 DR03 工序 5
 
   - scenario_id: S4
     name: F2 状态回跳
@@ -91,8 +91,8 @@ templates:
       traffic_scales: [RECIPE]
       linked_eval_version_allowed: true
     execution:
-      ready: false
-      reason: 同 S3（DR-03/DR-04 注入接线未交付）
+      ready: true
+      reason: 同 S3（DR-03 接线已交付+chaos-admin 连通鉴权实测；真机验收归 DR03 工序 5）
 
   - scenario_id: S5
     name: F3 超时结果未知
@@ -111,5 +111,5 @@ templates:
       traffic_scales: [RECIPE]
       linked_eval_version_allowed: true
     execution:
-      ready: false
-      reason: 同 S3（DR-03/DR-04 注入接线未交付）
+      ready: true
+      reason: 同 S3（DR-03 接线已交付+chaos-admin 连通鉴权实测；真机验收归 DR03 工序 5）

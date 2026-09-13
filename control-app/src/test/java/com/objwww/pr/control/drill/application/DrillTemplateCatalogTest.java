@@ -57,17 +57,15 @@ class DrillTemplateCatalogTest {
     }
 
     @Test
-    @DisplayName("可执行性分批开放（DR-A 批）：S1/S2（Flagd）ready=true 已接线；"
-            + "S3~S5（ArenaChaos）维持 ready=false 且必带原因（不展示假按钮）")
+    @DisplayName("可执行性分批开放（DR-A 批）：五场景全 ready=true——S1/S2 随 DR-05 接线开放；"
+            + "S3~S5 于 195 chaos-admin 连通+鉴权实测过后同窗开放（探针：对令牌 404/无令牌 401/"
+            + "错令牌 401）；全员必带原因（不展示假按钮），拒注闸语义由合成模板用例保持")
     void executionHonestlyUnavailable() {
         DrillTemplateCatalog catalog = loadBundled();
-        assertThat(catalog.byScenarioId("S1").orElseThrow().execution().ready()).isTrue();
-        assertThat(catalog.byScenarioId("S2").orElseThrow().execution().ready()).isTrue();
-        assertThat(catalog.templates()).filteredOn(t -> !t.execution().ready())
-                .extracting(DrillTemplate::scenarioId)
-                .containsExactly("S3", "S4", "S5");
-        assertThat(catalog.templates()).allSatisfy(t ->
-                assertThat(t.execution().reason()).isNotBlank());
+        assertThat(catalog.templates()).allSatisfy(t -> {
+            assertThat(t.execution().ready()).isTrue();
+            assertThat(t.execution().reason()).isNotBlank();
+        });
     }
 
     @Test
