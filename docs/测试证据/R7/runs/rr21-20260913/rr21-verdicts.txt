@@ -1,0 +1,7 @@
+真表写拒 PASS：ERROR:  cannot execute INSERT in a read-only transaction
+不假ACK+零新发送 PASS（503 非假 202；模型/工具/账本四表零增量）
+接收器日志留痕 PASS（无法持久化 WARN 行在）
+恢复重投 PASS（202→WHITELISTED 路由→run=SUCCEEDED；该告警 run 恰 1）
+幂等不重复 PASS（重复投递 run 恒 1——效果幂等）
+standing-health=200
+standing-restarts=0

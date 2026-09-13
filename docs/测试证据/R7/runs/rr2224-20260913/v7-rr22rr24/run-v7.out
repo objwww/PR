@@ -1,0 +1,82 @@
+决策表清场完成（iso 测试库）
+== 0) mock 起动 + bundle 全案预激活 ==
+mock-alive=404
+bundle ok
+== 1) RR22 模型 HTTP 四案（per-call-timeout=8s 测试档）==
+-- 案 C429 → http://172.28.0.1:18100/429
+health=200
+run=2a21909c-b5f3-450e-bdb0-2bc8af8cdfd2
+ledger: 3 rows, FAILED/DEFERRED | mock物理=3 | succ=0 | 物理证据行=3
+RR-C429 PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+-- 案 CSLOWFIRST → http://172.28.0.1:18100/slowfirst
+health=200
+run=c1efce44-ef28-41a2-ba56-4dfae53f8c4b
+ledger: 3 rows, FAILED/DEFERRED | mock物理=3 | succ=0 | 物理证据行=3
+RR-CSLOWFIRST PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+-- 案 CSLOWBODY → http://172.28.0.1:18100/slowbody
+health=200
+run=ac024b44-fb99-49c4-9ee7-1d1f13970536
+ledger: 3 rows, FAILED/DEFERRED | mock物理=3 | succ=0 | 物理证据行=3
+RR-CSLOWBODY PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+-- 案 CRESET → http://172.28.0.1:18100/reset
+health=200
+run=689d9f59-0d82-4289-aa6b-0c7b4b1057ba
+ledger: 3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED | mock物理=5 | succ=0 | 物理证据行=1
+RR-CRESET PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=5；物理证据行=1；零 fallback=00）
+== 2) RR24 协议/TLS/DNS 三案 + Clock NOT_RUN ==
+-- 案 CBADPROTO → http://172.28.0.1:18100/badproto
+health=200
+run=f5b2889a-dc1e-44a9-8bc4-5218c21714e2
+ledger: 2 rows, FAILED/UNKNOWN_ERROR:RestClientException | mock物理=2 | succ=0 | 物理证据行=2
+RR-CBADPROTO PASS（rows=2 有界≤6；全 FAILED=2 rows, FAILED/UNKNOWN_ERROR:RestClientException；mock物理对拍=2；物理证据行=2；零 fallback=00）
+-- 案 CTLS → https://172.28.0.1:18443/tls
+health=200
+run=b061fa6d-6d92-401a-be2a-0dc48cd8c8d6
+ledger: 3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED | mock物理=0 | succ=0 | 物理证据行=1
+RR-CTLS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=0；物理证据行=1；零 fallback=00）
+-- 案 CDNS → http://rr24-dead-host.invalid:4000
+health=200
+run=8ad1a8d8-0990-45aa-b814-f522bab57092
+ledger: 3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED | mock物理=skip | succ=0 | 物理证据行=1
+RR-CDNS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=skip；物理证据行=1；零 fallback=00）
+RR24-CLOCK NOT_RUN（无安全注入法：Linux time namespace 不虚拟化 CLOCK_REALTIME，容器 date -s 非局部偏移实验，需专用 VM；租约偏移语义验证归专用线）
+== 3) RR23 日志源四案（模型回真源 litellm；loki 指注入面）==
+-- 案 LDEAD → http://172.28.0.1:18999
+health=200
+run=abb05b66-3108-43fa-8d3b-f812de39b481
+logs 调用= evidence(logs)=0
+RR-LDEAD FAIL（succ=0 ev=0）
+-- 案 LEMPTY → http://172.28.0.1:18100/empty-loki
+health=200
+run=0f7458a9-e9aa-49c1-9cd9-3fa08fc48018
+logs 调用= evidence(logs)=0
+RR-LEMPTY FAIL（empty 语义区分未证： ev=0）
+-- 案 LTRUNC → http://172.28.0.1:18100/trunc-loki
+health=200
+run=c0c24baa-6ea0-4251-9079-beb3e315c612
+logs 调用= evidence(logs)=0
+RR-LTRUNC FAIL（succ=0 ev=0）
+-- 案 LSLOW → http://172.28.0.1:18100/slow-loki
+health=200
+run=fca6996a-1fe0-4dcb-af14-1c536ffc1e48
+logs 调用= evidence(logs)=0
+RR-LSLOW FAIL（succ=0 ev=0）
+== 4) 复原 ==
+health=200
+standing-health=200
+standing-restarts=0
+== 完成 ==
+RR-C429 PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+RR-CSLOWFIRST PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+RR-CSLOWBODY PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/DEFERRED；mock物理对拍=3；物理证据行=3；零 fallback=00）
+RR-CRESET PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=5；物理证据行=1；零 fallback=00）
+RR-CBADPROTO PASS（rows=2 有界≤6；全 FAILED=2 rows, FAILED/UNKNOWN_ERROR:RestClientException；mock物理对拍=2；物理证据行=2；零 fallback=00）
+RR-CTLS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=0；物理证据行=1；零 fallback=00）
+RR-CDNS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=skip；物理证据行=1；零 fallback=00）
+RR24-CLOCK NOT_RUN（无安全注入法：Linux time namespace 不虚拟化 CLOCK_REALTIME，容器 date -s 非局部偏移实验，需专用 VM；租约偏移语义验证归专用线）
+RR-LDEAD FAIL（succ=0 ev=0）
+RR-LEMPTY FAIL（empty 语义区分未证： ev=0）
+RR-LTRUNC FAIL（succ=0 ev=0）
+RR-LSLOW FAIL（succ=0 ev=0）
+standing-health=200
+standing-restarts=0

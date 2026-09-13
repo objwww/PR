@@ -1,0 +1,14 @@
+RR-C429 FAIL（rows=3 succ=0 mock=0——3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED）
+RR-CSLOWFIRST FAIL（rows=3 succ=0 mock=0——3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED）
+RR-CSLOWBODY FAIL（rows=3 succ=0 mock=0——3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED）
+RR-CRESET FAIL（rows=3 succ=0 mock=5——3 rows, FAILED/CIRCUIT_OPEN）
+RR-CBADPROTO PASS（rows=2 有界≤6；全 FAILED=2 rows, FAILED/UNKNOWN_ERROR:RestClientException；mock物理对拍=2；零 fallback=00）
+RR-CTLS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=skip；零 fallback=00）
+RR-CDNS PASS（rows=3 有界≤6；全 FAILED=3 rows, FAILED/CIRCUIT_OPEN,FAILED/DEFERRED；mock物理对拍=skip；零 fallback=00）
+RR24-CLOCK NOT_RUN（无安全注入法：Linux time namespace 不虚拟化 CLOCK_REALTIME，容器 date -s 非局部偏移实验，需专用 VM；租约偏移语义验证归专用线）
+RR-LDEAD FAIL（succ=0 ev=0）
+RR-LEMPTY FAIL（empty 语义区分未证： ev=0）
+RR-LTRUNC FAIL（succ=0 ev=0）
+RR-LSLOW FAIL（succ=0 ev=0）
+standing-health=200
+standing-restarts=0

@@ -1,0 +1,37 @@
+决策表清场完成（iso 测试库）
+== 0) mock 起动 + bundle 全案预激活 ==
+mock-alive=404
+bundle ok
+== 1) RR22 模型 HTTP 四案（per-call-timeout=8s 测试档）==
+== 3) RR23 日志源四案（模型回真源 litellm；loki 指注入面）==
+-- 案 LDEAD → http://172.28.0.1:18999
+health=200
+run=ab92148b-3b1e-487f-a55f-196a24066684
+logs 调用= evidence(logs)=0
+RR-LDEAD FAIL（succ=0 ev=0）
+-- 案 LEMPTY → http://172.28.0.1:18100/empty-loki
+health=200
+run=f288203e-9d9b-4e62-99ba-1ae8f5acba80
+logs 调用= evidence(logs)=0
+RR-LEMPTY FAIL（empty 语义区分未证： ev=0）
+-- 案 LTRUNC → http://172.28.0.1:18100/trunc-loki
+health=200
+run=a63918a3-147a-481c-bc47-fc97aa7f88f2
+logs 调用= evidence(logs)=0
+RR-LTRUNC FAIL（succ=0 ev=0）
+-- 案 LSLOW → http://172.28.0.1:18100/slow-loki
+health=200
+run=3fdba194-09ee-493c-b546-1a92da8ca3b2
+logs 调用= evidence(logs)=0
+RR-LSLOW FAIL（succ=0 ev=0）
+== 4) 复原 ==
+health=200
+standing-health=200
+standing-restarts=0
+== 完成 ==
+RR-LDEAD FAIL（succ=0 ev=0）
+RR-LEMPTY FAIL（empty 语义区分未证： ev=0）
+RR-LTRUNC FAIL（succ=0 ev=0）
+RR-LSLOW FAIL（succ=0 ev=0）
+standing-health=200
+standing-restarts=0

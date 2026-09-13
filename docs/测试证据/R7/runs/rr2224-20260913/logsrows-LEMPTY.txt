@@ -1,0 +1,6 @@
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-

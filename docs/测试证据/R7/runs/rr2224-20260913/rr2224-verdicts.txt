@@ -1,0 +1,11 @@
+RR-LDEAD FAIL（succ=0 ev=0）
+RR-LEMPTY PASS（空结果语义与不可达可区分：logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-
+logs.aggregate|SUCCESS|-；零伪造 evidence）
+RR-LTRUNC FAIL（run 未建：）
+RR-LSLOW FAIL（succ=0 ev=0）
+standing-health=200
+standing-restarts=0

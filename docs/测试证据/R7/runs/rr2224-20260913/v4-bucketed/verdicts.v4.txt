@@ -1,0 +1,14 @@
+RR-C429 FAIL（run 未建：NORUN(code=202)）
+RR-CSLOWFIRST FAIL（run 未建：NORUN(code=202)）
+RR-CSLOWBODY FAIL（run 未建：NORUN(code=202)）
+RR-CRESET FAIL（run 未建：NORUN(code=202)）
+RR-CBADPROTO FAIL（run 未建：NORUN(code=202)）
+RR-CTLS FAIL（run 未建：NORUN(code=202)）
+RR-CDNS FAIL（run 未建：NORUN(code=202)）
+RR24-CLOCK NOT_RUN（无安全注入法：Linux time namespace 不虚拟化 CLOCK_REALTIME，容器 date -s 非局部偏移实验，需专用 VM；租约偏移语义验证归专用线）
+RR-LDEAD FAIL（run 未建：NORUN(code=202)）
+RR-LEMPTY FAIL（run 未建：NORUN(code=202)）
+RR-LTRUNC FAIL（run 未建：NORUN(code=202)）
+RR-LSLOW FAIL（run 未建：NORUN(code=202)）
+standing-health=200
+standing-restarts=0

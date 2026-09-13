@@ -1,0 +1,409 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-13T09:15:37.794Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Starting ControlApplication v0.0.1-SNAPSHOT using Java 21.0.12 with PID 1 (/app/app.jar started by app in /app)
+2026-09-13T09:15:37.797Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : The following 1 profile is active: "docker"
+2026-09-13T09:15:43.180Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-09-13T09:15:43.193Z  INFO 1 --- [control-app] [           main] [                                                 ] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-09-13T09:15:43.194Z  INFO 1 --- [control-app] [           main] [                                                 ] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.40]
+2026-09-13T09:15:43.387Z  INFO 1 --- [control-app] [           main] [                                                 ] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-09-13T09:15:43.388Z  INFO 1 --- [control-app] [           main] [                                                 ] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 5431 ms
+2026-09-13T09:15:43.969Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-worker - Starting...
+2026-09-13T09:15:44.380Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : alert-worker - Added connection org.postgresql.jdbc.PgConnection@4bc21e34
+2026-09-13T09:15:44.382Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-worker - Start completed.
+2026-09-13T09:15:47.271Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.AlertAm4Config          : 上下文策略资产登记（EN-01/03 重放解释锚对）：contextPolicyDigest=71054842c1d49f33ae0061e6c7bb82ce2b79f0fee97890ef75d7be9fdb92a9b5 compactionSchemaVersion=v1
+2026-09-13T09:15:47.464Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-ingress - Starting...
+2026-09-13T09:15:47.475Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.pool.HikariPool        : alert-ingress - Added connection org.postgresql.jdbc.PgConnection@6802c10e
+2026-09-13T09:15:47.476Z  INFO 1 --- [control-app] [           main] [                                                 ] com.zaxxer.hikari.HikariDataSource       : alert-ingress - Start completed.
+2026-09-13T09:15:47.496Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.ModelCallLedgerRecovery        : ModelCallLedgerRecovery 启动: recoveryAfter=PT4M scanIntervalMs=60000
+2026-09-13T09:15:47.693Z  WARN 1 --- [control-app] [           main] [                                                 ] r$InitializeUserDetailsManagerConfigurer : Found 2 UserDetailsService beans, with names [platformUserDetailsService, authUserDetailsService]. Global Authentication Manager will not use a UserDetailsService for username/password login. Consider publishing a single UserDetailsService bean.
+2026-09-13T09:15:48.499Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-13T09:15:49.671Z  INFO 1 --- [control-app] [           main] [                                                 ] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path '/'
+2026-09-13T09:15:49.672Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : AlertInboxProcessor 启动 owner=control-1
+2026-09-13T09:15:49.673Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 启动 owner=control-1 scope=rca
+2026-09-13T09:15:49.673Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.a.a.IncidentWaitingRedrive       : IncidentWaitingRedrive 启动 interval=PT30S
+2026-09-13T09:15:49.674Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.alert.application.RunReconciler  : RunReconciler 启动 mode=ALERT_ONLY interval=PT30S batch=50
+2026-09-13T09:15:49.674Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.o.d.a.DutyFallbackWatcher        : DutyFallbackWatcher 启动: interval=30s maxAge=86400s
+2026-09-13T09:15:49.755Z  INFO 1 --- [control-app] [           main] [                                                 ] c.objwww.pr.control.ControlApplication   : Started ControlApplication in 13.207 seconds (process running for 14.585)
+2026-09-13T09:15:50.065Z  INFO 1 --- [control-app] [           main] [                                                 ] c.o.p.c.i.s.StartupSelfCheckRunner       : [control] 启动自检通过（B25 运行时门）
+2026-09-13T09:15:50.277Z  INFO 1 --- [control-app] [nio-8080-exec-1] [                                                 ] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-09-13T09:15:50.277Z  INFO 1 --- [control-app] [nio-8080-exec-1] [                                                 ] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-09-13T09:15:50.278Z  INFO 1 --- [control-app] [nio-8080-exec-1] [                                                 ] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-09-13T09:15:50.673Z  INFO 1 --- [control-app] [nio-8080-exec-5] [6aa669c618f84212817fa586cdd3b4aa-ac72e8730a8a6086] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 78c1037e26c3f6a1195d22a072b0b05ad569654b21e9cbb2a39c5be3c9fc6cbd revision=2 by=machine:release-line policy=rr14-rriso-20260913T091550Z
+2026-09-13T09:15:50.802Z  INFO 1 --- [control-app] [nio-8080-exec-9] [6aa669c6a2fcfe34e695c57f78fbda6b-2a9ef1e5d58ec7b3] c.o.p.c.r.i.ConfigBundleController       : config-bundle activate: digest=78c1037e26c3f6a1195d22a072b0b05ad569654b21e9cbb2a39c5be3c9fc6cbd body-keys=[expectedActiveRevision]
+2026-09-13T09:15:50.813Z  INFO 1 --- [control-app] [nio-8080-exec-9] [6aa669c6a2fcfe34e695c57f78fbda6b-2a9ef1e5d58ec7b3] c.o.p.c.r.a.ConfigBundleService          : ACTIVATE 落位: 78c1037e26c3f6a1195d22a072b0b05ad569654b21e9cbb2a39c5be3c9fc6cbd revision=2 by=machine:release-line
+2026-09-13T09:15:52.062Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.DeterministicSupervisor      : {"event":"r7_primary_started","ts":"2026-09-13T09:15:52.062080806Z","role":"primary@1","run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","task_id":"3be0600a-b96e-43d9-8ef7-81d2cadcb39a"}
+2026-09-13T09:15:52.101Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.r.a.SkillSelectionService        : Skill 绑定钉版（CL-05）：run=18d95e8f-bdb5-487d-99ab-9b300e6e4c4f role=primary epoch=0 status=NONE digest=- source=assembly
+2026-09-13T09:16:03.825Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary 空 content 带终止痕迹（finishReason=LENGTH, completionTokens=1000）→ OUTPUT_BUDGET_EXHAUSTED
+2026-09-13T09:16:03.891Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : task ff187916-c656-4c67-8272-3e713709d141 执行异常
+
+com.objwww.pr.control.alert.domain.agent.RcaModelCallException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:201) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.lambda$guardedModelCall$2(RcaActionGuard.java:115) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RunBudgetGate.call(RunBudgetGate.java:124) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.guardedModelCall(RcaActionGuard.java:112) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.drive(BoundedLlmRoleRunner.java:190) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drivePrimary(NativeInvestigationExecutor.java:657) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drive(NativeInvestigationExecutor.java:573) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.investigate(NativeInvestigationExecutor.java:422) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.execute(NativeInvestigationExecutor.java:259) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.runOneCycle(RcaWorker.java:430) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:504) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: com.objwww.pr.control.domain.ai.ModelCallFailedException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.application.ModelGateway.complete(ModelGateway.java:341) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:160) ~[!/:0.0.1-SNAPSHOT]
+	... 11 common frames omitted
+
+2026-09-13T09:16:03.902Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.RcaRunOrchestrator           : {"event":"rca_task_decision","ts":"2026-09-13T09:16:03.902087493Z","task_id":"ff187916-c656-4c67-8272-3e713709d141","run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","decision":"RETRY_SCHEDULED","latency_ms":11893,"attempt_id":"543e5228-d611-4f7b-9ff4-8898fb530b9e"}
+2026-09-13T09:16:19.788Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:16:19.788136131Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:16:19.788Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:16:49.794Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:16:49.794111686Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:16:49.794Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:17:07.341Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.agent.BoundedLlmRoleRunner   : TOOL_CALL 模型可见失败（REMOTE_UNAVAILABLE），计步重驱 task=3be0600a-b96e-43d9-8ef7-81d2cadcb39a tool=prometheus.catalog
+2026-09-13T09:17:14.657Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.agent.BoundedLlmRoleRunner   : TOOL_CALL 模型可见失败（REMOTE_UNAVAILABLE），计步重驱 task=3be0600a-b96e-43d9-8ef7-81d2cadcb39a tool=prometheus.catalog
+2026-09-13T09:17:19.798Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:17:19.798681685Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_ACTIVE_LEASE"}
+2026-09-13T09:17:19.799Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_ACTIVE_LEASE（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:17:27.613Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary 空 content 带终止痕迹（finishReason=LENGTH, completionTokens=1000）→ OUTPUT_BUDGET_EXHAUSTED
+2026-09-13T09:17:27.624Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : task ff187916-c656-4c67-8272-3e713709d141 执行异常
+
+com.objwww.pr.control.alert.domain.agent.RcaModelCallException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:201) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.lambda$guardedModelCall$2(RcaActionGuard.java:115) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RunBudgetGate.call(RunBudgetGate.java:124) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.guardedModelCall(RcaActionGuard.java:112) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.drive(BoundedLlmRoleRunner.java:190) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drivePrimary(NativeInvestigationExecutor.java:657) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drive(NativeInvestigationExecutor.java:573) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.investigate(NativeInvestigationExecutor.java:422) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.execute(NativeInvestigationExecutor.java:259) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.runOneCycle(RcaWorker.java:430) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:504) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: com.objwww.pr.control.domain.ai.ModelCallFailedException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.application.ModelGateway.complete(ModelGateway.java:341) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:160) ~[!/:0.0.1-SNAPSHOT]
+	... 11 common frames omitted
+
+2026-09-13T09:17:27.628Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.RcaRunOrchestrator           : {"event":"rca_task_decision","ts":"2026-09-13T09:17:27.628208654Z","task_id":"ff187916-c656-4c67-8272-3e713709d141","run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","decision":"RETRY_SCHEDULED","latency_ms":23403,"attempt_id":"9623b279-13b6-4c91-baae-a064304fccd1"}
+2026-09-13T09:17:49.804Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:17:49.804068095Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:17:49.804Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:18:19.812Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:18:19.812179125Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:18:19.812Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:18:49.826Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:18:49.826572506Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:18:49.826Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:19:19.830Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:19:19.830310353Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+2026-09-13T09:19:19.830Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_BACKOFF（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:19:33.200Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.agent.BoundedLlmRoleRunner   : TOOL_CALL 模型可见失败（REMOTE_UNAVAILABLE），计步重驱 task=3be0600a-b96e-43d9-8ef7-81d2cadcb39a tool=prometheus.catalog
+2026-09-13T09:19:39.884Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.agent.BoundedLlmRoleRunner   : TOOL_CALL 模型可见失败（REMOTE_UNAVAILABLE），计步重驱 task=3be0600a-b96e-43d9-8ef7-81d2cadcb39a tool=prometheus.catalog
+2026-09-13T09:19:44.133Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.agent.BoundedLlmRoleRunner   : TOOL_CALL 模型可见失败（REMOTE_UNAVAILABLE），计步重驱 task=3be0600a-b96e-43d9-8ef7-81d2cadcb39a tool=prometheus.catalog
+2026-09-13T09:19:49.833Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : {"event":"run_reconcile_decision","ts":"2026-09-13T09:19:49.833521190Z","deadline":"2026-09-13T09:25:51.779736Z","proposed":"等待（记录等待原因，不抢租约不代跑）","mode":"ALERT_ONLY","state":"RUNNING","recovery_attempts":0,"run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","purpose":"PRODUCTION","decision":"WAIT_ACTIVE_LEASE"}
+2026-09-13T09:19:49.833Z  INFO 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 对账决策 WAIT_ACTIVE_LEASE（mode=ALERT_ONLY deadline=2026-09-13T09:25:51.779736Z）：等待（记录等待原因，不抢租约不代跑）
+2026-09-13T09:19:56.412Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.i.model.SpringAiRouteClient      : route=primary 空 content 带终止痕迹（finishReason=LENGTH, completionTokens=1000）→ OUTPUT_BUDGET_EXHAUSTED
+2026-09-13T09:19:56.416Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : task ff187916-c656-4c67-8272-3e713709d141 执行异常
+
+com.objwww.pr.control.alert.domain.agent.RcaModelCallException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:201) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.lambda$guardedModelCall$2(RcaActionGuard.java:115) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RunBudgetGate.call(RunBudgetGate.java:124) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaActionGuard.guardedModelCall(RcaActionGuard.java:112) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.drive(BoundedLlmRoleRunner.java:190) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drivePrimary(NativeInvestigationExecutor.java:657) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.drive(NativeInvestigationExecutor.java:573) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.investigate(NativeInvestigationExecutor.java:422) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor.execute(NativeInvestigationExecutor.java:259) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.runOneCycle(RcaWorker.java:430) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:504) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: com.objwww.pr.control.domain.ai.ModelCallFailedException: 模型调用终态失败: OUTPUT_BUDGET_EXHAUSTED
+	at com.objwww.pr.control.application.ModelGateway.complete(ModelGateway.java:341) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.agent.RcaModelGateway.call(RcaModelGateway.java:160) ~[!/:0.0.1-SNAPSHOT]
+	... 11 common frames omitted
+
+2026-09-13T09:19:56.419Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.a.a.RcaRunOrchestrator           : {"event":"rca_task_decision","ts":"2026-09-13T09:19:56.419084195Z","task_id":"ff187916-c656-4c67-8272-3e713709d141","run_id":"18d95e8f-bdb5-487d-99ab-9b300e6e4c4f","decision":"DEAD","latency_ms":28442,"attempt_id":"e318fba0-1c00-4a26-99c2-5cd2a4d1c943"}
+2026-09-13T09:19:56.421Z  INFO 1 --- [control-app] [orker-control-1] [                                                 ] .o.p.c.r.a.CanaryEvidenceSampleCollector : canary LIVE 样本落档：run=18d95e8f-bdb5-487d-99ab-9b300e6e4c4f incident=b779dc74-02ab-4168-b322-7ee1336561d4
+2026-09-13T09:20:19.847Z  WARN 1 --- [control-app] [ run-reconciler] [                                                 ] c.o.p.c.alert.application.RunReconciler  : run 18d95e8f-bdb5-487d-99ab-9b300e6e4c4f 终态任务清理：1 条非终态任务 → CANCELLED（资格撤销，账本保留）
+2026-09-13T09:24:05.104Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : 悬挂调查记录 894a564a-03e8-43fc-947e-4d3c0e93c4df STARTED→UNKNOWN（崩溃回收）
+2026-09-13T09:25:53.367Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : 悬挂调查记录 543e5228-d611-4f7b-9ff4-8898fb530b9e STARTED→UNKNOWN（崩溃回收）
+2026-09-13T09:27:05.516Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : 悬挂调查记录 9623b279-13b6-4c91-baae-a064304fccd1 STARTED→UNKNOWN（崩溃回收）
+2026-09-13T09:29:29.821Z  WARN 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : 悬挂调查记录 e318fba0-1c00-4a26-99c2-5cd2a4d1c943 STARTED→UNKNOWN（崩溃回收）
+2026-09-13T09:30:19.501Z  INFO 1 --- [control-app] [nio-8080-exec-5] [6aa66d2b547caa325901774a1783d7ce-fb8d83ba40dcec56] c.o.p.c.r.a.ConfigBundleService          : bundle 发布: 80bf78d94d353f3a37827733d6dd6982c3b62dcf7db59b7b040acd0e551b7f0b revision=3 by=machine:release-line policy=rr21-rr21-1789291819
+2026-09-13T09:30:19.619Z  INFO 1 --- [control-app] [nio-8080-exec-9] [6aa66d2b026aa522551d83ba349a7091-9e28b60237738f3c] c.o.p.c.r.i.ConfigBundleController       : config-bundle activate: digest=80bf78d94d353f3a37827733d6dd6982c3b62dcf7db59b7b040acd0e551b7f0b body-keys=[expectedActiveRevision]
+2026-09-13T09:30:19.622Z  INFO 1 --- [control-app] [nio-8080-exec-9] [6aa66d2b026aa522551d83ba349a7091-9e28b60237738f3c] c.o.p.c.r.a.ConfigBundleService          : ACTIVATE 落位: 80bf78d94d353f3a37827733d6dd6982c3b62dcf7db59b7b040acd0e551b7f0b revision=3 by=machine:release-line
+2026-09-13T09:30:19.946Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE scheduler_slot SET lease_owner = NULL, lease_until = NULL, task_id = NULL
+ WHERE lease_owner IS NOT NULL AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository.reclaimExpired(PostgresSchedulerSlotRepository.java:92) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.recoverExpired(RcaWorker.java:268) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:490) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 8 common frames omitted
+
+2026-09-13T09:30:20.502Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@4bc21e34 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.503Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@382598e1 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.504Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@1a5ad944 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.504Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@49ce8227 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.504Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@a2cad16 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.505Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@1e5ade22 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.505Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@5286a454 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.505Z  WARN 1 --- [control-app] [inbox-control-1] [                                                 ] com.zaxxer.hikari.pool.PoolBase          : alert-worker - Failed to validate connection org.postgresql.jdbc.PgConnection@6fe4db99 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:20.513Z ERROR 1 --- [control-app] [inbox-control-1] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : inbox 消费循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE alert_inbox SET state = 'RECEIVED', updated_at = ?
+ WHERE state = 'PROCESSING' AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresAlertInboxRepository.reclaimExpired(PostgresAlertInboxRepository.java:182) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.AlertInboxProcessor.loop(AlertInboxProcessor.java:170) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 7 common frames omitted
+
+2026-09-13T09:30:21.949Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE scheduler_slot SET lease_owner = NULL, lease_until = NULL, task_id = NULL
+ WHERE lease_owner IS NOT NULL AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository.reclaimExpired(PostgresSchedulerSlotRepository.java:92) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.recoverExpired(RcaWorker.java:268) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:490) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 8 common frames omitted
+
+2026-09-13T09:30:22.515Z ERROR 1 --- [control-app] [inbox-control-1] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : inbox 消费循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE alert_inbox SET state = 'RECEIVED', updated_at = ?
+ WHERE state = 'PROCESSING' AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresAlertInboxRepository.reclaimExpired(PostgresAlertInboxRepository.java:182) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.AlertInboxProcessor.loop(AlertInboxProcessor.java:170) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 7 common frames omitted
+
+2026-09-13T09:30:23.036Z  WARN 1 --- [control-app] [nio-8080-exec-1] [6aa66d2fdd60ffb59ad0f9c71fa310eb-04c98f6d41864d2e] com.zaxxer.hikari.pool.PoolBase          : alert-ingress - Failed to validate connection org.postgresql.jdbc.PgConnection@6802c10e (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:23.036Z  WARN 1 --- [control-app] [nio-8080-exec-1] [6aa66d2fdd60ffb59ad0f9c71fa310eb-04c98f6d41864d2e] com.zaxxer.hikari.pool.PoolBase          : alert-ingress - Failed to validate connection org.postgresql.jdbc.PgConnection@2e8182e6 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:23.037Z  WARN 1 --- [control-app] [nio-8080-exec-1] [6aa66d2fdd60ffb59ad0f9c71fa310eb-04c98f6d41864d2e] com.zaxxer.hikari.pool.PoolBase          : alert-ingress - Failed to validate connection org.postgresql.jdbc.PgConnection@3b2a6058 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:23.037Z  WARN 1 --- [control-app] [nio-8080-exec-1] [6aa66d2fdd60ffb59ad0f9c71fa310eb-04c98f6d41864d2e] com.zaxxer.hikari.pool.PoolBase          : alert-ingress - Failed to validate connection org.postgresql.jdbc.PgConnection@46581fad (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-09-13T09:30:23.056Z  WARN 1 --- [control-app] [nio-8080-exec-3] [6aa66d2f71a304b8db33451f7752c9b0-0baac5a1acdc4dd9] c.o.p.c.a.i.AlertWebhookController       : 整组无法持久化，返回 503: ERROR: cannot execute INSERT in a read-only transaction
+2026-09-13T09:30:23.950Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE scheduler_slot SET lease_owner = NULL, lease_until = NULL, task_id = NULL
+ WHERE lease_owner IS NOT NULL AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository.reclaimExpired(PostgresSchedulerSlotRepository.java:92) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.recoverExpired(RcaWorker.java:268) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:490) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 8 common frames omitted
+
+2026-09-13T09:30:24.516Z ERROR 1 --- [control-app] [inbox-control-1] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : inbox 消费循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE alert_inbox SET state = 'RECEIVED', updated_at = ?
+ WHERE state = 'PROCESSING' AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresAlertInboxRepository.reclaimExpired(PostgresAlertInboxRepository.java:182) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.AlertInboxProcessor.loop(AlertInboxProcessor.java:170) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 7 common frames omitted
+
+2026-09-13T09:30:25.952Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE scheduler_slot SET lease_owner = NULL, lease_until = NULL, task_id = NULL
+ WHERE lease_owner IS NOT NULL AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository.reclaimExpired(PostgresSchedulerSlotRepository.java:92) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.recoverExpired(RcaWorker.java:268) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:490) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 8 common frames omitted
+
+2026-09-13T09:30:26.518Z ERROR 1 --- [control-app] [inbox-control-1] [                                                 ] c.o.p.c.a.a.AlertInboxProcessor          : inbox 消费循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE alert_inbox SET state = 'RECEIVED', updated_at = ?
+ WHERE state = 'PROCESSING' AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresAlertInboxRepository.reclaimExpired(PostgresAlertInboxRepository.java:182) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.AlertInboxProcessor.loop(AlertInboxProcessor.java:170) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 7 common frames omitted
+
+2026-09-13T09:30:27.954Z ERROR 1 --- [control-app] [orker-control-1] [                                                 ] c.o.p.c.alert.application.RcaWorker      : RcaWorker 循环异常，PT2S 后重试
+
+org.springframework.jdbc.UncategorizedSQLException: PreparedStatementCallback; uncategorized SQLException for SQL [UPDATE scheduler_slot SET lease_owner = NULL, lease_until = NULL, task_id = NULL
+ WHERE lease_owner IS NOT NULL AND lease_until < ?
+]; SQL state [25006]; error code [0]; ERROR: cannot execute UPDATE in a read-only transaction
+	at org.springframework.jdbc.core.JdbcTemplate.translateException(JdbcTemplate.java:1557) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:677) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:972) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.update(JdbcTemplate.java:993) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.update(NamedParameterJdbcTemplate.java:337) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.simple.DefaultJdbcClient$DefaultStatementSpec.update(DefaultJdbcClient.java:237) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at com.objwww.pr.control.infrastructure.persistence.PostgresSchedulerSlotRepository.reclaimExpired(PostgresSchedulerSlotRepository.java:92) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.recoverExpired(RcaWorker.java:268) ~[!/:0.0.1-SNAPSHOT]
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:490) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/java.lang.VirtualThread.run(Unknown Source) ~[na:na]
+Caused by: org.postgresql.util.PSQLException: ERROR: cannot execute UPDATE in a read-only transaction
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2733) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2420) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:372) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:517) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:434) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeWithFlags(PgPreparedStatement.java:194) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at org.postgresql.jdbc.PgPreparedStatement.executeUpdate(PgPreparedStatement.java:155) ~[postgresql-42.7.5.jar!/:42.7.5]
+	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61) ~[HikariCP-5.1.0.jar!/:na]
+	at com.zaxxer.hikari.pool.HikariProxyPreparedStatement.executeUpdate(HikariProxyPreparedStatement.java) ~[HikariCP-5.1.0.jar!/:na]
+	at org.springframework.jdbc.core.JdbcTemplate.lambda$update$2(JdbcTemplate.java:977) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	at org.springframework.jdbc.core.JdbcTemplate.execute(JdbcTemplate.java:658) ~[spring-jdbc-6.2.6.jar!/:6.2.6]
+	... 8 common frames omitted
+

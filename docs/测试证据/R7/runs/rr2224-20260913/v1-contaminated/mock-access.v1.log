@@ -1,0 +1,11 @@
+1789293232.634 MOCK-START http=18100 tls=18443 -
+1789293235.576 /ping 127.0.0.1
+1789293442.034 /ping 127.0.0.1
+1789293503.370 /slowbody/v1/chat/completions 172.28.0.5
+1789293523.997 /reset/v1/chat/completions 172.28.0.5
+1789293525.155 /reset/v1/chat/completions 172.28.0.5
+1789293526.207 /reset/v1/chat/completions 172.28.0.5
+1789293586.679 /reset/v1/chat/completions 172.28.0.5
+1789293708.210 /reset/v1/chat/completions 172.28.0.5
+1789293738.466 /badproto/v1/chat/completions 172.28.0.5
+1789293798.956 /badproto/v1/chat/completions 172.28.0.5

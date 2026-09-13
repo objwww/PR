@@ -1,0 +1,34 @@
+== 0) 前置：iso 栈健康 + RR21 车 bundle 预激活（可写窗口内完成）==
+health=200
+bundle 激活 ok digest=80bf…
+== 1) 基线计数 ==
+baseline inbox=2 run=2 model_call=10 tool_inv=5
+== 2) 注入只读（ALTER SYSTEM+reload+terminate 应用后端）==
+-- 真表写拒验证（alert_inbox，非临时表）--
+真表写拒 PASS：ERROR:  cannot execute INSERT in a read-only transaction
+只读期 health=200（读路径不受影响）
+== 3) 只读期发唯一告警 → 必须 503 不假 ACK ==
+只读期 POST code=503 body={"error":"storage unavailable"}
+app 日志『无法持久化』命中=1
+只读期增量 inbox=0 run=0 model_call=0 tool_inv=0
+不假ACK+零新发送 PASS（503 非假 202；模型/工具/账本四表零增量）
+接收器日志留痕 PASS（无法持久化 WARN 行在）
+== 4) 恢复（off+reload+terminate）+ 同载荷重投 → 单 run ==
+恢复期 POST code=202 body={"inboxId":"5ac90afd-3d92-4798-8e13-0214d67c27e1","status":"accepted"}
+run=6670387c-d935-4da2-92d8-4a07c4f695b7 state=SUCCEEDED
+恢复重投 PASS（202→WHITELISTED 路由→run=SUCCEEDED；该告警 run 恰 1）
+== 5) ACK 丢失面：同载荷再投（AM 视角重试）→ 效果不重复 ==
+ACK 丢失重投 code=202
+重投后 n_run=1 inbox_total=4（基线 2）
+幂等不重复 PASS（重复投递 run 恒 1——效果幂等）
+== 6) 在栈不变量 ==
+standing-health=200
+standing-restarts=0
+== RR21 完成（GUC 已复原 off；证据 /opt/build/pr-logs/rr21）==
+真表写拒 PASS：ERROR:  cannot execute INSERT in a read-only transaction
+不假ACK+零新发送 PASS（503 非假 202；模型/工具/账本四表零增量）
+接收器日志留痕 PASS（无法持久化 WARN 行在）
+恢复重投 PASS（202→WHITELISTED 路由→run=SUCCEEDED；该告警 run 恰 1）
+幂等不重复 PASS（重复投递 run 恒 1——效果幂等）
+standing-health=200
+standing-restarts=0
