@@ -5,7 +5,6 @@ import com.objwww.pr.shared.ExecutionEvent;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * 执行事件账本的内存 fake（M3 模型治理测试装备）。
@@ -17,11 +16,6 @@ public final class ExecutionEventsFake implements ExecutionEventRepository {
     @Override
     public void append(ExecutionEvent event) {
         all.add(event);
-    }
-
-    @Override
-    public List<ExecutionEvent> findByRunIdOrdered(UUID reviewRunId) {
-        return all.stream().filter(e -> e.reviewRunId().equals(reviewRunId)).toList();
     }
 
     public List<ExecutionEvent> all() {

@@ -38,16 +38,6 @@ public class RcaModelEventSink implements ExecutionEventRepository {
                 event.eventId(), "GATEWAY_" + event.eventType().name(), jsonOf(payload)));
     }
 
-    /**
-     * 只写汇：ModelGateway 从不回读事件，rca_event 读背面由 RCA 域自有查询承担
-     * （EX-A3 recover 面同款先例——端口方法无消费者时不实现假读）。
-     */
-    @Override
-    public java.util.List<ExecutionEvent> findByRunIdOrdered(java.util.UUID reviewRunId) {
-        throw new UnsupportedOperationException(
-                "RcaModelEventSink 是只写事件汇（无回读面）");
-    }
-
     private String jsonOf(Map<String, Object> payload) {
         try {
             return mapper.writeValueAsString(payload);

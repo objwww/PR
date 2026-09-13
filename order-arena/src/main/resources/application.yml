@@ -21,14 +21,12 @@ app:
       enabled: ${TRAFFIC_ENABLED:false}  # 默认关闭；docker compose 注入 TRAFFIC_ENABLED=true 打开
     probe:
       interval-ms: 30000      # DomainProbe 单线程周期（§7.2）
-      max-staleness-ms: 120000 # 探测数据超此新鲜度 → probe 自身告警（C-7）
     compensation:
       poll-interval-ms: 2000  # 补偿 worker 领取轮询
     chaos:
       scan-interval-ms: 5000  # chaos 会话扫描（F2 注入执行 + 恢复驱动）
       cache-ttl-ms: 2000      # 开关读面可丢缓存（AM2 v3.0 §3.2：内存只作可丢缓存）
       f2-batch: 16            # 单轮 F2 注入上限（有界）
-      recovery-grace-ms: 15000 # off 后宽限：宽限期内先验证再判定收敛（C-4）
     f3:
       reconcile-interval-ms: 5000     # 对账扫描周期（状态持久化，无 sleep 表达状态）
       unknown-older-than-ms: 10000    # UNKNOWN 超此龄才可领（超时未知的静默期）

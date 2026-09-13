@@ -78,13 +78,6 @@
             <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
 
-        <!-- tar.gz 安全解包（M0-T06 SafeTarExtractor，纯逻辑、非框架依赖） -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-compress</artifactId>
-            <version>1.27.1</version>
-        </dependency>
-
         <!-- Flyway 迁移在 control-app（owner 数据源，后续任务接） -->
         <dependency>
             <groupId>org.flywaydb</groupId>

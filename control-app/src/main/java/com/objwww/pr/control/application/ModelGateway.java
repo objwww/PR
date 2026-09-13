@@ -16,8 +16,6 @@ import com.objwww.pr.control.domain.ai.ModelRequest;
 import com.objwww.pr.control.domain.ai.ModelResult;
 import com.objwww.pr.control.domain.ai.ModelRetryDeferredException;
 import com.objwww.pr.control.domain.ai.ModelRoute;
-import com.objwww.pr.control.domain.ai.ModelRouteCatalog;
-import com.objwww.pr.control.domain.ai.ModelRouteIdentity;
 import com.objwww.pr.control.domain.ai.ModelRouter;
 import com.objwww.pr.control.domain.ai.ModelStepBudgetGuard;
 import com.objwww.pr.control.domain.ai.PricingService;
@@ -40,7 +38,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -52,7 +49,7 @@ import java.util.UUID;
  * <p>预算状态每次 complete() 新建（附录 B）；熔断器/冷却登记为进程内存态（R-M3）。
  * 不标 @Transactional（AFT-30：外部调用不挂数据库长事务）。
  */
-public class ModelGateway implements ModelGatewayPort, ModelRouteCatalog {
+public class ModelGateway implements ModelGatewayPort {
 
     private static final Logger log = LoggerFactory.getLogger(ModelGateway.class);
     private static final String PRODUCER = "control-app";
@@ -105,19 +102,6 @@ public class ModelGateway implements ModelGatewayPort, ModelRouteCatalog {
             this.breakers.put(fallbackRoute.routeId(),
                     new CircuitBreaker(params.failureThreshold(), params.circuitCoolDown().toNanos()));
         }
-    }
-
-    // ------------------------------------------------------------------ ModelRouteCatalog
-
-    @Override
-    public Optional<ModelRouteIdentity> findContractIdentityByModel(String requestedModel) {
-        if (primaryRoute.requestedModel().equals(requestedModel)) {
-            return Optional.of(params.contractIdentityOf(primaryRoute));
-        }
-        if (fallbackRoute != null && fallbackRoute.requestedModel().equals(requestedModel)) {
-            return Optional.of(params.contractIdentityOf(fallbackRoute));
-        }
-        return Optional.empty(); // 路由已被配置移除 → ROUTE_REMOVED（§4.7 规则 2）
     }
 
     // ------------------------------------------------------------------ ModelGatewayPort
