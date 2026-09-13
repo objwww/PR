@@ -28,3 +28,16 @@ OUTBOX: 3cb782e3 SENT channel=oncall sent_at=2026-09-13T07:33:57.235Z
 == 查询方法（可复算）==
 -- 链验证 SQL 见同目录 inspect-run.sql / inspect4.sql（var/e2e-demo-20260913/ 有副本）
 -- 发布仲裁日志：docker logs deploy-control-app-1 | grep report_publication
+
+== 跑 C：run f3922207-45f6-4ff2-a4d7-a3483025f1db（2026-09-13 07:52Z，deepseek 换模后回归）==
+背景：qwen3-max-preview / glm-5 上游实测 403 Free quota exhausted；deepseek-v4-flash-0731 探针
+实测 88-token 真实响应后切换 AGENT_MODEL（.env 备份 /tmp/.env.model-backup 已在窗末清理）。
+RUN: SUCCEEDED / NATIVE / INITIAL（新 incident E2EDemoDs075205）
+MODEL: deepseek-v4-flash-0731——SUCCESS×1（1957 tokens）+ FAILED×2（error_code=
+  OUTPUT_BUDGET_EXHAUSTED：推理模型 reasoning_tokens 吃掉输出预算，第三次尝试成功；
+  登记=deepseek 需更大输出预算上限，属模型适配面非系统缺陷）
+TOOLS: prometheus.catalog SUCCESS×1（零 claim 提案，保守收敛）
+REPORT: STRUCTURE_VALIDATED → PUBLICATION: SENT → OUTBOX: SENT×2（oncall+test）
+判定：换模后控制面→litellm→deepseek 真链全通，首发→发布→通知送达链路再次实测。
+phase5 FAIL=断言面再缺 catalog（jar 缺省 8 工具内的合法选择，非系统越权）。
+演示告警已 resolved。
