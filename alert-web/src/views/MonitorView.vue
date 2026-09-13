@@ -168,6 +168,10 @@ import { api } from '../api/client'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import { fmtTime } from '../utils/format'
+// RV11：图表组件局部化（echarts 按需注册随页面懒加载，首包不再携带大依赖）
+import { useChart } from '../composables/echarts'
+
+const VChart = useChart()
 
 const router = useRouter()
 

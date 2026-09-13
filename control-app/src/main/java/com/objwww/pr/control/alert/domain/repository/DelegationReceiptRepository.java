@@ -14,6 +14,13 @@ public interface DelegationReceiptRepository {
 
     void insert(DelegationReceipt receipt);
 
+    /**
+     * RV04/T20：原子幂等插入（ON CONFLICT (message_id) DO NOTHING）——返回是否
+     * 本副本插入成功（0=同键已存在）。PG 事务内唯一冲突会置 aborted、后续语句
+     * 25P02，不能异常后同事务续操作；并发分支必须走本方法，冲突后另条查询读胜者。
+     */
+    int insertIfAbsent(DelegationReceipt receipt);
+
     Optional<DelegationReceipt> findByMessageId(UUID messageId);
 
     /** 合并面：当前轮的 ACCEPTED 回执（主任务信封 child_receipts 槽唯一来源） */

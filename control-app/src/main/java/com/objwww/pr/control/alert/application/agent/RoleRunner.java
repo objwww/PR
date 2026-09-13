@@ -53,12 +53,37 @@ public interface RoleRunner {
         DELEGATE_REJECTED
     }
 
-    /** 驱动结果（FAILED 时 reason = 模型可见原因码；evidenceIds 只含本步新证据） */
-    record RoleDriveResult(RoleDriveOutcome outcome, List<UUID> evidenceIds, String reason) {
+    /** 驱动结果（FAILED 时 reason = 模型可见原因码；evidenceIds 只含本步新证据）。
+     * RV04：childResult = 结构化子任务结果（BA-142 回执生产面）——确定性角色如实
+     * 声明能力边界；null = legacy 结果（回执面回退机械映射）。 */
+    record RoleDriveResult(RoleDriveOutcome outcome, List<UUID> evidenceIds, String reason,
+            ChildResult childResult) {
+
+        /** RV04：结构化子任务结果（协议已有 findings/support_refs/counter_refs/
+         * missing_information 四清单，不另造回执表） */
+        public record ChildResult(List<String> findings, List<String> supportRefs,
+                List<String> counterRefs, List<String> missingInformation) {
+
+            public ChildResult {
+                findings = List.copyOf(Objects.requireNonNull(findings, "findings"));
+                supportRefs = List.copyOf(Objects.requireNonNull(supportRefs,
+                        "supportRefs"));
+                counterRefs = List.copyOf(Objects.requireNonNull(counterRefs,
+                        "counterRefs"));
+                missingInformation = List.copyOf(Objects.requireNonNull(
+                        missingInformation, "missingInformation"));
+            }
+        }
 
         public RoleDriveResult {
             evidenceIds = List.copyOf(Objects.requireNonNull(evidenceIds, "evidenceIds"));
             Objects.requireNonNull(outcome, "outcome");
+        }
+
+        /** 兼容构造（无结构化子结果） */
+        public RoleDriveResult(RoleDriveOutcome outcome, List<UUID> evidenceIds,
+                String reason) {
+            this(outcome, evidenceIds, reason, null);
         }
 
         public static RoleDriveResult of(RoleDriveOutcome outcome) {

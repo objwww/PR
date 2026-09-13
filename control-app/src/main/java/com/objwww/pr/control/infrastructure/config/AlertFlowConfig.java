@@ -329,6 +329,8 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
             ObjectProvider<com.objwww.pr.control.alert.application.agent.DelegationReceiptService>
                     delegationReceiptService,
+            org.springframework.beans.factory.ObjectProvider<
+                    org.springframework.transaction.support.TransactionOperations> txProvider,
             @Value("${app.alert.native.metrics-expr:}") String metricsExpr,
             @Value("${app.alert.native.tool-registry-digest:}") String toolRegistryDigest) {
         if (!probe.ready()) {
@@ -390,7 +392,8 @@ public class AlertFlowConfig {
                         "主任务检查点仓储缺件（R7-X6 主模式 FINAL 投影面）"),
                 rcaModelCallLedger,
                 primaryProfile.getIfAvailable(),
-                delegationReceiptService.getIfAvailable());
+                delegationReceiptService.getIfAvailable(),
+                txProvider.getIfAvailable());
     }
 
     /**
@@ -407,11 +410,13 @@ public class AlertFlowConfig {
             RcaTaskRepository tasks,
             com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository
                     delegationDecisions,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
             org.springframework.transaction.support.TransactionOperations tx,
             com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        // RV04/T22：证据仓入参——support/counter 引用 Host 校验（本 run 证据行成员面）
         return new com.objwww.pr.control.alert.application.agent.DelegationReceiptService(
-                delegationReceiptRepository, runs, tasks, delegationDecisions, tx,
-                AlertClock.system(), objectMapper);
+                delegationReceiptRepository, runs, tasks, delegationDecisions,
+                evidenceRepository, tx, AlertClock.system(), objectMapper);
     }
 
     /** MC31/32：人工补充材料受理（认证端身份由控制器传入；CAS 行锁串行化） */

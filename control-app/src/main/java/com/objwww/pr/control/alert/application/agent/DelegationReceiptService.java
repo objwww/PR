@@ -6,6 +6,7 @@ import com.objwww.pr.control.alert.domain.agent.DelegationDecision;
 import com.objwww.pr.control.alert.domain.agent.DelegationReceipt;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.repository.DelegationDecisionRepository;
 import com.objwww.pr.control.alert.domain.repository.DelegationReceiptRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
@@ -13,7 +14,6 @@ import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.nio.charset.StandardCharsets;
@@ -89,6 +89,9 @@ public class DelegationReceiptService {
     private final RcaRunRepository runs;
     private final RcaTaskRepository tasks;
     private final DelegationDecisionRepository decisions;
+    /** RV04：引用 Host 校验面（可空=假件环境跳过载荷校验）——support/counter 引用
+     * 必须解析到本 run 证据行，模型自报反证不直接流入记忆（T22） */
+    private final EvidenceRepository evidence;
     private final TransactionOperations tx;
     private final AlertClock clock;
     private final ObjectMapper mapper;
@@ -97,10 +100,18 @@ public class DelegationReceiptService {
             RcaRunRepository runs, RcaTaskRepository tasks,
             DelegationDecisionRepository decisions,
             TransactionOperations tx, AlertClock clock, ObjectMapper mapper) {
+        this(receipts, runs, tasks, decisions, null, tx, clock, mapper);
+    }
+
+    public DelegationReceiptService(DelegationReceiptRepository receipts,
+            RcaRunRepository runs, RcaTaskRepository tasks,
+            DelegationDecisionRepository decisions, EvidenceRepository evidence,
+            TransactionOperations tx, AlertClock clock, ObjectMapper mapper) {
         this.receipts = Objects.requireNonNull(receipts, "receipts");
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.decisions = Objects.requireNonNull(decisions, "decisions");
+        this.evidence = evidence;
         this.tx = Objects.requireNonNull(tx, "tx");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -123,7 +134,10 @@ public class DelegationReceiptService {
 
     private Verdict admitOnce(Submission submission) {
         Instant now = clock.now();
-        RcaRun run = runs.findById(submission.runId()).orElse(null);
+        // RV04/T21：行锁线性化点——取消（run CAS）与回执准入同一把 run 行锁定序；
+        // 取消先提交 → 本围栏判 LATE；准入先提交 → 取消在其后照常，回执不算迟到。
+        // 单行锁无交叉，无锁序环。
+        RcaRun run = runs.findByIdForUpdate(submission.runId()).orElse(null);
         if (run == null) {
             throw new IllegalArgumentException(
                     "run 不存在，回执无处落地: " + submission.runId());
@@ -151,6 +165,18 @@ public class DelegationReceiptService {
                     now);
             insertAudit(rejected);
             return new Verdict(rejected, false);
+        }
+        // RV04/T22：引用 Host 校验（先于限长/契约）——support/counter 引用必须
+        // 解析到本 run 证据行；模型自报的越界/伪造引用不能借回执流入记忆
+        if (evidence != null) {
+            String refProblem = refsProblem(submission);
+            if (refProblem != null) {
+                DelegationReceipt rejected = auditRow(submission, primaryTaskId, gapId,
+                        roleId, DelegationReceipt.Admission.REJECTED_SHAPE, refProblem,
+                        now);
+                insertAudit(rejected);
+                return new Verdict(rejected, false);
+            }
         }
         // MC21 限长先于裁剪：以原始载荷计量（先裁后量 = 超限不可达）。超限 →
         // OVERSIZED 显式拒绝：载荷不落库，digest/原始字节数留痕可对账
@@ -188,10 +214,10 @@ public class DelegationReceiptService {
                         Digest.sha256Of(payload).value(), bytes, now);
             }
         }
-        try {
-            receipts.insert(receipt);
-        } catch (DuplicateKeyException raced) {
-            // 并发同 messageId：以先到准入行为准，本副本并报告不落行（裁决幂等）
+        // RV04/T20：ON CONFLICT 原子幂等——PG 事务内唯一冲突会置 aborted（后续
+        // 语句 25P02），不能异常后同事务续操作；冲突面走 insertIfAbsent=0 后另条
+        // 查询读实际胜者（事务健康，同事务读合法）
+        if (receipts.insertIfAbsent(receipt) == 0) {
             log.info("回执并发撞既成准入行（messageId={}），以先到者为准",
                     submission.messageId());
             return new Verdict(
@@ -214,6 +240,39 @@ public class DelegationReceiptService {
         return new Verdict(receipts.findByMessageId(messageId)
                 .orElseThrow(() -> new IllegalStateException(
                         "并发准入后回执行缺席: " + messageId)), true);
+    }
+
+    /**
+     * RV04/T22 引用 Host 校验（null=通过）：support/counter 引用必须是本 run 已
+     * 落库证据行（UUID 形态 + findById 命中 + run 归属一致）；越界清单随审计行留痕。
+     */
+    private String refsProblem(Submission submission) {
+        List<String> offenders = new ArrayList<>();
+        for (List<String> bucket : List.of(submission.supportRefs(),
+                submission.counterRefs())) {
+            for (String ref : bucket) {
+                if (offenders.size() >= 5) {
+                    break;
+                }
+                if (!isRunEvidence(ref, submission.runId())) {
+                    offenders.add(ref);
+                }
+            }
+        }
+        return offenders.isEmpty() ? null
+                : "引用 Host 校验失败（非本 run 证据行）: " + offenders;
+    }
+
+    private boolean isRunEvidence(String ref, UUID runId) {
+        UUID id;
+        try {
+            id = UUID.fromString(ref);
+        } catch (IllegalArgumentException notUuid) {
+            return false;
+        }
+        return evidence.findById(id)
+                .map(row -> row.runId().equals(runId))
+                .orElse(false);
     }
 
     /**
@@ -281,11 +340,8 @@ public class DelegationReceiptService {
     }
 
     private void insertAudit(DelegationReceipt row) {
-        try {
-            receipts.insert(row);
-        } catch (DuplicateKeyException raced) {
-            log.info("审计回执撞既成行（messageId={}），以先到者为准", row.messageId());
-        }
+        // RV04：审计行同走 ON CONFLICT 面（同事务不产生 aborted）
+        receipts.insertIfAbsent(row);
     }
 
     private static List<String> clipped(List<String> items) {

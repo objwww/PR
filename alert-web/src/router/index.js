@@ -1,30 +1,33 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
-import OverviewView from '../views/OverviewView.vue'
-import AlertsView from '../views/AlertsView.vue'
-import IncidentDetailView from '../views/IncidentDetailView.vue'
-import HistoryView from '../views/HistoryView.vue'
-import RunsView from '../views/RunsView.vue'
-import RunDetailView from '../views/RunDetailView.vue'
-import CasesView from '../views/CasesView.vue'
-import DutyView from '../views/DutyView.vue'
-import DutyChatView from '../views/DutyChatView.vue'
-import NotificationsView from '../views/NotificationsView.vue'
-import EvalView from '../views/EvalView.vue'
-import EvalRunsView from '../views/EvalRunsView.vue'
-import EvalRunDetailView from '../views/EvalRunDetailView.vue'
-import EvalDatasetsView from '../views/EvalDatasetsView.vue'
-import EvalReviewView from '../views/EvalReviewView.vue'
-import EvalAssetsView from '../views/EvalAssetsView.vue'
-import EvalNewView from '../views/EvalNewView.vue'
-import EvalCompareView from '../views/EvalCompareView.vue'
-import MonitorView from '../views/MonitorView.vue'
-import DrillsView from '../views/DrillsView.vue'
-import DrillCreateView from '../views/DrillCreateView.vue'
-import DrillDetailView from '../views/DrillDetailView.vue'
-import VersionsView from '../views/VersionsView.vue'
 
 import { useSessionStore } from '../stores/session.js'
+
+// RV11 路由懒加载：首包只带登录页，其余页面按路由 chunk 动态加载
+// （Vite 原生动态导入；history 刷新与 nginx SPA 回退不受影响）
+const OverviewView = () => import('../views/OverviewView.vue')
+const AlertsView = () => import('../views/AlertsView.vue')
+const IncidentDetailView = () => import('../views/IncidentDetailView.vue')
+const HistoryView = () => import('../views/HistoryView.vue')
+const RunsView = () => import('../views/RunsView.vue')
+const RunDetailView = () => import('../views/RunDetailView.vue')
+const CasesView = () => import('../views/CasesView.vue')
+const DutyView = () => import('../views/DutyView.vue')
+const DutyChatView = () => import('../views/DutyChatView.vue')
+const NotificationsView = () => import('../views/NotificationsView.vue')
+const EvalView = () => import('../views/EvalView.vue')
+const EvalRunsView = () => import('../views/EvalRunsView.vue')
+const EvalRunDetailView = () => import('../views/EvalRunDetailView.vue')
+const EvalDatasetsView = () => import('../views/EvalDatasetsView.vue')
+const EvalReviewView = () => import('../views/EvalReviewView.vue')
+const EvalAssetsView = () => import('../views/EvalAssetsView.vue')
+const EvalNewView = () => import('../views/EvalNewView.vue')
+const EvalCompareView = () => import('../views/EvalCompareView.vue')
+const MonitorView = () => import('../views/MonitorView.vue')
+const DrillsView = () => import('../views/DrillsView.vue')
+const DrillCreateView = () => import('../views/DrillCreateView.vue')
+const DrillDetailView = () => import('../views/DrillDetailView.vue')
+const VersionsView = () => import('../views/VersionsView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },

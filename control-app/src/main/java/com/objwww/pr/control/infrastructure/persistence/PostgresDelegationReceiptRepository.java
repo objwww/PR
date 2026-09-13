@@ -66,6 +66,45 @@ public class PostgresDelegationReceiptRepository implements DelegationReceiptRep
                 .update();
     }
 
+    /** RV04/T20：并发同 messageId 原子幂等——ON CONFLICT 下 PG 事务不置 aborted，
+     * 冲突后可同事务另条查询读实际胜者 */
+    @Override
+    public int insertIfAbsent(DelegationReceipt r) {
+        return jdbc.sql("""
+                INSERT INTO rca_delegation_receipt (
+                    id, message_id, run_id, primary_task_id, child_task_id,
+                    round_id, gap_id, role_id, child_status, admission,
+                    findings, support_refs, counter_refs, missing_information,
+                    payload_digest, payload_bytes, received_at
+                ) VALUES (
+                    :id, :messageId, :runId, :primaryTaskId, :childTaskId,
+                    :roundId, :gapId, :roleId, :childStatus, :admission,
+                    CAST(:findings AS jsonb), CAST(:supportRefs AS jsonb),
+                    CAST(:counterRefs AS jsonb), CAST(:missingInformation AS jsonb),
+                    :payloadDigest, :payloadBytes, :receivedAt
+                )
+                ON CONFLICT (message_id) DO NOTHING
+                """)
+                .param("id", r.id())
+                .param("messageId", r.messageId())
+                .param("runId", r.runId())
+                .param("primaryTaskId", r.primaryTaskId())
+                .param("childTaskId", r.childTaskId())
+                .param("roundId", r.roundId())
+                .param("gapId", r.gapId())
+                .param("roleId", r.roleId())
+                .param("childStatus", r.childStatus().name())
+                .param("admission", r.admission().name())
+                .param("findings", toJson(r.findings()))
+                .param("supportRefs", toJson(r.supportRefs()))
+                .param("counterRefs", toJson(r.counterRefs()))
+                .param("missingInformation", toJson(r.missingInformation()))
+                .param("payloadDigest", r.payloadDigest())
+                .param("payloadBytes", r.payloadBytes())
+                .param("receivedAt", Timestamp.from(r.receivedAt()))
+                .update() > 0 ? 1 : 0;
+    }
+
     @Override
     public Optional<DelegationReceipt> findByMessageId(UUID messageId) {
         List<DelegationReceipt> rows = jdbc.sql("""

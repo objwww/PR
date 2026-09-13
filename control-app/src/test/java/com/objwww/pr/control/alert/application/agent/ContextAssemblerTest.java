@@ -817,6 +817,17 @@ class ContextAssemblerTest {
         }
 
         @Override
+        public int insertIfAbsent(DelegationReceipt receipt) {
+            boolean exists = rows.stream().anyMatch(r ->
+                    r.messageId().equals(receipt.messageId()));
+            if (exists) {
+                return 0;
+            }
+            rows.add(receipt);
+            return 1;
+        }
+
+        @Override
         public Optional<DelegationReceipt> findByMessageId(UUID messageId) {
             return rows.stream().filter(r -> r.messageId().equals(messageId)).findFirst();
         }
