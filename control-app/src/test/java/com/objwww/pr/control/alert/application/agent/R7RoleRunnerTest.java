@@ -95,6 +95,8 @@ class R7RoleRunnerTest {
     private BoundedLlmRoleRunner boundedRunner;
     private RunnerDirectory directory;
     private SingleToolRoleRunner singleToolRunner;
+    private RcaActionGuard guardRef;
+    private ContextAssembler assemblerRef;
 
     @BeforeEach
     void setUp() {
@@ -121,10 +123,12 @@ class R7RoleRunnerTest {
         gate.openRun(runId, Map.of(BudgetKind.TOKEN, 1_000_000L));
         RcaActionGuard guard = new RcaActionGuard(stores.runs, stores.tasks, agents,
                 gate, rcaGateway, CLOCK);
+        this.guardRef = guard;
 
         ContextAssembler assembler = new ContextAssembler(evidence, stores.toolLedger,
                 stores.delegationDecisions,
                 run -> ContextAssembler.AlertMaterial.unknown(), MAPPER);
+        this.assemblerRef = assembler;
         boundedRunner = new BoundedLlmRoleRunner(guard, supervisor, stores.checkpoints,
                 evidence, assembler, toolPort, MAPPER, CLOCK, commitFence());
         singleToolRunner = new SingleToolRoleRunner(Map.of("metrics-expert",
@@ -504,6 +508,44 @@ class R7RoleRunnerTest {
                 .as("可重试失败不留熔断签名").isNull();
     }
 
+    // ------------------------------------- 单步输出预算旋钮（deepseek 推理模型适配）
+
+    @Test
+    void stepMaxTokens默认1000_既有构造器链恒缺省() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"query\":\"error\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-t1",
+                Duration.ofMillis(5)));
+        boundedRunner.drive(request(primaryId, primaryProfile()));
+        assertThat(client.maxTokensSeen).containsExactly(1000);
+    }
+
+    @Test
+    void stepMaxTokens配置放大2000_直达模型请求() {
+        // 推理模型 reasoning_tokens 计入输出预算（195 实证 deepseek
+        // OUTPUT_BUDGET_EXHAUSTED）——11 参构造器注入 2000，值直达网关
+        BoundedLlmRoleRunner widened = new BoundedLlmRoleRunner(guardRef, supervisor,
+                stores.checkpoints, evidence, assemblerRef, toolPort, MAPPER, CLOCK,
+                null, commitFence(), 2000);
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"query\":\"error\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-t2",
+                Duration.ofMillis(5)));
+        widened.drive(request(primaryId, primaryProfile()));
+        assertThat(client.maxTokensSeen).containsExactly(2000);
+    }
+
+    @Test
+    void stepMaxTokens非正_构造即拒() {
+        assertThatThrownBy(() -> new BoundedLlmRoleRunner(guardRef, supervisor,
+                stores.checkpoints, evidence, assemblerRef, toolPort, MAPPER, CLOCK,
+                null, commitFence(), 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("stepMaxTokens");
+    }
+
     // ------------------------------------------------- 夹具
 
     /** 主模式启动（PlanCompiler 编译事务写绑定+检查点），返回主任务 id */
@@ -611,8 +653,10 @@ class R7RoleRunnerTest {
     }
 
     private static ModelGatewayParams params() {
+        // maxCompletionTokensPerCall 对齐生产默认 16_000（application.yml），
+        // 否则 step-max-tokens 放大面被测试夹具自身的天花板误拒
         return new ModelGatewayParams(
-                0, 4, 1_000, 1_000, 100_000,
+                0, 4, 1_000, 16_000, 100_000,
                 Duration.ofSeconds(30), Duration.ofMillis(1), Duration.ofSeconds(5),
                 4, Duration.ofSeconds(10), Duration.ofMillis(1), Duration.ofMillis(5),
                 "test-provider", "v1");
@@ -712,6 +756,7 @@ class R7RoleRunnerTest {
     private static final class ScriptedRouteClient implements RouteClientPort {
         private final Queue<RouteCallOutcome> script = new ArrayDeque<>();
         private final List<String> prompts = new ArrayList<>();
+        private final List<Integer> maxTokensSeen = new ArrayList<>();
         private int calls;
 
         void enqueue(RouteCallOutcome outcome) {
@@ -726,6 +771,7 @@ class R7RoleRunnerTest {
         public RouteCallOutcome complete(ModelRequest request, Duration timeout) {
             calls++;
             prompts.add(request.prompt());
+            maxTokensSeen.add(request.maxTokens());
             return script.poll();
         }
     }

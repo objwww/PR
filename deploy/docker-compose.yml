@@ -161,6 +161,10 @@ services:
       # 委派批上限透传（armA 旋钮，执行者 2026-09-12 增补）：缺省 2=现行为；
       # A0 直查车辆 .env 置 0=零委派姿态（phase4 断言零 DELEGATE，与车辆口径一致）
       APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: ${APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES:-2}
+      # 单步输出预算上限透传（主会话 2026-09-13 增补）：缺省 1000=现行为；
+      # 推理模型（deepseek 系 reasoning_tokens 计入输出预算）真窗实证
+      # OUTPUT_BUDGET_EXHAUSTED——推理模型姿态 .env 置 2000+
+      APP_ALERT_R7_PRIMARY_STEP_MAX_TOKENS: ${APP_ALERT_R7_PRIMARY_STEP_MAX_TOKENS:-1000}
       # Prometheus 工具服务范围面透传（执行者 2026-09-12 增补）：catalog/metric_value
       # 必填 service 的 allowlist（R10 范围纪律）；旧 SPRING_APPLICATION_JSON 退场后
       # 显式钉死，缺省回落 control-app 单服务

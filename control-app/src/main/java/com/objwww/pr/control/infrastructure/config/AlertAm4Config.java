@@ -898,6 +898,7 @@ public class AlertAm4Config {
             double compactionTargetRatio,
             @Value("${app.alert.r7.compaction.max-per-run:2}") int compactionMaxPerRun,
             @Value("${app.alert.r7.max-input-tokens:24000}") int compactionMaxInputTokens,
+            @Value("${app.alert.r7.primary.step-max-tokens:1000}") int stepMaxTokens,
             com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
                     releaseAssetRepository,
             org.springframework.beans.factory.ObjectProvider<
@@ -968,7 +969,8 @@ public class AlertAm4Config {
                 compaction,
                 java.util.Objects.requireNonNull(
                         checkpointCommitFenceProvider.getIfAvailable(),
-                        "检查点提交围栏缺件（CL-01 运行路径必要件）"));
+                        "检查点提交围栏缺件（CL-01 运行路径必要件）"),
+                stepMaxTokens);
     }
 
     /**

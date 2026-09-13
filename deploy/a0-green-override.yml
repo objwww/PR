@@ -1,0 +1,14 @@
+# A0 全绿姿态 override（2026-09-13 主会话）——三段姿态：
+# ① MAX_DELEGATION_BATCHES=0：臂A 零委派旋钮（RUNBOOK §四.2 裁定的 A0 前提）；
+# ② STEP_MAX_TOKENS=2500：deepseek 推理模型 reasoning_tokens 计入输出预算
+#    （跑 C 实证 OUTPUT_BUDGET_EXHAUSTED×2），1000→2500 留足推理+协议 JSON 余量，
+#    仍低于平台 max-completion-tokens-per-call=16000 天花板；
+# ③ PRIMARY_PROMPT=A0 直查调优版：只描述调查策略（限两工具+收敛纪律），
+#    不携带场景答案（纪律同执行者 2026-09-11 注释）。
+# 用法：docker compose -f docker-compose.yml -f a0-green-override.yml up -d --force-recreate control-app
+services:
+  control-app:
+    environment:
+      APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: "0"
+      APP_ALERT_R7_PRIMARY_STEP_MAX_TOKENS: "2500"
+      APP_ALERT_R7_PRIMARY_PROMPT: "你是主调查 Agent，只能用 prometheus.query 和 logs.query 两个工具直查（无委派、无其他工具）。调查纪律：①先 prometheus.query 查 checkout 的 RPC 错误分布 sum by (rpc_method,error_type)(rpc_client_call_duration_seconds_count{service_name=\"checkout\"})；②再 logs.query 查同时段错误日志；③收敛：指标面证据足以确认故障时，final 一个 kind=ROOT_CAUSE 的 Claim 并在 evidence_refs 引用证据 id、evidence_roles 标 SUPPORTS；证据不足则 kind=HYPOTHESIS 并把缺口写进 missing_information。禁止编造无证据的根因。"

@@ -45,7 +45,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
 
     /** 单步模型调用保守 token 估值（预算预留面；usage 实扣以服务端回执为准） */
     static final long TOKEN_ESTIMATE_PER_STEP = 1_500L;
-    /** 单步 max_tokens（有界输出；Decision 是小对象，不允许长文） */
+    /** 单步 max_tokens 缺省（有界输出；Decision 是小对象，不允许长文）。
+     *  推理模型（deepseek 系 reasoning_tokens 计入输出预算）需经
+     *  app.alert.r7.primary.step-max-tokens 放大——195 实证 OUTPUT_BUDGET_EXHAUSTED */
     static final int MAX_TOKENS_PER_STEP = 1_000;
 
     /** R5 同签名熔断签名前缀（与模型可见反馈文本同槽共存，按前缀+值精确比对） */
@@ -107,6 +109,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     private final ContextCompactionService compaction;
     /** CL-01 提交围栏：运行路径检查点唯一提交口（生产装配必须提供） */
     private final PrimaryCheckpointCommitService commits;
+    /** 单步输出预算上限（默认 {@link #MAX_TOKENS_PER_STEP}；推理模型经配置放大） */
+    private final int stepMaxTokens;
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
@@ -121,6 +125,18 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
             Clock clock, ContextCompactionService compaction,
             PrimaryCheckpointCommitService commits) {
+        this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
+                clock, compaction, commits, MAX_TOKENS_PER_STEP);
+    }
+
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock, ContextCompactionService compaction,
+            PrimaryCheckpointCommitService commits, int stepMaxTokens) {
+        if (stepMaxTokens <= 0) {
+            throw new IllegalArgumentException("stepMaxTokens 必须为正: " + stepMaxTokens);
+        }
         this.guard = Objects.requireNonNull(guard, "guard");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -131,6 +147,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.compaction = compaction;
         this.commits = Objects.requireNonNull(commits, "commits（提交围栏缺件）");
+        this.stepMaxTokens = stepMaxTokens;
     }
 
     @Override
@@ -171,7 +188,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         RcaModelOutcome outcome;
         try {
             outcome = guard.guardedModelCall(actionOf(request, checkpoint), assembly.prompt(),
-                    MAX_TOKENS_PER_STEP, TOKEN_ESTIMATE_PER_STEP);
+                    stepMaxTokens, Math.max(TOKEN_ESTIMATE_PER_STEP, stepMaxTokens + 500L));
         } catch (com.objwww.pr.control.alert.domain.agent.RcaModelCallException e) {
             // R5 同签名熔断（BA-120/MC25）：模型面终态失败（零触网栅栏/步级可重试除外）
             // 同 (errorCode+稳定信封) 连续第 2 次 → 确定性未决收敛，不再同参重发
