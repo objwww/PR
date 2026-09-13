@@ -1,0 +1,164 @@
+Output format is aligned.
+       sec       
+-----------------
+ === rca_run ===
+(1 row)
+
+                  id                  |   state   | engine | completion_kind |          created_at           |          finished_at          
+--------------------------------------+-----------+--------+-----------------+-------------------------------+-------------------------------
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 | SUCCEEDED | NATIVE |                 | 2026-09-13 08:26:51.397254+00 | 2026-09-13 08:29:31.221944+00
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 | SUCCEEDED | NATIVE |                 | 2026-09-13 08:32:07.67786+00  | 2026-09-13 08:34:22.258527+00
+ 544c8824-d06a-4528-b341-a2042dd04371 | SUCCEEDED | NATIVE |                 | 2026-09-13 08:39:02.989422+00 | 2026-09-13 08:41:15.309458+00
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 | SUCCEEDED | NATIVE |                 | 2026-09-13 08:42:46.498176+00 | 2026-09-13 08:47:18.367095+00
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 | SUCCEEDED | NATIVE |                 | 2026-09-13 08:49:37.338202+00 | 2026-09-13 08:53:41.287065+00
+(5 rows)
+
+          sec           
+------------------------
+ === rca_model_call ===
+(1 row)
+
+                run_id                | action_seq |  state  |       error_code        | ptok | ctok | latency_ms | has_prid 
+--------------------------------------+------------+---------+-------------------------+------+------+------------+----------
+ 544c8824-d06a-4528-b341-a2042dd04371 |          0 | SUCCESS |                         | 1594 | 182  |       3353 | f
+ 544c8824-d06a-4528-b341-a2042dd04371 |          1 | SUCCESS |                         | 2009 | 879  |      11135 | f
+ 544c8824-d06a-4528-b341-a2042dd04371 |          2 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ 544c8824-d06a-4528-b341-a2042dd04371 |          2 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |          0 | SUCCESS |                         | 1671 | 2785 |      28593 | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |          1 | SUCCESS |                         | 1768 | 859  |       9833 | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |          2 | SUCCESS |                         | 2113 | 3392 |      34796 | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |          3 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |          3 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          0 | SUCCESS |                         | 1531 | 177  |       3045 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          1 | SUCCESS |                         | 1948 | 275  |       3908 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          2 | SUCCESS |                         | 2039 | 436  |       5972 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          3 | SUCCESS |                         | 2388 | 400  |       6169 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          4 | SUCCESS |                         | 2801 | 412  |       5592 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          5 | SUCCESS |                         | 2840 | 810  |       8814 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          6 | SUCCESS |                         | 2880 | 374  |       4866 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          7 | SUCCESS |                         | 2978 | 357  |       4951 | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |          7 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          0 | SUCCESS |                         | 1525 | 292  |       4306 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          1 | SUCCESS |                         | 1615 | 262  |       3856 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          2 | SUCCESS |                         | 1951 | 332  |       4298 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          3 | SUCCESS |                         | 1988 | 381  |       4712 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          4 | SUCCESS |                         | 2404 | 457  |       5608 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          5 | SUCCESS |                         | 2823 | 271  |       3756 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          6 | SUCCESS |                         | 3236 | 803  |      10298 | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          7 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |          7 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          0 | SUCCESS |                         | 1603 | 301  |       4097 | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          1 | SUCCESS |                         | 2010 | 1168 |      13769 | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          2 | SUCCESS |                         | 2431 | 3241 |      38042 | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          3 | FAILED  | OUTPUT_BUDGET_EXHAUSTED |      |      |            | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          3 | SUCCESS |                         | 2900 | 1163 |      14407 | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          4 | SUCCESS |                         | 3255 | 4490 |      55387 | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |          5 | SUCCESS |                         | 3346 | 2826 |      31630 | f
+(34 rows)
+
+             sec             
+-----------------------------
+ === rca_tool_invocation ===
+(1 row)
+
+                run_id                | call_seq |    tool_name     |  state  |  reason_code  | has_ev 
+--------------------------------------+----------+------------------+---------+---------------+--------
+ 544c8824-d06a-4528-b341-a2042dd04371 |        1 | prometheus.query | SUCCESS |               | t
+ 544c8824-d06a-4528-b341-a2042dd04371 |        2 | prometheus.query | SUCCESS |               | t
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |        1 | prometheus.query | FAILED  | INVALID_INPUT | f
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |        2 | prometheus.query | SUCCESS |               | t
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |        3 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        1 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        2 | prometheus.query | FAILED  | INVALID_INPUT | f
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        3 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        4 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        5 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        6 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        7 | prometheus.query | SUCCESS |               | t
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        8 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        1 | prometheus.query | FAILED  | INVALID_INPUT | f
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        2 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        3 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        4 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        5 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        6 | prometheus.query | SUCCESS |               | t
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        7 | logs.query       | FAILED  | INVALID_INPUT | f
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        1 | prometheus.query | SUCCESS |               | t
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        2 | prometheus.query | SUCCESS |               | t
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        3 | prometheus.query | SUCCESS |               | t
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        4 | prometheus.query | SUCCESS |               | t
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        5 | logs.query       | FAILED  | INVALID_INPUT | f
+(25 rows)
+
+        sec        
+-------------------
+ === rca_claim ===
+(1 row)
+
+                run_id                |    kind    | status  | claim_key |     basis     |              evidence_refs               
+--------------------------------------+------------+---------+-----------+---------------+------------------------------------------
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 | HYPOTHESIS | UNKNOWN | c1        | SINGLE_SOURCE | ["3564c31f-f01e-46bf-893f-0f20232d9910"]
+(1 row)
+
+              sec               
+--------------------------------
+ === rca_primary_checkpoint ===
+(1 row)
+
+                run_id                | round_id |     phase     | steps_used |                                                                                                                                                                                                              final_claims                                                                                                                                                                                                              |                                                                                                                                                                 missing                                                                                                                                                                  |                                                                                          last_error                                                                                           
+--------------------------------------+----------+---------------+------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ 544c8824-d06a-4528-b341-a2042dd04371 |        0 | PRIMARY_READY |          2 | []                                                                                                                                                                                                                                                                                                                                                                                                                                     | ["MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code=OUTPUT_BUDGET_EXHAUSTED，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；已有事实由报告相位从工件面补集"]                                                                                                                                                          | MODEL_FAILURE_SIGNATURE:OUTPUT_BUDGET_EXHAUSTED|6e3a5fa1d103c0ab6c40ad4b2da250c6db168f2dcc48de3ab7634770bf9dd7d8
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 |        0 | PRIMARY_READY |          3 | []                                                                                                                                                                                                                                                                                                                                                                                                                                     | ["MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code=OUTPUT_BUDGET_EXHAUSTED，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；已有事实由报告相位从工件面补集"]                                                                                                                                                          | MODEL_FAILURE_SIGNATURE:OUTPUT_BUDGET_EXHAUSTED|70ab8bbcd275ee7162001156438f7427b7f7732794bcdbadb70fef9e467b57b6
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 |        0 | PRIMARY_READY |          8 | []                                                                                                                                                                                                                                                                                                                                                                                                                                     | ["STEPS_EXHAUSTED: max_steps=8 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束"]                                                                                                                                                                                                                                                         | 
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 |        0 | PRIMARY_READY |          7 | []                                                                                                                                                                                                                                                                                                                                                                                                                                     | ["MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code=OUTPUT_BUDGET_EXHAUSTED，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；已有事实由报告相位从工件面补集"]                                                                                                                                                          | MODEL_FAILURE_SIGNATURE:OUTPUT_BUDGET_EXHAUSTED|9cea24641dc71698978b63a4a20f8eeab762d9207829b7c9b718c94cb9af6f3b
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 |        0 | PRIMARY_READY |          5 | [{"kind": "HYPOTHESIS", "claim_key": "c1", "statement": "checkout 服务在冻结窗内可能因下游 oteldemo.PaymentService/Charge 调用出现大量 UNKNOWN/UNAVAILABLE 错误（指标显示 UNKNOWN=440、UNAVAILABLE=18）而受影响；但缺少错误日志/成功率证据，无法确认根因。", "evidence_refs": ["3564c31f-f01e-46bf-893f-0f20232d9910"], "admission_note": "", "evidence_roles": [{"ref": "3564c31f-f01e-46bf-893f-0f20232d9910", "role": "CONTEXT"}]}] | ["未能查询到 checkout 服务在窗口 1789288366/1789288966 内的错误日志（logs.query 未成功执行），缺少 PaymentService/Charge 返回 UNKNOWN 的实际错误信息/异常栈。", "缺少成功率/错误率指标（如总请求数与错误数对比），仅有累计计数器无法确认故障比例及影响。", "缺少下游 PaymentService/ProductCatalogService 自身健康状态或依赖关系证据。"] | INVALID_ARGS: 工具 logs.query 的 args 未通过校验：INVALID_ARGS: since 必须为 ISO-8601 Instant。严格对照 tool_schemas 里该工具的 JSON Schema（字段名/类型/取值域）修正 args 后重发 tool_call。
+(5 rows)
+
+              sec              
+-------------------------------
+ === report/publication 面 ===
+(1 row)
+
+ rca_report_tbl |  publication_tbl   
+----------------+--------------------
+ rca_report     | report_publication
+(1 row)
+
+Output format is aligned.
+        sec         
+--------------------
+ === rca_report ===
+(1 row)
+
+                run_id                |  validation_status  |          model          | total_tokens | outcome |          created_at           
+--------------------------------------+---------------------+-------------------------+--------------+---------+-------------------------------
+ 544c8824-d06a-4528-b341-a2042dd04371 | STRUCTURE_VALIDATED | native-deterministic-v1 |              |         | 2026-09-13 08:41:15.309458+00
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 | STRUCTURE_VALIDATED | native-deterministic-v1 |              |         | 2026-09-13 08:53:41.287065+00
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 | STRUCTURE_VALIDATED | native-deterministic-v1 |         3335 |         | 2026-09-13 08:34:22.258527+00
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 | STRUCTURE_VALIDATED | native-deterministic-v1 |              |         | 2026-09-13 08:29:31.221944+00
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 | STRUCTURE_VALIDATED | native-deterministic-v1 |        17980 |         | 2026-09-13 08:47:18.367095+00
+(5 rows)
+
+            sec             
+----------------------------
+ === report_publication ===
+(1 row)
+
+psql:/tmp/q-a0green-rp2.sql:5: ERROR:  column p.run_id does not exist
+LINE 1: SELECT p.run_id, p.status, p.channel, p.created_at FROM repo...
+               ^
+Output format is aligned.
+                      sec                       
+------------------------------------------------
+ === report_publication（经 report_id 关联）===
+(1 row)
+
+                run_id                | state | attempt_count | last_error |          created_at           
+--------------------------------------+-------+---------------+------------+-------------------------------
+ 544c8824-d06a-4528-b341-a2042dd04371 | SENT  |             0 |            | 2026-09-13 08:41:15.309458+00
+ 7ca8928e-00b1-426d-9ac9-ad09a11981c0 | SENT  |             0 |            | 2026-09-13 08:53:41.287065+00
+ ec0d708f-6d0c-4b6b-88d0-3d8cd3f24505 | SENT  |             0 |            | 2026-09-13 08:34:22.258527+00
+ ec15f8d5-f7fc-4dd6-98ba-5702caabb7e1 | SENT  |             0 |            | 2026-09-13 08:29:31.221944+00
+ fa979102-ba20-4c4d-bb83-ad9d4f9e19b4 | SENT  |             0 |            | 2026-09-13 08:47:18.367095+00
+(5 rows)
+
