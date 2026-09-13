@@ -1,0 +1,29 @@
+== RR25/27/28 incident 生命周期九相位（零模型依赖）==
+RR25-P1基线 PASS（首见铸 incident：status/generation=FIRING/0/WAITING_CAPABILITY/1/1/0；http=202）
+RR25-P1事件 PASS（事件=1；run=0（HOLMES 分桶不铸 run，决策行=10 实证零模型依赖））
+RR25-P2重复通知 PASS（received+1/distinct 不变/notification(重复计数)+1=FIRING/0/WAITING_CAPABILITY/2/1/1（多物理请求一次副作用））
+RR25-P2去重 PASS（事件仍=1（fingerprint+payloadHash+startsAt 幂等键生效））
+RR25-P3材料变化 PASS（generation 保持=0（同 episode）；RERUN 尝试被 HOLMES 分桶→WAITING_CAPABILITY；FIRING/0/WAITING_CAPABILITY/3/2/1）
+RR25-P4仅severity PASS（新事件（payloadHash 含 severity）但 generation 保持=0、材料未变不重查；FIRING/0/WAITING_CAPABILITY/4/3/1）
+RR25-P5resolved PASS（FIRING→RESOLVED generation 保持=0、resolved_at 落；RESOLVED/0/-/5/4/1）
+RR25-P6重复resolved PASS（重复 resolved 不换态不换代；RESOLVED/0/-/6/5/1）
+RR25-P7乱序迟到 PASS（迟到 firing（startsAt<resolvedAt）不复活不换代——恢复后旧 firing 不冒充新故障；RESOLVED/0/-/7/6/1）
+RR25-P8新episode PASS（resolved→firing generation+1=1、episodeStartedAt 推进到 2026-09-13T14:31:12Z；FIRING/1/WAITING_CAPABILITY/8/7/1）
+RR25-P9幂等键 PASS（新 episode 内同载荷×3 次物理投递=1 条事件、generation 恒 1；FIRING/1/WAITING_CAPABILITY/10/7/3）
+== 复原核验 ==
+standing-health=200
+standing-restarts=0
+== 完成 ==
+RR25-P1基线 PASS（首见铸 incident：status/generation=FIRING/0/WAITING_CAPABILITY/1/1/0；http=202）
+RR25-P1事件 PASS（事件=1；run=0（HOLMES 分桶不铸 run，决策行=10 实证零模型依赖））
+RR25-P2重复通知 PASS（received+1/distinct 不变/notification(重复计数)+1=FIRING/0/WAITING_CAPABILITY/2/1/1（多物理请求一次副作用））
+RR25-P2去重 PASS（事件仍=1（fingerprint+payloadHash+startsAt 幂等键生效））
+RR25-P3材料变化 PASS（generation 保持=0（同 episode）；RERUN 尝试被 HOLMES 分桶→WAITING_CAPABILITY；FIRING/0/WAITING_CAPABILITY/3/2/1）
+RR25-P4仅severity PASS（新事件（payloadHash 含 severity）但 generation 保持=0、材料未变不重查；FIRING/0/WAITING_CAPABILITY/4/3/1）
+RR25-P5resolved PASS（FIRING→RESOLVED generation 保持=0、resolved_at 落；RESOLVED/0/-/5/4/1）
+RR25-P6重复resolved PASS（重复 resolved 不换态不换代；RESOLVED/0/-/6/5/1）
+RR25-P7乱序迟到 PASS（迟到 firing（startsAt<resolvedAt）不复活不换代——恢复后旧 firing 不冒充新故障；RESOLVED/0/-/7/6/1）
+RR25-P8新episode PASS（resolved→firing generation+1=1、episodeStartedAt 推进到 2026-09-13T14:31:12Z；FIRING/1/WAITING_CAPABILITY/8/7/1）
+RR25-P9幂等键 PASS（新 episode 内同载荷×3 次物理投递=1 条事件、generation 恒 1；FIRING/1/WAITING_CAPABILITY/10/7/3）
+standing-health=200
+standing-restarts=0

@@ -1,0 +1,6 @@
+=== incident 终态 ===
+alertname=E2RRR25223043|service=checkout|FIRING|1|WAITING_CAPABILITY|10|7|3|2026-09-13 14:31:12+00|
+=== 全事件轨迹 ===
+ERROR:  invalid input syntax for type timestamp with time zone: "-"
+LINE 1: ..., status, generation, starts_at, coalesce(ends_at,'-'), reco...
+                                                             ^
