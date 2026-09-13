@@ -2,8 +2,16 @@
 
 目标主机：195 服务器（CentOS 7，内核 3.10，docker 26 + compose v2.27.1）。
 构建现场 = compose 项目目录 `/opt/build/pr`（git 工作副本，deploy/ 直挂
-../control-app 的迁移 SQL，单一事实源）；持久状态（.env / App 私钥）在
-`/opt/projects/pr_agent`，经符号链接接入 deploy/，同步重建构建现场不影响。
+../control-app 的迁移 SQL，单一事实源）。
+
+> **当前生产实况（2026-09-13 起，告警时代）**：`deploy/.env` 是**真实文件**
+> （45+ 键，chmod 600），在构建现场原地维护，**不是符号链接**；`deploy/keys`
+> 也是真实目录。`/opt/projects/pr_agent/` 仅余 M0 时代 stub 残留，不再接入。
+> **严禁对该 .env 执行 `ln -sfn`**——对已存在的真实文件做符号链接会静默覆盖
+> 掉全部键值（2026-09-13 实发事故，靠 fail-closed 拒启+备份恢复）。
+> 步骤 0 的 `rm -rf /opt/build/pr` 整体重建同样会删除真实 .env——
+> 重建前必须先备份 `.env`（如 `cp -a deploy/.env /tmp/.env.deploy-backup`），
+> 重建后原样恢复并核对行数与权限。增量同步（tar 覆盖不删目录）不受影响。
 
 栈组成（`docker-compose.yml` 头注有完整 hardening/迁移选型说明）：
 
@@ -23,23 +31,20 @@ tar czf - --exclude=target --exclude=.git --exclude=backups --exclude=.kimi-code
   | ssh -i ~/.ssh/id_ed25519 root@146.56.195.225 \
     'rm -rf /opt/build/pr && mkdir -p /opt/build/pr && tar xzf - -C /opt/build/pr'
 
-# 1) 195 上准备持久目录（只放 .env 与私钥；构建现场每次同步会整体重建，不能放持久状态）
+# 1) .env 与私钥就位（195 上执行）
 ssh -i ~/.ssh/id_ed25519 root@146.56.195.225
-mkdir -p /opt/projects/pr_agent/keys
 
 # 迁移 SQL 单一事实源 = control-app 资源目录，compose migrate 服务直挂
 # ../control-app/src/main/resources/db/migration（T18 裁决：不复制双份，杜绝漂移）。
-# 因此 compose 项目目录 = 构建现场 /opt/build/pr/deploy（../control-app 才有效）；
-# 持久状态经符号链接接入：
+# 因此 compose 项目目录 = 构建现场 /opt/build/pr/deploy（../control-app 才有效）。
 
-# stub 模式的 GitHub App 私钥 = 一次性 RSA 测试 key（stub 不验签；真实部署换成真 key）
-cd /opt/projects/pr_agent
-[ -f keys/github-app-key.pem ] || \
-  openssl genrsa 2048 2>/dev/null | openssl pkcs8 -topk8 -nocrypt > keys/github-app-key.pem
-chmod 444 keys/github-app-key.pem   # 启动自检断言私钥无任何写位
+# 【已有部署（当前生产）】deploy/.env 是原地维护的真实文件，本步只需核对：
+cd /opt/build/pr/deploy
+stat -c '%a %s' .env    # 期望 600 权限、非符号链接；勿动
 
-# .env：全 stub 冒烟的最小集（模型/GitHub 均不打真实端点，不需要任何真实凭证）
-cat > .env <<EOF
+# 【全新环境首次部署】才按下法生成（M0 全 stub 冒烟的最小集，
+# 模型/GitHub 均不打真实端点，不需要任何真实凭证）：
+cat > /opt/build/pr/deploy/.env <<EOF
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 CONTROL_DB_PASSWORD=$(openssl rand -hex 24)
 PUBLISHER_DB_PASSWORD=$(openssl rand -hex 24)
@@ -52,11 +57,16 @@ OPENAI_COMPAT_BASE_URL=http://github-stub:8080
 AGENT_MODEL_API_KEY=stub-not-a-real-key
 AGENT_MODEL=qwen-plus
 EOF
-chmod 600 .env
+chmod 600 /opt/build/pr/deploy/.env
 
-# 符号链接接入 compose 项目目录（deploy/.gitignore 已排 .env 与 *.pem，链接不落库）
-ln -sfn /opt/projects/pr_agent/.env /opt/build/pr/deploy/.env
-ln -sfn /opt/projects/pr_agent/keys /opt/build/pr/deploy/keys
+# stub 模式的 GitHub App 私钥 = 一次性 RSA 测试 key（stub 不验签；真实部署换成真 key）
+mkdir -p /opt/build/pr/deploy/keys
+[ -f /opt/build/pr/deploy/keys/github-app-key.pem ] || \
+  openssl genrsa 2048 2>/dev/null | openssl pkcs8 -topk8 -nocrypt > /opt/build/pr/deploy/keys/github-app-key.pem
+chmod 444 /opt/build/pr/deploy/keys/github-app-key.pem   # 启动自检断言私钥无任何写位
+
+# 注意：历史上曾用 ln -sfn 把 /opt/projects/pr_agent/.env 符号链接进 deploy/——
+# 该方式已废弃（当前生产 .env 为真实文件，ln -sfn 会覆盖销毁它，见文件头警示框）。
 
 # 2) 构建 jar（宿主机 maven 容器，挂 m2repo 缓存卷）
 docker run --rm -v /opt/build/pr:/build -w /build \
