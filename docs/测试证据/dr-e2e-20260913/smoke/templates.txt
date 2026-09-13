@@ -1,0 +1,5 @@
+S1 True DR-03/DR-05 已接线（2026-09-13 DR-A 批）
+S2 True DR-03/DR-05 已接线（2026-09-13 DR-A 批）
+S3 True DR-03 注入接线已交付（2026-09-13 DR-A 批：ArenaCha
+S4 True 同 S3（DR-03 接线已交付+chaos-admin 连通鉴权实测；真机验收
+S5 True 同 S3（DR-03 接线已交付+chaos-admin 连通鉴权实测；真机验收
