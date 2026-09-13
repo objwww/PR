@@ -1,0 +1,32 @@
+{
+  "suiteVersion": "b2-cl06-verify2/1.0",
+  "runId": "$r",
+  "status": "ERROR",
+  "assertions": [
+    {
+      "id": "A00-db",
+      "status": "ERROR",
+      "detail": "psql returncode=1 stderr=ERROR:  invalid input syntax for type uuid: \"$r\"\nLINE 1: ...del_call c on c.id=i.model_call_id where c.run_id='$r' and c...\n                                                             ^\n"
+    },
+    {
+      "id": "A04-rounds",
+      "status": "FAIL",
+      "detail": "round 数 0 <2（CL-06 不可验）"
+    },
+    {
+      "id": "A07-purity",
+      "status": "FAIL",
+      "detail": "控制拒绝码零混入扫描完成"
+    }
+  ],
+  "coverage": {
+    "rounds": [],
+    "boundaries": [],
+    "nonEmptyWitness": false,
+    "semanticNote": "witness=false 时结构过但语义覆盖不足（INCONCLUSIVE）"
+  },
+  "configDigest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidenceRefs": [
+    "/tmp/v2probe/$r/verify2-result.json"
+  ]
+}

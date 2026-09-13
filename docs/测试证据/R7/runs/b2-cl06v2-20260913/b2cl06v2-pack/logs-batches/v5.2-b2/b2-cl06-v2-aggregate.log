@@ -1,0 +1,8 @@
+attempt 1 valid: drv=1 run=2716d219-176a-40c1-ad18-4b6371e5e67d verify2=3 dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073227Z30178
+  -> INCONCLUSIVE（verify2=3：结构过/非空 witness 未取得——drv=1 为 phase10 门预期编码）
+attempt 2 INVALID（场景未成立：零委派采样面；run=007116ec-b9df-43bf-b094-1acbd75b4ae0）
+attempt 3 valid: drv=1 run=3564fee0-236f-4fb8-87c7-b17a197f86b4 verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073309Z3819
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase4 PRIMARY_INVESTIGATE DONE 应恰 1 实得 0）
+attempt 4 valid: drv=1 run=e8df6896-f48a-4e76-95b1-8333ae60f0bc verify2=3 dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073318Z4783
+  -> INCONCLUSIVE（verify2=3：结构过/非空 witness 未取得——drv=1 为 phase10 门预期编码）
+invalid_trials=1 valid_trials=3 pass_seen=0 fail_seen=1

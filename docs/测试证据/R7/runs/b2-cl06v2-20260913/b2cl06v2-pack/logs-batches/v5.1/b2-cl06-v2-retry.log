@@ -1,0 +1,14 @@
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+override-ok（v5 两批委派场景在）
+==== attempt 1 (valid 0/3) ====
+attempt 1 valid: drv=1 run=bbf9af6a-8b1e-4fa3-80bc-d8672722c003 verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T071737Z30116/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase9 记忆行 1（<2，无累计链可言））
+==== attempt 2 (valid 1/3) ====
+attempt 2 valid: drv=1 run=e6f0aa34-d83c-4223-8805-f0993588bfc8 verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T071757Z32599/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase9 记忆行 1（<2，无累计链可言））
+==== attempt 3 (valid 2/3) ====
+attempt 3 valid: drv=1 run=7fdbce6c-9f2c-438e-a5ff-a19485ca1a67 verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T071813Z2306/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase9 记忆行 1（<2，无累计链可言））
+invalid_trials=0 valid_trials=3 pass_seen=0 fail_seen=1
+RETRY2-VERDICT: FAIL（存在有效试验失败——全记录见 /opt/build/pr-logs/b2-cl06-v2-aggregate.log）

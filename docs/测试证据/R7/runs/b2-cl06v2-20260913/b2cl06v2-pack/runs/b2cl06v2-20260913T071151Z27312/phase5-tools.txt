@@ -1,0 +1,3 @@
+change.query
+logs.query
+prometheus.query

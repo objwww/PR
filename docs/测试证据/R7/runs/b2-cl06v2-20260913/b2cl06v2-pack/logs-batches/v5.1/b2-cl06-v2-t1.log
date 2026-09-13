@@ -1,0 +1,21 @@
+[R7] suite=b2cl06v2-20260913T071737Z30116 runs=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T071737Z30116 scene=service:checkout alertname:E2EB2Cl06CrossRound (委派面 v2)
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=9c941021-022c-4e52-a81d-40de5edd1fc7（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=113daeb9ed12e11b28739454ae96f7fd40b9745114d83cbd77fafafeed8d7761）
+[R7] phase2 注入合成告警（E2EB2Cl06CrossRound@checkout）
+[R7] phase2 PASS（原子对成立；run=bbf9af6a-8b1e-4fa3-80bc-d8672722c003）
+[R7] phase3 等 run 终态（真模型 900s 上限；两批委派收敛窗更宽）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：PRIMARY DONE / DELEGATE≥1 / 绑定 / 检查点（round≥1+batches≥1）
+[R7] phase4 PASS（主 DONE+委派 2 子任务；checkpoint round/steps/batches：2|1|3|2|true）
+[R7] phase5 受限直查：allowlist=jar 缺省八工具；evidence_refs 全可解析
+[R7] phase5 PASS（直查全落 allowlist；证据 2 行）
+[R7] phase6 回执链：全 SUCCESS 结清 + 捕获对账（R2）+ 快照回填（R1）+ 平台零交叉
+[R7] phase6 PASS（4 笔调用全结清）
+[R7] phase7 报告链 v2：winner=本案 pub SENT+outbox / loser=本案零 pub 零 outbox+同 incident 更早 SENT winner
+[R7] phase7 PASS（loser 面·绑案成立：本案零发布零外发 + 同 incident 更早 SENT winner 在档=仲裁语义正确）
+[R7] phase8 日志取证（脱敏）+ 密钥词形零回显
+[R7] phase8 PASS
+[R7] phase9 CL-06 记忆链 v2：schema2/LAG 父链（允许间隙）/锚点 NULL-safe/槽纯度
+[R7] FAIL: phase9 记忆行 1（<2，无累计链可言）
+RUN_ID_RESULT=bbf9af6a-8b1e-4fa3-80bc-d8672722c003

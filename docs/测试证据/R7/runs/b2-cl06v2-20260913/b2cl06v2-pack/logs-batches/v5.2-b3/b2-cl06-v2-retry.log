@@ -1,0 +1,18 @@
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+override-ok（v5 两批委派场景在）
+==== attempt 1 (valid 0/3) ====
+attempt 1 INVALID（场景未成立：零委派采样面；run=389632ed-eda1-4021-8875-e7b5ff3948f8）
+==== attempt 2 (valid 0/3) ====
+attempt 2 valid: drv=1 run=35100ace-5eac-4b84-9c91-bcff85e37cdd verify2=3 dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073811Z6279
+  -> INCONCLUSIVE（verify2=3：结构过/非空 witness 未取得——drv=1 为 phase10 门预期编码）
+==== attempt 3 (valid 1/3) ====
+attempt 3 INVALID（场景未成立：零委派采样面；run=ae998083-2bc2-4ec8-8774-487581670dad）
+==== attempt 4 (valid 1/3) ====
+attempt 4 valid: drv=1 run=99d69d8b-ce05-48f9-9fcd-78832712cbcd verify2=3 dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073852Z11045
+  -> INCONCLUSIVE（verify2=3：结构过/非空 witness 未取得——drv=1 为 phase10 门预期编码）
+==== attempt 5 (valid 2/3) ====
+attempt 5 valid: drv=1 run=22f2040d-226e-4161-a891-0efd48c0d4cf verify2=3 dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073915Z14272
+  -> INCONCLUSIVE（verify2=3：结构过/非空 witness 未取得——drv=1 为 phase10 门预期编码）
+invalid_trials=2 valid_trials=3 pass_seen=0 fail_seen=0
+RETRY2-VERDICT: INCONCLUSIVE（全部有效试验槽恒空——非空 witness 未取得）

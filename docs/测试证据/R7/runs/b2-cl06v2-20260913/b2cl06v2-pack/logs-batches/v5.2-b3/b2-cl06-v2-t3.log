@@ -1,0 +1,11 @@
+[R7] suite=b2cl06v2-20260913T073834Z9125 runs=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073834Z9125 scene=service:checkout alertname:E2EB2Cl06CrossRound (委派面 v2)
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=f46ebf2c-c3a2-46c4-9436-136d8a67610a（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=fc409aeefdc77c79bc75dd493e0f328d1689321969c24edbe3af295ff00cffb8）
+[R7] phase2 注入合成告警（E2EB2Cl06CrossRound@checkout）
+[R7] phase2 PASS（原子对成立；run=ae998083-2bc2-4ec8-8774-487581670dad）
+[R7] phase3 等 run 终态（真模型 900s 上限；两批委派收敛窗更宽）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：PRIMARY DONE / DELEGATE≥1 / 绑定 / 检查点（round≥1+batches≥1）
+[R7] FAIL: phase4 零委派（DELEGATE-%=0）——委派未发生，prompt/姿态再调
+RUN_ID_RESULT=ae998083-2bc2-4ec8-8774-487581670dad

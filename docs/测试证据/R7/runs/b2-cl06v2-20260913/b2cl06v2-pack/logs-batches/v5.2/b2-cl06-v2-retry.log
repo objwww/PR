@@ -1,0 +1,14 @@
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+override-ok（v5 两批委派场景在）
+==== attempt 1 (valid 0/3) ====
+attempt 1 valid: drv=1 run=3415d937-4fc4-4f72-8dbe-9d501f655462 verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T072715Z24994/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase10 INCONCLUSIVE（verify2=3：结构过但跨轮槽恒空——非空 witness 未取得，不得整体 PASS，见 /opt/build/runs-b2cl06v2/b2cl06v2-20260913T072715Z24994/veri）
+==== attempt 2 (valid 1/3) ====
+attempt 2 valid: drv=1 run=ffa70088-57a0-471b-9ee0-6fa51d0f390d verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T072742Z28568/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase10 INCONCLUSIVE（verify2=3：结构过但跨轮槽恒空——非空 witness 未取得，不得整体 PASS，见 /opt/build/runs-b2cl06v2/b2cl06v2-20260913T072742Z28568/veri）
+==== attempt 3 (valid 2/3) ====
+attempt 3 valid: drv=1 run=3e6c8694-3253-436c-9393-32e1cf25935c verify2=? dir=/opt/build/runs-b2cl06v2/b2cl06v2-20260913T072808Z32540/run-id.txt
+  -> FAIL（drv=1 verify2=?；末错行：[R7] FAIL: phase10 INCONCLUSIVE（verify2=3：结构过但跨轮槽恒空——非空 witness 未取得，不得整体 PASS，见 /opt/build/runs-b2cl06v2/b2cl06v2-20260913T072808Z32540/veri）
+invalid_trials=0 valid_trials=3 pass_seen=0 fail_seen=1
+RETRY2-VERDICT: FAIL（存在有效试验失败——全记录见 /opt/build/pr-logs/b2-cl06-v2-aggregate.log）

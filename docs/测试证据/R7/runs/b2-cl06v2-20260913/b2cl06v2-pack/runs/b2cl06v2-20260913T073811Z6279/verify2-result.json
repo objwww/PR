@@ -1,0 +1,85 @@
+{
+  "suiteVersion": "b2-cl06-verify2/1.0",
+  "runId": "35100ace-5eac-4b84-9c91-bcff85e37cdd",
+  "status": "INCONCLUSIVE",
+  "assertions": [
+    {
+      "id": "A01-rows",
+      "status": "PASS",
+      "detail": "primary 捕获行=6"
+    },
+    {
+      "id": "A04-rounds",
+      "status": "PASS",
+      "detail": "rounds=[0, 1, 2]"
+    },
+    {
+      "id": "A05-contain-r0-1-hypotheses",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r0-1-ruled_out",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r0-1-counter_evidence_refs",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r0-1-open_gaps",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r1-2-hypotheses",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r1-2-ruled_out",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r1-2-counter_evidence_refs",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A05-contain-r1-2-open_gaps",
+      "status": "SKIP",
+      "detail": "父版为空（无丢失面，不计语义覆盖）"
+    },
+    {
+      "id": "A07-purity",
+      "status": "PASS",
+      "detail": "控制拒绝码零混入扫描完成"
+    }
+  ],
+  "coverage": {
+    "rounds": [
+      0,
+      1,
+      2
+    ],
+    "boundaries": [
+      [
+        0,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "nonEmptyWitness": false,
+    "semanticNote": "witness=false 时结构过但语义覆盖不足（INCONCLUSIVE）"
+  },
+  "configDigest": "5248fe3f39c030c497669ee03b435755602660e7f80db7ec8eae22d2bc735479",
+  "evidenceRefs": [
+    "/opt/build/runs-b2cl06v2/b2cl06v2-20260913T073811Z6279/verify2-result.json"
+  ]
+}
