@@ -16,5 +16,9 @@ public enum ToolControlReason {
     /** EX-B2：日志源对良构查询回 4xx（LogQL 拒收/版本语义差）——工具侧缺陷，不进重试循环 */
     QUERY_FAILED,
     /** EN-06 M06：MCP server 已禁用（disable 先提交则无新资格）——明确终止，不无限重试 */
-    CAPABILITY_REVOKED
+    CAPABILITY_REVOKED,
+    /** A0 补充方案 §3 AS-05：allowlist 含工具但执行装配缺席——控制终止，启动期校验首闸 */
+    CONFIGURATION_ERROR,
+    /** A0 补充方案 §3 AS-03：重复调用熔断触发——控制终止，不当网络错误重试 */
+    DOOM_LOOP_TRIPPED
 }

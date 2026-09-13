@@ -245,16 +245,36 @@ class R7ActionGuardAdmissionTest {
     @Test
     void claim准入_本run引用保留_重复引用算一份_RX20() {
         UUID evidenceId = UUID.randomUUID();
+        // A0 补充方案 §2：作用面显式声明 SUPPORTS（未声明=CONTEXT 不计支持 → 降级）
         PrimaryDecision.FinalClaim good = new PrimaryDecision.FinalClaim("c1", "ROOT_CAUSE",
-                "异常由部署触发", List.of(evidenceId.toString(), evidenceId.toString()));
+                "异常由部署触发", List.of(evidenceId.toString(), evidenceId.toString()),
+                List.of(new PrimaryDecision.EvidenceRole(evidenceId.toString(),
+                        "SUPPORTS", null)));
 
         PrimaryClaimAdmission.AdmissionResult r = PrimaryClaimAdmission.admit(
                 List.of(good), Set.of(evidenceId.toString()));
 
         assertThat(r.claims().get(0).kind()).isEqualTo("ROOT_CAUSE");
+        assertThat(r.claims().get(0).hasSupport()).isTrue();
         assertThat(r.claims().get(0).evidenceRefs()).as("同一来源去重算一份")
                 .containsExactly(evidenceId.toString());
         assertThat(r.downgraded()).isZero();
+    }
+
+    @Test
+    void claim准入_未声明作用面_ROOT_CAUSE降级_A0补充方案() {
+        UUID evidenceId = UUID.randomUUID();
+        PrimaryDecision.FinalClaim unconfirmed = new PrimaryDecision.FinalClaim("c1",
+                "ROOT_CAUSE", "引用在但未声明作用", List.of(evidenceId.toString()));
+
+        PrimaryClaimAdmission.AdmissionResult r = PrimaryClaimAdmission.admit(
+                List.of(unconfirmed), Set.of(evidenceId.toString()));
+
+        assertThat(r.claims().get(0).kind()).as("支持关系未确认不确认根因")
+                .isEqualTo("HYPOTHESIS");
+        assertThat(r.claims().get(0).admissionNote())
+                .contains(PrimaryClaimAdmission.NOTE_SUPPORT_UNCONFIRMED);
+        assertThat(r.downgraded()).isEqualTo(1);
     }
 
     // ------------------------------------------------------- 夹具

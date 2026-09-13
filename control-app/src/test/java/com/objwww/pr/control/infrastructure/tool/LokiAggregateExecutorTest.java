@@ -156,6 +156,85 @@ class LokiAggregateExecutorTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ---------------------------------------------- A0 补充方案 §3：severity 口径
+
+    private static ToolExecutor.ToolExecution execSeverity(String severity) {
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("since", "2026-09-10T00:00:00Z");
+        args.put("until", "2026-09-10T00:05:00Z");
+        args.put("service", "checkout");
+        if (severity != null) {
+            args.put("severity", severity);
+        }
+        return new ToolExecutor.ToolExecution(args,
+                System.currentTimeMillis() + 10_000, 65_536);
+    }
+
+    @Test
+    @DisplayName("AS-01：severity=ERROR 过滤进选择器；结果携带 filter/window/coverage 口径面")
+    void severityFilterNarrowsSelectorAndResultCarriesSemantics() throws Exception {
+        WIREMOCK.stubFor(get(urlPathEqualTo("/loki/api/v1/query"))
+                .willReturn(aResponse().withStatus(200).withBody("""
+                        {"status":"success","data":{"resultType":"vector",
+                         "result":[
+                          {"metric":{"service_name":"checkout"},"value":[1757059500,"7"]}]}}
+                        """)));
+
+        byte[] body = executor().execute(execSeverity("ERROR"));
+
+        Map<?, ?> payload = JSON.readValue(body, Map.class);
+        assertThat(payload.get("status")).isEqualTo("success");
+        assertThat(JSON.readTree(body).path("data").path("severity").asText())
+                .isEqualTo("ERROR");
+        assertThat(JSON.readTree(body).path("data").path("filter").asText())
+                .contains("detected_level");
+        assertThat(JSON.readTree(body).path("data").path("coverage")
+                .path("collection_gaps").asText()).isEqualTo("unknown");
+        assertThat(JSON.readTree(body).path("data").path("result").get(0)
+                .path("count").asLong()).isEqualTo(7L);
+        String query = WIREMOCK.getAllServeEvents().get(0).getRequest().getQueryParams()
+                .get("query").firstValue();
+        assertThat(query).as("全量计数≠错误计数：过滤面由服务器按已核对标签生成")
+                .contains("detected_level=~\"(?i)^error$\"")
+                .contains("service_name=\"checkout\"");
+    }
+
+    @Test
+    @DisplayName("AS-02：过滤级空=成功 count=0+覆盖警示（不证明无故障）；ALL 空窗=NO_DATA 不变")
+    void filteredZeroIsSuccessWithCaveatAllZeroIsNoData() throws Exception {
+        WIREMOCK.stubFor(get(urlPathEqualTo("/loki/api/v1/query"))
+                .willReturn(aResponse().withStatus(200).withBody(
+                        "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\","
+                                + "\"result\":[]}}")));
+
+        byte[] body = executor().execute(execSeverity("ERROR"));
+
+        assertThat(JSON.readTree(body).path("data").path("result").get(0)
+                .path("count").asLong()).isZero();
+        assertThat(JSON.readTree(body).path("data").path("coverage").path("note")
+                .asText()).contains("不能据此证明无故障");
+
+        WIREMOCK.resetAll();
+        WIREMOCK.stubFor(get(urlPathEqualTo("/loki/api/v1/query"))
+                .willReturn(aResponse().withStatus(200).withBody(
+                        "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\","
+                                + "\"result\":[]}}")));
+        assertThatThrownBy(() -> executor().execute(execSeverity(null)))
+                .as("ALL 空窗维持 NO_DATA 诚实面（09-12 契约不变）")
+                .isInstanceOf(ToolModelVisibleException.class)
+                .hasMessageContaining("NO_DATA");
+    }
+
+    @Test
+    @DisplayName("severity 封闭集：未识别级别发出前 INVALID_ARGS 拒绝，零请求（未知≠INFO/健康）")
+    void unknownSeverityRejectedBeforeRequest() {
+        LokiAggregateExecutor executor = executor();
+        assertThatThrownBy(() -> executor.execute(execSeverity("FATAL")))
+                .isInstanceOf(ToolControlPlaneException.class)
+                .hasMessageContaining("INVALID_ARGS");
+        assertThat(WIREMOCK.getAllServeEvents()).as("目标端点计数零").isEmpty();
+    }
+
     private static ToolExecutor.ToolExecution exec2(String since, String until,
             String service) {
         Map<String, Object> args = new LinkedHashMap<>();

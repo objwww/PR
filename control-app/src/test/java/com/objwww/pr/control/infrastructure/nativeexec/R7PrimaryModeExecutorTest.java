@@ -162,7 +162,9 @@ class R7PrimaryModeExecutorTest {
         toolPort.afterFirstToolCall = () -> client.enqueue(ok("{\"final\":{\"claims\":["
                 + "{\"claim_key\":\"c1\",\"kind\":\"ROOT_CAUSE\","
                 + "\"statement\":\"checkout 错误率饱和\",\"evidence_refs\":[\""
-                + toolPort.lastEvidenceId + "\"]}],\"missing_information\":[]}}"));
+                + toolPort.lastEvidenceId + "\"],"
+                + "\"evidence_roles\":[{\"ref\":\"" + toolPort.lastEvidenceId
+                + "\",\"role\":\"SUPPORTS\"}]}],\"missing_information\":[]}}"));
 
         RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
                 stores.runs.findById(runId).orElseThrow(),
@@ -262,7 +264,9 @@ class R7PrimaryModeExecutorTest {
         onEvidenceProduced = () -> client.enqueue(ok("{\"final\":{\"claims\":["
                 + "{\"claim_key\":\"c2\",\"kind\":\"ROOT_CAUSE\","
                 + "\"statement\":\"日志证实错误聚集\",\"evidence_refs\":[\""
-                + lastChildEvidenceId + "\"]}],"
+                + lastChildEvidenceId + "\"],"
+                + "\"evidence_roles\":[{\"ref\":\"" + lastChildEvidenceId
+                + "\",\"role\":\"SUPPORTS\"}]}],"
                 + "\"missing_information\":[\"部署时间线\"]}}"));
 
         RcaTaskExecutor.ExecutionResult result = executor.execute(driver,
@@ -434,16 +438,22 @@ class R7PrimaryModeExecutorTest {
     // ------------------------------------------------- 投影映射
 
     @Test
-    @DisplayName("检查点提案投影：双源 ROOT_CAUSE=TRUE/多源一致；EXCLUSION=FALSE；零引用跳过；未知 kind 缺省 HYPOTHESIS")
+    @DisplayName("检查点提案投影（v2 判定面）：双源 SUPPORTS ROOT_CAUSE=TRUE/多源一致；"
+            + "REFUTES EXCLUSION=FALSE；零引用跳过；未知 kind 缺省 HYPOTHESIS")
     void projectionMappingAndSkipRules() {
         UUID e1 = seedEvidence("prometheus");
         UUID e2 = seedEvidence("loki");
         PrimaryCheckpoint checkpoint = new PrimaryCheckpoint(UUID.randomUUID(), UUID.randomUUID(),
                 0, PrimaryCheckpoint.Phase.PRIMARY_READY, 3, 2, 0, null, null, null,
                 List.of(Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
-                                "statement", "双源", "evidence_refs", List.of(e1, e2)),
+                                "statement", "双源", "evidence_refs", List.of(e1, e2),
+                                "evidence_roles", List.of(
+                                        Map.of("ref", e1.toString(), "role", "SUPPORTS"),
+                                        Map.of("ref", e2.toString(), "role", "SUPPORTS"))),
                         Map.of("claim_key", "c2", "kind", "EXCLUSION",
                                 "statement", "已排除", "evidence_refs", List.of(e1),
+                                "evidence_roles", List.of(
+                                        Map.of("ref", e1.toString(), "role", "REFUTES")),
                                 "admission_note", "note-x"),
                         Map.of("claim_key", "c3", "kind", "ROOT_CAUSE",
                                 "statement", "零引用", "evidence_refs", List.of()),

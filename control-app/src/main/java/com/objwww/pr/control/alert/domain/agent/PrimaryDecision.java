@@ -52,10 +52,19 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
 
     /**
      * FINAL{claims,missing_information}：主 Agent 的 Claim 提案出口。
-     * evidenceRefs 为该 claim 依据的本 run 证据引用（准入面按此核对）。
+     * evidenceRefs 为该 claim 依据的本 run 证据引用（准入面按此核对）；
+     * evidenceRoles 为每条引用对本断言的作用提案（SUPPORTS/REFUTES/CONTEXT，
+     * A0 补充方案 §2——模型只可提议作用，最终可信状态由准入/投影确定性授予；
+     * 未声明作用的引用按 CONTEXT 处理，不计入支持来源）。
      */
     public record FinalClaim(String claimKey, String kind, String statement,
-            List<String> evidenceRefs) {
+            List<String> evidenceRefs, List<EvidenceRole> evidenceRoles) {
+        /** 兼容构造：未声明作用面（旧协议形状 → 全部按未确认处理） */
+        public FinalClaim(String claimKey, String kind, String statement,
+                List<String> evidenceRefs) {
+            this(claimKey, kind, statement, evidenceRefs, List.of());
+        }
+
         public FinalClaim {
             if (claimKey == null || claimKey.isBlank()) {
                 throw new IllegalArgumentException("claim.claim_key 必须是非空字符串");
@@ -64,6 +73,28 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
                 throw new IllegalArgumentException("claim.statement 必须是非空字符串");
             }
             evidenceRefs = List.copyOf(Objects.requireNonNull(evidenceRefs, "evidenceRefs"));
+            evidenceRoles = List.copyOf(Objects.requireNonNull(evidenceRoles,
+                    "evidenceRoles"));
+        }
+    }
+
+    /** 单条引用作用提案：role 封闭集；locator 可选载荷定位（字段路径/行区间描述） */
+    public record EvidenceRole(String ref, String role, String locator) {
+        public static final Set<String> ROLES = Set.of("SUPPORTS", "REFUTES", "CONTEXT");
+
+        public EvidenceRole {
+            if (ref == null || ref.isBlank()) {
+                throw new IllegalArgumentException("evidence_roles.ref 必须是非空字符串");
+            }
+            if (role == null) {
+                throw new IllegalArgumentException(
+                        "evidence_roles.role 必须是 SUPPORTS|REFUTES|CONTEXT");
+            }
+            role = role.strip().toUpperCase(Locale.ROOT);
+            if (!ROLES.contains(role)) {
+                throw new IllegalArgumentException(
+                        "evidence_roles.role 只允许 SUPPORTS|REFUTES|CONTEXT: " + role);
+            }
         }
     }
 
@@ -158,11 +189,12 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
             for (Object item : rawClaims) {
                 Map<String, Object> c = asStringMap(requireMap(item, "claim"));
                 requireAllowedKeys(c, Set.of("claim_key", "kind", "statement",
-                        "evidence_refs"), "claim");
+                        "evidence_refs", "evidence_roles"), "claim");
                 claims.add(new FinalClaim(requireString(c, "claim_key"),
                         c.get("kind") == null ? null : requireString(c, "kind"),
                         requireString(c, "statement"),
-                        stringsOf(c.get("evidence_refs"), "evidence_refs")));
+                        stringsOf(c.get("evidence_refs"), "evidence_refs"),
+                        rolesOf(c.get("evidence_roles"))));
             }
         }
         List<String> missing = fin.get("missing_information") == null
@@ -196,6 +228,25 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
             throw new IllegalArgumentException(field + " 必须是对象");
         }
         return m;
+    }
+
+    /** evidence_roles 解析：[{ref,role,locator?},...]；未声明=空表（准入按 CONTEXT 处理） */
+    private static List<EvidenceRole> rolesOf(Object raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        if (!(raw instanceof List<?> list)) {
+            throw new IllegalArgumentException("evidence_roles 必须是数组");
+        }
+        List<EvidenceRole> out = new java.util.ArrayList<>();
+        for (Object item : list) {
+            Map<String, Object> r = asStringMap(requireMap(item, "evidence_roles[]"));
+            requireAllowedKeys(r, Set.of("ref", "role", "locator"), "evidence_roles[]");
+            out.add(new EvidenceRole(requireString(r, "ref"),
+                    requireString(r, "role"),
+                    r.get("locator") == null ? null : requireString(r, "locator")));
+        }
+        return List.copyOf(out);
     }
 
     private static List<String> stringsOf(Object raw, String field) {

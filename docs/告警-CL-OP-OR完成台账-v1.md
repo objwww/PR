@@ -1,5 +1,7 @@
 # CL/OP/OR 完成台账 v1（总方案 §18）
 
+> 2026-09-13 独立审查限定：CL-06 的 VERIFIED_TARGET 当前证明跨轮结构，非空反证跨轮语义仍待验；B2 归档验证器发现退出码/空集/关联范围问题，后续资格需用修订版重验。OR-02 部署记录保留，不再沿用“从未部署”旧结论，但完整通知链仍依赖 RR05～08。具体代码现状、时间/编号/状态口径修正与剩余全部工作见[统一收口方案](告警-BUGLOG与B2测试审查-统一收口技术方案-v1.md)。本说明不抹去历史证据，也不代其他执行者宣告新版本验收通过。
+
 2026-09-13 初始化（B0 事实冻结批）。记录格式（总方案 §18）：
 `owner | current_impl | target_behavior | commit/patch/image | migration | config/release | tests | scope | evidence | rollback | status | blocker | next_trigger`
 

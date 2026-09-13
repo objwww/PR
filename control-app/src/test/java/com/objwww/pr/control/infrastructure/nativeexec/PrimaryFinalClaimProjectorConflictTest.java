@@ -18,9 +18,11 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MC22/P0-1 对峙呈堂（投影面）：同 claimKey TRUE/FALSE 双断言不再 REVISED 覆盖，
- * 强制 UNKNOWN+MULTI_SOURCE_CONFLICT 单行、证据全组并集呈堂（与 ClaimReducer
- * 无法裁决分支同语义）；同态多行合并引用；单行映射字节级不变；零引用跳过不变。
+ * MC22/P0-1 对峙呈堂（投影面，A0 补充方案 §2 升版 v2）：同 claimKey TRUE/FALSE
+ * 双断言不再 REVISED 覆盖，强制 UNKNOWN+MULTI_SOURCE_CONFLICT 单行呈堂（与
+ * ClaimReducer 无法裁决分支同语义）；同态多行合并引用；零引用跳过不变。
+ * v2 差异：状态判定消费 evidence_roles 准入判定（行断言须带 SUPPORTS/REFUTES
+ * 才达 TRUE/FALSE）；冲突行来源集不再冒认并集（引用并集保留在 evidence_refs）。
  */
 class PrimaryFinalClaimProjectorConflictTest {
 
@@ -46,11 +48,10 @@ class PrimaryFinalClaimProjectorConflictTest {
         UUID e1 = seedEvidence("prometheus");
         UUID e2 = seedEvidence("loki");
         PrimaryCheckpoint checkpoint = checkpointWith(List.of(
-                Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
-                        "statement", "X 是根因", "evidence_refs", List.of(e1)),
-                Map.of("claim_key", "c1", "kind", "EXCLUSION",
-                        "statement", "已排除 X", "evidence_refs", List.of(e2),
-                        "admission_note", "note-b")));
+                row("c1", "ROOT_CAUSE", "X 是根因", List.of(e1),
+                        List.of(role(e1, "SUPPORTS")), null),
+                row("c1", "EXCLUSION", "已排除 X", List.of(e2),
+                        List.of(role(e2, "REFUTES")), "note-b")));
 
         int appended = projector.project(RUN, checkpoint,
                 Digest.sha256Of("snap").hex(), GENERATION, TIME_RANGE);
@@ -62,7 +63,7 @@ class PrimaryFinalClaimProjectorConflictTest {
         // ClaimVerdict 构造即对 evidenceRefs 排序去重（内容哈希可复现）——并集无序断言
         assertThat(claim.evidenceRefs())
                 .containsExactlyInAnyOrder(e1.toString(), e2.toString());
-        assertThat(claim.sources()).containsExactlyInAnyOrder("prometheus", "loki");
+        assertThat(claim.sources()).as("v2：冲突行来源不冒认（引用并集在 refs 面）").isEmpty();
         assertThat(claim.reason()).as("双方陈述同场呈堂（审计完整）")
                 .contains("对峙呈堂").contains("X 是根因").contains("已排除 X");
     }
@@ -73,10 +74,10 @@ class PrimaryFinalClaimProjectorConflictTest {
         UUID e1 = seedEvidence("prometheus");
         UUID e2 = seedEvidence("loki");
         PrimaryCheckpoint checkpoint = checkpointWith(List.of(
-                Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
-                        "statement", "双源同述", "evidence_refs", List.of(e1)),
-                Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
-                        "statement", "双源同述", "evidence_refs", List.of(e2))));
+                row("c1", "ROOT_CAUSE", "双源同述", List.of(e1),
+                        List.of(role(e1, "SUPPORTS")), null),
+                row("c1", "ROOT_CAUSE", "双源同述", List.of(e2),
+                        List.of(role(e2, "SUPPORTS")), null)));
 
         int appended = projector.project(RUN, checkpoint,
                 Digest.sha256Of("snap").hex(), GENERATION, TIME_RANGE);
@@ -90,15 +91,15 @@ class PrimaryFinalClaimProjectorConflictTest {
     }
 
     @Test
-    @DisplayName("单行映射字节级不变：ROOT_CAUSE→TRUE/EXCLUSION→FALSE；不同键互不并组")
-    void singleRowMappingUnchanged() {
+    @DisplayName("单行 v2 判定：ROOT_CAUSE+SUPPORTS→TRUE/EXCLUSION+REFUTES→FALSE；不同键互不并组")
+    void singleRowMappingByRoles() {
         UUID e1 = seedEvidence("prometheus");
         UUID e2 = seedEvidence("loki");
         PrimaryCheckpoint checkpoint = checkpointWith(List.of(
-                Map.of("claim_key", "c1", "kind", "ROOT_CAUSE",
-                        "statement", "双源", "evidence_refs", List.of(e1, e2)),
-                Map.of("claim_key", "c2", "kind", "EXCLUSION",
-                        "statement", "已排除", "evidence_refs", List.of(e1))));
+                row("c1", "ROOT_CAUSE", "双源", List.of(e1, e2),
+                        List.of(role(e1, "SUPPORTS"), role(e2, "SUPPORTS")), null),
+                row("c2", "EXCLUSION", "已排除", List.of(e1),
+                        List.of(role(e1, "REFUTES")), null)));
 
         int appended = projector.project(RUN, checkpoint,
                 Digest.sha256Of("snap").hex(), GENERATION, TIME_RANGE);
@@ -130,6 +131,24 @@ class PrimaryFinalClaimProjectorConflictTest {
     }
 
     // ------------------------------------------------------------------ 夹具
+
+    private static Map<String, Object> role(UUID ref, String roleName) {
+        return Map.of("ref", ref.toString(), "role", roleName);
+    }
+
+    private static Map<String, Object> row(String claimKey, String kind, String statement,
+            List<UUID> refs, List<Map<String, Object>> roles, String admissionNote) {
+        Map<String, Object> row = new java.util.LinkedHashMap<>();
+        row.put("claim_key", claimKey);
+        row.put("kind", kind);
+        row.put("statement", statement);
+        row.put("evidence_refs", List.copyOf(refs));
+        row.put("evidence_roles", roles);
+        if (admissionNote != null) {
+            row.put("admission_note", admissionNote);
+        }
+        return row;
+    }
 
     private PrimaryCheckpoint checkpointWith(List<Map<String, Object>> rows) {
         return new PrimaryCheckpoint(UUID.randomUUID(), UUID.randomUUID(), 0,

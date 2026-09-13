@@ -97,12 +97,16 @@ public final class DirectReadToolCatalog {
                 timeoutMillis, resultLimitBytes);
     }
 
-    /** log_error_aggregate：service,window → 聚合统计（先聚合后读行，确定性零 LLM） */
+    /** log_error_aggregate：service,window(,severity) → 聚合统计（先聚合后读行，确定性
+     * 零 LLM）。severity 封闭集缺省 ALL=通用计数；ERROR/WARN/INFO=明确选定等级——
+     * 全量计数≠错误计数（A0 补充方案 §3/AS-01），结果携带 filter/coverage 口径面 */
     public static ToolDefinition logsAggregate(long timeoutMillis, long resultLimitBytes) {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("since", Map.of("type", "string"));
         properties.put("until", Map.of("type", "string"));
         properties.put("service", Map.of("type", "string", "maxLength", 128));
+        properties.put("severity", Map.of("type", "string",
+                "enum", List.of("ALL", "ERROR", "WARN", "INFO")));
         return definition(TOOL_LOGS_AGGREGATE, properties, List.of("since", "until"),
                 timeoutMillis, resultLimitBytes);
     }

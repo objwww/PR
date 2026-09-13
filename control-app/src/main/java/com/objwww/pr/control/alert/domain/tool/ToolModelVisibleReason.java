@@ -16,5 +16,9 @@ public enum ToolModelVisibleReason {
     /** EX-B2：日志源不可用（Loki 不可达/超时/半包中断；与 REMOTE_UNAVAILABLE 分开记因，台账可判源） */
     SOURCE_UNAVAILABLE,
     /** 回放账本无此精确动作记录（M4-32/33 REPLAY_MOCK 专用；不降级活执行） */
-    REPLAY_MISS
+    REPLAY_MISS,
+    /** A0 补充方案 §3：工具不在本 Run 允许集——有界反馈，零触网，权限不扩大 */
+    TOOL_NOT_ALLOWED,
+    /** A0 补充方案 §3：失败原因未分类——显式内部错误，不默认 REMOTE_UNAVAILABLE */
+    INTERNAL_ERROR
 }

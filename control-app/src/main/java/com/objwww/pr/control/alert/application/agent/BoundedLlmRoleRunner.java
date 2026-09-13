@@ -64,11 +64,17 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             + "\"question\":\"...\",\"input_refs\":[],\"scope\":{},\"requested_budget\":4}]}}\n"
             + "3. 收敛：{\"final\":{\"claims\":[{\"claim_key\":\"c1\","
             + "\"kind\":\"ROOT_CAUSE|HYPOTHESIS|SYMPTOM|EXCLUSION\",\"statement\":\"...\","
-            + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"]}],"
+            + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"],"
+            + "\"evidence_roles\":[{\"ref\":\"<evidence_refs 之一>\","
+            + "\"role\":\"SUPPORTS|REFUTES|CONTEXT\"}]}],"
             + "\"missing_information\":[\"...\"]}}\n"
             + "规则：args 形状严格遵守 tool_schemas 的 properties/required；evidence_refs"
             + " 只允许引用 valid_artifact_refs 中的 id，且每个 claim 的 evidence_refs"
             + " 必须至少一条非空——无证据引用的断言会被整案拒绝、不算有效收敛；"
+            + " evidence_roles 为每条引用对本断言的作用：SUPPORTS=支持该结论，"
+            + "REFUTES=反驳该结论，CONTEXT=仅背景（宿主逐条校验，未声明的引用按"
+            + " CONTEXT 处理、不计入支持来源；全量日志计数与累计计数器值不能作为"
+            + " 错误/失败断言的支持证据，会被降为 CONTEXT）；"
             + " 证据不足时用 HYPOTHESIS 并在 missing_information 写明缺口；"
             + " 每步只输出一个决策对象；"
             + "委派=按冻结时间窗+input_refs 的固定查询专家（确定性执行，不接受自由文本"
@@ -225,11 +231,20 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         try {
             evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
         } catch (com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException e) {
-            // 模型可见族（超时/限流/远端故障/零数据）：计步重驱，步数耗尽兜底保终止
+            // 模型可见族（超时/限流/远端故障/零数据/越权/未分类）：计步重驱，步数耗尽
+            // 兜底保终止。A0 补充方案 §3 分类保真——INTERNAL_ERROR/TOOL_NOT_ALLOWED
+            // 不是网络错误，反馈不再一律劝重试。
+            String guidance = switch (e.reason()) {
+                case INTERNAL_ERROR -> "该失败原因未分类，不能假定为远端故障；不要按网络"
+                        + "错误同参重试，改用白名单内其他工具或基于已有证据走 final。";
+                case TOOL_NOT_ALLOWED -> "权限不扩大：只能从 tool_allowlist 内选择工具，"
+                        + "按 tool_schemas 的形状重发或改走 final。";
+                default -> "可修正查询（时间窗/service 过滤/指标名）后重试，"
+                        + "或换用白名单内其他工具，或基于已有证据走 final。";
+            };
             advanceStep(request, checkpoint, stableDigest, memory,
                     "TOOL_FAILED " + e.reason().name() + ": 工具 " + tool.toolId()
-                            + " 调用未成功。可修正查询（时间窗/service 过滤/指标名）后重试，"
-                            + "或换用白名单内其他工具，或基于已有证据走 final。");
+                            + " 调用未成功。" + guidance);
             log.warn("TOOL_CALL 模型可见失败（{}），计步重驱 task={} tool={}",
                     e.reason(), request.task().id(), tool.toolId());
             return RoleRunner.RoleDriveResult.failed(
@@ -295,8 +310,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
 
     private RoleRunner.RoleDriveResult driveFinal(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+        // A0 补充方案 §2：全量准入（作用面授予+载荷确定性检查）——evidence/runId 传入
         PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
-                decision.finalAnswer().claims(), validRefsOf(request));
+                decision.finalAnswer().claims(), validRefsOf(request),
+                evidence, request.task().runId());
         List<Map<String, Object>> claimRows = new ArrayList<>();
         for (PrimaryClaimAdmission.AdmittedClaim claim : admission.claims()) {
             Map<String, Object> row = new LinkedHashMap<>();
@@ -304,6 +321,20 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             row.put("kind", claim.kind());
             row.put("statement", claim.statement());
             row.put("evidence_refs", claim.evidenceRefs());
+            row.put("evidence_roles", claim.refVerdicts().stream()
+                    .map(v -> {
+                        Map<String, Object> rv = new LinkedHashMap<>();
+                        rv.put("ref", v.ref());
+                        rv.put("role", v.role().name());
+                        if (v.locator() != null) {
+                            rv.put("locator", v.locator());
+                        }
+                        if (!v.note().isEmpty()) {
+                            rv.put("note", v.note());
+                        }
+                        return rv;
+                    })
+                    .toList());
             row.put("admission_note", claim.admissionNote());
             claimRows.add(row);
         }

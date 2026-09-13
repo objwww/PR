@@ -331,6 +331,9 @@ public class SingleToolEvidenceAgent {
             case REPLAY_MISS -> ToolReasonCode.REPLAY_MISS;
             case REMOTE_UNAVAILABLE, SOURCE_UNAVAILABLE, NO_DATA ->
                     ToolReasonCode.TRANSPORT_UNKNOWN;
+            // A0 补充方案 §3：越权反馈=策略族；未分类失败=未知归因（十码冻结集内收敛）
+            case TOOL_NOT_ALLOWED -> ToolReasonCode.POLICY_DENIED;
+            case INTERNAL_ERROR -> ToolReasonCode.TRANSPORT_UNKNOWN;
         };
     }
 
@@ -343,6 +346,8 @@ public class SingleToolEvidenceAgent {
             case CAPABILITY_REVOKED -> ToolReasonCode.POLICY_DENIED;
             case BUDGET_EXHAUSTED, RESULT_OVERSIZE, STALE_GENERATION, QUERY_FAILED ->
                     ToolReasonCode.TRANSPORT_UNKNOWN;
+            // A0 补充方案 §3：装配缺口与熔断终止归策略族（十码冻结集，账本可判源）
+            case CONFIGURATION_ERROR, DOOM_LOOP_TRIPPED -> ToolReasonCode.POLICY_DENIED;
         };
     }
 }

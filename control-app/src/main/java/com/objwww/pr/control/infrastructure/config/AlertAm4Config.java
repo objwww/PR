@@ -732,11 +732,17 @@ public class AlertAm4Config {
     }
 
     /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面；
-     * EN-05 后 delegates 合并 P0 直查 Agent 族（按 toolName 对位，同键不覆盖兼容面） */
+     * EN-05 后 delegates 合并 P0 直查 Agent 族（按 toolName 对位，同键不覆盖兼容面）。
+     * A0 补充方案 AS-05 启动期一致性首闸：allowlist 每个工具必须有执行装配（delegate），
+     * 缺件=启动失败——不等模型第二步才发现（run16/17 UNKNOWN_TOOL→DEAD 的直接根因面）。*/
     @Bean
     public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort
             am4PrimaryToolPort(
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
+                    + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.rules,logs.aggregate}")
+            String toolAllowlist,
             MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent,
             ChangeAgent am4ChangeAgent,
             @org.springframework.beans.factory.annotation.Qualifier("am4DirectReadAgents")
@@ -753,8 +759,16 @@ public class AlertAm4Config {
         for (DirectReadToolAgent agent : am4DirectReadAgents) {
             delegates.put(agent.toolName(), agent);
         }
+        java.util.Set<String> allowlist = java.util.Set.of(toolAllowlist.split(","));
+        java.util.List<String> unwired = allowlist.stream()
+                .filter(toolId -> !delegates.containsKey(toolId)).toList();
+        if (!unwired.isEmpty()) {
+            throw new IllegalStateException(
+                    "主模式 allowlist 工具未对位执行装配（启动期 fail-fast，A0 补充方案 "
+                            + "AS-05）: " + unwired);
+        }
         return new com.objwww.pr.control.alert.application.agent.PrimaryGatewayToolPort(
-                delegates, toolLedger);
+                delegates, toolLedger, allowlist);
     }
 
     /**
