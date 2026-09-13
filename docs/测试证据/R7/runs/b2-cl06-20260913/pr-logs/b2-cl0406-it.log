@@ -1,0 +1,222 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src/main/resources to target/classes
+[INFO] Copying 83 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src/test/resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.alert.application.agent.R7ModelGatewayTest
+11:53:46.975 [main] WARN com.objwww.pr.control.alert.application.agent.RcaModelGateway -- 输入超模型可用窗硬限，零触网（primary）: approxTokens=101 maxInputTokens=100
+11:53:46.992 [main] WARN com.objwww.pr.control.alert.application.agent.RcaModelGateway -- rca_model_call PENDING 写失败，零触网（primary）: DuplicateKeyException
+11:53:47.000 [main] WARN com.objwww.pr.control.alert.application.agent.RcaModelGateway -- rca_model_input 捕获写失败，零触网（primary）: IllegalStateException
+11:53:47.034 [main] WARN com.objwww.pr.control.application.ModelGateway -- 账本 STARTED 写失败，零触网（D5）: IllegalStateException
+11:53:47.045 [main] INFO com.objwww.pr.control.alert.application.agent.RcaModelGateway -- rca_model_call EPOCH_FENCE，零触网（primary）: EPOCH_FENCE: 动作 configEpoch=1 已落后于当前代际 2，零触网拒绝发送
+11:53:47.051 [main] WARN com.objwww.pr.control.alert.application.agent.RcaModelGateway -- 输入超模型可用窗硬限，零触网（primary）: approxTokens=101 maxInputTokens=100
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.400 s -- in com.objwww.pr.control.alert.application.agent.R7ModelGatewayTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.R7RoleRunnerTest
+11:53:47.123 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.123188105Z","role":"primary@1","run_id":"0e0f8d62-e376-4139-8d95-339e40ec6471","task_id":"f7ed174b-c6ec-4f34-9450-93827e6430f2"}
+11:53:47.230 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主 FINAL 提案落检查点 task=f7ed174b-c6ec-4f34-9450-93827e6430f2 claims=2 downgraded=1 stripped=1
+11:53:47.242 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.241969618Z","role":"primary@1","run_id":"556be49c-1db9-48d4-87be-a626d9397e60","task_id":"ef4b2bdf-9d6f-4a99-98ab-748d2a527d63"}
+11:53:47.243 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主任务步数耗尽 → 确定性未决 FINAL（零模型调用）task=ef4b2bdf-9d6f-4a99-98ab-748d2a527d63 steps=1
+11:53:47.253 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.253591810Z","role":"primary@1","run_id":"ffb9718f-5269-480c-b20f-e89a29e46c72","task_id":"a9ff5b7e-b872-4b35-9546-c886212bc8d6"}
+11:53:47.259 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task=a9ff5b7e-b872-4b35-9546-c886212bc8d6 tool=logs.query
+11:53:47.264 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.264385862Z","role":"primary@1","run_id":"ac582976-f175-4929-b345-4e7ec8e7048d","task_id":"d7fdd351-e7ab-41df-a26a-b6d7242c81fb"}
+11:53:47.267 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主决策不可解析（JsonParseException），计步重驱 task=d7fdd351-e7ab-41df-a26a-b6d7242c81fb
+11:53:47.271 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.271108565Z","role":"primary@1","run_id":"0e6367c5-2bda-4910-83d4-53875b3913bd","task_id":"c8b2e068-6bbf-4890-bdd9-20865fd28070"}
+11:53:47.280 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-13T03:53:47.280196353Z","batch_accepted":true,"requests":1,"approved":1,"task_id":"c8b2e068-6bbf-4890-bdd9-20865fd28070","run_id":"0e6367c5-2bda-4910-83d4-53875b3913bd"}
+11:53:47.290 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.290674751Z","role":"primary@1","run_id":"e2b43bf7-0004-49e8-adb2-108193c2d162","task_id":"7108e519-985d-4bea-8c31-4d697905fb24"}
+11:53:47.291 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-13T03:53:47.291734377Z","batch_accepted":true,"requests":1,"approved":1,"task_id":"7108e519-985d-4bea-8c31-4d697905fb24","run_id":"e2b43bf7-0004-49e8-adb2-108193c2d162"}
+11:53:47.302 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.302197506Z","role":"primary@1","run_id":"c4b913db-bff9-4197-8363-a27703661303","task_id":"983e24a1-fb35-490e-b3da-a059b339dc11"}
+11:53:47.312 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主任务同签名模型失败 ×2 → 确定性未决 FINAL（零模型调用）task=983e24a1-fb35-490e-b3da-a059b339dc11 code=PROTOCOL_ERROR
+11:53:47.317 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.317439046Z","role":"primary@1","run_id":"8ac2bf2e-b8c5-450b-b696-e4ffa84a532c","task_id":"c5e32a83-2be4-4997-84d0-4967c1ff0f00"}
+11:53:47.320 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-13T03:53:47.320094287Z","batch_accepted":false,"requests":1,"approved":0,"task_id":"c5e32a83-2be4-4997-84d0-4967c1ff0f00","run_id":"8ac2bf2e-b8c5-450b-b696-e4ffa84a532c"}
+11:53:47.332 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主 FINAL 提案落检查点 task=9f53d2fe-e69f-4ee8-958f-28323b18d0d4 claims=0 downgraded=0 stripped=0
+11:53:47.335 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.335778832Z","role":"primary@1","run_id":"75fa0509-214b-4fd1-ac21-938eaecc60f7","task_id":"bee4607d-3e4d-4f07-a500-3d465114aff7"}
+11:53:47.338 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- 主 FINAL 提案落检查点 task=bee4607d-3e4d-4f07-a500-3d465114aff7 claims=0 downgraded=0 stripped=0
+11:53:47.355 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.355145271Z","role":"primary@1","run_id":"0f3c3c83-0e2f-4e25-8be8-6ea12e784f80","task_id":"d255641d-9e0e-4acd-9267-be84095de2cb"}
+11:53:47.365 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.365558646Z","role":"primary@1","run_id":"733a3b85-2bc0-4b2c-8e8c-1680ecf3da9a","task_id":"124080ea-073f-49a7-ba21-5c5f9691f624"}
+11:53:47.368 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- TOOL_CALL 越权拒绝（不在 allowlist），计步重驱 task=124080ea-073f-49a7-ba21-5c5f9691f624 tool=code.search
+11:53:47.371 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.371048216Z","role":"primary@1","run_id":"7e262c54-cac2-4bde-a02d-b7939b341cc3","task_id":"165052a0-8b84-433e-8d62-ac5c425e4cfc"}
+11:53:47.382 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-13T03:53:47.382446797Z","role":"primary@1","run_id":"2973d8bd-0541-40ed-a235-0e5493db01d4","task_id":"8b9caa19-bf6a-4c9b-9f7a-ee1115ffb9d3"}
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.342 s -- in com.objwww.pr.control.alert.application.agent.R7RoleRunnerTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.ContextAssemblerTest
+11:53:47.487 [main] INFO com.objwww.pr.control.alert.application.agent.PrimaryCheckpointCommitService -- {"event":"CHECKPOINT_COMMIT_REJECTED","ts":"2026-09-13T03:53:47.487513697Z","reason":"ACTION_RESULT_MISMATCH","task_id":"ebdb9e26-340f-49fb-821c-a38bf9a0e178","action_key":"step-key"}
+11:53:47.487 [main] WARN com.objwww.pr.control.alert.application.agent.PrimaryCheckpointCommitService -- 同动作不同结果的一致性错误（按 REPLAYED 收敛）task=ebdb9e26-340f-49fb-821c-a38bf9a0e178 action=step-key
+11:53:47.498 [main] INFO com.objwww.pr.control.alert.application.agent.PrimaryCheckpointCommitService -- {"event":"CHECKPOINT_COMMIT_REJECTED","ts":"2026-09-13T03:53:47.498237997Z","reason":"ACTION_RESULT_MISMATCH","task_id":"cf3830c1-6ec8-422a-a8df-5c40cbaf76a9","action_key":"step-2"}
+11:53:47.498 [main] WARN com.objwww.pr.control.alert.application.agent.PrimaryCheckpointCommitService -- 同动作不同结果的一致性错误（按 REPLAYED 收敛）task=cf3830c1-6ec8-422a-a8df-5c40cbaf76a9 action=step-2
+[INFO] Tests run: 19, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.129 s -- in com.objwww.pr.control.alert.application.agent.ContextAssemblerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 53, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jar:3.4.2:jar (default-jar) @ control-app ---
+[INFO] 
+[INFO] --- spring-boot:3.4.5:repackage (repackage) @ control-app ---
+[INFO] Attaching repackaged archive /opt/build/pr/control-app/target/control-app-0.0.1-SNAPSHOT-exec.jar with classifier exec
+[INFO] 
+[INFO] --- failsafe:3.5.3:integration-test (default) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+11:53:50.175 [main] INFO org.testcontainers.DockerClientFactory -- Testcontainers version: 1.20.4
+11:53:50.427 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+11:53:50.783 [main] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with local Unix socket (unix:///var/run/docker.sock)
+11:53:50.785 [main] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is localhost
+11:53:50.800 [main] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 26.1.4
+  API Version: 1.45
+  Operating System: CentOS Linux 7 (Core)
+  Total Memory: 7725 MB
+11:53:50.810 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+11:53:50.812 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+11:53:50.882 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Creating container for image: testcontainers/ryuk:0.11.0
+11:53:50.888 [main] INFO org.testcontainers.utility.RegistryAuthLocator -- Failure when attempting to lookup auth config. Please ignore if you don't have images in an authenticated registry. Details: (dockerImageName: testcontainers/ryuk:0.11.0, configFile: /root/.docker/config.json, configEnv: DOCKER_AUTH_CONFIG). Falling back to docker-java default behaviour. Exception message: Status 404: No config supplied. Checked in order: /root/.docker/config.json (file not found), DOCKER_AUTH_CONFIG (not set)
+11:53:51.096 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 is starting: 020a5f10b16201c70adb115851337407f75dc526bd86914f59d594437eab7cfb
+11:53:51.411 [main] INFO tc.testcontainers/ryuk:0.11.0 -- Container testcontainers/ryuk:0.11.0 started in PT0.528479319S
+11:53:51.416 [main] INFO org.testcontainers.utility.RyukResourceReaper -- Ryuk started - will monitor and terminate Testcontainers containers on JVM exit
+11:53:51.416 [main] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+11:53:51.417 [main] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+[INFO] Running com.objwww.pr.control.it.PostgresWorkingMemoryIT
+11:53:51.437 [main] INFO tc.postgres:16-alpine -- Creating container for image: postgres:16-alpine
+11:53:51.503 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine is starting: f10c3d5e557646366abbc5df4c5d66154fa95a4bd85507f9c5012256f612b598
+11:53:52.680 [main] INFO tc.postgres:16-alpine -- Container postgres:16-alpine started in PT1.243362328S
+11:53:52.681 [main] INFO tc.postgres:16-alpine -- Container is started (JDBC URL: jdbc:postgresql://localhost:33694/test?loggerLevel=OFF)
+11:53:52.690 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Starting...
+11:53:52.959 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@610df783
+11:53:52.961 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-1 - Start completed.
+11:53:53.314 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:postgresql://localhost:33694/test?loggerLevel=OFF (PostgreSQL 16.15)
+11:53:53.423 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "public"."flyway_schema_history" does not exist yet
+11:53:53.431 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 81 migrations (execution time 00:00.072s)
+11:53:53.449 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "public"."flyway_schema_history" ...
+11:53:53.501 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "public": << Empty Schema >>
+11:53:53.569 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "1 - m0 schema"
+11:53:53.663 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "2 - grants"
+11:53:53.692 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "3 - m1 inbox reconcile"
+11:53:53.729 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "4 - m2 checkpoint repair"
+11:53:53.763 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "5 - m3 model governance"
+11:53:53.795 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "6 - m4 sandbox"
+11:53:53.862 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "7 - am1 alert domain"
+11:53:53.927 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "8 - am1 dag reserve"
+11:53:53.952 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "9 - am3 eval notify"
+11:53:54.010 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "10 - am3 eval run"
+11:53:54.031 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "11 - am3 eval readonly"
+11:53:54.039 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "12 - am4 state expansion"
+11:53:54.053 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "13 - am4 budget ledger"
+11:53:54.078 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "14 - am4 rca event"
+11:53:54.109 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "15 - am4 tool invocation ledger"
+11:53:54.124 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "16 - am4 evidence snapshot"
+11:53:54.144 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "17 - am4 claim"
+11:53:54.158 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "18 - am4 task edge run scope"
+11:53:54.168 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "19 - am4 tool replay"
+11:53:54.178 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "20 - am5 dataset version"
+11:53:54.196 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "21 - am5 dataset partition"
+11:53:54.216 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "22 - am5 golden candidate"
+11:53:54.235 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "23 - am5 sampling fingerprint"
+11:53:54.246 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "24 - am5 config bundle"
+11:53:54.268 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "25 - am5 canary route"
+11:53:54.310 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "26 - am5 operator case"
+11:53:54.332 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "27 - am5 operator command"
+11:53:54.354 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "28 - am5 monthly partition"
+11:53:54.396 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "29 - am5 retention archive"
+11:53:54.423 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "30 - am6 canary window verdict"
+11:53:54.446 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "31 - ba52 canary decision fk deferred"
+11:53:54.452 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "32 - am6 engine comparison"
+11:53:54.467 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "33 - am6 run fallback"
+11:53:54.490 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "34 - am6 engine shadow work"
+11:53:54.506 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "35 - m607 holmes wish decision run id nullable"
+11:53:54.514 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "36 - exa0 investigation identity"
+11:53:54.523 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "37 - exa4a claim kind"
+11:53:54.530 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "38 - exa3 tool invocation result ref"
+11:53:54.538 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "39 - b21 operator command state widen"
+11:53:54.544 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "40 - exb1 change event"
+11:53:54.554 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "41 - exa4b incident waiting reason"
+11:53:54.560 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "42 - exc3a auth event"
+11:53:54.571 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "43 - am7 duty"
+11:53:54.612 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "44 - auth1 platform user"
+11:53:54.624 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "45 - ui5 eval readonly grants"
+11:53:54.631 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "46 - r7x1 task execution binding"
+11:53:54.648 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "47 - r7x4 primary state"
+11:53:54.666 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "48 - r7a1 rca model call"
+11:53:54.682 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "60 - en01 release asset"
+11:53:54.692 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "61 - en02 release qualification"
+11:53:54.707 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "62 - en09 eval grader version"
+11:53:54.715 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "63 - en04 run config epoch"
+11:53:54.730 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "64 - en06 mcp server registry"
+11:53:54.739 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "80 - ev03 eval projection contract"
+11:53:54.750 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "81 - ev04 eval lifecycle"
+11:53:54.765 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "82 - ux01 incident classification"
+11:53:54.789 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "83 - ux02 duty bot"
+11:53:54.802 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "85 - ev07 eval comparison"
+11:53:54.815 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "86 - dr02 drill job"
+11:53:54.833 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "87 - ev08 eval review"
+11:53:54.853 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "88 - r7 checkpoint last error"
+11:53:54.860 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "89 - en07 release asset kinds"
+11:53:54.867 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "90 - r2 input capture"
+11:53:54.882 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "91 - r10 working memory"
+11:53:54.896 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "92 - r11 context summary"
+11:53:54.908 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "93 - r6 eval app model call grant"
+11:53:54.913 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "94 - ux03 case incident link"
+11:53:54.921 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "95 - dr05 flagd restore ledger"
+11:53:54.933 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "96 - mc2123 receipt and operator material"
+11:53:54.953 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "97 - en08 skill candidate"
+11:53:54.965 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "98 - context policy asset"
+11:53:54.971 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "99 - cl01 checkpoint commit fence"
+11:53:54.978 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "100 - cl05 run skill binding"
+11:53:54.986 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "101 - cl06 working memory accumulation"
+11:53:54.993 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "102 - cl07 compaction attempt"
+11:53:55.007 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "103 - op04 report feedback"
+11:53:55.023 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "104 - op01 regression candidate"
+11:53:55.034 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "105 - op03 action assessment"
+11:53:55.044 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "106 - op01 dataset version grant"
+11:53:55.049 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "107 - op01 case version rls insert"
+11:53:55.054 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "public" to version "108 - sr01 run purpose reconcile"
+11:53:55.066 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 81 migrations to schema "public", now at version v108 (execution time 00:00.934s)
+11:53:55.071 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Starting...
+11:53:55.087 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@1a0d96a5
+11:53:55.087 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-2 - Start completed.
+11:53:55.087 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Starting...
+11:53:55.101 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@3ac3f6f
+11:53:55.101 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-3 - Start completed.
+11:53:55.102 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Starting...
+11:53:55.114 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@59b65dce
+11:53:55.115 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-4 - Start completed.
+11:53:55.115 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Starting...
+11:53:55.126 [main] INFO com.zaxxer.hikari.pool.HikariPool -- HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@7c72ecc
+11:53:55.126 [main] INFO com.zaxxer.hikari.HikariDataSource -- HikariPool-5 - Start completed.
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.851 s -- in com.objwww.pr.control.it.PostgresWorkingMemoryIT
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.5.3:verify (default) @ control-app ---
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  12.461 s
+[INFO] Finished at: 2026-09-13T11:53:56+08:00
+[INFO] ------------------------------------------------------------------------

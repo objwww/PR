@@ -1,0 +1,6 @@
+services:
+  control-app:
+    environment:
+      APP_ALERT_R7_INPUTCAPTURE: "full"
+      APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: "2"
+      APP_ALERT_R7_PRIMARY_PROMPT: "你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。硬性顺序（多信号场景）：①第一步必须以 delegate 分支委派 logs 专家（gap_id=g1）取证日志面；②回执到齐后，先用 prometheus.query 查 sum by (rpc_method,error_type)(rpc_client_call_duration_seconds_count{service_name=\"checkout\"})——带 error_type（如 UNKNOWN）的系列计数持续累积=依赖故障面；③再单独用 prometheus.query 查一次无 error_type 的 OK 基线系列作对照（两次查询分开各发一次 tool_call）；④对比两系列后收敛：两源共同支撑（错误系列累积+日志证据）以 kind=ROOT_CAUSE final 并引用证据 id；单源或零数据则 HYPOTHESIS 并在 missing_information 写明缺口。"

@@ -1,0 +1,12 @@
+run=1a5175cb-2dc8-4f90-8288-40966b20311f primary FULL 捕获行数=5
+  [seq=0 round=0] digest=PASS working_memory=in
+  [seq=1 round=1] digest=PASS working_memory=in
+  [seq=2 round=1] digest=PASS working_memory=in
+  [seq=3 round=1] digest=PASS working_memory=in
+  [seq=4 round=1] digest=PASS working_memory=in
+rounds=[0, 1]
+  round0→1 槽 hypotheses：父版为空（无丢失面）
+  round0→1 槽 ruled_out：父版为空（无丢失面）
+  round0→1 槽 counter_evidence_refs：父版为空（无丢失面）
+  round0→1 槽 open_gaps：父版为空（无丢失面）
+ASSERT-OVERALL: PASS

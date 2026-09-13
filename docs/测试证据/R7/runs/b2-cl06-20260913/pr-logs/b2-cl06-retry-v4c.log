@@ -1,0 +1,7 @@
+ Container deploy-postgres-1  Healthy
+ Container deploy-migrate-1  Exited
+override-ok（硬性委派 prompt 在）
+==== attempt 1 ====
+attempt 1 SUITE PASS
+tail: cannot open ‘/opt/build/pr-logs/b2-cl06-a0-try0.log’ for reading: No such file or directory
+RETRY-WRAPPER-DONE

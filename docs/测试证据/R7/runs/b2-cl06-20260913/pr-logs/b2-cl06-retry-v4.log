@@ -1,0 +1,20 @@
+ Container deploy-control-app-1  Starting
+ Container deploy-control-app-1  Started
+override-ok（硬性委派 prompt 在）
+==== attempt 1 ====
+attempt 1 未过：[R7] FAIL: phase9 父链断裂/跳号 1 处
+==== attempt 2 ====
+attempt 2 未过：[R7] FAIL: phase9 父链断裂/跳号 1 处
+==== attempt 3 ====
+attempt 3 未过：[R7] FAIL: phase9 父链断裂/跳号 1 处
+==== attempt 4 ====
+attempt 4 未过：[R7] FAIL: phase9 父链断裂/跳号 1 处
+==== attempt 5 ====
+attempt 5 未过：[R7] FAIL: phase9 父链断裂/跳号 1 处
+[R7] phase7 报告链：report → publication（winner）或 loser（同 incident 已发布）
+[R7] phase7 PASS（loser 面：同 incident 发布位已被更早报告占据——仲裁语义正确，outbox 不外发）
+[R7] phase8 日志取证（脱敏）+ 密钥词形零回显
+[R7] phase8 PASS
+[R7] phase9 CL-06 记忆链：schema2/父链连号/锚点回环/槽纯度
+[R7] FAIL: phase9 父链断裂/跳号 1 处
+RETRY-WRAPPER-DONE

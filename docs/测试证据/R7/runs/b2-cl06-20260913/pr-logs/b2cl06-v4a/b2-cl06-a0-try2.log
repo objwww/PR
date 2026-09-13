@@ -1,0 +1,20 @@
+[R7] suite=b2cl06-20260913T045408Z runs=/opt/build/runs-b2cl06/b2cl06-20260913T045408Z scene=service:checkout alertname:E2EB2Cl06CrossRound (委派面)
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=90325f02-0397-4846-82a4-c21409eb235e（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=660d66485f3543e833ef7a2b6c2b4262d723b95ad0711730a7cd5ad4f746be25）
+[R7] phase2 注入合成告警（E2EB2Cl06CrossRound@checkout）
+[R7] phase2 PASS（原子对成立；run=cbf1223f-cafd-4fb1-81cd-dd270708beff）
+[R7] phase3 等 run 终态（真模型 900s 上限；委派面收敛窗更宽）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：PRIMARY DONE / DELEGATE≥1 / 绑定 / 检查点（round≥1+batches≥1）
+[R7] phase4 PASS（主 DONE+委派 1 子任务；checkpoint round/batches 推进：1|3|4|1|true）
+[R7] phase5 受限直查：allowlist=jar 缺省八工具；evidence_refs 全可解析
+[R7] phase5 PASS（直查全落 allowlist；证据 2 行引用全锚定）
+[R7] phase6 回执链：全 SUCCESS 结清 + 捕获对账（R2）+ 快照回填（R1）+ 平台零交叉
+[R7] phase6 PASS（5 笔调用全结清）
+[R7] phase7 报告链：report → publication（winner）或 loser（同 incident 已发布）
+[R7] phase7 PASS（loser 面：同 incident 发布位已被更早报告占据——仲裁语义正确，outbox 不外发）
+[R7] phase8 日志取证（脱敏）+ 密钥词形零回显
+[R7] phase8 PASS
+[R7] phase9 CL-06 记忆链：schema2/父链连号/锚点回环/槽纯度
+[R7] FAIL: phase9 父链断裂/跳号 1 处
