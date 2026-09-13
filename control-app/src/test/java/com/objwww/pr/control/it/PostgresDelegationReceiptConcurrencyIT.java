@@ -171,10 +171,14 @@ class PostgresDelegationReceiptConcurrencyIT extends PostgresITBase {
 
         DelegationReceiptService.Verdict v1 = (DelegationReceiptService.Verdict) firstOutcome.get();
         DelegationReceiptService.Verdict v2 = (DelegationReceiptService.Verdict) secondOutcome.get();
-        long accepted = List.of(v1, v2).stream()
-                .filter(v -> v.receipt().admission() == DelegationReceipt.Admission.ACCEPTED)
+        // 口径：duplicate=true 的裁决返回的就是既有 ACCEPTED 行（admission 也是
+        // ACCEPTED），恰一性必须按「非重复的 ACCEPTED」数，不能按 admission 数
+        // （195 首跑实测：按 admission 数出 2=重复裁决携带同一胜者行，产品正确）
+        long freshAccepted = List.of(v1, v2).stream()
+                .filter(v -> !v.duplicate()
+                        && v.receipt().admission() == DelegationReceipt.Admission.ACCEPTED)
                 .count();
-        assertThat(accepted).as("恰一 ACCEPTED（并发幂等）").isEqualTo(1);
+        assertThat(freshAccepted).as("恰一非重复 ACCEPTED（并发幂等）").isEqualTo(1);
         long duplicates = List.of(v1, v2).stream().filter(DelegationReceiptService.Verdict::duplicate).count();
         assertThat(duplicates).as("恰一重复面（duplicate=true）").isEqualTo(1);
         assertThat(v1.receipt().id()).as("双方读到同一实际胜者行").isEqualTo(v2.receipt().id());

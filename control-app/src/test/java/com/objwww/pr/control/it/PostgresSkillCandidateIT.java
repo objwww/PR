@@ -80,10 +80,12 @@ class PostgresSkillCandidateIT extends PostgresITBase {
         SkillCandidate evaluating = service.validate(first.candidate().id(),
                 Set.of("prometheus.instant"));
         assertThat(evaluating.status()).isEqualTo(SkillCandidate.ST_EVALUATING);
+        // 资格证明钉必须带候选「当前」assetDigest（validate 计算的真实摘要）；
+        // 占位符会踩 recordQualification 的防他人证明守卫（195 真 PG 首跑实测）
         SkillCandidate qualified = service.recordQualification(evaluating.id(),
                 new com.objwww.pr.control.release.domain.model.ReleaseQualification(
                         UUID.randomUUID(),
-                        new com.objwww.pr.shared.Digest("a".repeat(64)),
+                        new com.objwww.pr.shared.Digest(evaluating.assetDigest()),
                         new com.objwww.pr.shared.Digest("b".repeat(64)),
                         "c".repeat(64), "runner-v1", "grader-v1",
                         com.objwww.pr.control.release.domain.model.ReleaseQualification.VERDICT_PASS,
