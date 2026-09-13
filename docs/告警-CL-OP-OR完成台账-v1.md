@@ -14,7 +14,7 @@
 | 卡 | owner | current_impl→target | commit | migration | tests | evidence | status | blocker / next_trigger |
 |---|---|---|---|---|---|---|---|---|
 | CL-01/02 提交围栏+恢复接线 | CL批执行者 | 围栏已落：PrimaryCheckpointCommitService 四身份校验（owner/leaseEpoch/configEpoch/revision）+REPLAYED 收敛，全部检查点写点收口单入口（BLRR/Supervisor/NIE 八处）→目标：迟到写拒绝、失租旧 writer 无效 | WORKTREE 未提交 | V99 已应用（RR01 flyway MATCH） | 本地 1809 全绿；195 真 PG PrimaryCheckpointCommitFenceIT 7/7 | OP批 PROGRESS 05:35；A13-03 复核（本批）| **VERIFIED_TARGET** | —；A13 复核结论：实现覆盖在位 |
-| CL-03 有效证据投影 | CL批执行者 | ContextAssembler 类型前缀分派+logs 签名聚合/observations 有界投影+首末时间序解耦→目标：嵌套日志/指标原文关键内容入模 | WORKTREE 未提交（**已上靶**：jar fd546d26 实证 projectLogs/projectMetrics、appendTopLevel 无） | —（无新表） | ContextAssemblerTest 19 本地绿 | A13-01 复核；**B1 FULL 捕获窗待开**（DIGEST_ONLY 下 run26 五 prompt 正文未存——A13-01 验收"捕获完整模型请求"需 FULL 档真跑） | **VERIFIED_LOCAL** | FULL 捕获 run 排队（对方部署窗占用中；override/脚本已备：/opt/build/b1-fullcap-*） |
+| CL-03 有效证据投影 | CL批执行者 | ContextAssembler 类型前缀分派+logs 签名聚合/observations 有界投影+首末时间序解耦→目标：嵌套日志/指标原文关键内容入模 | WORKTREE 未提交（**已上靶**：jar fd546d26 实证 projectLogs/projectMetrics、appendTopLevel 无） | —（无新表） | ContextAssemblerTest 19 本地绿 | A13-01 复核；**B1 FULL 捕获窗已开并过**（run 6b607ec9：5/5 primary 行 FULL 原文 5598~15610B 落库；活 prompt 断言 observations/message/labels/window/total_count 全在+旧折叠 "(+N struct fields)" 零残留；runs/b1-input-capture-20260913/） | **VERIFIED_TARGET** | —；A13-01 半面收口（真模型对照残留 MC01 另卡） |
 | CL-04 原文回读+输入身份 | CL批执行者 | 并入 CL-03 实施面（受控回读/单次成员快照/digest 分离）→目标：超长有用部分可回读、循环检测 digest 与实际 prompt digest 分离 | WORKTREE 未提交 | — | 随 ContextAssemblerTest | — | **IMPLEMENTED_NOT_VERIFIED** | B1 复核独立验收用例（MC 矩阵对位） |
 | CL-05 Skill 持久绑定 | CL批执行者 | V100 rca_run_skill_binding PK(run,role,epoch) insert-if-absent 单写者+冻结允许集+SELECTED/NONE 显式+热切同事务预生成→目标：重启不漂移/发布不逃逸 | WORKTREE 未提交 | V100 已应用+运行表 9 行（RR01） | PostgresRunSkillBindingIT 3/3（195 真 PG） | A13-02 复核：SELECTED/NONE/insert-if-absent 实现在位 | **VERIFIED_TARGET** | — |
 | CL-06 累计记忆 | CL批执行者 | V101 schema_version/parent_memory_id/ofV2 真 revision+父链+跨轮反证并集保留→目标：反证跨轮可达、控制拒绝不混业务 ruled_out | WORKTREE 未提交 | V101 已应用 | ContextAssemblerTest/WorkingMemory 单测 | A13-04 复核：WorkingMemory/Port 在位 | **VERIFIED_LOCAL** | 真实跨轮 Run 验证留 B2 |
@@ -61,7 +61,8 @@
 - RR03 **VERIFIED_TARGET**（B1：不可达 DOCKER_HOST→全 UNKNOWN、overall=UNKNOWN、exit 1、零秘密；采集器失效模式修复 @bcda248）
 - RR04 **VERIFIED_TARGET**（B1：9 绑定各钉各 release_digest/config_digest 多版本并存、停滞 run 老身份不改写；Skill ACTIVE 双版本半面 N/A——当前全 NONE 绑定，如实登记待 CL-09 链启用）
 - RR13 **VERIFIED_TARGET**（B1：11/11 探针）
-- RR16 **VERIFIED_TARGET（日志面半面）**（B1：10 秘密×3 容器日志=0；模型输入半面随 FULL 捕获）
+- RR16 **VERIFIED_TARGET（两面全收）**（B1：10 秘密×3 容器日志=0；B1-1 模型输入面：5 prompt 全文（5.5~15.6KB×5）0 秘密出现，rr16-promptscan 真集合复扫）
+- R2/V90 输入捕获 FULL 档 **VERIFIED_TARGET**（B1-1：compose override 开 full→run 6b607ec9 5/5 行 FULL 原文落库+digest=sha256(原文) 逐行对账全 PASS+phase6 账面"捕获恰一行+digest 对账一致"；CHECK 约束 FULL⇒原文必在双向钉；复原后回 DIGEST_ONLY 默认已验证（env 复核无 INPUTCAPTURE））
 - RR14/RR15 PENDING（并独立运行窗）；RR05~12/17~48 PENDING（B2~B3 按归属）。
 
 ## 五、A13 复核结论（B0）
@@ -84,7 +85,7 @@
 - **K. BUDGET_STEP 部署层未钉**：走应用内默认 8（与 8 步主预算一致，无功能漂移）；如需钉定加 compose 透传行即可。
 - **L. RunReconciler 热循环（→BA-136，对方 SR 批已立案并修复）**：本批 02:11~02:40Z 观察到对两停滞 run ~235 行/秒持续 reconcile、3h45m 未收敛——与对方 SR 收官窗立案的 BA-136（decided==0 才睡→巡逻热旋转）同源，其修复（无条件 30s 拍巡逻）随 02:30Z 重打包部署；B2 复核时观察日志节律即可，无需另案。
 - **M. 构建树同步副作用（→BA-137，对方已立案并恢复）**：本批撞见的 e2e 脚本 CRLF 化+`.env` 02:23~02:30Z 缺席=对方部署脚本 rsync --delete 误删（BA-137），其恢复含 bcrypt `$$` 转义+46 变量逐值对账，且重建 .env 吸收了本批 INPUTCAPTURE 键（compose 无映射行→容器 env 不生效属机制事实）。经验固化：e2e 驱动用树外副本+sed（本批 b1-fullcap-main.sh 已如此）。
-- **N. run26 模型输入不可回放（→R2/V90 设计事实）**：全库 230 行捕获均为 DIGEST_ONLY（默认档只存 digest+尺寸）。A13-01"捕获完整模型请求"验收必须开 FULL 档真跑（键：`app.alert.r7.input-capture: full|redacted|digest-only`）。
+- **N. run26 模型输入不可回放（→R2/V90 设计事实）→已关闭（B1-1，2026-09-13）**：全库 230 行捕获均为 DIGEST_ONLY（默认档只存 digest+尺寸）。A13-01"捕获完整模型请求"验收必须开 FULL 档真跑——**已跑**：override 开 full→run 6b607ec9 5 行 FULL 原文+四组断言 PASS（runs/b1-input-capture-20260913/）。机制教训：.env 键无 compose 映射行不进容器，env 覆写须走 override 文件。
 - **HOST2 现场事实（修正过时假设，→OR-02）**：gatus（twinproduction/gatus digest a8c53f9e…，2026-09-10T09:08Z 起）+duty-adapter+node-exporter 均运行中；/srv/alert-eval 九目录树在；WireGuard 隧道 10.250.250.1↔.2 活跃（README 记录）。**"探针未部署"结论作废**。
 
 ## 七、台账维护纪律

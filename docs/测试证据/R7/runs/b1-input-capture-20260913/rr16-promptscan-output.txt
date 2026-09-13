@@ -1,0 +1,2 @@
+prompt 秘密出现总数: 0（期望 0）
+RR16-PROMPTSCAN-PASS

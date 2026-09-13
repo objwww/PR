@@ -1,0 +1,11 @@
+run=6b607ec9-4b8d-4062-95c0-cc7d307911cd
+primary FULL 捕获行数: 5
+  [seq=0] bytes=5598 digest=PASS envelope=PASS logs投影=-- metrics投影=-- 旧折叠残留=无 真实证据=PASS
+  [seq=1] bytes=6281 digest=PASS envelope=PASS logs投影=PASS metrics投影=-- 旧折叠残留=无 真实证据=PASS
+  [seq=2] bytes=14934 digest=PASS envelope=PASS logs投影=PASS metrics投影=PASS 旧折叠残留=无 真实证据=PASS
+  [seq=3] bytes=15322 digest=PASS envelope=PASS logs投影=PASS metrics投影=PASS 旧折叠残留=无 真实证据=PASS
+  [seq=4] bytes=15610 digest=PASS envelope=PASS logs投影=PASS metrics投影=PASS 旧折叠残留=无 真实证据=PASS
+投影标记汇总: observations=True message=True labels=True window=True total_count=True
+ASSERT-OVERALL: PASS
+---- evidence 投影样本（末轮 prompt 截取）----
+"logs.aggregate","source_digest":"91553b1f315382e788f0b0776bd8ea86717bfc80900ef939e6f2f59b4c71326a","observations":[{"at":null,"service":"checkout","message":""}],"total_count":1,"shown_count":1},{"ref":"a335e63e-1ed3-4bb0-849c-e1b06cf5b129","type":"metrics.catalog","source_digest":"c1f088f2770b1e304e394e9a2c6387ebcd479195b380262158095be79b4d062c","observations":[{"name":"ALERTS","type":"unknown"},{"name":"ALERTS_FOR_STATE","type":"unknown"},{"name":"go_config_gogc_percent","type":"unknown"},{"name":"go_goroutine_count","type":"unknown"},{"name":"go_memory_allocated_bytes_total","type":"unknown"},{"name":"go_memory_allocations_total","type":"unknown"}],"total_count":26,"shown_count":6,"truncated":true,"omission_reason":"ITEM_LIMIT"},{"ref":"91d1b33d-de04-4760-bc4d-c3d6896b9ace","type":"metrics.metric_value","source_digest":"e2d27fae30aeeab8e669413d083318f7eb2de5684ce75d6d7ff5ba6408fba89b

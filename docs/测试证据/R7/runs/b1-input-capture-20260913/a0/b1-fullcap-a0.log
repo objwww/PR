@@ -1,0 +1,20 @@
+[R7] suite=a0-20260913T025432Z runs=/opt/build/runs-r7batch3/a0-20260913T025432Z scene=service:checkout alertname:E2EA0CheckoutProbe
+[R7] phase1 姿态：health 200 + bundle 发布激活（白名单 checkout）
+[R7] qualification 授予 id=6b3ecb1b-c4f1-4805-9edd-447d0024aaf2（EN-02 资格门；SQL 桥）
+[R7] phase1 PASS（health 200；digest=83f31718f3d075146df8c62cdb34249d0efa335c7fa8aa683665e85f3c80c34e）
+[R7] phase2 注入 checkout 合成告警（E2EA0CheckoutProbe@checkout）
+[R7] phase2 PASS（原子对成立；run=6b607ec9-4b8d-4062-95c0-cc7d307911cd）
+[R7] phase3 等 run 终态（真模型 900s 上限）
+[R7] phase3 PASS（run SUCCEEDED）
+[R7] phase4 主链：恰 1 PRIMARY_INVESTIGATE DONE / 零 DELEGATE / 绑定 / 检查点
+[R7] phase4 PASS（零子 Agent/绑定三元组/检查点 final_claims 在场）
+[R7] phase5 受限直查：allowlist=prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,prometheus.rules,logs.aggregate,logs.query；evidence_refs 全可解析
+[R7] phase5 PASS（直查全落 allowlist；证据 3 行；TRUE Claim 1 个引用全锚定）
+[R7] phase6 回执链：rca_model_call 全 SUCCESS 结清 + 平台账本零交叉（BA-109）
+[R7] phase6 PASS（5 笔调用全 SUCCESS 结清；捕获恰一行+digest 对账一致（R2）；快照回填非空（R1）；平台账本零交叉）
+[R7] phase7 报告链：report → publication → outbox
+ERROR:  column "package" does not exist
+LINE 1: ...ON LEVEL SERIALIZABLE READ ONLY; SELECT substring(package::t...
+                                                             ^
+[R7] phase7 提示：报告包头部 400 字未见 claim 词形（全文见 DB，不硬断言）
+[R7] FAIL: DB 轮询超时(30s): phase7 report_publication 落行（last=0）

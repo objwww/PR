@@ -1,0 +1,5 @@
+# B1-1 临时覆盖：R2 输入捕获 FULL 档（app.alert.r7.input-capture）——验证窗结束即撤
+services:
+  control-app:
+    environment:
+      APP_ALERT_R7_INPUTCAPTURE: "full"
