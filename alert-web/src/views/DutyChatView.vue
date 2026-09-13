@@ -200,17 +200,22 @@ async function jumpToLatest() {
 }
 
 // ---------------- markdown 手写子集（D1/§C：标题/粗体/引用/三色 font/链接/@人）——
-// 不引 vditor 等依赖；先转义再渲染，v-html 面安全
+// 不引 vditor 等依赖；先转义再渲染。
+// RV01 安全不变量：本函数是全部插值的唯一来源，引号一并转义后，任何载荷都无法
+// 进入标记/属性边界（href="..." 内不可能出现裸 "，事件属性注入结构性不可达）。
+// 后续新增 Markdown 规则必须保持该不变量：只能插值本函数输出；URL 只认 https?://。
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 function inlineMd(s) {
   let t = escapeHtml(s)
   // 企微三色 font（橙红 warning=page 级 / 绿 info=恢复 / 灰 comment=元信息）
-  t = t.replace(/&lt;font color="(warning|info|comment)"&gt;(.*?)&lt;\/font&gt;/g,
+  // RV01：源文本引号已转义为 &quot;——识别正则同步改匹配转义形
+  t = t.replace(/&lt;font color=&quot;(warning|info|comment)&quot;&gt;(.*?)&lt;\/font&gt;/g,
     '<span class="fc-$1">$2</span>')
-  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)"]+)\)/g,
     '<a href="$2" target="_blank" rel="noopener">$1</a>')
   t = t.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
   // @人蓝色高亮（D1 样式占位；模板真 @ 走企微 mentioned_list 补发 text，此处只渲染外观）

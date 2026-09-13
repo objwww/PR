@@ -373,7 +373,9 @@ class RunQueryServiceTest {
                         null)));
         java.util.concurrent.CompletableFuture<Object> inflight =
                 new java.util.concurrent.CompletableFuture<>();
-        cancels.register(stoppingRun, inflight);
+        // RV03 句柄 API：注册（QUEUED=在飞事实）→ attach 中断面 → cancelRun 通知
+        var inflightHandle = cancels.register(stoppingRun);
+        inflightHandle.attach(inflight);
         cancels.cancelRun(stoppingRun);
         ledger.unknownByRun.put(stoppingRun, 2L);
 

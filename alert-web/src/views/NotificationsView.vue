@@ -117,21 +117,28 @@ const loading = ref(false)
 const expandedId = ref(null)
 const feedMap = ref(new Map())
 let timer = null
+// RV08：单调请求序号——切筛选必须发出新请求（loading 锁只防同筛选加载更多重复），
+// 旧响应写回前校验序号仍为当前值，不得覆盖新筛选面
+let loadSeq = 0
 
 async function load(reset) {
-  if (loading.value) return
+  if (!reset && loading.value) return
+  const seq = ++loadSeq
+  const unreadAtStart = tab.value === 'unread'
   loading.value = true
   try {
-    const params = { unread: tab.value === 'unread', limit: PAGE_SIZE }
+    const params = { unread: unreadAtStart, limit: PAGE_SIZE }
     if (!reset && nextCursor.value) params.cursor = nextCursor.value
     const res = await api('/duty/notifications', { params })
+    if (seq !== loadSeq) return
     rows.value = reset ? res.notifications : rows.value.concat(res.notifications)
     unreadCount.value = res.unreadCount ?? 0
     nextCursor.value = res.nextCursor ?? null
   } catch (e) {
+    if (seq !== loadSeq) return
     ElMessage.error(e?.response?.data?.error || '加载失败，请重试')
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
