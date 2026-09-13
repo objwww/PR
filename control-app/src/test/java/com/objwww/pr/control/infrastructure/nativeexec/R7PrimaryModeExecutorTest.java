@@ -504,7 +504,13 @@ class R7PrimaryModeExecutorTest {
                         run -> com.objwww.pr.control.alert.application.agent.ContextAssembler
                                 .AlertMaterial.unknown(), MAPPER);
         BoundedLlmRoleRunner bounded = new BoundedLlmRoleRunner(guard, supervisor,
-                stores.checkpoints, evidence, assembler, toolPort, MAPPER, CLOCK);
+                stores.checkpoints, evidence, assembler, toolPort, MAPPER, CLOCK,
+                new com.objwww.pr.control.alert.application.agent
+                        .PrimaryCheckpointCommitService(stores.runs, stores.tasks,
+                        stores.checkpoints,
+                        com.objwww.pr.control.alert.domain.repository
+                                .RunConfigEpochRepository.NO_OP, clock,
+                        withoutTransaction(), stores.workingMemories));
         SingleToolRoleRunner compat = new SingleToolRoleRunner(Map.of(
                 "metrics", (ctx, start, end) -> produceEvidence(ctx, "prometheus"),
                 "logs", (ctx, start, end) -> produceEvidence(ctx, "loki"),

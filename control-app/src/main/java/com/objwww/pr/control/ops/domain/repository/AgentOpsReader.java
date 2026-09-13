@@ -48,6 +48,17 @@ public interface AgentOpsReader {
                           long inFlightTasks) {
     }
 
+    /**
+     * OP-03 动作分析聚合（近窗 rca_action_assessment 行的 SQL 侧计数）：
+     * duplicateRate 分母=logicalActions（分母为 0 时服务层如实回 0 并显式分母）；
+     * 未被分析的 Run 是 NOT_ASSESSED，不在这组计数里当 0 价值。
+     */
+    record ActionAssessmentStats(long logicalActions, long duplicateActions,
+                                 long newObservations, long confirmsOrRefutes,
+                                 long noData, long sourceFailed, long undetermined,
+                                 long assessedRuns) {
+    }
+
     /** 聚合（now 参与 oldestReadyWait 计算与 24h 窗） */
     AgentOpsAggregate summary(Instant now);
 
@@ -56,4 +67,13 @@ public interface AgentOpsReader {
      * 空清单 = 窗口内无租约活动，如实返回，不编造在线 worker。
      */
     List<WorkerActivity> workerActivity(Instant now, Duration window);
+
+    /**
+     * OP-03：动作分析行聚合（since 窗口按 computed_at）。default 抛出 = 假件
+     * 环境未镜像（reclaimPendingOlderThan 同款先例）——真实 PG 实现覆盖。
+     */
+    default ActionAssessmentStats actionAssessmentStats(Instant since) {
+        throw new UnsupportedOperationException(
+                "actionAssessmentStats 仅 Postgres 读面实现（OP-03）");
+    }
 }

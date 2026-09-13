@@ -183,6 +183,7 @@ public class RcaRunOrchestrator {
         if (com.objwww.pr.control.alert.domain.lease.LeaseFence
                 .acquire(tasks, task.id(), owner, task.leaseEpoch()).isEmpty()) {
             log.warn("task {} 旧租约提交被拒 owner={} epoch={}", task.id(), owner, task.leaseEpoch());
+            metrics.lateCommitRejected();   // WC-5：迟到提交拒绝计数（旧租约栅栏）
             return FinishOutcome.LEASE_REJECTED;
         }
         RcaTask fresh = tasks.findById(task.id()).orElseThrow();
@@ -205,6 +206,7 @@ public class RcaRunOrchestrator {
                     Map.entry("decision", FinishOutcome.STALE_GENERATION.name()),
                     Map.entry("run_state", run.state().name())));
             metrics.taskDecision(FinishOutcome.STALE_GENERATION.name(), engineOf(run));
+            metrics.lateCommitRejected();   // WC-5：迟到提交拒绝计数（终态 run 旧代结果）
             log.warn("task {} 旧代结果作废（run {} state={}），task→STALE 零落档",
                     task.id(), run.id(), run.state());
             return FinishOutcome.STALE_GENERATION;
@@ -324,11 +326,16 @@ public class RcaRunOrchestrator {
             return;
         }
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
-                RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null);
+                RunTrigger.RERUN, RcaRunState.QUEUED, materialHash, now, now, null, null, null,
+                // SR §3.1：RERUN 同为生产身份（铸造点两处同闸）
+                com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                "orchestrator-rerun", null);
         // EX-A0（F14）：RERUN 铸点同冻结——调查输入身份+时间窗随行落列
         runs.insertRouted(run, routing,
                 com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
                         incident, now));
+        // SR §4.1：铸点冻结对账硬期限（同任务 SLA；重试/重启不重置）
+        runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);
@@ -343,38 +350,36 @@ public class RcaRunOrchestrator {
      * 调查落档（M3-08，收尾事务内）：Result 终态 CAS + tool_calls 落表（栅栏直挂）+
      * 结构验证通过时报告 + publication(READY) + outbox 原子写入。
      * 执行失败与结构失败同权落档——验证失败不再是"零落档误判超时"（INV-AM3-7）。
+     *
+     * <p>SR §3.2 发布准入负向门：purpose=SHADOW（持久身份行）禁止正式报告/发布/
+     * 通知——材料照档（影子取证即目的），不依赖调用者"不调用 notifier"的约定。
      */
     private void archiveArtifact(RcaTask task, RcaRun run, RcaAttempt attempt,
                                  RcaTaskExecutor.ExecutionResult result,
                                  RcaTaskExecutor.AttemptArtifact artifact, Instant now) {
-        ExecutionStatus execution = result.outcome() == RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED
-                ? ExecutionStatus.SUCCEEDED
-                : "TIMEOUT".equals(result.errorClass()) ? ExecutionStatus.TIMEOUT
-                : ExecutionStatus.FAILED;
+        ExecutionStatus execution = executionStatusOf(result);
         boolean validated = artifact.validationStatus() == ValidationStatus.STRUCTURE_VALIDATED;
 
         // CAS 落档脱敏原文（内容寻址以脱敏文本自身 digest；失败不阻断——digest 已在行上）
-        String rawRef = null;
-        if (artifact.rawText() != null && !artifact.rawText().isEmpty()) {
-            Digest redactedDigest = Digest.sha256Of(artifact.rawText());
-            try {
-                rawRef = artifacts.putIfAbsent(redactedDigest,
-                        artifact.rawText().getBytes(StandardCharsets.UTF_8));
-            } catch (RuntimeException e) {
-                log.warn("raw 落 CAS 失败（digest 仍可对账）attempt={}", attempt.id(), e);
-            }
-        }
+        String rawRef = putRawIfAbsent(artifact);
 
-        investigationResults.finishTerminal(new InvestigationResult(
-                attempt.id(), attempt.id(), run.id(), run.generation(), artifact.schemaVersion(),
-                execution, artifact.validationStatus(),
-                artifact.validationErrors().isEmpty() ? null : artifact.validationErrors(),
-                validated ? artifact.packageJson() : null,
-                rawRef, artifact.rawDigest(), artifact.payloadDigest(), artifact.model(),
-                usageJson(artifact), null, now));
+        investigationResults.finishTerminal(toTerminalRow(run, attempt, result, artifact,
+                rawRef, now));
 
         if (!artifact.toolCalls().isEmpty()) {
             toolCalls.insertAll(artifact.toolCalls());
+        }
+
+        // SR §3.2 影子负向门：材料照档后即止——零正式报告/零发布/零通知
+        if (run.purpose() == com.objwww.pr.control.alert.domain.model.RunPurpose.SHADOW) {
+            if (validated) {
+                StructuredLog.event(log, "shadow_publication_blocked", Map.ofEntries(
+                        Map.entry("run_id", run.id().toString()),
+                        Map.entry("attempt_id", attempt.id().toString()),
+                        Map.entry("incident_id", run.incidentId().toString())));
+                log.warn("run {} 影子身份：验证通过材料照档，禁止正式报告/发布/通知", run.id());
+            }
+            return;
         }
 
         if (validated) {
@@ -404,6 +409,61 @@ public class RcaRunOrchestrator {
                                 + "落档不发布", reportId, run.incidentId(), run.generation());
             }
         }
+    }
+
+    /**
+     * SR §4.3 报告待收尾材料预提交（收尾事务<b>前</b>独立短事务，RcaWorker 调用）：
+     * raw 原文先落 CAS（内容寻址幂等）+ InvestigationResult 终态 CAS——进程在
+     * "执行完成→finishTask 提交"缝隙被杀时，RunReconciler 可凭持久材料铸
+     * REPORT_FINALIZE 重入收尾；不能凭 task DONE/零 report 推断材料完整。
+     * 幂等：finishTerminal 仅 STARTED 行迁移，收尾事务内同材料再写 0 行无害。
+     */
+    public void persistFinalizableMaterials(RcaRun run, RcaAttempt attempt,
+                                            RcaTaskExecutor.ExecutionResult result, Instant now) {
+        RcaTaskExecutor.AttemptArtifact artifact = result.artifact().orElse(null);
+        if (artifact == null) {
+            return;
+        }
+        String rawRef = putRawIfAbsent(artifact);
+        investigationResults.finishTerminal(toTerminalRow(run, attempt, result, artifact,
+                rawRef, now));
+    }
+
+    /** raw 原文 CAS 落档（内容寻址幂等；失败仅告警——digest 已在行上可对账） */
+    private String putRawIfAbsent(RcaTaskExecutor.AttemptArtifact artifact) {
+        if (artifact.rawText() == null || artifact.rawText().isEmpty()) {
+            return null;
+        }
+        Digest redactedDigest = Digest.sha256Of(artifact.rawText());
+        try {
+            return artifacts.putIfAbsent(redactedDigest,
+                    artifact.rawText().getBytes(StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            log.warn("raw 落 CAS 失败（digest 仍可对账）", e);
+            return null;
+        }
+    }
+
+    private static ExecutionStatus executionStatusOf(RcaTaskExecutor.ExecutionResult result) {
+        return result.outcome() == RcaTaskExecutor.ExecutionResult.Outcome.SUCCEEDED
+                ? ExecutionStatus.SUCCEEDED
+                : "TIMEOUT".equals(result.errorClass()) ? ExecutionStatus.TIMEOUT
+                : ExecutionStatus.FAILED;
+    }
+
+    /** 调查终态行（预提交与收尾事务同一构造——材料单一事实源） */
+    private static InvestigationResult toTerminalRow(RcaRun run, RcaAttempt attempt,
+                                                     RcaTaskExecutor.ExecutionResult result,
+                                                     RcaTaskExecutor.AttemptArtifact artifact,
+                                                     String rawRef, Instant now) {
+        boolean validated = artifact.validationStatus() == ValidationStatus.STRUCTURE_VALIDATED;
+        return new InvestigationResult(
+                attempt.id(), attempt.id(), run.id(), run.generation(), artifact.schemaVersion(),
+                executionStatusOf(result), artifact.validationStatus(),
+                artifact.validationErrors().isEmpty() ? null : artifact.validationErrors(),
+                validated ? artifact.packageJson() : null,
+                rawRef, artifact.rawDigest(), artifact.payloadDigest(), artifact.model(),
+                usageJson(artifact), null, now);
     }
 
     /** usage → jsonb 文本（usage_missing 时为空，§6.2 冻结语义） */
@@ -470,7 +530,9 @@ public class RcaRunOrchestrator {
                 r.investigationHash(), r.createdAt(), now,
                 starting ? now : r.startedAt(),
                 state.isActive() ? null : now,
-                error);
+                error,
+                // SR §3.1：状态迁移不改写身份三列（收尾/取消/对账同一纪律）
+                r.purpose(), r.purposeSource(), r.completionKind());
     }
 
     private static Incident withIncidentRunEnd(Incident i, Digest lastInvestigation,

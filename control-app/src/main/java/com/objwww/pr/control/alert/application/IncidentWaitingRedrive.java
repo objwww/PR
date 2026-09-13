@@ -90,9 +90,14 @@ public class IncidentWaitingRedrive {
                     ? incident.lastInvestigationHash()
                     : Digest.sha256Of("redrive|" + incident.incidentKey());
             RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
-                    RunTrigger.INITIAL, RcaRunState.QUEUED, basis, now, now, null, null, null);
+                    RunTrigger.INITIAL, RcaRunState.QUEUED, basis, now, now, null, null, null,
+                    // SR §3.1：重驱铸 run 也是生产准入（铸造点三处同闸）
+                    com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                    "incident-waiting-redrive", null);
             runs.insertRouted(run, routing, InvestigationInputs.freezeAt(incident, now));
             int priority = sla.priority(null);
+            // SR §4.1：铸点冻结对账硬期限
+            runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
             tasks.insert(new RcaTask(UUID.randomUUID(), run.id(),
                     RcaTask.taskKeyFor(routing.engine()), RcaTaskState.READY, priority,
                     now, now, sla.deadline(now, priority), null, null, 0, 0, 3, now, now));

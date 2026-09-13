@@ -52,7 +52,7 @@ public class PostgresContextSummary implements ContextSummaryPort {
                 .query((rs, i) -> rs.getObject("id", UUID.class))
                 .list();
         if (!existing.isEmpty()) {
-            return findById(existing.get(0));
+            return rowById(existing.get(0));
         }
         jdbc.sql("""
                 insert into rca_context_summary (id, run_id, task_id, schema_version,
@@ -125,10 +125,18 @@ public class PostgresContextSummary implements ContextSummaryPort {
                 .query((rs, i) -> rs.getLong(1)).list().get(0);
     }
 
-    private ContextSummary findById(UUID id) {
-        return jdbc.sql("select " + COLUMNS + " from rca_context_summary where id = :id")
-                .param("id", id)
-                .query(this::mapRow).list().get(0);
+    /** CL-08 消费面：按 id 精确读（检查点 current_summary_id 钉面） */
+    @Override
+    public Optional<ContextSummary> findById(UUID id) {
+        List<ContextSummary> rows = jdbc.sql(
+                        "select " + COLUMNS + " from rca_context_summary where id = :id")
+                .param("id", id).query(this::mapRow).list();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    private ContextSummary rowById(UUID id) {
+        return findById(id).orElseThrow(() ->
+                new IllegalStateException("rca_context_summary 行丢失: " + id));
     }
 
     private ContextSummary mapRow(java.sql.ResultSet rs, int rowNum)

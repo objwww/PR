@@ -44,11 +44,31 @@ public class SingleToolEvidenceAgent {
 
     private static final Logger log = LoggerFactory.getLogger(SingleToolEvidenceAgent.class);
 
-    /** 调用身份与上下文（timeRange 非空——ActionEnvelope 契约；EX-A0：输入身份=调查输入绑定，可空） */
+    /**
+     * 调用身份与上下文（timeRange 非空——ActionEnvelope 契约；EX-A0：输入身份=调查输入绑定，可空）。
+     * WC-3（§5.1/§5.2）追加控制两列（Host 装配，LLM/工具参数不得自报）：
+     * controlSignal = 租约心跳 + Run 终态周期检查（停止抛 {@link com.objwww.pr.control
+     * .alert.application.ExecutionControl.StoppedException}）；actionDeadline = 本动作
+     * 有效期限（任务行 deadlineAt 等，工具执行取 min(工具超时, 本期限)）。兼容构造器
+     * = 无控制语义（noop 信号 + 无期限钳制），既有装配/测试零改动。
+     */
     public record CallContext(UUID runId, UUID taskId, UUID attemptId, long callSeq,
             long observedGeneration,
             com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
-                    investigationInputDigest, String timeRange) {
+                    investigationInputDigest, String timeRange,
+            Runnable controlSignal, java.time.Instant actionDeadline) {
+
+        public CallContext(UUID runId, UUID taskId, UUID attemptId, long callSeq,
+                long observedGeneration,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+                        investigationInputDigest, String timeRange) {
+            this(runId, taskId, attemptId, callSeq, observedGeneration,
+                    investigationInputDigest, timeRange, () -> { }, null);
+        }
+
+        public CallContext {
+            java.util.Objects.requireNonNull(controlSignal, "controlSignal");
+        }
     }
 
     public enum AgentOutcome {EVIDENCE_PRODUCED, NO_DATA, FAILED}
@@ -133,6 +153,9 @@ public class SingleToolEvidenceAgent {
      * 悬挂 PENDING 残余由恢复扫描回收（{@code reclaimPendingOlderThan}）。
      */
     public AgentResult investigate(CallContext ctx, Map<String, Object> args) {
+        // WC-3：入口控制探针——Run 终态/租约失效即停（零新资格：复用、熔断、预算
+        // 判定全部不再进行；迟到结果由提交围栏只审计）
+        ctx.controlSignal().run();
         String schemaHash = registry.find(spec.toolName(), spec.toolVersion()).orElseThrow()
                 .definition().schemaHash();
         String actionDigest = ActionDigest.of(new ActionEnvelope("rca", spec.toolName(),
@@ -202,7 +225,7 @@ public class SingleToolEvidenceAgent {
                         return gateway.invoke(new ToolGateway.ToolInvocation(ctx.runId(),
                                 ctx.taskId(), ctx.attemptId(), ctx.callSeq(), spec.toolName(),
                                 spec.toolVersion(), ctx.timeRange(), args,
-                                ctx.investigationInputDigest()));
+                                ctx.investigationInputDigest(), ctx.actionDeadline()));
                     },
                     ignored -> java.util.Map.of(
                             com.objwww.pr.control.alert.domain.budget.BudgetKind.TOOL_CALL,

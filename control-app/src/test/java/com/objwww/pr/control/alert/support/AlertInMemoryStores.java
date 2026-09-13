@@ -58,7 +58,7 @@ public final class AlertInMemoryStores {
     public final Events events = new Events();
     public final Incidents incidents = new Incidents();
     public final Runs runs = new Runs();
-    public final Tasks tasks = new Tasks();
+    public final Tasks tasks = new Tasks(runs);
     public final Attempts attempts = new Attempts();
     public final Reports reports = new Reports();
     public final Invocations invocations = new Invocations();
@@ -83,6 +83,8 @@ public final class AlertInMemoryStores {
     public final Checkpoints checkpoints = new Checkpoints();
     /** R7-X4/X11：委派裁决台账假件（uq(run,gap) 冲突显式抛） */
     public final DelegationDecisions delegationDecisions = new DelegationDecisions();
+    /** R10：工作记忆快照假件（append 幂等 = 同修订重放返回既有行） */
+    public final WorkingMemories workingMemories = new WorkingMemories();
     /** R7a-1：RCA 模型调用账本假件（PENDING 先行 + 终态 CAS） */
     public final ModelCalls modelCalls = new ModelCalls();
     /** UX-01：分类写面假件（rule/override 两族列分离 + 生效面裁决 + 审计行） */
@@ -409,6 +411,10 @@ public final class AlertInMemoryStores {
                 routings = new LinkedHashMap<>();
         /** EX-A2（F12）：修订锚镜像 last_event_seq——仅 updateIfRevision 推进（同 PG update 不推进） */
         private final Map<UUID, Long> runRevisions = new LinkedHashMap<>();
+        /** SR（V108）对账专用列镜像（不进 RcaRun 域记录；fake 与 PG 读写语义对齐） */
+        private final Map<UUID, java.time.Instant> reconcileDeadlines = new LinkedHashMap<>();
+        private final Map<UUID, java.time.Instant> reportingStarted = new LinkedHashMap<>();
+        private final Map<UUID, Integer> recoveryAttempts = new LinkedHashMap<>();
 
         @Override
         public synchronized void insert(RcaRun run) {
@@ -528,8 +534,78 @@ public final class AlertInMemoryStores {
                             == com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE);
         }
 
+        // -------------------------------------------------- SR 对账面（V108；与 PG 同语义）
+
+        /** WC-4 §6.1 keyset 分页（与 PG 同语义：游标 (createdAt,id) 后取、稳定排序） */
+        @Override
+        public synchronized List<com.objwww.pr.control.alert.domain.repository.RcaRunRepository.ReconcileCandidate>
+        findActiveForReconcileAfter(java.time.Instant afterCreatedAt, UUID afterId, int limit) {
+            return rows.values().stream()
+                    .filter(r -> r.state().isActive())
+                    .filter(r -> afterCreatedAt == null
+                            || r.createdAt().isAfter(afterCreatedAt)
+                            || (r.createdAt().equals(afterCreatedAt)
+                                && afterId != null && r.id().compareTo(afterId) > 0))
+                    .sorted(Comparator.comparing(RcaRun::createdAt).thenComparing(RcaRun::id))
+                    .limit(limit)
+                    .map(r -> new com.objwww.pr.control.alert.domain.repository
+                            .RcaRunRepository.ReconcileCandidate(
+                            r.id(), r.incidentId(), r.state(), r.generation(), r.purpose(),
+                            r.createdAt(), r.updatedAt(),
+                            reconcileDeadlines.get(r.id()),
+                            reportingStarted.get(r.id()),
+                            recoveryAttempts.getOrDefault(r.id(), 0)))
+                    .toList();
+        }
+
+        /** WC-4 §6.3 锁内复验面：现行 deadline 单列读（fake 与 PG 读写语义对齐） */
+        @Override
+        public synchronized Optional<java.time.Instant> reconcileDeadlineById(UUID id) {
+            return Optional.ofNullable(reconcileDeadlines.get(id));
+        }
+
+        /** WC-5：最老活跃 Run createdAt（gauge 数据面，fake 与 PG 对齐） */
+        @Override
+        public synchronized Optional<java.time.Instant> oldestActiveCreatedAt() {
+            return rows.values().stream()
+                    .filter(r -> r.state().isActive())
+                    .map(RcaRun::createdAt)
+                    .min(Comparator.naturalOrder());
+        }
+
+        @Override
+        public synchronized void markReportingStarted(UUID id, java.time.Instant now) {
+            reportingStarted.putIfAbsent(id, now);
+        }
+
+        @Override
+        public synchronized void fixReconcileDeadlineIfAbsent(UUID id, java.time.Instant deadline) {
+            reconcileDeadlines.putIfAbsent(id, deadline);
+        }
+
+        @Override
+        public synchronized void incrementRecoveryAttempts(UUID id) {
+            recoveryAttempts.merge(id, 1, Integer::sum);
+        }
+
+        public synchronized java.time.Instant reconcileDeadlineOf(UUID id) {
+            return reconcileDeadlines.get(id);
+        }
+
+        public synchronized int recoveryAttemptsOf(UUID id) {
+            return recoveryAttempts.getOrDefault(id, 0);
+        }
+
         public synchronized List<RcaRun> all() {
             return List.copyOf(rows.values());
+        }
+
+        /** SR：claim 谓词用（行不在 = LEGACY_UNKNOWN，与 SQL coalesce 同语义） */
+        public synchronized com.objwww.pr.control.alert.domain.model.RunPurpose purposeOf(UUID id) {
+            RcaRun run = rows.get(id);
+            return run == null
+                    ? com.objwww.pr.control.alert.domain.model.RunPurpose.LEGACY_UNKNOWN
+                    : run.purpose();
         }
     }
 
@@ -537,6 +613,16 @@ public final class AlertInMemoryStores {
 
     public static final class Tasks implements RcaTaskRepository {
         private final Map<UUID, RcaTask> rows = new LinkedHashMap<>();
+        /** SR：claim 排除影子 Run（镜像 CLAIM_SQL coalesce(purpose,'LEGACY_UNKNOWN')<>'SHADOW' 谓词；可空=独立 fake 无 run 面） */
+        private final Runs runsRef;
+
+        public Tasks() {
+            this(null);
+        }
+
+        public Tasks(Runs runsRef) {
+            this.runsRef = runsRef;
+        }
 
         @Override
         public synchronized void insert(RcaTask task) {
@@ -555,8 +641,14 @@ public final class AlertInMemoryStores {
                     .filter(t -> t.state() == RcaTaskState.READY || t.state() == RcaTaskState.RETRY_WAIT)
                     .filter(t -> !t.availableAt().isAfter(now))
                     // C-70（M6-01）与 Postgres CLAIM_SQL 同语义：通用领取只认 driver task_key
+                    // + SR §4.3 REPORT_FINALIZE 恢复 task（worker 领取后走 finalize 分派）
                     .filter(t -> t.taskKey().equals(RcaTask.HOLMES_INVESTIGATE)
-                            || t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE))
+                            || t.taskKey().equals(RcaTask.NATIVE_INVESTIGATE)
+                            || t.taskKey().equals(RcaTask.REPORT_FINALIZE))
+                    // SR §3.2：生产调度排除影子 Run（不以"临时占满槽位"为隔离机制）
+                    .filter(t -> runsRef == null
+                            || runsRef.purposeOf(t.runId()) != com.objwww.pr.control.alert
+                                    .domain.model.RunPurpose.SHADOW)
                     .min(SlaPolicy.claimOrder(now));
             if (candidate.isEmpty()) {
                 return Optional.empty();
@@ -656,6 +748,53 @@ public final class AlertInMemoryStores {
                     .count();
         }
 
+        /**
+         * WC-4 §5.3 清理通道 join 面（镜像 PG：非终态任务 × 终态 Run，(createdAt,id)
+         * keyset）。独立 fake（无 runsRef）无 run 语义 → 空集。
+         */
+        @Override
+        public synchronized List<RcaTaskRepository.OpenTaskRef>
+        findOpenTasksUnderTerminalRunsAfter(Instant afterCreatedAt, UUID afterId, int limit) {
+            if (runsRef == null) {
+                return List.of();
+            }
+            return rows.values().stream()
+                    .filter(t -> switch (t.state()) {
+                        case READY, BLOCKED, RETRY_WAIT, LEASED, RUNNING -> true;
+                        default -> false;
+                    })
+                    .filter(t -> {
+                        RcaRun run = runsRef.findById(t.runId()).orElse(null);
+                        return run != null && !run.state().isActive();
+                    })
+                    .filter(t -> afterCreatedAt == null
+                            || t.createdAt().isAfter(afterCreatedAt)
+                            || (t.createdAt().equals(afterCreatedAt)
+                                && afterId != null && t.id().compareTo(afterId) > 0))
+                    .sorted(Comparator.comparing(RcaTask::createdAt).thenComparing(RcaTask::id))
+                    .limit(limit)
+                    .map(t -> new RcaTaskRepository.OpenTaskRef(t.id(), t.runId(), t.createdAt()))
+                    .toList();
+        }
+
+        /** WC-5：终态 Run 名下未决任务存量（gauge 数据面，fake 与 PG 对齐） */
+        @Override
+        public synchronized long countOpenTasksUnderTerminalRuns() {
+            if (runsRef == null) {
+                return 0;
+            }
+            return rows.values().stream()
+                    .filter(t -> switch (t.state()) {
+                        case READY, BLOCKED, RETRY_WAIT, LEASED, RUNNING -> true;
+                        default -> false;
+                    })
+                    .filter(t -> {
+                        RcaRun run = runsRef.findById(t.runId()).orElse(null);
+                        return run != null && !run.state().isActive();
+                    })
+                    .count();
+        }
+
         public synchronized List<RcaTask> all() {
             return List.copyOf(rows.values());
         }
@@ -703,6 +842,11 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized void insert(RcaReport report) {
             rows.put(report.id(), report);
+        }
+
+        @Override
+        public synchronized Optional<RcaReport> findById(UUID id) {
+            return Optional.ofNullable(rows.get(id));
         }
 
         @Override
@@ -1026,6 +1170,16 @@ public final class AlertInMemoryStores {
                     .filter(r -> r.state() == OperatorCommand.State.WAITING_SAFE_POINT)
                     .filter(r -> r.payload().get("deadline") instanceof String deadline
                             && Instant.parse(deadline).isBefore(now))
+                    .sorted(java.util.Comparator.comparing(OperatorCommand::createdAt))
+                    .toList();
+        }
+
+        /** WC-2 恢复面：run 的某类型命令全量行（唯一候选身份裁决用） */
+        @Override
+        public synchronized java.util.List<OperatorCommand> findByRunAndType(
+                UUID runId, OperatorCommand.Type type) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.type() == type)
                     .sorted(java.util.Comparator.comparing(OperatorCommand::createdAt))
                     .toList();
         }
@@ -1436,6 +1590,15 @@ public final class AlertInMemoryStores {
             }
             return swept;
         }
+
+        /** WC-5 读面：run × 结算状态行数（fake 与 PG 对齐） */
+        @Override
+        public synchronized long countByRunAndState(UUID runId,
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState state) {
+            return rows.values().stream()
+                    .filter(r -> r.identity.runId().equals(runId) && r.state == state)
+                    .count();
+        }
     }
 
     // --------------------------------- 任务→角色冻结绑定假件（R7-X1）
@@ -1482,6 +1645,9 @@ public final class AlertInMemoryStores {
             com.objwww.pr.control.alert.domain.repository.PrimaryCheckpointRepository {
         private final Map<UUID, com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint> rows =
                 new LinkedHashMap<>();
+        /** CL-01 动作身份（REPLAYED 判定锚，同构 last_action_* 两列） */
+        private final Map<UUID, String> lastActionKeys = new LinkedHashMap<>();
+        private final Map<UUID, String> lastActionDigests = new LinkedHashMap<>();
 
         @Override
         public synchronized void upsert(
@@ -1493,6 +1659,31 @@ public final class AlertInMemoryStores {
         public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint> findByTask(
                 UUID taskId) {
             return java.util.Optional.ofNullable(rows.get(taskId));
+        }
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.repository
+                .PrimaryCheckpointRepository.CommitState findCommitStateForUpdate(UUID taskId) {
+            com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint current = rows.get(taskId);
+            return current == null ? null
+                    : new com.objwww.pr.control.alert.domain.repository
+                            .PrimaryCheckpointRepository.CommitState(current,
+                            lastActionKeys.get(taskId), lastActionDigests.get(taskId));
+        }
+
+        @Override
+        public synchronized long updateGuarded(
+                com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint next,
+                long expectedRevision, String actionKey, String actionDigest) {
+            com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint current = rows.get(next.taskId());
+            if (current == null || current.revision() != expectedRevision) {
+                return 0;
+            }
+            // 镜像 PG SQL：revision=revision+1 随行落库
+            rows.put(next.taskId(), next.withRevision(current.revision() + 1));
+            lastActionKeys.put(next.taskId(), actionKey);
+            lastActionDigests.put(next.taskId(), actionDigest);
+            return 1;
         }
 
         @Override
@@ -1750,6 +1941,12 @@ public final class AlertInMemoryStores {
                             com.objwww.pr.control.alert.domain.agent.WorkingMemory
                                     ::checkpointRevision));
         }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.WorkingMemory>
+                findById(UUID id) {
+            return java.util.Optional.ofNullable(rows.get(id));
+        }
     }
 
     // --------------------------------- R11 上下文摘要假件（不可变档同构）
@@ -1764,6 +1961,12 @@ public final class AlertInMemoryStores {
         public synchronized List<com.objwww.pr.control.alert.domain.agent.ContextSummary>
                 all() {
             return List.copyOf(rows.values());
+        }
+
+        @Override
+        public synchronized java.util.Optional<com.objwww.pr.control.alert.domain.agent.ContextSummary>
+                findById(UUID id) {
+            return java.util.Optional.ofNullable(rows.get(id));
         }
 
         @Override
@@ -1811,6 +2014,300 @@ public final class AlertInMemoryStores {
             return rows.values().stream()
                     .filter(r -> r.runId().equals(runId) && r.taskId().equals(taskId))
                     .count();
+        }
+    }
+
+    // --------------------------------- CL-07 压缩尝试台账假件（V102 同构）
+
+    /** rca_compaction_attempt 同构假件：逻辑键 insert-if-absent + 状态 CAS 终态化 */
+    public static final class CompactionAttempts implements
+            com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort {
+
+        public final Map<UUID, com.objwww.pr.control.alert.domain.agent.CompactionAttempt>
+                rows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.agent.CompactionAttempt
+                insertIfAbsent(
+                        com.objwww.pr.control.alert.domain.agent.CompactionAttempt candidate) {
+            java.util.function.Predicate<
+                    com.objwww.pr.control.alert.domain.agent.CompactionAttempt> sameKey =
+                    r -> r.taskId().equals(candidate.taskId())
+                            && r.sourceContextDigest()
+                                    .equals(candidate.sourceContextDigest())
+                            && r.policyDigest().equals(candidate.policyDigest())
+                            && java.util.Objects.equals(r.configEpoch() == null ? -1L
+                                    : r.configEpoch(),
+                            candidate.configEpoch() == null ? -1L : candidate.configEpoch());
+            return rows.values().stream().filter(sameKey).findFirst()
+                    .orElseGet(() -> {
+                        rows.put(candidate.id(), candidate);
+                        return candidate;
+                    });
+        }
+
+        @Override
+        public synchronized boolean casState(UUID id, String fromState, String toState,
+                String errorCode, UUID summaryId) {
+            com.objwww.pr.control.alert.domain.agent.CompactionAttempt row = rows.get(id);
+            if (row == null || !row.state().equals(fromState)) {
+                return false;
+            }
+            rows.put(id, new com.objwww.pr.control.alert.domain.agent.CompactionAttempt(
+                    row.id(), row.runId(), row.taskId(), row.sourceContextDigest(),
+                    row.policyDigest(), row.owner(), row.leaseEpoch(), row.configEpoch(),
+                    row.expectedRevision(), toState, row.logicalActionKey(), errorCode,
+                    summaryId, row.createdAt(),
+                    "RESERVED".equals(toState) || "IN_FLIGHT".equals(toState)
+                            ? null : java.time.Instant.now()));
+            return true;
+        }
+
+        @Override
+        public synchronized java.util.Optional<
+                com.objwww.pr.control.alert.domain.agent.CompactionAttempt> findById(UUID id) {
+            return java.util.Optional.ofNullable(rows.get(id));
+        }
+    }
+
+    // ------------------------------------------------------------------ OP-04 report_feedback
+
+    public static final class Feedbacks implements
+            com.objwww.pr.control.alert.domain.repository.ReportFeedbackPort {
+
+        public final Map<UUID, com.objwww.pr.control.alert.domain.model.ReportFeedback>
+                rows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized com.objwww.pr.control.alert.domain.model.ReportFeedback insert(
+                com.objwww.pr.control.alert.domain.model.ReportFeedback candidate) {
+            // (author, idempotency_key) 幂等面
+            for (var row : rows.values()) {
+                if (row.author().equals(candidate.author())
+                        && row.idempotencyKey().equals(candidate.idempotencyKey())) {
+                    return row;
+                }
+            }
+            // uq(supersedes_id)：同一前序只允许一条更正
+            if (candidate.supersedesId() != null) {
+                for (var row : rows.values()) {
+                    if (candidate.supersedesId().equals(row.supersedesId())) {
+                        return row;
+                    }
+                }
+            }
+            rows.put(candidate.id(), candidate);
+            return candidate;
+        }
+
+        @Override
+        public synchronized List<
+                com.objwww.pr.control.alert.domain.model.ReportFeedback> findByReportId(
+                        UUID reportId) {
+            return rows.values().stream()
+                    .filter(r -> r.reportId().equals(reportId)).toList();
+        }
+
+        @Override
+        public synchronized Optional<
+                com.objwww.pr.control.alert.domain.model.ReportFeedback> findById(UUID id) {
+            return Optional.ofNullable(rows.get(id));
+        }
+    }
+
+    // ------------------------------------------------------------------ OP-01 regression candidate
+
+    public static final class RegressionCandidates implements
+            com.objwww.pr.control.eval.domain.repository.RegressionCandidatePort {
+
+        public final Map<UUID, com.objwww.pr.control.eval.domain.model.RegressionCandidate>
+                rows = new LinkedHashMap<>();
+        public final Map<UUID, com.objwww.pr.control.eval.domain.model.RegressionReview>
+                reviewRows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized com.objwww.pr.control.eval.domain.model.RegressionCandidate
+                insertIfAbsent(
+                        com.objwww.pr.control.eval.domain.model.RegressionCandidate candidate) {
+            for (var row : rows.values()) {
+                if (row.sourceDigest().equals(candidate.sourceDigest())
+                        && row.caseKey().equals(candidate.caseKey())) {
+                    return row;
+                }
+            }
+            rows.put(candidate.id(), candidate);
+            return candidate;
+        }
+
+        @Override
+        public synchronized Optional<
+                com.objwww.pr.control.eval.domain.model.RegressionCandidate> casState(
+                        UUID id, String fromState,
+                        com.objwww.pr.control.eval.domain.model.RegressionCandidate next) {
+            var row = rows.get(id);
+            if (row == null || !row.state().equals(fromState)) {
+                return Optional.empty();
+            }
+            rows.put(id, next);
+            return Optional.of(next);
+        }
+
+        @Override
+        public synchronized Optional<
+                com.objwww.pr.control.eval.domain.model.RegressionCandidate> findById(
+                        UUID id) {
+            return Optional.ofNullable(rows.get(id));
+        }
+
+        @Override
+        public synchronized List<
+                com.objwww.pr.control.eval.domain.model.RegressionCandidate> findByState(
+                        String state) {
+            return rows.values().stream()
+                    .filter(r -> r.state().equals(state)).toList();
+        }
+
+        @Override
+        public synchronized com.objwww.pr.control.eval.domain.model.RegressionReview
+                insertReview(
+                        com.objwww.pr.control.eval.domain.model.RegressionReview review) {
+            for (var row : reviewRows.values()) {
+                if (row.candidateId().equals(review.candidateId())
+                        && row.reviewer().equals(review.reviewer())) {
+                    return row;
+                }
+            }
+            reviewRows.put(review.id(), review);
+            return review;
+        }
+
+        @Override
+        public synchronized List<
+                com.objwww.pr.control.eval.domain.model.RegressionReview> reviewsOf(
+                        UUID candidateId) {
+            return reviewRows.values().stream()
+                    .filter(r -> r.candidateId().equals(candidateId)).toList();
+        }
+    }
+
+    // ------------------------------------------------------------------ AM4 evidence（OP-01 来源指纹输入）
+
+    public static final class Evidences implements
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository {
+
+        public final Map<UUID,
+                com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> rows =
+                new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insert(
+                com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope envelope) {
+            rows.put(envelope.evidenceId(), envelope);
+        }
+
+        @Override
+        public synchronized Optional<
+                com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findById(
+                        UUID evidenceId) {
+            return Optional.ofNullable(rows.get(evidenceId));
+        }
+
+        @Override
+        public synchronized List<
+                com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findByRunId(
+                        UUID runId) {
+            return rows.values().stream()
+                    .filter(e -> e.runId().equals(runId)).toList();
+        }
+    }
+
+    // ------------------------------------------------------------------ OP-03 rca_action_assessment
+
+    public static final class ActionAssessments implements
+            com.objwww.pr.control.ops.domain.repository.ActionAssessmentPort {
+
+        public final Map<UUID, com.objwww.pr.control.ops.domain.model.ActionAssessment>
+                rows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized com.objwww.pr.control.ops.domain.model.ActionAssessment
+                insertIfAbsent(
+                        com.objwww.pr.control.ops.domain.model.ActionAssessment candidate) {
+            for (var row : rows.values()) {
+                if (row.runId().equals(candidate.runId())
+                        && row.logicalActionKey().equals(candidate.logicalActionKey())
+                        && row.assessorVersion().equals(candidate.assessorVersion())
+                        && row.evidenceSnapshotDigest()
+                                .equals(candidate.evidenceSnapshotDigest())) {
+                    return row;
+                }
+            }
+            rows.put(candidate.id(), candidate);
+            return candidate;
+        }
+
+        @Override
+        public synchronized List<
+                com.objwww.pr.control.ops.domain.model.ActionAssessment> findByRun(
+                        UUID runId) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId)).toList();
+        }
+    }
+
+    // ------------------------------------------------------------------ AM5 dataset_version（OP-01 materialize 落点）
+
+    public static final class Datasets implements
+            com.objwww.pr.control.eval.domain.repository.DatasetVersionRepository {
+
+        public final Map<UUID, com.objwww.pr.control.eval.domain.model.DatasetVersion>
+                datasetRows = new LinkedHashMap<>();
+        public final Map<UUID, com.objwww.pr.control.eval.domain.model.CaseVersion>
+                caseRows = new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insertDatasetVersion(
+                com.objwww.pr.control.eval.domain.model.DatasetVersion version) {
+            for (var row : datasetRows.values()) {
+                if (row.name().equals(version.name())
+                        && row.version().equals(version.version())) {
+                    throw new org.springframework.dao.DuplicateKeyException(
+                            "uq(dataset name,version): " + version.name());
+                }
+            }
+            datasetRows.put(version.id(), version);
+        }
+
+        @Override
+        public synchronized boolean insertCaseVersion(
+                com.objwww.pr.control.eval.domain.model.CaseVersion version) {
+            for (var row : caseRows.values()) {
+                if (row.datasetVersionId().equals(version.datasetVersionId())
+                        && row.caseKey().equals(version.caseKey())) {
+                    return false;
+                }
+            }
+            caseRows.put(version.id(), version);
+            return true;
+        }
+
+        @Override
+        public synchronized Optional<
+                com.objwww.pr.control.eval.domain.model.DatasetVersion> findDataset(
+                        String name, String version) {
+            return datasetRows.values().stream()
+                    .filter(d -> d.name().equals(name) && d.version().equals(version))
+                    .findFirst();
+        }
+
+        @Override
+        public synchronized List<com.objwww.pr.control.eval.domain.model.CaseVersion>
+                findCasesValidAt(UUID datasetVersionId, Instant at) {
+            return caseRows.values().stream()
+                    .filter(c -> c.datasetVersionId().equals(datasetVersionId))
+                    .filter(c -> !c.validFrom().isAfter(at)
+                            && (c.validTo() == null || c.validTo().isAfter(at)))
+                    .toList();
         }
     }
 }

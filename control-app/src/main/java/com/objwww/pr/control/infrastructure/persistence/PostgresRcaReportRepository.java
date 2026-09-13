@@ -60,6 +60,16 @@ public class PostgresRcaReportRepository implements RcaReportRepository {
                 .list();
     }
 
+    @Override
+    public java.util.Optional<RcaReport> findById(UUID id) {
+        List<RcaReport> rows = jdbc.sql("SELECT * FROM rca_report WHERE id = :id")
+                .param("id", id)
+                .query(this::mapRow)
+                .list();
+        return rows.isEmpty() ? java.util.Optional.empty()
+                : java.util.Optional.of(rows.get(0));
+    }
+
     private static String toJsonArray(List<String> errors) {
         if (errors == null || errors.isEmpty()) {
             return null;

@@ -92,7 +92,7 @@ class ExA2LeaseCancelFenceIT extends PostgresITBase {
                 org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         RcaEventAppender appender = new PostgresRcaEventAppender(jdbc, controlTx, requiresNew);
         commands = new CommandService(new PostgresOperatorCommandRepository(jdbc), runs,
-                appender, Instant::now);
+                appender, controlTx, Instant::now);
         orchestrator = new RcaRunOrchestrator(tasks, runs, attempts,
                 new PostgresRcaReportRepository(jdbc), incidents,
                 new PostgresSchedulerSlotRepository(jdbc),

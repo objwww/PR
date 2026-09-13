@@ -45,13 +45,16 @@ public class PostgresWorkingMemory implements WorkingMemoryPort {
                 .query((rs, i) -> rs.getObject("id", UUID.class))
                 .list();
         if (!existing.isEmpty()) {
-            return findById(existing.get(0));
+            return findById(existing.get(0)).orElseThrow(() -> new IllegalStateException(
+                    "记忆行 id 已查得却不可读: " + existing.get(0)));
         }
         jdbc.sql("""
                 insert into rca_working_memory (id, run_id, task_id, checkpoint_revision,
-                    memory_json, memory_digest, config_epoch, created_at)
+                    memory_json, memory_digest, config_epoch, schema_version,
+                    parent_memory_id, created_at)
                 values (:id, :runId, :taskId, :revision,
-                    cast(:slots as jsonb), :digest, :configEpoch, :createdAt)
+                    cast(:slots as jsonb), :digest, :configEpoch, :schemaVersion,
+                    :parentMemoryId, :createdAt)
                 """)
                 .param("id", candidate.id())
                 .param("runId", candidate.runId())
@@ -60,6 +63,8 @@ public class PostgresWorkingMemory implements WorkingMemoryPort {
                 .param("slots", jsonOf(candidate.slots()))
                 .param("digest", candidate.memoryDigest())
                 .param("configEpoch", candidate.configEpoch())
+                .param("schemaVersion", candidate.schemaVersion())
+                .param("parentMemoryId", candidate.parentMemoryId())
                 .param("createdAt", Timestamp.from(candidate.createdAt()))
                 .update();
         return candidate;
@@ -69,7 +74,8 @@ public class PostgresWorkingMemory implements WorkingMemoryPort {
     public Optional<WorkingMemory> latestByTask(UUID runId, UUID taskId) {
         List<WorkingMemory> rows = jdbc.sql("""
                 select id, run_id, task_id, checkpoint_revision, memory_json,
-                       memory_digest, config_epoch, created_at
+                       memory_digest, config_epoch, schema_version, parent_memory_id,
+                       created_at
                 from rca_working_memory
                 where run_id = :runId and task_id = :taskId
                 order by checkpoint_revision desc
@@ -82,16 +88,17 @@ public class PostgresWorkingMemory implements WorkingMemoryPort {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
-    private WorkingMemory findById(UUID id) {
+    @Override
+    public Optional<WorkingMemory> findById(UUID id) {
         return jdbc.sql("""
                         select id, run_id, task_id, checkpoint_revision, memory_json,
-                               memory_digest, config_epoch, created_at
+                               memory_digest, config_epoch, schema_version,
+                               parent_memory_id, created_at
                         from rca_working_memory where id = :id
                         """)
                 .param("id", id)
                 .query(this::mapRow)
-                .list()
-                .get(0);
+                .optional();
     }
 
     private WorkingMemory mapRow(java.sql.ResultSet rs, int rowNum)
@@ -104,7 +111,8 @@ public class PostgresWorkingMemory implements WorkingMemoryPort {
                 rs.getObject("run_id", UUID.class),
                 rs.getObject("task_id", UUID.class),
                 revision, slots, rs.getString("memory_digest"),
-                configEpoch, createdAt.toInstant());
+                configEpoch, rs.getInt("schema_version"),
+                rs.getObject("parent_memory_id", UUID.class), createdAt.toInstant());
     }
 
     private String jsonOf(Object value) {

@@ -257,4 +257,103 @@ class ToolGatewayTest {
             busyPool.shutdownNow();
         }
     }
+
+    // ------------------------------------------------- WC-3 取消传播（§5.1/§5.2）
+
+    @Test
+    void wc3_t13a_外部硬期限已过_提交前即停_零执行() {
+        ToolGateway gateway = gateway(
+                new ToolRegistry.Registration(definition("t.tool", ToolRisk.R0, 10_000, 16),
+                        countingExecutor()),
+                new ToolPolicy(Set.of("t.tool")), POOL);
+        ToolGateway.ToolInvocation inv = new ToolGateway.ToolInvocation(RUN, RUN, RUN, 1,
+                "t.tool", "1.0.0", "r", Map.of("q", "x"), null,
+                FIXED.instant().minusMillis(1));
+        com.objwww.pr.control.alert.application.ExecutionControl.StoppedException e =
+                catchThrowableOfType(() -> gateway.invoke(inv),
+                        com.objwww.pr.control.alert.application.ExecutionControl
+                                .StoppedException.class);
+        assertThat(e.kind()).isEqualTo(
+                com.objwww.pr.control.alert.application.ExecutionControl
+                        .STOP_RUN_DEADLINE_EXCEEDED);
+        assertThat(remoteCalls.get()).as("停止在提交前：零执行").isZero();
+    }
+
+    @Test
+    void wc3_t13b_外部期限收紧等待_executor收到夹紧deadline_超时面不变() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<Long> seenDeadline = new AtomicReference<>();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            // 工具超时 10s，外部期限 = now+150ms → 等待必须在夹紧点结束（不等 10s）
+            ToolGateway gateway = gateway(
+                    new ToolRegistry.Registration(
+                            definition("slow.tool", ToolRisk.R0, 10_000, 16),
+                            execution -> {
+                                seenDeadline.set(execution.deadlineEpochMillis());
+                                release.await();
+                                return new byte[1];
+                            }),
+                    new ToolPolicy(Set.of("slow.tool")), pool);
+            ToolGateway.ToolInvocation inv = new ToolGateway.ToolInvocation(RUN, RUN, RUN, 1,
+                    "slow.tool", "1.0.0", "r", Map.of("q", "x"), null,
+                    FIXED.instant().plusMillis(150));
+            long begin = System.nanoTime();
+            ToolModelVisibleException e = catchThrowableOfType(() -> gateway.invoke(inv),
+                    ToolModelVisibleException.class);
+            long elapsedMs = (System.nanoTime() - begin) / 1_000_000;
+            assertThat(e.reason()).isEqualTo(ToolModelVisibleReason.TIMEOUT_RETRYABLE);
+            assertThat(elapsedMs).as("等待被外部期限夹紧（远小于 10s 工具超时）")
+                    .isLessThan(5_000);
+            assertThat(seenDeadline.get()).as("executor 收到夹紧后的 deadline")
+                    .isEqualTo(FIXED.instant().plusMillis(150).toEpochMilli());
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void wc3_t13c_Run取消的在途通知_中断工具等待_转RUN_CANCELLED停止() throws Exception {
+        InFlightToolCancels cancels = new InFlightToolCancels();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        AtomicReference<Throwable> thrown = new AtomicReference<>();
+        try {
+            ToolGateway gateway = new ToolGateway(
+                    new ToolRegistry(List.of(new ToolRegistry.Registration(
+                            definition("slow.tool", ToolRisk.R0, 60_000, 16),
+                            execution -> {
+                                started.countDown();
+                                release.await();
+                                return new byte[1];
+                            }))),
+                    new ToolPolicy(Set.of("slow.tool")), pool, FIXED, null, cancels);
+            Thread caller = new Thread(() -> {
+                try {
+                    gateway.invoke(new ToolGateway.ToolInvocation(RUN, RUN, RUN, 1,
+                            "slow.tool", "1.0.0", "r", Map.of("q", "x"), null, null));
+                } catch (Throwable t) {
+                    thrown.set(t);
+                }
+            });
+            caller.start();
+            assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
+            cancels.cancelRun(RUN); // CANCEL 应用后的后置通知
+
+            caller.join(5_000);
+            assertThat(thrown.get()).isNotNull();
+            assertThat(thrown.get()).isInstanceOfSatisfying(
+                    com.objwww.pr.control.alert.application.ExecutionControl
+                            .StoppedException.class,
+                    e -> assertThat(((com.objwww.pr.control.alert.application.ExecutionControl
+                            .StoppedException) e).kind())
+                            .isEqualTo(com.objwww.pr.control.alert.application.ExecutionControl
+                                    .STOP_RUN_CANCELLED));
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
+    }
 }

@@ -75,4 +75,12 @@ public interface RcaToolInvocationLedger {
     default boolean markResultRef(UUID operationId, UUID evidenceId) {
         return false;
     }
+
+    /**
+     * WC-5 读面：某 run 指定结算状态（如 UNKNOWN）的账本行数——取消收敛详情的
+     * unknownActionCount。default 0 = 假件环境无账面；真实 PG 实现覆盖。
+     */
+    default long countByRunAndState(UUID runId, ToolInvocationState state) {
+        return 0;
+    }
 }

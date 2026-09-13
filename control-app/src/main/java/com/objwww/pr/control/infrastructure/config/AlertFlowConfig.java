@@ -492,17 +492,59 @@ public class AlertFlowConfig {
                                @Value("${app.alert.worker.hanging-grace:PT10M}") Duration hangingGrace,
                                @Value("${app.alert.worker.investigation-schema-version:2}") int investigationSchemaVersion,
                                RunConfigSwitchService runConfigSwitchService,
-                               com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask) {
+                               com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask,
+                               com.objwww.pr.control.alert.application.ReportFinalizeExecutor
+                                       reportFinalizeExecutor,
+                               AlertMetrics alertMetrics) {
         Map<RcaEngine, RcaTaskExecutor> executors = new java.util.EnumMap<>(RcaEngine.class);
         NativeInvestigationExecutor nativeExecutorInstance = nativeExecutor.getIfAvailable();
         if (nativeExecutorInstance != null) {
             executors.put(RcaEngine.NATIVE, nativeExecutorInstance);
         }
         return new RcaWorker(tasks, runs, attempts, investigationResults, incidents, slots,
-                invocations, toolLedger, executors, orchestrator, tx, AlertClock.system(),
-                owner, slotScope, taskLease, heartbeatInterval, pollInterval, retryBackoff,
-                hangingGrace, investigationSchemaVersion, runConfigSwitchService,
-                canaryWindowTask);
+                invocations, toolLedger, executors, reportFinalizeExecutor, orchestrator, tx,
+                AlertClock.system(), owner, slotScope, taskLease, heartbeatInterval, pollInterval,
+                retryBackoff, hangingGrace, investigationSchemaVersion, runConfigSwitchService,
+                canaryWindowTask, alertMetrics);
+    }
+
+    /** SR §4.3：报告收尾恢复执行器（只组既有持久材料，不隐式 LLM/重查现场） */
+    @Bean
+    public com.objwww.pr.control.alert.application.ReportFinalizeExecutor reportFinalizeExecutor(
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository reports,
+            InvestigationResultRepository investigationResults,
+            com.objwww.pr.control.domain.port.ArtifactStore artifacts) {
+        return new com.objwww.pr.control.alert.application.ReportFinalizeExecutor(
+                reports, investigationResults, artifacts);
+    }
+
+    /**
+     * SR §4/§5：Run 停滞对账看门狗——灰度三态（默认 ALERT_ONLY 只告警；空串/缺省
+     * 回退 ALERT_ONLY，CL-07 同款装配语义），验证误报后再开 SAFE_RECOVER/AUTO_EXPIRE。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.RunReconciler runReconciler(
+            RcaRunRepository runs,
+            RcaTaskRepository tasks,
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository reports,
+            InvestigationResultRepository investigationResults,
+            IncidentRepository incidents,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            TransactionOperations tx,
+            SlaPolicy sla,
+            com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics,
+            @Value("${app.alert.reconcile.mode:}") String modeText,
+            @Value("${app.alert.reconcile.poll-interval:PT30S}") Duration pollInterval,
+            @Value("${app.alert.reconcile.batch-limit:50}") int batchLimit) {
+        com.objwww.pr.control.alert.application.RunReconciler.Mode mode =
+                modeText == null || modeText.isBlank()
+                        ? com.objwww.pr.control.alert.application.RunReconciler.Mode.ALERT_ONLY
+                        : com.objwww.pr.control.alert.application.RunReconciler.Mode.valueOf(
+                                modeText.trim().toUpperCase());
+        // WC-5：观测面随装配接线（扫描时长/失败/决策计数/覆盖与积压 gauge 族）
+        return new com.objwww.pr.control.alert.application.RunReconciler(
+                runs, tasks, reports, investigationResults, incidents, events, tx, sla,
+                AlertClock.system(), mode, pollInterval, batchLimit, alertMetrics);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */
@@ -528,12 +570,13 @@ public class AlertFlowConfig {
                 AlertClock.system(), pollInterval);
     }
 
-    /** 消费循环（inbox 投影 + RCA worker + 等待重驱）随容器启停（T10 部署启动真执行链；
-     *  M6-05 holmes shadow 调度循环已随退场摘除） */
+    /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗）随容器启停
+     *  （T10 部署启动真执行链；M6-05 holmes shadow 调度循环已随退场摘除） */
     @Bean
     public SmartLifecycle alertFlowLifecycle(
             AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
-            com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive) {
+            com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive,
+            com.objwww.pr.control.alert.application.RunReconciler runReconciler) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -542,12 +585,14 @@ public class AlertFlowConfig {
                 inboxProcessor.start();
                 rcaWorker.start();
                 redrive.start();
+                runReconciler.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                runReconciler.stop();
                 redrive.stop();
                 rcaWorker.stop();
                 inboxProcessor.stop();

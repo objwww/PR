@@ -44,8 +44,10 @@ import java.util.UUID;
  * </ol>
  * 失败恢复：任何拒绝/失败一律丢弃候选保留原快照，主路径按既有确定性有界材料继续
  * （有界回退，无内联重试、无"摘要→摘要"递归——源锚恒为原始快照 digest）。
- * 摘要的消费面（信封注入与证据窗再裁剪）待 MC34 证明收益后启用；enabled=true 时
- * 本服务只生成不消费——放量前置条件写入执行日志。
+ * CL-07 起每次生成先经 V102 rca_compaction_attempt 预留（冻结来源/策略/执行身份，
+ * 终态封闭不删行）；SHADOW_GENERATE 只留档不换输入，CONSUME_VALIDATED 才经 CL-01
+ * 围栏更新 checkpoint.current_summary_id（信封消费面见 CL-08）。全量旧正文替换
+ * 消费待 MC34 三臂对照证明收益后启用。
  */
 public class ContextCompactionService {
 
@@ -78,6 +80,26 @@ public class ContextCompactionService {
         REJECTED_NO_SAVINGS, SUPERSEDED, COMMITTED
     }
 
+    /**
+     * CL-07 三模式：OFF 关闭；SHADOW_GENERATE 只生成留档不换输入（旧 enabled=true
+     * 的全部语义）；CONSUME_VALIDATED 生成后经围栏把 current_summary_id 钉上检查点
+     * ——默认仍关，放量前提 MC34 三臂对照（OFF/确定性/消费）证明收益。
+     */
+    public enum Mode { OFF, SHADOW_GENERATE, CONSUME_VALIDATED }
+
+    /**
+     * CL-07 消费口（生产装配 = CL-01 提交围栏 SUMMARY_CONSUMED 条件写）：把已提交
+     * 摘要钉为检查点消费指针。返回 false=围栏拒绝（失租/revision 漂移），调用方
+     * 保留旧指针不打断主路径。
+     */
+    @FunctionalInterface
+    public interface SummaryConsumer {
+
+        boolean consume(UUID runId, UUID taskId, String owner, long leaseEpoch,
+                Long configEpoch, long expectedRevision, String actionKey,
+                UUID summaryId);
+    }
+
     /** 一步边界结果：kind + 已提交摘要（仅 COMMITTED 非 null）+ 机器可读细节 */
     public record CompactionOutcome(OutcomeKind kind, ContextSummary summary,
             String detail) {
@@ -104,16 +126,34 @@ public class ContextCompactionService {
     private final EvidenceRepository evidence;
     private final ObjectMapper mapper;
     private final Clock clock;
-    private final boolean enabled;
+    /** CL-07 三模式（旧 enabled 语义：true=SHADOW_GENERATE，false=OFF） */
+    private final Mode mode;
+    /** CL-07 尝试台账（可空=无持久面装配，零台账零语义漂移） */
+    private final com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort attempts;
+    /** CL-07 消费口（仅 CONSUME_VALIDATED 调用；可空=只生成不消费） */
+    private final SummaryConsumer consumer;
     private final double softThreshold;
     private final double targetRatio;
     private final int maxPerRun;
     private final int maxInputTokens;
 
+    /** 旧构造（enabled 布尔映射 SHADOW_GENERATE/OFF）：既有装配/测试零改动 */
     public ContextCompactionService(CompactionModelPort model, ContextSummaryPort summaries,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
             ObjectMapper mapper, Clock clock, boolean enabled, double softThreshold,
             double targetRatio, int maxPerRun, int maxInputTokens) {
+        this(model, summaries, checkpoints, evidence, mapper, clock,
+                enabled ? Mode.SHADOW_GENERATE : Mode.OFF, softThreshold,
+                targetRatio, maxPerRun, maxInputTokens, null, null);
+    }
+
+    /** CL-07 全参构造：模式 + V102 尝试台账 + 消费口（围栏化 current_summary_id） */
+    public ContextCompactionService(CompactionModelPort model, ContextSummaryPort summaries,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ObjectMapper mapper, Clock clock, Mode mode, double softThreshold,
+            double targetRatio, int maxPerRun, int maxInputTokens,
+            com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort attempts,
+            SummaryConsumer consumer) {
         this.model = Objects.requireNonNull(model, "model");
         this.summaries = Objects.requireNonNull(summaries, "summaries");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -134,11 +174,13 @@ public class ContextCompactionService {
         if (maxInputTokens <= 0) {
             throw new IllegalArgumentException("max-input-tokens 须为正: " + maxInputTokens);
         }
-        this.enabled = enabled;
+        this.mode = Objects.requireNonNull(mode, "mode");
         this.softThreshold = softThreshold;
         this.targetRatio = targetRatio;
         this.maxPerRun = maxPerRun;
         this.maxInputTokens = maxInputTokens;
+        this.attempts = attempts;
+        this.consumer = consumer;
     }
 
     /**
@@ -147,9 +189,9 @@ public class ContextCompactionService {
      */
     public CompactionOutcome afterToolResults(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly) {
-        if (!enabled) {
+        if (mode == Mode.OFF) {
             return new CompactionOutcome(OutcomeKind.DISABLED, null,
-                    "compaction.enabled=false（放量前提 MC34 三臂对照）");
+                    "compaction mode=OFF（放量前提 MC34 三臂对照）");
         }
         int softLine = (int) Math.ceil(softThreshold * maxInputTokens);
         if (assembly.approxTokens() < softLine) {
@@ -171,6 +213,32 @@ public class ContextCompactionService {
         }
         if (summaries.findBySource(runId, taskId, source).isPresent()) {
             return new CompactionOutcome(OutcomeKind.ALREADY_COMPACTED, null, source);
+        }
+        // CL-07 §6.4-2：短事务预留尝试资格——外部调用前冻结来源/策略/四类执行身份
+        // （V102 台账）；同逻辑动作并发预留一胜一拒，败者读胜者行收敛（首期一动作
+        // 一物理尝试；崩溃残留 IN_FLIGHT 行即对账面，不静默删除）
+        java.util.UUID wishId = UUID.randomUUID();
+        com.objwww.pr.control.alert.domain.agent.CompactionAttempt attempt = null;
+        if (attempts != null) {
+            com.objwww.pr.control.alert.domain.agent.CompactionAttempt stored =
+                    attempts.insertIfAbsent(
+                            com.objwww.pr.control.alert.domain.agent.CompactionAttempt
+                                    .reserve(wishId, runId, taskId, source,
+                                            policyDigest(), request.task().leaseOwner(),
+                                            request.task().leaseEpoch(),
+                                            request.binding().configEpoch(),
+                                            checkpoint.revision(),
+                                            "compaction:" + taskId + ":" + source,
+                                            clock.instant()));
+            if (!stored.id().equals(wishId)) {
+                return new CompactionOutcome(OutcomeKind.ALREADY_COMPACTED, null,
+                        "attempt=" + stored.id() + " state=" + stored.state());
+            }
+            attempts.casState(stored.id(),
+                    com.objwww.pr.control.alert.domain.agent.CompactionAttempt.RESERVED,
+                    com.objwww.pr.control.alert.domain.agent.CompactionAttempt.IN_FLIGHT,
+                    null, null);
+            attempt = stored;
         }
         long eventSeqFrom = summaries.latestByTask(runId, taskId)
                 .map(s -> s.eventSeqTo() + 1).orElse(0L);
@@ -200,19 +268,24 @@ public class ContextCompactionService {
                 request.task().leaseUntil() != null ? request.task().leaseUntil()
                         : request.task().deadlineAt(),
                 request.binding().configEpoch(), request.binding().releaseDigest(),
-                source, () -> true);
+                source, com.objwww.pr.control.alert.application.ExecutionControl.aliveHeartbeat(
+                        request.callContext().controlSignal()));
 
         RcaModelOutcome outcome;
         try {
             outcome = model.call(action, prompt, SUMMARY_MAX_TOKENS);
         } catch (RcaModelCallException e) {
             // MC15：有界回退——候选丢弃保留原快照，确定性选材继续；无内联重试
+            settle(attempt, com.objwww.pr.control.alert.domain.agent.CompactionAttempt.FAILED,
+                    e.errorCode());
             return new CompactionOutcome(OutcomeKind.MODEL_FAILED, null, e.errorCode());
         }
 
         JsonNode candidate = parseCandidate(outcome.content());
         if (candidate == null || !candidate.hasNonNull("summary")
                 || !candidate.get("summary").isTextual()) {
+            settle(attempt, com.objwww.pr.control.alert.domain.agent.CompactionAttempt.REJECTED,
+                    OutcomeKind.REJECTED_UNPARSEABLE.name());
             return new CompactionOutcome(OutcomeKind.REJECTED_UNPARSEABLE, null,
                     "候选不是 {\"summary\",\"refs\"} JSON 形状");
         }
@@ -226,12 +299,16 @@ public class ContextCompactionService {
         if (!refs.containsAll(requiredRefs)) {
             Set<String> missing = new LinkedHashSet<>(requiredRefs);
             missing.removeAll(refs);
+            settle(attempt, com.objwww.pr.control.alert.domain.agent.CompactionAttempt.REJECTED,
+                    OutcomeKind.REJECTED_MISSING_REQUIRED.name());
             return new CompactionOutcome(OutcomeKind.REJECTED_MISSING_REQUIRED, null,
                     "必需引用缺失: " + missing);
         }
         int tokenAfter = summaryText.length() / CHARS_PER_TOKEN + 1;
         if (tokenAfter >= assembly.approxTokens()) {
             // MC15：没有节省 → 丢弃候选保留原快照（不无限重压缩）
+            settle(attempt, com.objwww.pr.control.alert.domain.agent.CompactionAttempt.REJECTED,
+                    OutcomeKind.REJECTED_NO_SAVINGS.name());
             return new CompactionOutcome(OutcomeKind.REJECTED_NO_SAVINGS, null,
                     "tokenAfter=" + tokenAfter + " >= tokenBefore="
                             + assembly.approxTokens());
@@ -242,6 +319,8 @@ public class ContextCompactionService {
         PrimaryCheckpoint fresh = checkpoints.findByTask(taskId).orElse(null);
         if (fresh == null || fresh.decisionSeq() != eventSeqTo
                 || !source.equals(fresh.inputSnapshotDigest())) {
+            settle(attempt, com.objwww.pr.control.alert.domain.agent.CompactionAttempt.SUPERSEDED,
+                    OutcomeKind.SUPERSEDED.name());
             return new CompactionOutcome(OutcomeKind.SUPERSEDED, null,
                     "检查点已推进/漂移，冻结区间失效");
         }
@@ -257,11 +336,79 @@ public class ContextCompactionService {
                 "llm:" + (outcome.routeId() == null ? "unknown" : outcome.routeId()),
                 request.binding().configEpoch(), clock.instant());
         ContextSummary committed = summaries.append(row);
+        settleCommitted(attempt, committed.id());
         log.info("上下文压缩提交 run={} task={} source={} 区间=[{},{}] token {}→{} "
                         + "required={} omitted={}", runId, taskId, source,
                 eventSeqFrom, eventSeqTo, row.tokenBefore(), row.tokenAfter(),
                 requiredRefs.size(), omitted.size());
+        consumeIfValidated(request, checkpoint, committed);
         return new CompactionOutcome(OutcomeKind.COMMITTED, committed, null);
+    }
+
+    /**
+     * CL-07 §6.4-4 消费面（CONSUME_VALIDATED 才走）：经 CL-01 提交围栏把
+     * current_summary_id 钉上检查点（SUMMARY_CONSUMED，零推进字段）。围栏拒绝
+     * （失租/revision 漂移/REPLAYED 收敛）一律保留旧指针不打断主路径——§6.4
+     * "候选超时/失租/无收益均保留旧指针"。全量旧正文替换消费仍待 MC34 三臂对照。
+     */
+    private void consumeIfValidated(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, ContextSummary committed) {
+        if (mode != Mode.CONSUME_VALIDATED || consumer == null) {
+            return;
+        }
+        String actionKey = "summary-consumed:" + committed.id();
+        boolean consumed = consumer.consume(committed.runId(), committed.taskId(),
+                request.task().leaseOwner(), request.task().leaseEpoch(),
+                request.binding().configEpoch(), checkpoint.revision(),
+                actionKey, committed.id());
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("run_id", String.valueOf(committed.runId()));
+        fields.put("task_id", String.valueOf(committed.taskId()));
+        fields.put("summary_id", String.valueOf(committed.id()));
+        fields.put("result", consumed ? "CONSUMED" : "KEPT_OLD_POINTER");
+        com.objwww.pr.control.infrastructure.observability.StructuredLog.event(log,
+                "COMPACTION_CONSUME", fields);
+        if (!consumed) {
+            log.warn("摘要消费围栏拒绝（保留旧指针）run={} task={} summary={} action={}",
+                    committed.runId(), committed.taskId(), committed.id(), actionKey);
+        }
+    }
+
+    /** 台账终态化（无台账装配零副作用；CAS 败=他人已终态化，留 warn 不覆盖） */
+    private void settle(com.objwww.pr.control.alert.domain.agent.CompactionAttempt attempt,
+            String toState, String errorCode) {
+        if (attempt == null || attempts == null) {
+            return;
+        }
+        if (!attempts.casState(attempt.id(),
+                com.objwww.pr.control.alert.domain.agent.CompactionAttempt.IN_FLIGHT,
+                toState, errorCode, null)) {
+            log.warn("attempt 终态 CAS 失败（他人已终态化）id={} 目标={}",
+                    attempt.id(), toState);
+        }
+    }
+
+    /** COMMITTED 终态化（携带 summary_id；errorCode 恒空） */
+    private void settleCommitted(
+            com.objwww.pr.control.alert.domain.agent.CompactionAttempt attempt,
+            java.util.UUID summaryId) {
+        if (attempt == null || attempts == null) {
+            return;
+        }
+        if (!attempts.casState(attempt.id(),
+                com.objwww.pr.control.alert.domain.agent.CompactionAttempt.IN_FLIGHT,
+                com.objwww.pr.control.alert.domain.agent.CompactionAttempt.COMMITTED,
+                null, summaryId)) {
+            log.warn("attempt 终态 CAS 失败（他人已终态化）id={} 目标=COMMITTED",
+                    attempt.id());
+        }
+    }
+
+    /** 策略指纹（V102 policy_digest）：模式旋钮+协议的确定性摘要，变旋钮即新逻辑动作 */
+    private String policyDigest() {
+        return Digest.sha256Of("compaction-policy|" + SCHEMA_VERSION + "|"
+                + OUTPUT_PROTOCOL + "|" + softThreshold + "|" + targetRatio + "|"
+                + maxPerRun + "|" + maxInputTokens + "|" + SUMMARY_MAX_TOKENS).value();
     }
 
     /**
@@ -296,7 +443,7 @@ public class ContextCompactionService {
     /** 压缩策略旋钮值（资产登记内容；与构造注入的运行时值同源） */
     public Map<String, Object> policyView() {
         Map<String, Object> policy = new LinkedHashMap<>();
-        policy.put("enabled", enabled);
+        policy.put("mode", mode.name());
         policy.put("soft_threshold", softThreshold);
         policy.put("target_ratio", targetRatio);
         policy.put("max_per_run", maxPerRun);

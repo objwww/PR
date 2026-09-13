@@ -3,7 +3,10 @@ package com.objwww.pr.control.alert.domain.repository;
 import com.objwww.pr.control.alert.domain.model.RcaEngine;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
+import com.objwww.pr.control.alert.domain.model.RcaRunState;
+import com.objwww.pr.control.alert.domain.model.RunPurpose;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -100,4 +103,86 @@ public interface RcaRunRepository {
      * 状态事实推进时同行 +1，无洞单调，是 run 的天然修订号。run 不存在 → empty。
      */
     OptionalLong currentRevision(UUID id);
+
+    // ------------------------------------------------------------------ SR 对账面（V108）/ WC-4 公平分页（V109）
+
+    /**
+     * SR §4.1 对账候选批扫描（WC-4 §6.1 改 keyset 分页）：活跃集（QUEUED/RUNNING/
+     * REPORTING，谓词与 isActive()/V12 uq 索引同集）按 (created_at,id) 稳定排序、
+     * 游标后取批上限——活跃 Run 超过批上限时不再"最老 N 条独占、新记录饿死"。
+     * 游标 = 上一批末条的 (createdAt,id)；null 游标 = 从头。deadline/reportingStarted/
+     * recoveryAttempts 不进 {@link RcaRun} 域记录（写面专用列），由本投影携带。
+     *
+     * <p>默认实现 = findAll 派生（薄 fake 语义等价：不跟踪对账专用列——全空/0）；
+     * 生产实现（Postgres）必须以 V109 部分索引真查询覆盖。
+     */
+    default List<ReconcileCandidate> findActiveForReconcileAfter(Instant afterCreatedAt,
+            UUID afterId, int limit) {
+        return findAll().stream()
+                .filter(r -> r.state().isActive())
+                .filter(r -> afterCreatedAt == null
+                        || r.createdAt().isAfter(afterCreatedAt)
+                        || (r.createdAt().equals(afterCreatedAt)
+                            && afterId != null && r.id().compareTo(afterId) > 0))
+                .sorted(java.util.Comparator.comparing(RcaRun::createdAt)
+                        .thenComparing(RcaRun::id))
+                .limit(limit)
+                .map(r -> new ReconcileCandidate(r.id(), r.incidentId(), r.state(),
+                        r.generation(), r.purpose(), r.createdAt(), r.updatedAt(),
+                        null, null, 0))
+                .toList();
+    }
+
+    /**
+     * 兼容面（SR §4.1 原批扫描）：= 从头取一批。新代码请用
+     * {@link #findActiveForReconcileAfter(Instant, UUID, int)}。
+     */
+    default List<ReconcileCandidate> findActiveForReconcile(int limit) {
+        return findActiveForReconcileAfter(null, null, limit);
+    }
+
+    /**
+     * WC-4 §6.3：现行对账硬期限单列读（调用方已持 run 行锁时的锁内复验面——
+     * 候选快照的 deadline 可能已被并发修宽/清除）。null = legacy 无可信期限。
+     * 默认 Optional.empty()（无对账语义环境）。
+     */
+    default Optional<Instant> reconcileDeadlineById(UUID id) {
+        return Optional.empty();
+    }
+
+    /**
+     * WC-5：最老活跃 Run 的 createdAt（keyset 全覆盖下 = 最长未扫描时长的上界
+     * 代理；无活跃 Run = empty）。默认 empty（无对账语义环境）。
+     */
+    default Optional<Instant> oldestActiveCreatedAt() {
+        return Optional.empty();
+    }
+
+    /** SR §3.1 影子收口 / §4.2 对账决策的候选投影（purpose 读侧归一，无 null） */
+    record ReconcileCandidate(UUID id, UUID incidentId, RcaRunState state, int generation,
+                              RunPurpose purpose, Instant createdAt, Instant updatedAt,
+                              Instant reconcileDeadlineAt, Instant reportingStartedAt,
+                              int recoveryAttempts) {
+    }
+
+    /**
+     * SR §4.1：REPORTING 进入时刻首记（幂等首触：已记不覆盖——重启/重复 advance
+     * 不重置停滞计时起点）。不推进 updated_at（观测列，不当业务进展）。
+     */
+    default void markReportingStarted(UUID id, Instant now) {
+        // 无对账语义环境（薄 fake）默认无操作；生产实现必须真写
+    }
+
+    /**
+     * SR §4.1：铸点冻结对账硬期限（首记不覆盖；重试/重启不重置）。deadline 语义 =
+     * 本轮调查的 SLA 期限——旧 Run 无该列值时对账只 ALERT_ONLY，不追溯制造。
+     */
+    default void fixReconcileDeadlineIfAbsent(UUID id, Instant deadline) {
+        // 同上：生产实现必须真写
+    }
+
+    /** SR §4.3：恢复动作计数（对账触发的收尾铸造/过期各 +1；持久化上限判据） */
+    default void incrementRecoveryAttempts(UUID id) {
+        // 同上
+    }
 }

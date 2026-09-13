@@ -3,6 +3,7 @@ package com.objwww.pr.control.alert.application;
 import com.objwww.pr.control.alert.domain.claim.ClaimLifecycle;
 import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
+import com.objwww.pr.control.alert.domain.model.OperatorCommand;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
@@ -62,11 +63,25 @@ public class RunQueryService {
     private final RcaModelCallUsageReader modelCalls;
     private final ClaimStore claims;
     private final Supplier<Instant> now;
+    /** WC-5 取消收敛读面（均可空=旧装配无此面，字段按"无知识"如实给值） */
+    private final com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels;
+    private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
+    private final com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository commands;
 
     public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
                            TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
                            RcaModelCallUsageReader modelCalls, ClaimStore claims,
                            Supplier<Instant> now) {
+        this(runs, tasks, edges, bindings, modelCalls, claims, now, null, null, null);
+    }
+
+    public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
+                           TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+                           RcaModelCallUsageReader modelCalls, ClaimStore claims,
+                           Supplier<Instant> now,
+                           com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels,
+                           com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+                           com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository commands) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.edges = Objects.requireNonNull(edges, "edges");
@@ -74,6 +89,9 @@ public class RunQueryService {
         this.modelCalls = Objects.requireNonNull(modelCalls, "modelCalls");
         this.claims = Objects.requireNonNull(claims, "claims");
         this.now = Objects.requireNonNull(now, "now");
+        this.cancels = cancels;
+        this.toolLedger = toolLedger;
+        this.commands = commands;
     }
 
     /** 队列页：summary 计数 + 全量 rows（O-5：游标分页未落，nextCursor 恒 null） */
@@ -140,6 +158,17 @@ public class RunQueryService {
             });
             head.put("progress", progress(runTasks));
             head.put("budget", null);
+            // SR §3.1：详情头透出可信身份与完成语义（影子取证完成展示依据）
+            head.put("purpose", run.purpose().name());
+            head.put("completionKind", run.completionKind());
+            // WC-5（方案 v2 §3）：取消收敛读面——"取消成功"拆成可检验事实。
+            // 全部单进程/账本视角，不伪造跨实例知识
+            head.put("terminationRequestedAt", terminationRequestedAt(runId));
+            head.put("localExecutionState", localExecutionState(run));
+            head.put("inflightCount", cancels == null ? 0 : cancels.inflightCount(runId));
+            head.put("unknownActionCount", toolLedger == null ? 0
+                    : toolLedger.countByRunAndState(runId,
+                            com.objwww.pr.control.alert.domain.tool.ToolInvocationState.UNKNOWN));
 
             List<Map<String, Object>> taskRows = new ArrayList<>();
             Map<String, String> keyById = new LinkedHashMap<>();
@@ -193,6 +222,34 @@ public class RunQueryService {
      * 推导、evidences 首版只给 id（ref 原文；desc/digest/window 无源不给键）；
      * agree 为 mock 遗留无源字段——不给键。排序 claimKey 字典序（与 A1 一致）。
      */
+    /** WC-5：终止请求时刻 = 最近一条已应用 CANCEL 命令的 appliedAt（无命令面 = null 如实） */
+    private String terminationRequestedAt(UUID runId) {
+        if (commands == null) {
+            return null;
+        }
+        return commands.findByRunAndType(runId, OperatorCommand.Type.CANCEL).stream()
+                .filter(c -> c.state() == OperatorCommand.State.APPLIED)
+                .map(OperatorCommand::appliedAt)
+                .filter(Objects::nonNull)
+                .max(Comparator.naturalOrder())
+                .map(Instant::toString)
+                .orElse(null);
+    }
+
+    /**
+     * WC-5：本地执行态（单进程视角，不伪造跨实例知识）：STOPPING=停止已标记且在途
+     * 未静默；ACTIVE=run 活跃且未标记停止；QUIESCED=run 终态且在途清零。
+     */
+    private String localExecutionState(RcaRun run) {
+        if (cancels == null) {
+            return null;
+        }
+        if (cancels.wasStopCancelled(run.id()) && cancels.inflightCount(run.id()) > 0) {
+            return "STOPPING";
+        }
+        return run.state().isActive() ? "ACTIVE" : "QUIESCED";
+    }
+
     private List<Map<String, Object>> claimRows(UUID runId) {
         List<ClaimStore.ClaimRow> rows = new ArrayList<>(claims.findByRunId(runId));
         rows.sort(Comparator.comparing(ClaimStore.ClaimRow::claimKey,
@@ -238,6 +295,8 @@ public class RunQueryService {
         String bucket = bucketOf(run.state(), stuck != null);
         RcaTaskState stageState = stuck != null ? stuck.state() : null;
         String stage = stageState != null ? stageState.name() : run.state().name();
+        boolean shadowEvidenceOnly = RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY
+                .equals(run.completionKind());
 
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("id", run.id().toString());
@@ -245,13 +304,17 @@ public class RunQueryService {
         row.put("severity", null);
         row.put("bucket", bucket);
         row.put("stage", stage);
-        row.put("stageZh", stageZh(stageState, run.state()));
-        row.put("stageTone", stageTone(stageState, run.state()));
+        row.put("stageZh", shadowEvidenceOnly ? "影子取证完成（未发布）"
+                : stageZh(stageState, run.state()));
+        row.put("stageTone", shadowEvidenceOnly ? "gray" : stageTone(stageState, run.state()));
         row.put("progress", progressLine(runTasks));
         row.put("blocker", blockerOf(run, stuck));
         row.put("owner", null);
         row.put("duration", durationOf(run, at));
         row.put("action", "view");
+        // SR §3.1/§3.2：可信身份读面（影子取证完成不再恒显"报告组装中"；legacy 原样）
+        row.put("purpose", run.purpose().name());
+        row.put("completionKind", run.completionKind());
         return row;
     }
 

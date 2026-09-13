@@ -66,6 +66,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 标记（{@code AM4_SHADOW_RUN_ID=} / {@code AM4_SHADOW_TASK=}）；降级案：
  * 单源 FAILED → 任务 DEAD、run 继续终 REPORTING、快照只含存活源成员。
  *
+ * <p>SR §3.2 影子收口（2026-09-13）：取证完成后 run 不再终于 REPORTING——
+ * 收口 SUCCEEDED + completionKind=SHADOW_EVIDENCE_ONLY + SHADOW_COMPLETED 审计
+ * 事件；同 incident 活跃位随之释放（SR01/SR02）。零报告零发布纪律不变。
+ *
  * @author wanghua
  * @date 2026-09-05
  */
@@ -107,7 +111,13 @@ class Am4ShadowTriggerTest {
         assertThat(shadow.incidentId()).isEqualTo(incidentId);
         assertThat(shadow.generation()).isEqualTo(GENERATION);
         assertThat(shadow.investigationHash()).isEqualTo(snapshot);
-        assertThat(shadow.state()).isEqualTo(RcaRunState.REPORTING);
+        // SR01：取证完成 → 非活跃终态（不再是 REPORTING 活跃位）
+        assertThat(shadow.state()).isEqualTo(RcaRunState.SUCCEEDED);
+        assertThat(shadow.purpose()).isEqualTo(
+                com.objwww.pr.control.alert.domain.model.RunPurpose.SHADOW);
+        assertThat(shadow.completionKind())
+                .isEqualTo(RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY);
+        assertThat(shadow.finishedAt()).isEqualTo(NOW);
 
         List<RcaTask> tasks = stores.tasks.findByRunId(shadowId);
         assertThat(tasks).extracting(RcaTask::taskKey)
@@ -130,12 +140,43 @@ class Am4ShadowTriggerTest {
 
         assertThat(stores.reports.all()).isEmpty();
         assertThat(stores.publications.all()).isEmpty();
+        // SR01：影子完成审计事件在账（事件面可查，不是仅日志）
+        assertThat(stores.rcaEvents.all().stream()
+                .anyMatch(e -> e.runId().equals(shadowId)
+                        && "SHADOW_COMPLETED".equals(e.eventType())))
+                .as("SHADOW_COMPLETED 审计事件").isTrue();
 
         assertThat(captured.toString(StandardCharsets.UTF_8))
                 .contains(Am4ShadowTrigger.RUN_ID_MARKER + shadowId)
                 .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + Am4ShadowTrigger.TASK_METRICS
                         + "=EVIDENCE_PRODUCED")
                 .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + "snapshot=");
+    }
+
+    /** SR02：影子收口后同 incident 同 engine 活跃位释放——新 PRODUCTION run 可按正式规则创建 */
+    @Test
+    void shadowClosureFreesActiveSlotForNextProductionRun() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, incidentId, 14, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        captureStdout();
+        UUID shadowId = trigger(inv -> ok(inv)).trigger(holmesId);
+        resetStdout();
+        assertThat(stores.runs.findById(shadowId).orElseThrow().state())
+                .isEqualTo(RcaRunState.SUCCEEDED);
+
+        // 影子已非活跃——同 incident 新 run 铸造不再撞 uq_rca_run_active_incident
+        UUID nextRunId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(nextRunId, incidentId, 14, RunTrigger.RERUN,
+                RcaRunState.QUEUED, snapshot, NOW, NOW, null, null, null));
+        assertThat(stores.runs.findActiveByIncidentId(incidentId).orElseThrow().id())
+                .isEqualTo(nextRunId);
+        // 历史影子 run 仍可查（零报告零发布原样保留）
+        assertThat(stores.runs.findById(shadowId)).isPresent();
+        assertThat(stores.reports.all()).isEmpty();
     }
 
     @Test
@@ -150,7 +191,9 @@ class Am4ShadowTriggerTest {
         resetStdout();
 
         RcaRun shadow = stores.runs.findById(shadowId).orElseThrow();
-        assertThat(shadow.state()).isEqualTo(RcaRunState.REPORTING);
+        assertThat(shadow.state()).isEqualTo(RcaRunState.SUCCEEDED);
+        assertThat(shadow.completionKind())
+                .isEqualTo(RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY);
         assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_CHANGE))
                 .isEqualTo(RcaTaskState.DEAD);
         assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_METRICS))
@@ -178,7 +221,9 @@ class Am4ShadowTriggerTest {
         // 缺源降级语义要求任务 DEAD 续跑，异常不得逃出 trigger 把影子 run 永久挂在
         // QUEUED（195 实证：残留活跃 run 毒死同 incident 后续影子触发）
         RcaRun shadow = stores.runs.findById(shadowId).orElseThrow();
-        assertThat(shadow.state()).isEqualTo(RcaRunState.REPORTING);
+        assertThat(shadow.state()).isEqualTo(RcaRunState.SUCCEEDED);
+        assertThat(shadow.completionKind())
+                .isEqualTo(RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY);
         assertThat(taskState(shadowId, Am4ShadowTrigger.TASK_CHANGE))
                 .isEqualTo(RcaTaskState.DEAD);
         assertThat(evidence.rows).extracting(EvidenceEnvelope::source)
@@ -188,6 +233,40 @@ class Am4ShadowTriggerTest {
                 .contains(Am4ShadowTrigger.RUN_ID_MARKER + shadowId)
                 .contains(Am4ShadowTrigger.TASK_OUTCOME_MARKER + Am4ShadowTrigger.TASK_CHANGE
                         + "=FAILED(POLICY_DENIED)");
+    }
+
+    /** SR §3.2 失败路径：驱动异常 → run 按实际错误 FAILED 收口（不留活跃行），异常照常上抛 */
+    @Test
+    void driveFailureClosesShadowAsFailedWithoutSwallowing() {
+        Digest snapshot = Digest.sha256Of("holmes-input");
+        UUID holmesId = UUID.randomUUID();
+        UUID incidentId = UUID.randomUUID();
+        stores.runs.insert(new RcaRun(holmesId, incidentId, 5, RunTrigger.RERUN,
+                RcaRunState.SUCCEEDED, snapshot, NOW, NOW, NOW, NOW, null));
+
+        // startRun 后第一步即抛（investigate 之前的 supervisor.startRun 失败形态）：
+        // 用不存在的 holmes run 之外更直接的方式——让 startRun 收到 ALREADY_STARTED 不行，
+        // 改用 metrics agent 网关恒抛非 ToolControlPlane 异常（IllegalState 走 RuntimeException）
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        trigger(inv -> {
+                            throw new IllegalStateException("gateway down");
+                        }).trigger(holmesId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gateway down");
+
+        RcaRun shadow = stores.runs.all().stream()
+                .filter(r -> r.incidentId().equals(incidentId) && r.id() != holmesId)
+                .findFirst().orElseThrow();
+        assertThat(shadow.state()).isEqualTo(RcaRunState.FAILED);
+        assertThat(shadow.lastError()).contains("IllegalStateException");
+        assertThat(shadow.completionKind()).isNull();
+        assertThat(shadow.finishedAt()).isEqualTo(NOW);
+        // 失败也留审计事件（SHADOW_FAILED），且残留任务全部收敛 CANCELLED
+        assertThat(stores.rcaEvents.all().stream()
+                .anyMatch(e -> e.runId().equals(shadow.id())
+                        && "SHADOW_FAILED".equals(e.eventType()))).isTrue();
+        assertThat(stores.tasks.findByRunId(shadow.id()))
+                .allSatisfy(t -> assertThat(t.state()).isEqualTo(RcaTaskState.CANCELLED));
     }
 
     @Test
@@ -205,7 +284,7 @@ class Am4ShadowTriggerTest {
         assertThat(slots.acquired).isEqualTo(TriggerSlots.TOTAL);
         assertThat(slots.released).isEqualTo(TriggerSlots.TOTAL);
         assertThat(stores.runs.findById(shadowId).orElseThrow().state())
-                .isEqualTo(RcaRunState.REPORTING);
+                .isEqualTo(RcaRunState.SUCCEEDED);
     }
 
     @Test
@@ -265,7 +344,8 @@ class Am4ShadowTriggerTest {
                 com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP);
         return new Am4ShadowTrigger(supervisor, stores.runs, stores.tasks, evidence,
                 snapshots, metrics, logs, change, nativeRca, slots,
-                Am4ShadowTrigger.WORKER_SLOT_SCOPE, () -> NOW, recorder);
+                Am4ShadowTrigger.WORKER_SLOT_SCOPE, () -> NOW, recorder,
+                inPlaceTx(), stores.rcaEvents);
     }
 
     /** 全部执行成功：恒回 EXECUTED + success 体 */

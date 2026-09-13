@@ -59,9 +59,55 @@ class EvalQueryControllerTest {
                         required: true
                 """);
         EvalQueryService service = new EvalQueryService(reader, new ObjectMapper(), rubrics);
+        // OP-02 质量面：本测试不触（qualityOf 由 QualitySummaryServiceTest 覆盖），
+        // 注入最小桩——run 不存在路径仅校验 404 映射不误伤既有端点
+        com.objwww.pr.control.eval.domain.repository.EvalRunRepository emptyRuns =
+                new com.objwww.pr.control.eval.domain.repository.EvalRunRepository() {
+                    @Override
+                    public void insertRunning(
+                            com.objwww.pr.control.eval.domain.EvalRun running) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean finalizeOnce(
+                            com.objwww.pr.control.eval.domain.EvalRun terminal) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean applyLaunchIdentity(UUID runId, String displayName,
+                            String mode, String launchPlanJson) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean updateRecoveryState(UUID runId, String recoveryState) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public boolean insertCaseResult(
+                            com.objwww.pr.control.eval.domain.EvalCaseResult result) {
+                        throw new UnsupportedOperationException();
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.eval.domain.EvalRun> findById(
+                            UUID id) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public List<com.objwww.pr.control.eval.domain.EvalCaseResult>
+                            findCasesByRunId(UUID id) {
+                        return List.of();
+                    }
+                };
         // standalone 装配不挂 Boot 自动配置，jsr310 需显式注册并关时间戳——与生产序列化
         // （ISO 字符串）对齐，沿 MetricsQueryControllerTest 惯例
-        mvc = MockMvcBuilders.standaloneSetup(new EvalQueryController(service))
+        mvc = MockMvcBuilders.standaloneSetup(new EvalQueryController(service,
+                new com.objwww.pr.control.eval.application.QualitySummaryService(emptyRuns)))
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(
                         Jackson2ObjectMapperBuilder.json()
                                 .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)

@@ -51,9 +51,12 @@ import java.util.UUID;
 public class EvalQueryController {
 
     private final EvalQueryService query;
+    private final com.objwww.pr.control.eval.application.QualitySummaryService qualityService;
 
-    public EvalQueryController(EvalQueryService query) {
+    public EvalQueryController(EvalQueryService query,
+            com.objwww.pr.control.eval.application.QualitySummaryService qualityService) {
         this.query = query;
+        this.qualityService = qualityService;
     }
 
     @GetMapping("/runs")
@@ -191,6 +194,19 @@ public class EvalQueryController {
             return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
         }
         return query.usage(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
+    /** OP-02 质量口径（显式分母；流程成功≠质量正确）；未知 run → 404 */
+    @GetMapping("/runs/{runId}/quality")
+    public ResponseEntity<?> quality(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return qualityService.qualityOf(id)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(404)
                         .body(Map.of("error", "eval run 不存在")));

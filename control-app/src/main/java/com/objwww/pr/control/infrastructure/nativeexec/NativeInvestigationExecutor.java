@@ -248,10 +248,23 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         }
         heartbeat.run();
 
-        // ③④ DAG 驱动（不动点 sweep：主模式委派批会中途生长子任务）+ 冻结证据快照
+        // ③④ DAG 驱动（不动点 sweep：主模式委派批会中途生长子任务）+ 冻结证据快照。
+        // CL-01：检查点提交围栏拒绝（STALE_OWNER/STALE_REVISION/RUN_TERMINAL/
+        // CONFIG_CHANGED）= 失去执行所有权——立即停止驱动，不做快照/REPORTING/收尾
+        // 等后续 transitionState，交 worker 以 LOST_OWNERSHIP 重试态经 finishTask
+        // epoch 栅栏诚实结算（晚到者零有效产出）
         long generation = run.generation();
-        String timeRange = investigate(run.id(), attempt.id(), generation, inputDigest,
-                routing, heartbeat);
+        String timeRange;
+        try {
+            timeRange = investigate(run.id(), attempt.id(), generation, inputDigest,
+                    routing, heartbeat);
+        } catch (com.objwww.pr.control.alert.application.agent
+                .PrimaryCheckpointCommitService.CommitRejectedException lost) {
+            log.warn("run {} 主任务检查点围栏拒绝 → LOST_OWNERSHIP（{}），停止驱动",
+                    run.id(), lost.getMessage());
+            metrics.attemptFinished("LOST_OWNERSHIP", "NATIVE");
+            return ExecutionResult.retryable("LOST_OWNERSHIP", lost.getMessage());
+        }
         EvidenceSnapshotDigest snapshotDigest =
                 freezeSnapshot(run.id(), generation, configDigest.hex());
 
@@ -396,9 +409,16 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
             progress = false;
             for (RcaTask dagTask : drivableTasks(runId)) {
                 callSeq++;
+                // WC-3（§5.2）：控制身份 Host 装配——心跳（失租→LEASE_LOST）+ Run
+                // 终态探针合一；任务硬期限作为本次驱动的动作 deadline 下发
                 SingleToolEvidenceAgent.CallContext ctx = new SingleToolEvidenceAgent.CallContext(
                         runId, dagTask.id(), attemptId, callSeq, generation,
-                        inputDigest, timeRange);
+                        inputDigest, timeRange,
+                        com.objwww.pr.control.alert.application.ExecutionControl.controlSignal(
+                                heartbeat,
+                                id -> runs.findById(id).map(RcaRun::state).orElse(null),
+                                runId),
+                        dagTask.deadlineAt());
                 progress |= drive(dagTask, ctx, startEpoch, endEpoch);
                 heartbeat.run();
             }

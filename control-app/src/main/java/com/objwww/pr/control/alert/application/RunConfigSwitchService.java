@@ -70,6 +70,8 @@ public class RunConfigSwitchService {
     private final RcaEventAppender appender;
     private final TransactionOperations tx;
     private final Supplier<Instant> now;
+    /** CL-05 §4.3：热切应用事务内预生成新代际 Skill 绑定（可空=未接线零漂移） */
+    private final SkillEpochProvisioner skillProvisioner;
 
     public RunConfigSwitchService(OperatorCommandRepository commands,
             RcaRunRepository runs, RcaTaskRepository tasks,
@@ -77,6 +79,17 @@ public class RunConfigSwitchService {
             ReleaseQualificationRepository qualifications, AgentRegistry agents,
             RcaModelCallLedger ledger, RcaEventAppender appender,
             TransactionOperations tx, Supplier<Instant> now) {
+        this(commands, runs, tasks, epochs, bundles, qualifications, agents, ledger,
+                appender, tx, now, null);
+    }
+
+    public RunConfigSwitchService(OperatorCommandRepository commands,
+            RcaRunRepository runs, RcaTaskRepository tasks,
+            RunConfigEpochRepository epochs, ConfigBundleRepository bundles,
+            ReleaseQualificationRepository qualifications, AgentRegistry agents,
+            RcaModelCallLedger ledger, RcaEventAppender appender,
+            TransactionOperations tx, Supplier<Instant> now,
+            SkillEpochProvisioner skillProvisioner) {
         this.commands = Objects.requireNonNull(commands, "commands");
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
@@ -88,6 +101,18 @@ public class RunConfigSwitchService {
         this.appender = Objects.requireNonNull(appender, "appender");
         this.tx = Objects.requireNonNull(tx, "tx");
         this.now = Objects.requireNonNull(now, "now");
+        this.skillProvisioner = skillProvisioner;
+    }
+
+    /**
+     * CL-05 §4.3：热切同事务预生成钩子——新 epoch 应用时为该代际生成 Skill 选择
+     * 记录（或明确 NONE，含 release_manifest.skills 允许集判定）。在应用事务内
+     * 调用：抛异常 = 组合不可选，整体回滚（切换不半落）。
+     */
+    public interface SkillEpochProvisioner {
+
+        void provision(UUID runId, long targetEpoch, String targetReleaseDigest,
+                UUID sourceCommandId);
     }
 
     /** 结果面：state=终态或 WAITING_SAFE_POINT；reason=拒绝/等待/过期的人读原因（可查询） */
@@ -261,6 +286,12 @@ public class RunConfigSwitchService {
                     request.reason())) {
                 return reject(cmd, OperatorCommand.State.REJECTED_STALE,
                         "并发切换已应用（epoch " + targetEpoch + " 已在史），不跳两级");
+            }
+            // ⑩b CL-05 §4.3：新代际 Skill 选择记录同事务预生成（或明确 NONE）——
+            // 抛异常 = 组合不可选，切换整体回滚不半落
+            if (skillProvisioner != null) {
+                skillProvisioner.provision(cmd.runId(), targetEpoch,
+                        request.targetReleaseDigest(), cmd.id());
             }
             // ⑪ 状态事实事件（join 同事务，H10 提交前杀=全回滚）
             appender.append(cmd.runId(), new RcaEventAppender.EventDraft(

@@ -63,4 +63,12 @@ public record Incident(
                 receivedCount, distinctEventCount, notificationCount, currentRcaRunId,
                 firstSeenAt, lastEventAt, createdAt, updatedAt, null);
     }
+
+    /** WC-4 §5.3：当前 Run 指针条件清零后的写回形状（其余列照抄；updatedAt 推进） */
+    public Incident withCurrentRunPointerCleared(Instant updatedAt) {
+        return new Incident(id, incidentKey, status, generation, episodeStartedAt,
+                lastFiringStartsAt, resolvedAt, lastInvestigationHash, pendingInvestigationHash,
+                receivedCount, distinctEventCount, notificationCount, null,
+                firstSeenAt, lastEventAt, createdAt, updatedAt, waitingReason);
+    }
 }

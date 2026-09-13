@@ -1,6 +1,7 @@
 package com.objwww.pr.control.alert.application.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.application.agent.ContextCompactionService.Mode;
 import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallException;
 import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
@@ -321,6 +322,146 @@ class ContextCompactionServiceTest {
         assertThat(summaries.countByTask(runId, taskId)).isEqualTo(1);
     }
 
+    // ------------------------------------------------------------- CL-07 尝试台账与消费面
+
+    @Test
+    @DisplayName("CL-07：COMMITTED 全程 RESERVED→IN_FLIGHT→COMMITTED(summary_id) 终态留痕")
+    void attemptLedgerCommittedLifecycle() {
+        AlertInMemoryStores.CompactionAttempts ledger =
+                new AlertInMemoryStores.CompactionAttempts();
+        ContextCompactionService svc = serviceOf(Mode.SHADOW_GENERATE, ledger, null);
+        model.script.add(candidateJson("台账摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                svc.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+        assertThat(ledger.rows).hasSize(1);
+        var row = ledger.rows.values().iterator().next();
+        assertThat(row.state()).isEqualTo("COMMITTED");
+        assertThat(row.summaryId()).isEqualTo(outcome.summary().id());
+        assertThat(row.settledAt()).as("终态必带 settled_at").isNotNull();
+        assertThat(row.sourceContextDigest()).isEqualTo("src-digest-1");
+        assertThat(row.expectedRevision()).isEqualTo(checkpoint().revision());
+        assertThat(row.logicalActionKey())
+                .contains(taskId.toString()).contains("src-digest-1");
+    }
+
+    @Test
+    @DisplayName("CL-07：FAILED/REJECTED 终态带 error_code 不删行（预算/校验拒绝不静默消单）")
+    void attemptLedgerFailedAndRejectedTerminalStates() {
+        AlertInMemoryStores.CompactionAttempts failedLedger =
+                new AlertInMemoryStores.CompactionAttempts();
+        ContextCompactionService failed = serviceOf(Mode.SHADOW_GENERATE, failedLedger, null);
+        model.failure = new RcaModelCallException("PROTOCOL_ERROR", "空内容", false, true, null);
+        failed.afterToolResults(request(), checkpoint(), assembly());
+        var failedRow = failedLedger.rows.values().iterator().next();
+        assertThat(failedRow.state()).isEqualTo("FAILED");
+        assertThat(failedRow.errorCode()).isEqualTo("PROTOCOL_ERROR");
+
+        model.failure = null;
+        AlertInMemoryStores.CompactionAttempts rejectedLedger =
+                new AlertInMemoryStores.CompactionAttempts();
+        ContextCompactionService rejected =
+                serviceOf(Mode.SHADOW_GENERATE, rejectedLedger, null);
+        model.script.add(candidateJson("长".repeat(APPROX_OVER * 2), List.of(requiredRef())));
+        rejected.afterToolResults(request(), checkpoint(), assembly());
+        var rejectedRow = rejectedLedger.rows.values().iterator().next();
+        assertThat(rejectedRow.state()).isEqualTo("REJECTED");
+        assertThat(rejectedRow.errorCode()).isEqualTo("REJECTED_NO_SAVINGS");
+        assertThat(rejectedRow.settledAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("CL-07：SUPERSEDED 终态留痕；同逻辑动作重驱读胜者行收敛（一动作一尝试）")
+    void attemptLedgerSupersededAndSingleWinner() {
+        AlertInMemoryStores.CompactionAttempts ledger =
+                new AlertInMemoryStores.CompactionAttempts();
+        ContextCompactionService svc = serviceOf(Mode.SHADOW_GENERATE, ledger, null);
+        model.script.add(candidateJson("压缩摘要", List.of(requiredRef())));
+        model.onCall = () -> stores.checkpoints.upsert(checkpoint()
+                .withStepAdvanced("src-digest-1", null, null, null, NOW));
+
+        ContextCompactionService.CompactionOutcome superseded =
+                svc.afterToolResults(request(), checkpoint(), assembly());
+        assertThat(superseded.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.SUPERSEDED);
+        assertThat(ledger.rows.values().iterator().next().state())
+                .isEqualTo("SUPERSEDED");
+
+        model.onCall = null;
+        model.script.add(candidateJson("再试摘要", List.of(requiredRef())));
+        ContextCompactionService.CompactionOutcome replay =
+                svc.afterToolResults(request(), checkpoint(), assembly());
+        assertThat(replay.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.ALREADY_COMPACTED);
+        assertThat(replay.detail()).contains("SUPERSEDED");
+        assertThat(ledger.rows).as("同逻辑动作不二次预留").hasSize(1);
+        assertThat(model.calls).as("台账收敛后零模型调用").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("CL-07：CONSUME_VALIDATED 提交后经消费口钉指针（围栏身份齐备）；SHADOW 不消费")
+    void consumeValidatedInvokesConsumerShadowDoesNot() {
+        List<String> consumeCalls = new ArrayList<>();
+        ContextCompactionService consuming = serviceOf(Mode.CONSUME_VALIDATED,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> {
+                    consumeCalls.add(actionKey + "|" + expectedRevision + "|" + summaryId
+                            + "|" + owner + "|" + leaseEpoch);
+                    return true;
+                });
+        model.script.add(candidateJson("消费摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                consuming.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+        assertThat(consumeCalls).hasSize(1);
+        assertThat(consumeCalls.get(0))
+                .contains("summary-consumed:" + outcome.summary().id())
+                .contains(String.valueOf(checkpoint().revision()));
+
+        ContextCompactionService shadow = serviceOf(Mode.SHADOW_GENERATE,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> {
+                    consumeCalls.add("shadow 不应消费");
+                    return true;
+                });
+        model.script.add(candidateJson("影子摘要", List.of(requiredRef())));
+        stores.checkpoints.upsert(checkpoint()
+                .withStepAdvanced("src-digest-2", null, null, null, NOW));
+        shadow.afterToolResults(request(), checkpoint(), assembly());
+        assertThat(consumeCalls).as("SHADOW_GENERATE 只生成不消费").hasSize(1);
+    }
+
+    @Test
+    @DisplayName("CL-07：消费口围栏拒绝（false）→ 保留旧指针不打断主路径（仍 COMMITTED）")
+    void consumeFenceRejectionKeepsOldPointer() {
+        ContextCompactionService rejected = serviceOf(Mode.CONSUME_VALIDATED,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> false);
+        model.script.add(candidateJson("拒消费摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                rejected.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind()).as("消费拒绝不打断生成主路径")
+                .isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+    }
+
+    private ContextCompactionService serviceOf(Mode mode,
+            com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort ledger,
+            ContextCompactionService.SummaryConsumer consumer) {
+        return new ContextCompactionService(model, summaries, stores.checkpoints,
+                evidence, MAPPER, CLOCK, mode, 0.7, 0.55, 2, V, ledger, consumer);
+    }
+
     // ------------------------------------------------------------- 夹具
 
     private void seedSummary(String source, long eventSeqTo, int minutesAgo) {
@@ -399,7 +540,7 @@ class ContextCompactionServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> policy = (Map<String, Object>) template.get("policy");
         assertThat(policy)
-                .containsEntry("enabled", false)
+                .containsEntry("mode", "OFF")
                 .containsEntry("soft_threshold", 0.7)
                 .containsEntry("target_ratio", 0.55)
                 .containsEntry("max_per_run", 2)
@@ -407,10 +548,10 @@ class ContextCompactionServiceTest {
     }
 
     @Test
-    @DisplayName("资产钉版：policyView 与运行时旋钮同源（enabled 双构造各映本值）")
+    @DisplayName("资产钉版：policyView 与运行时旋钮同源（enabled 双构造各映模式）")
     void policyViewMirrorsRuntimeKnobs() {
-        assertThat(service.policyView().get("enabled")).isEqualTo(false);
-        assertThat(enabledService.policyView().get("enabled")).isEqualTo(true);
+        assertThat(service.policyView().get("mode")).isEqualTo("OFF");
+        assertThat(enabledService.policyView().get("mode")).isEqualTo("SHADOW_GENERATE");
         assertThat(enabledService.policyView().get("summary_max_tokens"))
                 .isEqualTo(ContextCompactionService.SUMMARY_MAX_TOKENS);
         assertThat(service.policyView().get("chars_per_token_estimate"))

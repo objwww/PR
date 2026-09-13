@@ -19,4 +19,10 @@ public interface WorkingMemoryPort {
 
     /** 最近快照（checkpoint_revision 最大）；无 → empty（宿主走确定性重建） */
     Optional<WorkingMemory> latestByTask(UUID runId, UUID taskId);
+
+    /**
+     * 精确读上一版（CL-06 §5.2）：从 checkpoint.memory_id 指针取累计链父版，
+     * 不以 latestByTask 替代（latest 可能属于并发修订或重驱路径）。
+     */
+    Optional<WorkingMemory> findById(UUID id);
 }

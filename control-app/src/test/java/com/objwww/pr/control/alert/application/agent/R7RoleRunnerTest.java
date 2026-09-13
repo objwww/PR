@@ -126,7 +126,7 @@ class R7RoleRunnerTest {
                 stores.delegationDecisions,
                 run -> ContextAssembler.AlertMaterial.unknown(), MAPPER);
         boundedRunner = new BoundedLlmRoleRunner(guard, supervisor, stores.checkpoints,
-                evidence, assembler, toolPort, MAPPER, CLOCK);
+                evidence, assembler, toolPort, MAPPER, CLOCK, commitFence());
         singleToolRunner = new SingleToolRoleRunner(Map.of("metrics-expert",
                 (ctx, start, end) -> null));
         directory = new RunnerDirectory(List.of(boundedRunner, singleToolRunner));
@@ -625,6 +625,14 @@ class R7RoleRunnerTest {
                 return action.doInTransaction(null);
             }
         };
+    }
+
+    /** CL-01 提交围栏（假件面：in-place 事务 + 无代际史 epoch 源 + 记忆随提交 append） */
+    private PrimaryCheckpointCommitService commitFence() {
+        return new PrimaryCheckpointCommitService(stores.runs, stores.tasks,
+                stores.checkpoints,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP,
+                clock, inPlaceTx(), stores.workingMemories);
     }
 
     private static final class AlertClockStub implements com.objwww.pr.control.alert.application.AlertClock {

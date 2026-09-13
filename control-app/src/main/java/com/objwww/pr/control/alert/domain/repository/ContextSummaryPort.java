@@ -12,6 +12,9 @@ import java.util.UUID;
  */
 public interface ContextSummaryPort {
 
+    /** CL-08 消费面：按检查点 current_summary_id 精确读已提交摘要 */
+    Optional<ContextSummary> findById(UUID id);
+
     /** CAS 提交：同 (run, task, source) 已有摘要 → 返回既有行（候选丢弃） */
     ContextSummary append(ContextSummary candidate);
 

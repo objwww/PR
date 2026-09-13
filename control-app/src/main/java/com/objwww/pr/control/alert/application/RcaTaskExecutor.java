@@ -66,6 +66,14 @@ public interface RcaTaskExecutor {
             return new ExecutionResult(Outcome.SUCCEEDED, null, null, null, Optional.of(artifact));
         }
 
+        /**
+         * SR §4.3：无材料成功（幂等对账收敛——已有报告时 finalize 空跑收口，
+         * 不产第二份报告/发布/outbox）。
+         */
+        public static ExecutionResult successNoArtifact() {
+            return new ExecutionResult(Outcome.SUCCEEDED, null, null, null, Optional.empty());
+        }
+
         public static ExecutionResult retryable(String errorClass, String detail) {
             return new ExecutionResult(Outcome.FAILED_RETRYABLE, errorClass, null, detail, Optional.empty());
         }

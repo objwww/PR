@@ -369,6 +369,16 @@ public class AlertAm4Config {
     }
 
     /**
+     * WC-3：在途工具取消通知（进程内加速件）——CANCEL 应用/看门狗终态后中断该
+     * Run 名下在途工具等待；丢了只慢不错（收敛骨架=持久终态行+边界探针+deadline）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.tool.InFlightToolCancels
+    am4InFlightToolCancels() {
+        return new com.objwww.pr.control.alert.application.tool.InFlightToolCancels();
+    }
+
+    /**
      * 影子在线只读工具面（M4-35 → M6-01 落点 ⑦）：真实类型 ReadOnlyToolFace。
      * redteamOnly=false = canary 期策略位（REDTEAM 双闸从结构强制降为策略开关，
      * 落点 ③；装配硬接线，bundle 化归 M6-03）——R0/R1 裁剪/独立池/限流/预算门不变。
@@ -377,11 +387,13 @@ public class AlertAm4Config {
     public ReadOnlyToolFace am4ShadowToolFace(ToolRegistry am4ToolRegistry,
             ToolPolicy am4ToolPolicy, ExecutorService am4ShadowPool,
             @Value(SHADOW_MAX_CALLS_KEY) long maxCallsPerWindow,
-            @Value(SHADOW_WINDOW_MILLIS_KEY) long windowMillis) {
+            @Value(SHADOW_WINDOW_MILLIS_KEY) long windowMillis,
+            com.objwww.pr.control.alert.application.tool.InFlightToolCancels
+                    am4InFlightToolCancels) {
         long calls = maxCallsPerWindow > 0 ? maxCallsPerWindow : SHADOW_MAX_CALLS_DEFAULT;
         long window = windowMillis > 0 ? windowMillis : SHADOW_WINDOW_MILLIS_DEFAULT;
         return new ReadOnlyToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
-                calls, window, Clock.systemUTC(), false);
+                calls, window, Clock.systemUTC(), false, am4InFlightToolCancels);
     }
 
     /** 影子对照路由器（M4-34）：同 digest 盖章/独立预算/失败隔离，无发布出口 */
@@ -615,12 +627,14 @@ public class AlertAm4Config {
                     runConfigEpochRepository,
             com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
                     workingMemoryPort,
-            TransactionOperations tx) {
+            TransactionOperations tx,
+            com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics) {
+        // WC-5：迟到提交拒绝计数（STALE 族/RUN_TERMINAL）随围栏接线
         return new com.objwww.pr.control.alert.application.agent
                 .PrimaryCheckpointCommitService(rcaRunRepository, rcaTaskRepository,
                 primaryCheckpointRepository, runConfigEpochRepository,
                 com.objwww.pr.control.alert.application.AlertClock.system(), tx,
-                workingMemoryPort);
+                workingMemoryPort, alertMetrics);
     }
 
     /**

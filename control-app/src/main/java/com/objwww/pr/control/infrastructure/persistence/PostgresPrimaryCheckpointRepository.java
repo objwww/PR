@@ -81,6 +81,104 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
     }
 
     @Override
+    public boolean insertIfAbsent(PrimaryCheckpoint initial) {
+        // 单语句幂等（不存在才插）：竞态下缺席者胜，不走"读后写"窗口
+        int inserted = jdbc.sql("""
+                INSERT INTO rca_primary_checkpoint (
+                    task_id, run_id, round_id, phase,
+                    decision_seq, steps_used, batches_used,
+                    input_snapshot_digest, memory_id, memory_digest,
+                    final_claims, final_missing_information,
+                    last_error, updated_at
+                ) VALUES (
+                    :taskId, :runId, :roundId, :phase,
+                    0, 0, 0, null, null, null,
+                    cast('[]' as jsonb), cast('[]' as jsonb), null, :updatedAt
+                )
+                ON CONFLICT (task_id) DO NOTHING
+                """)
+                .param("taskId", initial.taskId())
+                .param("runId", initial.runId())
+                .param("roundId", initial.roundId())
+                .param("phase", initial.phase().name())
+                .param("updatedAt", Timestamp.from(initial.updatedAt()))
+                .update();
+        return inserted > 0;
+    }
+
+    @Override
+    public Optional<PrimaryCheckpoint> findByTaskForUpdate(UUID taskId) {
+        List<PrimaryCheckpoint> rows = jdbc.sql("""
+                SELECT * FROM rca_primary_checkpoint WHERE task_id = :taskId FOR UPDATE
+                """)
+                .param("taskId", taskId)
+                .query(this::mapRow)
+                .list();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
+    public CommitState findCommitStateForUpdate(UUID taskId) {
+        List<Object[]> rows = jdbc.sql("""
+                SELECT * FROM rca_primary_checkpoint WHERE task_id = :taskId FOR UPDATE
+                """)
+                .param("taskId", taskId)
+                .query((rs, rowNum) -> new Object[] {
+                        mapRow(rs, rowNum),
+                        rs.getString("last_action_key"),
+                        rs.getString("last_action_digest")})
+                .list();
+        if (rows.isEmpty()) {
+            return null;
+        }
+        Object[] row = rows.get(0);
+        return new CommitState((PrimaryCheckpoint) row[0],
+                (String) row[1], (String) row[2]);
+    }
+
+    @Override
+    public long updateGuarded(PrimaryCheckpoint next, long expectedRevision,
+            String actionKey, String actionDigest) {
+        return jdbc.sql("""
+                UPDATE rca_primary_checkpoint SET
+                    round_id = :roundId, phase = :phase,
+                    decision_seq = :decisionSeq, steps_used = :stepsUsed,
+                    batches_used = :batchesUsed,
+                    input_snapshot_digest = :snapshotDigest,
+                    memory_id = :memoryId, memory_digest = :memoryDigest,
+                    final_claims = cast(:finalClaims as jsonb),
+                    final_missing_information = cast(:missing as jsonb),
+                    last_error = :lastError, updated_at = now(),
+                    revision = revision + 1,
+                    schema_version = :schemaVersion,
+                    current_context_digest = :contextDigest,
+                    current_summary_id = :summaryId,
+                    last_action_key = :actionKey,
+                    last_action_digest = :actionDigest
+                WHERE task_id = :taskId AND revision = :expectedRevision
+                """)
+                .param("taskId", next.taskId())
+                .param("roundId", next.roundId())
+                .param("phase", next.phase().name())
+                .param("decisionSeq", next.decisionSeq())
+                .param("stepsUsed", next.stepsUsed())
+                .param("batchesUsed", next.batchesUsed())
+                .param("snapshotDigest", next.inputSnapshotDigest())
+                .param("memoryId", next.memoryId())
+                .param("memoryDigest", next.memoryDigest())
+                .param("finalClaims", jsonOf(next.finalClaims()))
+                .param("missing", jsonOf(next.finalMissingInformation()))
+                .param("lastError", next.lastError())
+                .param("schemaVersion", next.schemaVersion())
+                .param("contextDigest", next.currentContextDigest())
+                .param("summaryId", next.currentSummaryId())
+                .param("actionKey", actionKey)
+                .param("actionDigest", actionDigest)
+                .param("expectedRevision", expectedRevision)
+                .update();
+    }
+
+    @Override
     public Optional<PrimaryCheckpoint> findByTask(UUID taskId) {
         List<PrimaryCheckpoint> rows = jdbc.sql("""
                 SELECT * FROM rca_primary_checkpoint WHERE task_id = :taskId
@@ -125,7 +223,11 @@ public class PostgresPrimaryCheckpointRepository implements PrimaryCheckpointRep
                 claimsJson == null ? List.of() : claimsOf(claimsJson),
                 missingJson == null ? List.of() : stringsOf(missingJson),
                 rs.getString("last_error"),
-                updatedAt.toInstant());
+                updatedAt.toInstant(),
+                rs.getLong("revision"),
+                rs.getInt("schema_version"),
+                rs.getString("current_context_digest"),
+                rs.getObject("current_summary_id", UUID.class));
     }
 
     private String jsonOf(Object value) {

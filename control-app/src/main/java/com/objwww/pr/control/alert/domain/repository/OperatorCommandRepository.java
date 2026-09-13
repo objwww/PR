@@ -46,4 +46,14 @@ public interface OperatorCommandRepository {
         throw new UnsupportedOperationException(
                 "findWaitingOverdue 需实现: " + getClass().getName());
     }
+
+    /**
+     * WC-2（方案 v2 §4.2）恢复面身份证明：该 run 的某类型命令全量行（created_at
+     * 稳定序）。遗留半应用行（PERSISTED + Run 已 CANCELLED）补标 APPLIED 的裁决
+     * 依据 = 唯一候选行不变量；多候选无法证明身份时不冒认（恢复异常交对账）。
+     */
+    default List<OperatorCommand> findByRunAndType(UUID runId, OperatorCommand.Type type) {
+        throw new UnsupportedOperationException(
+                "findByRunAndType 需实现: " + getClass().getName());
+    }
 }

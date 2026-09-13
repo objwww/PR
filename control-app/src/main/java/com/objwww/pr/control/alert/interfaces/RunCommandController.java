@@ -35,12 +35,18 @@ public class RunCommandController {
     private final CommandService service;
     private final RunConfigSwitchService switchService;
     private final RcaRunRepository runs;
+    /** WC-3：CANCEL 应用后在途工具等待中断通知（可空=未装配，只慢不错） */
+    private final org.springframework.beans.factory.ObjectProvider<
+            com.objwww.pr.control.alert.application.tool.InFlightToolCancels> cancels;
 
     public RunCommandController(CommandService service, RunConfigSwitchService switchService,
-            RcaRunRepository runs) {
+            RcaRunRepository runs,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.tool.InFlightToolCancels> cancels) {
         this.service = service;
         this.switchService = switchService;
         this.runs = runs;
+        this.cancels = cancels;
     }
 
     @PostMapping(path = "/api/rca-runs/{runId}/commands",
@@ -87,6 +93,15 @@ public class RunCommandController {
 
         CommandService.Result result = service.submit(id, type, idempotencyKey,
                 expectedRevision, payload, truncate(AuthenticatedActor.name()));
+        // WC-3（§5.2 后置通知）：CANCEL 提交事务已落（run=CANCELLED）——进程内加速
+        // 中断在途工具等待；幂等无害（重复 cancelRun 只再标一次）
+        if (type == OperatorCommand.Type.CANCEL
+                && result.state() == OperatorCommand.State.APPLIED && cancels != null) {
+            var registry = cancels.getIfAvailable();
+            if (registry != null) {
+                registry.cancelRun(id);
+            }
+        }
         return respond(result);
     }
 

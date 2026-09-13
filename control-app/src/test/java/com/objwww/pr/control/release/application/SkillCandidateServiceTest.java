@@ -186,7 +186,7 @@ class SkillCandidateServiceTest {
 
         // FAIL（即便费用 MATCHED）→ REJECTED
         SkillCandidate fail = service.recordQualification(evaluating.id(),
-                qualification(SkillCandidateServiceTest.class.getSimpleName(),
+                qualification(evaluating.assetDigest(),
                         ReleaseQualification.VERDICT_FAIL, ReleaseQualification.USAGE_MATCHED));
         assertThat(fail.status()).isEqualTo(SkillCandidate.ST_REJECTED);
         assertThat(fail.failureReason()).contains("S09");
@@ -196,7 +196,8 @@ class SkillCandidateServiceTest {
                 service.propose(proposal("inconclusive-skill", true)).candidate().id(),
                 Set.of("prometheus.instant"));
         SkillCandidate inconclusive = service.recordQualification(evaluating2.id(),
-                qualification("inconclusive", ReleaseQualification.VERDICT_INCONCLUSIVE,
+                qualification(evaluating2.assetDigest(),
+                        ReleaseQualification.VERDICT_INCONCLUSIVE,
                         ReleaseQualification.USAGE_MATCHED));
         assertThat(inconclusive.status()).isEqualTo(SkillCandidate.ST_REJECTED);
 
@@ -205,7 +206,7 @@ class SkillCandidateServiceTest {
                 service.propose(proposal("pass-skill", true)).candidate().id(),
                 Set.of("prometheus.instant"));
         SkillCandidate qualified = service.recordQualification(evaluating3.id(),
-                qualification("pass", ReleaseQualification.VERDICT_PASS,
+                qualification(evaluating3.assetDigest(), ReleaseQualification.VERDICT_PASS,
                         ReleaseQualification.USAGE_MATCHED));
         assertThat(qualified.status()).isEqualTo(SkillCandidate.ST_QUALIFIED);
         assertThat(service.activeSkills()).as("QUALIFIED 仍未发布（S08）").isEmpty();
@@ -281,16 +282,35 @@ class SkillCandidateServiceTest {
                 service.propose(proposal(name, true)).candidate().id(),
                 Set.of("prometheus.instant"));
         return service.recordQualification(evaluating.id(),
-                qualification(name, ReleaseQualification.VERDICT_PASS,
+                // §7.4：证明钉住本候选确切 assetDigest（占位 digest 一律拒绝）
+                qualification(evaluating.assetDigest(),
+                        ReleaseQualification.VERDICT_PASS,
                         ReleaseQualification.USAGE_MATCHED));
     }
 
-    private static ReleaseQualification qualification(String tag, String verdict,
-            String usage) {
+    @Test
+    @DisplayName("§7.4：证明 candidateDigest 与候选 assetDigest 不一致 → 拒绝（不能拿他人 PASS 认可本候选）")
+    void s09_qualificationMustPinExactAssetDigest() {
+        SkillCandidate evaluating = service.validate(
+                service.propose(proposal("pin-digest", true)).candidate().id(),
+                Set.of("prometheus.instant"));
+
+        assertThatThrownBy(() -> service.recordQualification(evaluating.id(),
+                qualification("c".repeat(64), ReleaseQualification.VERDICT_PASS,
+                        ReleaseQualification.USAGE_MATCHED)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("不能以他人证明认可本候选");
+        assertThat(candidates.findById(evaluating.id()).orElseThrow().status())
+                .as("拒绝后候选停在 EVALUATING")
+                .isEqualTo(SkillCandidate.ST_EVALUATING);
+    }
+
+    private static ReleaseQualification qualification(String candidateDigestHex,
+            String verdict, String usage) {
         return new ReleaseQualification(UUID.randomUUID(),
-                new Digest("c".repeat(64)), new Digest("d".repeat(64)),
+                new Digest(candidateDigestHex), new Digest("d".repeat(64)),
                 "e".repeat(64), "runner-v1", "grader-v1", verdict, usage,
-                "skill:" + tag, "eval-operator", NOW, null, null, null);
+                "skill:" + verdict, "eval-operator", NOW, null, null, null);
     }
 
     // ------------------------------------------------------------ 内存假件
@@ -330,6 +350,12 @@ class SkillCandidateServiceTest {
         @Override
         public List<SkillCandidate> listByStatus(String status) {
             return rows.stream().filter(r -> r.status().equals(status)).toList();
+        }
+
+        @Override
+        public Optional<SkillCandidate> findByAssetDigest(String assetDigest) {
+            return rows.stream().filter(r -> assetDigest.equals(r.assetDigest()))
+                    .findFirst();
         }
     }
 

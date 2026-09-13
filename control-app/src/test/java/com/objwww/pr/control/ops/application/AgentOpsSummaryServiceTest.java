@@ -86,12 +86,45 @@ class AgentOpsSummaryServiceTest {
         assertThat(out.windowMinutes()).isEqualTo(30);
     }
 
+    // -------------------------------------------------------------- OP-03 动作分析汇总
+
+    @Test
+    void actionAssessmentComputesDuplicateRateWithExplicitDenominator() {
+        reader.stats = new AgentOpsReader.ActionAssessmentStats(10, 4, 3, 1, 1, 1, 0, 6);
+
+        AgentOpsSummaryService.ActionAssessmentResponse out = service.actionAssessment();
+
+        assertThat(out.logicalActions()).isEqualTo(10);
+        assertThat(out.duplicateRate()).isEqualTo(0.4);
+        assertThat(out.newObservations()).isEqualTo(3);
+        assertThat(out.confirmsOrRefutes()).isEqualTo(1);
+        assertThat(out.noData()).isEqualTo(1);
+        assertThat(out.sourceFailed()).isEqualTo(1);
+        assertThat(out.undetermined()).isEqualTo(0);
+        assertThat(out.assessedRuns()).isEqualTo(6);
+        assertThat(out.descriptiveNotCausal()).isTrue();
+        assertThat(out.generatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    void zeroDenominatorReportsHonestZeroRate() {
+        reader.stats = new AgentOpsReader.ActionAssessmentStats(0, 0, 0, 0, 0, 0, 0, 0);
+
+        AgentOpsSummaryService.ActionAssessmentResponse out = service.actionAssessment();
+
+        assertThat(out.logicalActions()).isZero();
+        assertThat(out.duplicateRate()).isEqualTo(0.0);
+        assertThat(out.assessedRuns()).isZero();
+    }
+
     private static final class FakeReader implements AgentOpsReader {
         AgentOpsAggregate aggregate;
         Instant lastNow;
         List<WorkerActivity> activities = List.of();
         Instant lastActivityNow;
         Duration lastWindow;
+        AgentOpsReader.ActionAssessmentStats stats =
+                new AgentOpsReader.ActionAssessmentStats(0, 0, 0, 0, 0, 0, 0, 0);
 
         @Override
         public AgentOpsAggregate summary(Instant now) {
@@ -104,6 +137,11 @@ class AgentOpsSummaryServiceTest {
             this.lastActivityNow = now;
             this.lastWindow = window;
             return activities;
+        }
+
+        @Override
+        public AgentOpsReader.ActionAssessmentStats actionAssessmentStats(Instant since) {
+            return stats;
         }
     }
 }

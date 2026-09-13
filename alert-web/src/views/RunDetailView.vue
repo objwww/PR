@@ -15,11 +15,17 @@
         告警 {{ shortId(run.incident) }}
       </router-link>
       <StatusBadge :status="run.status" />
+      <!-- SR：可信身份读面——影子取证完成显式展示（未发布），legacy REPORTING 原样 -->
+      <el-tag v-if="run.completionKind === 'SHADOW_EVIDENCE_ONLY'" type="info" effect="plain" disable-transitions>
+        影子取证完成（未发布）
+      </el-tag>
       <span class="mini">耗时 {{ listRow?.duration ?? '—' }}</span>
       <span class="mini">预算 token：{{ run.budget?.token?.used ?? '—' }}</span>
       <span class="mini" :title="costTitle">费用：{{ costText }}</span>
       <span class="mini">任务 {{ run.progress.done }}/{{ run.progress.total }}</span>
       <span v-if="listRow?.blocker" class="mini blocker" :title="listRow.blocker">卡点：{{ listRow.blocker }}</span>
+      <!-- WC-5 取消收敛读面：把"取消成功"拆成可检验事实（请求时间｜本地执行态｜在途｜未知结果） -->
+      <span v-if="stopLine" class="mini stop-line" :title="stopTitle">{{ stopLine }}</span>
       <span class="ops">
         <template v-if="runActive">
           <el-button size="small" :disabled="cmdPending" @click="submitHint">补充线索</el-button>
@@ -337,6 +343,37 @@
             <div v-if="pubLastError" class="blocker-box">最近错误：{{ pubLastError }}</div>
           </template>
           <div v-else class="muted">无发布记录——报告未进入外发链</div>
+
+          <!-- OP-04 终态报告评价：绑定已发布报告（state=OK）且 run 已终态，不再仅绑定 runActive（§5.3）；
+               运行中反馈仍走顶部命令面按钮（FO22 两面分离） -->
+          <template v-if="report.state === 'OK' && !runActive">
+            <div class="lbl pub-lbl">报告评价</div>
+            <div class="box">
+              <div class="mini">评价对象：报告 {{ shortId(report.reportId) }} · 生成于 {{ fmtTime(report.createdAt) }} · {{ report.validationStatus }}（提交时服务端按报告指纹对账，版本错位将拒绝）</div>
+              <div class="fb-form">
+                <el-select v-model="fbVerdict" size="small" class="w-verdict" placeholder="评价结论">
+                  <el-option v-for="v in FEEDBACK_VERDICTS" :key="v.value" :label="v.label" :value="v.value" />
+                </el-select>
+                <el-input
+                  v-model="fbReason" type="textarea" :rows="2" size="small"
+                  placeholder="理由（必填）：结论是否与证据相符、遗漏了什么"
+                />
+                <el-button size="small" type="primary" :disabled="fbSubmitting || !fbVerdict || !fbReason.trim()" @click="submitReportFeedback">
+                  {{ fbSubmitting ? '提交中…' : '提交评价' }}
+                </el-button>
+              </div>
+              <div v-if="fbError" class="blocker-box">{{ fbError }}</div>
+            </div>
+            <div class="box" v-if="fbList.length">
+              <b>历史评价（{{ fbList.length }}）</b>
+              <div v-for="fb in fbList" :key="fb.id" class="line-item">
+                · <el-tag size="small" effect="plain" disable-transitions>{{ fbVerdictLabel(fb.verdict) }}</el-tag>
+                {{ fb.reason }}
+                <span class="mini">— {{ fb.author }} @ {{ fmtTime(fb.createdAt) }}</span>
+                <span v-if="fb.supersedesId" class="mini">（更正前序 {{ shortId(fb.supersedesId) }}）</span>
+              </div>
+            </div>
+          </template>
         </template>
       </div>
     </template>
@@ -616,11 +653,65 @@ async function loadReport() {
   try {
     report.value = await api(`/rca-runs/${route.params.runId}/report`)
     reportLoadState.value = 'ok'
+    // OP-04：终态 + 已发布报告 → 顺带拉评价历史（失败不阻塞报告渲染）
+    if (report.value?.state === 'OK' && !runActive.value) loadFeedback()
   } catch (e) {
     reportLoadState.value = 'error'
     reportError.value = e?.response?.data?.error
       ? `报告加载失败：${e.response.data.error}`
       : '报告加载失败（后端不可达或接口未部署）'
+  }
+}
+
+// ===== OP-04 终态报告评价（POST/GET /rca-runs/{runId}/report/{reportId}/feedback）=====
+// 与运行中命令面（顶部 FEEDBACK 命令按钮）分离；失败保留本地草稿（v-model 不清）
+const FEEDBACK_VERDICTS = [
+  { value: 'ACCEPTED', label: '正确' },
+  { value: 'PARTIAL', label: '部分正确' },
+  { value: 'INCORRECT', label: '错误' },
+  { value: 'INSUFFICIENT', label: '证据不足' },
+]
+const fbVerdict = ref(null)
+const fbReason = ref('')
+const fbSubmitting = ref(false)
+const fbError = ref('')
+const fbList = ref([])
+
+function fbVerdictLabel(value) {
+  return FEEDBACK_VERDICTS.find(v => v.value === value)?.label ?? value
+}
+
+async function loadFeedback() {
+  try {
+    const out = await api(`/rca-runs/${route.params.runId}/report/${report.value.reportId}/feedback`)
+    fbList.value = out.feedbacks ?? []
+  } catch {
+    fbList.value = [] // 历史读失败不阻塞评价表单（提交时另行报错）
+  }
+}
+
+async function submitReportFeedback() {
+  if (!report.value?.reportId) return
+  fbSubmitting.value = true
+  fbError.value = ''
+  try {
+    await api(`/rca-runs/${route.params.runId}/report/${report.value.reportId}/feedback`, {
+      method: 'POST',
+      body: {
+        verdict: fbVerdict.value,
+        reason: fbReason.value.trim(),
+        idempotencyKey: `fb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      },
+    })
+    ElMessage.success('评价已提交')
+    fbVerdict.value = null
+    fbReason.value = ''
+    await loadFeedback() // 刷新后读取真实反馈记录（不本地拼接冒充）
+  } catch (e) {
+    const detail = e?.response?.data?.error
+    fbError.value = detail ? `提交失败：${detail}（草稿已保留）` : '提交失败（后端不可达；草稿已保留）'
+  } finally {
+    fbSubmitting.value = false
   }
 }
 
@@ -841,6 +932,12 @@ function toggleClaim(id) {
 }
 
 // ===== 运行详情 =====
+// WC-5 头部停止进度行：只陈述事实，不推断跨实例知识
+const LOCAL_STATE_ZH = {
+  STOPPING: '本地执行停止中',
+  ACTIVE: '本地执行中',
+  QUIESCED: '本地已静默',
+}
 const runHeadKv = computed(() => ({
   '调查 ID': run.value?.id,
   '告警 ID': run.value?.incident,
@@ -850,7 +947,24 @@ const runHeadKv = computed(() => ({
   '配置摘要': run.value?.config ?? '—',
   '负责人': '认领面未落码',
   '事件游标（revision）': revision.value ?? '—',
+  // WC-5 取消收敛四字段（旧部署无此面 → null 如实）
+  '取消请求时间': run.value?.terminationRequestedAt ? fmtTime(run.value.terminationRequestedAt) : '—',
+  '本地执行态': LOCAL_STATE_ZH[run.value?.localExecutionState] ?? '—',
+  '本地在途调用': run.value?.inflightCount ?? '—',
+  '未知结果动作': run.value?.unknownActionCount > 0 ? `${run.value.unknownActionCount} 条（结果不可知，诚实归档）` : (run.value?.unknownActionCount === 0 ? '0' : '—'),
 }))
+
+const stopLine = computed(() => {
+  const r = run.value
+  if (!r) return ''
+  const parts = []
+  if (r.terminationRequestedAt) parts.push(`取消请求于 ${fmtTime(r.terminationRequestedAt)}`)
+  if (r.localExecutionState === 'STOPPING') parts.push(`本地还有 ${r.inflightCount} 个调用停止中`)
+  else if (r.localExecutionState) parts.push(LOCAL_STATE_ZH[r.localExecutionState])
+  if (r.unknownActionCount > 0) parts.push(`未知结果 ${r.unknownActionCount} 条`)
+  return parts.join('；')
+})
+const stopTitle = '取消收敛读面（单进程视角）：在途数为本实例注册表计数，跨实例在途由各自探针与工具期限兜底；未知结果 = 崩溃回收诚实归档（UNKNOWN），不代表失败'
 
 // ===== §三.5 费用（usage 块 = rca_model_call 聚合，RV08 口径；无行 → null 显「无模型调用」）=====
 const usage = computed(() => detail.value?.usage ?? null)
@@ -1258,6 +1372,7 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 .inc-link { font-weight: 600; font-size: var(--fs-section); }
 .mini { font-size: var(--fs-aux); color: var(--ink-2); }
 .blocker { color: var(--warn); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stop-line { color: var(--warn); }
 .ops { margin-left: auto; display: inline-flex; gap: 8px; flex-wrap: wrap; }
 
 .tabs { display: flex; gap: 2px; padding: 4px 10px 0; }
@@ -1362,6 +1477,8 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 }
 .pub-lbl { margin-top: 12px; }
 .pub-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fb-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.w-verdict { width: 180px; }
 
 /* ===== EV-10 配置切换 ===== */
 .cfg-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }

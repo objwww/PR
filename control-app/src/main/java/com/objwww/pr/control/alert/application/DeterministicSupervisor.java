@@ -109,6 +109,9 @@ public class DeterministicSupervisor {
     private final com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository
             epochs;
     private final int maxDelegationBatches;
+    /** CL-01 提交围栏：检查点运行路径唯一提交口（由本类依赖自建，无新装配面） */
+    private final com.objwww.pr.control.alert.application.agent
+            .PrimaryCheckpointCommitService commitFence;
 
     /** 缺省批上限（=2，行为与旋钮化前字节级一致） */
     public DeterministicSupervisor(PlanCompiler compiler, DagExecutionService dag,
@@ -161,6 +164,9 @@ public class DeterministicSupervisor {
         this.tx = Objects.requireNonNull(tx);
         this.clock = Objects.requireNonNull(clock);
         this.epochs = Objects.requireNonNull(epochs, "epochs");
+        this.commitFence = new com.objwww.pr.control.alert.application.agent
+                .PrimaryCheckpointCommitService(runs, tasks, checkpoints, epochs,
+                clock, tx);
         if (maxDelegationBatches < 0) {
             throw new IllegalArgumentException(
                     "maxDelegationBatches 必须 ≥0（0=零委派臂A 姿态），实际: "
@@ -245,9 +251,9 @@ public class DeterministicSupervisor {
             return new StartResult(StartOutcome.PROPOSAL_REJECTED, null, e.getMessage());
         }
         UUID primaryTaskId = compiled.taskIds().get(RcaTask.PRIMARY_INVESTIGATE);
-        if (checkpoints.findByTask(primaryTaskId).isEmpty()) {
-            checkpoints.upsert(PrimaryCheckpoint.initial(primaryTaskId, runId, 0, clock.now()));
-        }
+        // CL-01：初始化走 insertIfAbsent（竞态缺席者胜），不复用无条件 upsert
+        checkpoints.insertIfAbsent(
+                PrimaryCheckpoint.initial(primaryTaskId, runId, 0, clock.now()));
         advance(runId);
         StructuredLog.event(log, "r7_primary_started",
                 Map.of("run_id", runId.toString(),
@@ -280,7 +286,21 @@ public class DeterministicSupervisor {
         List<DelegationDecision> recorded = new ArrayList<>();
         Set<String> persistedGaps = new HashSet<>();
         boolean batchAccepted = Boolean.TRUE.equals(tx.execute(status -> {
-            PrimaryCheckpoint checkpoint = checkpoints.findByTask(primaryTaskId)
+            // CL-01 锁序 run→task→checkpoint：裁决事务先锁 run/task 校验执行资格，
+            // 检查点推进走提交围栏（revision CAS）；围栏拒绝=整体回滚（含子任务建行）
+            // WC-1：外层锁序与 checkAndApply 一致（task→run）——委派事务不得先持 run
+            // 再等 task（与 finishTask/expireRun 构成 AB-BA 环，方案 v2 §4.1）
+            RcaTask lockedPrimary = tasks.findByIdForUpdate(primaryTaskId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "主任务不存在: " + primaryTaskId));
+            runs.findByIdForUpdate(runId)
+                    .filter(run -> run.state().isActive())
+                    .orElseThrow(() -> new com.objwww.pr.control.alert.application.agent
+                            .PrimaryCheckpointCommitService.CommitRejectedException(
+                            com.objwww.pr.control.alert.application.agent
+                                    .PrimaryCheckpointCommitService.CommitStatus.RUN_TERMINAL,
+                            "run 不活跃，拒绝裁决: " + runId));
+            PrimaryCheckpoint checkpoint = checkpoints.findByTaskForUpdate(primaryTaskId)
                     .orElseThrow(() -> new IllegalStateException(
                             "主任务检查点缺失: " + primaryTaskId));
             if (checkpoint.phase() != PrimaryCheckpoint.Phase.PRIMARY_READY) {
@@ -358,13 +378,26 @@ public class DeterministicSupervisor {
                 approvedCount++;
             }
             if (approvedCount > 0) {
-                checkpoints.upsert(new PrimaryCheckpoint(primaryTaskId, runId, newRound,
-                        PrimaryCheckpoint.Phase.WAITING_CHILDREN, checkpoint.decisionSeq()
-                                + requests.size(), checkpoint.stepsUsed(),
-                        checkpoint.batchesUsed() + 1, checkpoint.inputSnapshotDigest(),
-                        checkpoint.memoryId(), checkpoint.memoryDigest(),
-                        checkpoint.finalClaims(), checkpoint.finalMissingInformation(),
-                        checkpoint.lastError(), now));
+                // CL-01：检查点推进走提交围栏（owner/epoch 以 task 行为事实源；
+                // configEpoch 留空 = 裁决沿用铸造代际戳，热切一致性由安全点检查保证）
+                commitFence.checkAndApply(
+                        new com.objwww.pr.control.alert.application.agent
+                                .PrimaryCheckpointCommitService.CommitFence(runId,
+                                primaryTaskId, lockedPrimary.leaseOwner(),
+                                lockedPrimary.leaseEpoch(), null, checkpoint.revision()),
+                        "primary:" + primaryTaskId + ":delegate:" + checkpoint.decisionSeq()
+                                + ":" + requests.size(),
+                        com.objwww.pr.control.alert.application.agent
+                                .PrimaryCheckpointCommitService.CommitMutation
+                                .DELEGATION_COMMITTED,
+                        cp -> new PrimaryCheckpoint(primaryTaskId, runId, newRound,
+                                PrimaryCheckpoint.Phase.WAITING_CHILDREN,
+                                cp.decisionSeq() + requests.size(), cp.stepsUsed(),
+                                cp.batchesUsed() + 1, cp.inputSnapshotDigest(),
+                                cp.memoryId(), cp.memoryDigest(),
+                                cp.finalClaims(), cp.finalMissingInformation(),
+                                cp.lastError(), now, cp.revision(), cp.schemaVersion(),
+                                cp.currentContextDigest(), cp.currentSummaryId()));
             }
             return approvedCount > 0;
         }));
@@ -472,6 +505,8 @@ public class DeterministicSupervisor {
             }
             RcaRunStateMachine.requireTransition(locked.state(), RcaRunState.REPORTING);
             runs.update(withState(locked, RcaRunState.REPORTING, clock.now(), locked.lastError()));
+            // SR §4.1：REPORTING 进入时刻首记（幂等；对账停滞计时起点，重启不重置）
+            runs.markReportingStarted(runId, clock.now());
             return true;
         }));
         if (entered) {
@@ -517,6 +552,8 @@ public class DeterministicSupervisor {
     private static RcaRun withState(RcaRun run, RcaRunState state, Instant now, String error) {
         return new RcaRun(run.id(), run.incidentId(), run.generation(), run.trigger(), state,
                 run.investigationHash(), run.createdAt(), now, run.startedAt(),
-                state.isActive() ? null : now, error);
+                state.isActive() ? null : now, error,
+                // SR §3.1：状态迁移不改写身份三列
+                run.purpose(), run.purposeSource(), run.completionKind());
     }
 }

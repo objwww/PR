@@ -10,16 +10,21 @@ import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotBuilder;
 import com.objwww.pr.control.alert.domain.evidence.EvidenceSnapshotRepository;
+import com.objwww.pr.control.alert.domain.event.RcaEventAppender;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
 import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.RunPurpose;
 import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.SchedulerSlotRepository;
+import com.objwww.pr.control.alert.domain.statemachine.RcaRunStateMachine;
+import com.objwww.pr.control.alert.domain.statemachine.RcaTaskStateMachine;
 import com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException;
 import com.objwww.pr.control.release.application.EngineComparisonRecorder;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -40,12 +45,15 @@ import java.util.UUID;
  * 黑板推导 Claim。stdout 打印 {@value #RUN_ID_MARKER}（E2E 脚本捕获锚点）与
  * 逐任务结局行（{@value #TASK_OUTCOME_MARKER}）。
  *
- * <p>纪律（AM4 技术方案 §2）：影子链<b>零报告零发布</b>（run 终于 REPORTING，
- * 与 G2 套件终态一致）；单任务 FAILED = 缺源降级续跑（任务 DEAD 终态，run 继续，
- * 对齐 ClaimReducer 降级白名单语义），缺源面由场景脚本按证据计数断言；本类不
- * 发明生产触发器——正式触发入口仍是 G2 终裁开放项（配方 §6.1），本类只调用
- * 组件公开入口，供 195 E2E 执行者一次性驱动。M6-02 起影子结论对照 holmes 主
- * 路径 run 落 {@link com.objwww.pr.control.release.application.EngineComparisonRecorder}
+ * <p>纪律（AM4 技术方案 §2）：影子链<b>零报告零发布</b>（发布准入层另有 SR §3.2
+ * 持久身份负向门：purpose=SHADOW 禁止正式报告与通知）；单任务 FAILED = 缺源降级
+ * 续跑（任务 DEAD 终态，run 继续，对齐 ClaimReducer 降级白名单语义），缺源面由
+ * 场景脚本按证据计数断言；SR §3.2 起取证完成后 run 收口为合法非活跃终态
+ * SUCCEEDED + completionKind=SHADOW_EVIDENCE_ONLY（完成取证、未生成正式报告），
+ * 不再以 REPORTING 为影子结束位置——同 incident 同 engine 的活跃位随之释放。
+ * 本类不发明生产触发器——正式触发入口仍是 G2 终裁开放项（配方 §6.1），本类只
+ * 调用组件公开入口，供 195 E2E 执行者一次性驱动。M6-02 起影子结论对照 holmes
+ * 主路径 run 落 {@link com.objwww.pr.control.release.application.EngineComparisonRecorder}
  * （V32 观察面成账——对照行不是报告/发布，零报告纪律不变）。
  *
  * <p>槽位避让（195 实证 2026-09-07）：一次性实例与主容器 {@link RcaWorker} 共享
@@ -102,13 +110,17 @@ public class Am4ShadowTrigger {
     private final String slotScope;
     private final AlertClock clock;
     private final EngineComparisonRecorder comparisonRecorder;
+    /** SR §3.2 影子收口事务 + 审计事件面 */
+    private final TransactionOperations tx;
+    private final RcaEventAppender events;
 
     public Am4ShadowTrigger(DeterministicSupervisor supervisor, RcaRunRepository runs,
             RcaTaskRepository tasks, EvidenceRepository evidence,
             EvidenceSnapshotRepository snapshots, MetricsAgent metricsAgent,
             LogsAgent logsAgent, ChangeAgent changeAgent, NativeRcaAgent nativeRcaAgent,
             SchedulerSlotRepository slots, String slotScope, AlertClock clock,
-            EngineComparisonRecorder comparisonRecorder) {
+            EngineComparisonRecorder comparisonRecorder,
+            TransactionOperations tx, RcaEventAppender events) {
         this.supervisor = Objects.requireNonNull(supervisor);
         this.runs = Objects.requireNonNull(runs);
         this.tasks = Objects.requireNonNull(tasks);
@@ -122,6 +134,8 @@ public class Am4ShadowTrigger {
         this.slotScope = Objects.requireNonNull(slotScope);
         this.clock = Objects.requireNonNull(clock);
         this.comparisonRecorder = Objects.requireNonNull(comparisonRecorder);
+        this.tx = Objects.requireNonNull(tx, "tx");
+        this.events = Objects.requireNonNull(events, "events");
     }
 
     /**
@@ -148,32 +162,43 @@ public class Am4ShadowTrigger {
         String snapshotDigest = holmes.investigationHash().hex();
         RcaRun shadow = new RcaRun(UUID.randomUUID(), holmes.incidentId(),
                 holmes.generation(), RunTrigger.RERUN, RcaRunState.QUEUED,
-                holmes.investigationHash(), clock.now(), clock.now(), null, null, null);
+                holmes.investigationHash(), clock.now(), clock.now(), null, null, null,
+                // SR §3.1：影子身份随铸造落行（发布准入/worker 领取按持久身份排除）
+                RunPurpose.SHADOW, "am4-shadow-trigger", null);
         List<SchedulerSlotRepository.AcquiredSlot> held = new ArrayList<>();
         try {
             holdAllSlots(held);
             runs.insert(shadow);
-            DeterministicSupervisor.StartResult started = supervisor.startRun(shadow.id(),
-                    proposal(), Set.of());
-            if (started.outcome() != DeterministicSupervisor.StartOutcome.STARTED) {
-                throw new IllegalStateException("影子 run 启动失败: " + started.outcome()
-                        + " reason=" + started.rejectReason());
+            try {
+                DeterministicSupervisor.StartResult started = supervisor.startRun(shadow.id(),
+                        proposal(), Set.of());
+                if (started.outcome() != DeterministicSupervisor.StartOutcome.STARTED) {
+                    throw new IllegalStateException("影子 run 启动失败: " + started.outcome()
+                            + " reason=" + started.rejectReason());
+                }
+                investigate(shadow.id(), holmes.generation(), snapshotDigest);
+                // F05 黑板身份：agent 只认冻结成员表——快照 digest 必须是 freeze 落库的
+                // 内容 digest（holmes hash 是输入身份，走 inputDigest 面，两者不得混用）
+                String frozenDigest = freezeSnapshot(shadow.id(), holmes.generation());
+                supervisor.advance(shadow.id());
+                nativeRcaAgent.investigate(shadow.id(),
+                        new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
+                                snapshotDigest),
+                        new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
+                                frozenDigest),
+                        holmes.generation());
+                // M6-02 观察面成账：影子结论对照 HOLMES 主路径 run 落 V32 engine_comparison
+                // （HOLMES 侧守卫的落账动作；无 GT 只记 disagreement 不判对错）
+                comparisonRecorder.compareHolmesNative(holmesRunId, shadow.id(),
+                        "am4-shadow-trigger");
+                // SR §3.2 影子收口：取证/对照完成 → 合法非活跃终态（零报告零发布纪律
+                // 不变，但不再以 REPORTING 活跃位为"结束位置"）
+                closeShadowRun(shadow.id(), null);
+            } catch (RuntimeException e) {
+                // 失败按实际错误收口 FAILED（不吞异常、不留活跃行），然后照常上抛
+                closeShadowRun(shadow.id(), e.getClass().getSimpleName() + ": " + e.getMessage());
+                throw e;
             }
-            investigate(shadow.id(), holmes.generation(), snapshotDigest);
-            // F05 黑板身份：agent 只认冻结成员表——快照 digest 必须是 freeze 落库的
-            // 内容 digest（holmes hash 是输入身份，走 inputDigest 面，两者不得混用）
-            String frozenDigest = freezeSnapshot(shadow.id(), holmes.generation());
-            supervisor.advance(shadow.id());
-            nativeRcaAgent.investigate(shadow.id(),
-                    new com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest(
-                            snapshotDigest),
-                    new com.objwww.pr.control.alert.domain.identity.EvidenceSnapshotDigest(
-                            frozenDigest),
-                    holmes.generation());
-            // M6-02 观察面成账：影子结论对照 HOLMES 主路径 run 落 V32 engine_comparison
-            // （HOLMES 侧守卫的落账动作；无 GT 只记 disagreement 不判对错）
-            comparisonRecorder.compareHolmesNative(holmesRunId, shadow.id(),
-                    "am4-shadow-trigger");
         } finally {
             for (SchedulerSlotRepository.AcquiredSlot slot : held) {
                 slots.release(slotScope, slot.slotNo(), SLOT_OWNER, slot.leaseEpoch());
@@ -181,6 +206,66 @@ public class Am4ShadowTrigger {
         }
         System.out.println(RUN_ID_MARKER + shadow.id());
         return shadow.id();
+    }
+
+    /**
+     * SR §3.2 影子收口（单事务）：行锁复核身份与活跃态后推进非活跃终态——
+     * 取证完成 = SUCCEEDED + completionKind=SHADOW_EVIDENCE_ONLY + SHADOW_COMPLETED
+     * 审计事件；失败 = FAILED + 实际错误 + SHADOW_FAILED 事件。残余非终态任务
+     * 收敛 CANCELLED（撤销后续执行资格）。行不存在/非影子/已终态 = 不覆盖他方事实。
+     */
+    private void closeShadowRun(UUID runId, String error) {
+        try {
+            tx.executeWithoutResult(status -> {
+                RcaRun locked = runs.findByIdForUpdate(runId).orElse(null);
+                if (locked == null || locked.purpose() != RunPurpose.SHADOW) {
+                    return;
+                }
+                if (!locked.state().isActive()) {
+                    return;
+                }
+                boolean evidenceComplete = error == null;
+                RcaRunState target =
+                        evidenceComplete ? RcaRunState.SUCCEEDED : RcaRunState.FAILED;
+                RcaRunStateMachine.requireTransition(locked.state(), target);
+                Instant now = clock.now();
+                runs.update(new RcaRun(locked.id(), locked.incidentId(), locked.generation(),
+                        locked.trigger(), target, locked.investigationHash(), locked.createdAt(),
+                        now, locked.startedAt(), now, error, locked.purpose(),
+                        locked.purposeSource(),
+                        evidenceComplete ? RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY : null));
+                events.append(runId, new RcaEventAppender.EventDraft(UUID.randomUUID(),
+                        evidenceComplete ? "SHADOW_COMPLETED" : "SHADOW_FAILED",
+                        "{\"purpose\":\"SHADOW\",\"completionKind\":"
+                                + (evidenceComplete
+                                        ? "\"" + RcaRun.COMPLETION_SHADOW_EVIDENCE_ONLY + "\""
+                                        : "null")
+                                + (error == null ? "" : ",\"error\":\"" + jsonEscape(error) + "\"")
+                                + "}"));
+                for (RcaTask task : tasks.findByRunId(runId)) {
+                    if (!isTaskTerminal(task.state())) {
+                        RcaTaskStateMachine.requireTransition(task.state(),
+                                RcaTaskState.CANCELLED);
+                        tasks.update(task.withState(RcaTaskState.CANCELLED, now));
+                    }
+                }
+            });
+        } catch (RuntimeException closeFailure) {
+            // 收口自身失败必须可见（不能静默留活跃行）；不抛出以免掩盖主异常
+            System.err.println("AM4_SHADOW_CLOSE_FAILED run=" + runId
+                    + " error=" + closeFailure.getMessage());
+        }
+    }
+
+    private static boolean isTaskTerminal(RcaTaskState state) {
+        return state == RcaTaskState.DONE || state == RcaTaskState.CANCELLED
+                || state == RcaTaskState.DEAD || state == RcaTaskState.SKIPPED
+                || state == RcaTaskState.FAILED_TERMINAL || state == RcaTaskState.STALE;
+    }
+
+    /** 事件 payload 极简转义（错误文本进 JSON 字符串位） */
+    private static String jsonEscape(String text) {
+        return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
     }
 
     /** 占满 worker 槽位（尽力而为：已被生产调查占用的槽跳过，不与之争抢） */

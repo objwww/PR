@@ -112,7 +112,10 @@ public class HolmesShadowWorker {
         UUID attemptId = UUID.randomUUID();
         RcaRun shadowRun = new RcaRun(shadowRunId, row.incidentId(), row.generation(),
                 RunTrigger.RERUN, RcaRunState.RUNNING,
-                new Digest(row.snapshotDigest()), now, now, now, null, null);
+                new Digest(row.snapshotDigest()), now, now, now, null, null,
+                // SR §3.1：旧影子工作面同样落 SHADOW 身份（发布准入负向门生效）
+                com.objwww.pr.control.alert.domain.model.RunPurpose.SHADOW,
+                "holmes-shadow-worker", null);
         RcaTask task = new RcaTask(taskId, shadowRunId, RcaTask.HOLMES_INVESTIGATE,
                 RcaTaskState.DONE, 0, now, now, sla.deadline(now, 0),
                 null, null, 0, 0, 1, now, now);
@@ -249,7 +252,9 @@ public class HolmesShadowWorker {
             Instant now) {
         return new RcaRun(run.id(), run.incidentId(), run.generation(), run.trigger(),
                 state, run.investigationHash(), run.createdAt(), now, run.startedAt(),
-                now, lastError);
+                now, lastError,
+                // SR §3.1：状态迁移不改写身份三列
+                run.purpose(), run.purposeSource(), run.completionKind());
     }
 
     private static String truncate(String value) {

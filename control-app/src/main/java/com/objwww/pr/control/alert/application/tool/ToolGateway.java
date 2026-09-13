@@ -40,14 +40,21 @@ public final class ToolGateway implements ToolInvoker {
     private final ExecutorService callPool;
     private final Clock clock;
     private final RcaEventAppender events; // 可空：意图/进度事件账本（V14）
+    private final InFlightToolCancels cancels; // 可空：WC-3 在途取消通知（丢了只慢不错）
 
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events) {
+        this(registry, policy, callPool, clock, events, null);
+    }
+
+    public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
+            Clock clock, RcaEventAppender events, InFlightToolCancels cancels) {
         this.registry = Objects.requireNonNull(registry);
         this.policy = Objects.requireNonNull(policy);
         this.callPool = Objects.requireNonNull(callPool);
         this.clock = Objects.requireNonNull(clock);
         this.events = events; // 可空（意图事件落档可选项）
+        this.cancels = cancels; // 可空（默认不参与在途取消通知）
     }
 
     /** 下发给 LLM 的工具清单：被拒工具从清单删除（双闸之一） */
@@ -57,12 +64,26 @@ public final class ToolGateway implements ToolInvoker {
                 .toList();
     }
 
-    /** 一次调用请求（幂等/审计身份五元组 + 工具语义字段；EX-A0：输入身份=调查输入绑定） */
+    /**
+     * 一次调用请求（幂等/审计身份五元组 + 工具语义字段；EX-A0：输入身份=调查输入绑定）。
+     * WC-3：{@code externalDeadline} = 任务/Run 硬期限（Host 下发，可空）——工具等待
+     * deadline 取 min(工具超时, 外部期限)，过期即停止事实，不吞成工具超时。
+     */
     public record ToolInvocation(UUID runId, UUID taskId, UUID attemptId, long callSeq,
             String toolName, String toolVersion, String timeRange,
             Map<String, Object> args,
             com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
-                    investigationInputDigest) {
+                    investigationInputDigest,
+            java.time.Instant externalDeadline) {
+
+        public ToolInvocation(UUID runId, UUID taskId, UUID attemptId, long callSeq,
+                String toolName, String toolVersion, String timeRange,
+                Map<String, Object> args,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
+                        investigationInputDigest) {
+            this(runId, taskId, attemptId, callSeq, toolName, toolVersion, timeRange,
+                    args, investigationInputDigest, null);
+        }
     }
 
     /** 调用结局：EXECUTED（真实执行）或 VALIDATE_ONLY（R2/R3 意图记录，零执行） */
@@ -105,10 +126,28 @@ public final class ToolGateway implements ToolInvoker {
         return new ToolInvocationResult(ToolInvocationResult.Kind.EXECUTED, digest, body);
     }
 
-    /** 硬 deadline 执行：独立调用池 + 超时 cancel(true)，迟到结果丢弃不补旧快照 */
+    /**
+     * 硬 deadline 执行：独立调用池 + 超时 cancel(true)，迟到结果丢弃不补旧快照。
+     * WC-3：deadline = min(工具超时, 外部硬期限)（§5.1 最小化）；外部期限已过 =
+     * 停止事实（{@code RUN_DEADLINE_EXCEEDED}，不吞成工具超时重试）；Run 取消的
+     * 在途中断通知经 {@link InFlightToolCancels} 转 {@code RUN_CANCELLED} 停止。
+     */
     private byte[] executeWithDeadline(ToolRegistry.Registration registration,
             ToolInvocation invocation) {
-        long deadline = clock.millis() + registration.definition().timeoutMillis();
+        java.time.Instant hard = clock.instant()
+                .plusMillis(registration.definition().timeoutMillis());
+        java.time.Instant external = invocation.externalDeadline();
+        if (external != null && external.isBefore(hard)) {
+            if (!clock.instant().isBefore(external)) {
+                throw new com.objwww.pr.control.alert.application.ExecutionControl
+                        .StoppedException(
+                        com.objwww.pr.control.alert.application.ExecutionControl
+                                .STOP_RUN_DEADLINE_EXCEEDED,
+                        "外部硬期限已过，工具等待不再开始: " + external);
+            }
+            hard = external;
+        }
+        long deadline = hard.toEpochMilli();
         ToolExecutor.ToolExecution execution = new ToolExecutor.ToolExecution(
                 invocation.args(), deadline, registration.definition().resultLimitBytes());
         Future<byte[]> future;
@@ -119,6 +158,9 @@ public final class ToolGateway implements ToolInvoker {
             // 不静默排队也不靠兜底映射；模型可见族（可退避重试）
             throw new ToolModelVisibleException(ToolModelVisibleReason.REMOTE_UNAVAILABLE,
                     "工具调用通道拥塞（背压拒绝，可稍后重试）");
+        }
+        if (cancels != null) {
+            cancels.register(invocation.runId(), future);
         }
         try {
             return future.get(deadline - clock.millis(), TimeUnit.MILLISECONDS);
@@ -131,9 +173,23 @@ public final class ToolGateway implements ToolInvoker {
             future.cancel(true);
             throw new ToolModelVisibleException(ToolModelVisibleReason.REMOTE_UNAVAILABLE,
                     "工具调用被中断（临时远端故障）");
+        } catch (java.util.concurrent.CancellationException e) {
+            if (cancels != null && cancels.wasStopCancelled(invocation.runId())) {
+                // WC-3：Run 取消的后置在途中断——类型化停止，不折成可重试远端故障
+                throw new com.objwww.pr.control.alert.application.ExecutionControl
+                        .StoppedException(
+                        com.objwww.pr.control.alert.application.ExecutionControl
+                                .STOP_RUN_CANCELLED,
+                        "run " + invocation.runId() + " 已取消，中断在途工具等待");
+            }
+            throw e; // 非 stop 取消（线程池 shutdown 等）——原样上抛
         } catch (java.util.concurrent.ExecutionException e) {
             future.cancel(true);
             throw mapExecutorFailure(e.getCause() == null ? e : e.getCause());
+        } finally {
+            if (cancels != null) {
+                cancels.unregister(invocation.runId(), future);
+            }
         }
     }
 

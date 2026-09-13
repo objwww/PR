@@ -3,6 +3,7 @@ package com.objwww.pr.control.alert.domain.repository;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -13,4 +14,7 @@ public interface RcaReportRepository {
     void insert(RcaReport report);
 
     List<RcaReport> findByRunId(UUID runId);
+
+    /** OP-04 报告反馈：按 id 精确读（反馈对象钉面） */
+    Optional<RcaReport> findById(UUID id);
 }

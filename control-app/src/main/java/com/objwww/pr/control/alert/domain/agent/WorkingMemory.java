@@ -18,17 +18,28 @@ import java.util.UUID;
  * 手里的 map/list 不影响已构造快照与 digest；digest = 规范化槽 JSON 的 sha256，
  * 构造期一次算定，此后不漂移。
  *
- * <p>checkpoint_revision = 该快照所属检查点代数（主任务 decision_seq）：同修订
- * 重放幂等（append 返回既有行），检查点经 memory_id/digest 钉住本步所用快照
- * （MC07 恢复语义：重驱读同快照，不另生成）。
+ * <p>checkpoint_revision = 该快照所属检查点代数：同修订重放幂等（append 返回
+ * 既有行），检查点经 memory_id/digest 钉住本步所用快照（MC07 恢复语义：重驱读
+ * 同快照，不另生成）。
+ *
+ * <p><b>CL-06 协议分型（§5.1）</b>：schema_version=1 旧协议（revision 存
+ * decision_seq 语义，存量行不回填）；schema_version=2 新协议（checkpoint_revision
+ * 严格对应 rca_primary_checkpoint.revision）。parent_memory_id = 上一版快照的
+ * 不可变引用（§5.2 累计链：宿主从 checkpoint.memory_id 精确读上一版，按内容
+ * 去重合并本版 delta——反证跨轮保留，不以 latestByTask 替代指针）。
  */
 public record WorkingMemory(UUID id, UUID runId, UUID taskId, long checkpointRevision,
                             Map<String, List<String>> slots, String memoryDigest,
-                            Long configEpoch, Instant createdAt) {
+                            Long configEpoch, int schemaVersion, UUID parentMemoryId,
+                            Instant createdAt) {
 
     /** 槽契约四槽（§19.2 词表）；缺失槽以空表如实占位 */
     public static final List<String> SLOT_KEYS =
             List.of("hypotheses", "ruled_out", "counter_evidence_refs", "open_gaps");
+
+    /** CL-06 协议版本：1=旧（revision 存 decisionSeq），2=新（真 checkpoint revision） */
+    public static final int SCHEMA_V1 = 1;
+    public static final int SCHEMA_V2 = 2;
 
     public WorkingMemory {
         Objects.requireNonNull(id, "id");
@@ -40,16 +51,36 @@ public record WorkingMemory(UUID id, UUID runId, UUID taskId, long checkpointRev
         if (checkpointRevision < 0) {
             throw new IllegalArgumentException("checkpoint_revision 不得为负");
         }
+        if (schemaVersion < SCHEMA_V1 || schemaVersion > SCHEMA_V2) {
+            throw new IllegalArgumentException("schema_version 必须为 1 或 2: " + schemaVersion);
+        }
         slots = deepFreeze(slots);
     }
 
-    /** 构造工厂：digest 在此一次算定（规范化槽 JSON 的 sha256） */
+    /** 旧协议兼容构造（schema1：checkpoint_revision=decision_seq 语义） */
+    public WorkingMemory(UUID id, UUID runId, UUID taskId, long checkpointRevision,
+            Map<String, List<String>> slots, String memoryDigest, Long configEpoch,
+            Instant createdAt) {
+        this(id, runId, taskId, checkpointRevision, slots, memoryDigest, configEpoch,
+                SCHEMA_V1, null, createdAt);
+    }
+
+    /** 构造工厂（digest 在此一次算定：规范化槽 JSON 的 sha256） */
     public static WorkingMemory of(UUID id, UUID runId, UUID taskId,
             long checkpointRevision, Map<String, List<String>> slots, Long configEpoch,
             Instant createdAt) {
         String digest = Digest.sha256Of(canonicalJson(slots)).value();
         return new WorkingMemory(id, runId, taskId, checkpointRevision, slots,
                 digest, configEpoch, createdAt);
+    }
+
+    /** CL-06 新协议工厂：真 revision + 不可变父引用（累计链） */
+    public static WorkingMemory ofV2(UUID id, UUID runId, UUID taskId,
+            long checkpointRevision, Map<String, List<String>> slots, Long configEpoch,
+            UUID parentMemoryId, Instant createdAt) {
+        String digest = Digest.sha256Of(canonicalJson(slots)).value();
+        return new WorkingMemory(id, runId, taskId, checkpointRevision, slots,
+                digest, configEpoch, SCHEMA_V2, parentMemoryId, createdAt);
     }
 
     /**

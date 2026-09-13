@@ -344,15 +344,19 @@ public class IncidentProjector {
             incidents.update(withWaitingReason(incident, "WAITING_CAPABILITY"));
             return;
         }
+        int priority = sla.priority(alert.labels().get("severity"));
         RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
-                trigger, RcaRunState.QUEUED, invHash, now, now, null, null, null);
+                trigger, RcaRunState.QUEUED, invHash, now, now, null, null, null,
+                // SR §3.1：准入身份随铸造落行（生产路径；影子/评测走各自受控入口）
+                com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                "incident-projector", null);
         // EX-A0（F14）：调查输入身份+冻结时间窗随铸造一次落列（Run 创建时冻结，
         // 执行期只读——禁止静默改取"执行时最近十分钟"）
         runs.insertRouted(run, routing,
                 com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
                         incident, now));
-
-        int priority = sla.priority(alert.labels().get("severity"));
+        // SR §4.1：铸点冻结对账硬期限（首记不覆盖；重启/重试不重置；旧 Run 无值不追溯）
+        runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
                 RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
                 null, null, 0, 0, 3, now, now);

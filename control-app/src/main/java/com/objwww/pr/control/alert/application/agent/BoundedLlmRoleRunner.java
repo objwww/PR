@@ -99,19 +99,22 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     private final Clock clock;
     /** R11/MA-04 一步边界压缩（可空=null 零压缩姿态，既有装配零行为漂移） */
     private final ContextCompactionService compaction;
+    /** CL-01 提交围栏：运行路径检查点唯一提交口（生产装配必须提供） */
+    private final PrimaryCheckpointCommitService commits;
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
             ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
-            Clock clock) {
+            Clock clock, PrimaryCheckpointCommitService commits) {
         this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
-                clock, null);
+                clock, null, commits);
     }
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
             ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
-            Clock clock, ContextCompactionService compaction) {
+            Clock clock, ContextCompactionService compaction,
+            PrimaryCheckpointCommitService commits) {
         this.guard = Objects.requireNonNull(guard, "guard");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -121,6 +124,7 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         this.mapper = Objects.requireNonNull(mapper, "mapper");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.compaction = compaction;
+        this.commits = Objects.requireNonNull(commits, "commits（提交围栏缺件）");
     }
 
     @Override
@@ -170,8 +174,12 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 if (isSameFailureSignature(checkpoint.lastError(), signature)) {
                     return modelFailureFinal(request, checkpoint, e.errorCode());
                 }
-                checkpoints.upsert(checkpoint.withLastError(
-                        MODEL_FAILURE_SIGNATURE_PREFIX + signature, clock.instant()));
+                commitCheckpoint(request, checkpoint,
+                        "primary:" + checkpoint.taskId() + ":err:" + checkpoint.decisionSeq()
+                                + ":" + e.errorCode(),
+                        PrimaryCheckpointCommitService.CommitMutation.ERROR_RECORDED,
+                        cp -> cp.withLastError(
+                                MODEL_FAILURE_SIGNATURE_PREFIX + signature, clock.instant()));
             }
             throw e;
         }
@@ -271,13 +279,16 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         // 全拒不消耗步数（X4"状态不动"），但决策已出——决策序必须推进（动作身份单调）；
         // BA-119 反馈环扩面：全拒原因+修正指引写 lastError 随下步信封回喂（否则模型
         // 拿不到"该 gap 已有台账/配额耗尽"的裁决事实，盲重提同一 gap 烧尽驱动上限）
-        checkpoints.upsert(checkpoint.withDecisionAdvanced(
-                "DELEGATE_REJECTED: 委派批全拒（" + codes + "）。"
-                        + "GAP_ALREADY_ADJUDICATED=该 gap 已有台账行，勿换汤不换药重提同一 gap；"
-                        + "DELEGATION_BUDGET_EXHAUSTED=委派配额耗尽，不可再委派。"
-                        + "改用 tool_allowlist 内工具直查补证，或基于已有证据走 final"
-                        + "（缺口如实写 missing_information）。",
-                clock.instant()));
+        commitCheckpoint(request, checkpoint,
+                "primary:" + checkpoint.taskId() + ":decision:" + checkpoint.decisionSeq(),
+                PrimaryCheckpointCommitService.CommitMutation.DECISION_ADVANCED,
+                cp -> cp.withDecisionAdvanced(
+                        "DELEGATE_REJECTED: 委派批全拒（" + codes + "）。"
+                                + "GAP_ALREADY_ADJUDICATED=该 gap 已有台账行，勿换汤不换药重提同一 gap；"
+                                + "DELEGATION_BUDGET_EXHAUSTED=委派配额耗尽，不可再委派。"
+                                + "改用 tool_allowlist 内工具直查补证，或基于已有证据走 final"
+                                + "（缺口如实写 missing_information）。",
+                        clock.instant()));
         return new RoleRunner.RoleDriveResult(
                 RoleRunner.RoleDriveOutcome.DELEGATE_REJECTED, List.of(), codes);
     }
@@ -296,8 +307,11 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             row.put("admission_note", claim.admissionNote());
             claimRows.add(row);
         }
-        checkpoints.upsert(checkpoint.withFinal(claimRows,
-                decision.finalAnswer().missingInformation(), clock.instant()));
+        commitCheckpoint(request, checkpoint,
+                "primary:" + checkpoint.taskId() + ":final:" + checkpoint.decisionSeq(),
+                PrimaryCheckpointCommitService.CommitMutation.FINAL_PROPOSED,
+                cp -> cp.withFinal(claimRows,
+                        decision.finalAnswer().missingInformation(), clock.instant()));
         log.info("主 FINAL 提案落检查点 task={} claims={} downgraded={} stripped={}",
                 request.task().id(), claimRows.size(), admission.downgraded(),
                 admission.strippedRefs());
@@ -311,9 +325,14 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             PrimaryCheckpoint checkpoint) {
         PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
                 List.of(), validRefsOf(request));
-        checkpoints.upsert(checkpoint.withFinal(List.of(),
-                List.of("STEPS_EXHAUSTED: max_steps=" + request.profile().maxSteps()
-                        + " 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束"), clock.instant()));
+        commitCheckpoint(request, checkpoint,
+                "primary:" + checkpoint.taskId() + ":final:" + checkpoint.decisionSeq()
+                        + ":exhausted",
+                PrimaryCheckpointCommitService.CommitMutation.FINAL_PROPOSED,
+                cp -> cp.withFinal(List.of(),
+                        List.of("STEPS_EXHAUSTED: max_steps=" + request.profile().maxSteps()
+                                + " 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束"),
+                        clock.instant()));
         log.warn("主任务步数耗尽 → 确定性未决 FINAL（零模型调用）task={} steps={}",
                 request.task().id(), checkpoint.stepsUsed());
         return new RoleRunner.RoleDriveResult(RoleRunner.RoleDriveOutcome.FINAL_READY,
@@ -349,15 +368,39 @@ public class BoundedLlmRoleRunner implements RoleRunner {
      * 计步推进 + 反馈环（V88）：lastError = 本步结束后留给下一步模型的修正指引
      * （A0 八跑实证盲重驱=连猜同错；信封 last_error 面下发，成功步传 null 清空）。
      * R10：本步所用工作记忆快照随检查点钉面（memory_id/digest），DECISION_UNPARSEABLE
-     * 重驱读同快照不另生成（MC07）。
+     * 重驱读同快照不另生成（MC07）。CL-01：写点走提交围栏（revision CAS + owner/
+     * epoch 栅栏），围栏拒绝上抛由执行器收敛 LOST_OWNERSHIP，不再末写胜出。CL-03：
+     * 候选记忆随本提交事务 append（装配器零写入，模型未执行不落记忆）。
      */    private void advanceStep(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, String snapshotDigest,
             com.objwww.pr.control.alert.domain.agent.WorkingMemory memory,
             String lastError) {
-        checkpoints.upsert(checkpoint.withStepAdvanced(snapshotDigest,
-                memory == null ? null : memory.id(),
-                memory == null ? null : memory.memoryDigest(),
-                lastError, clock.instant()));
+        PrimaryCheckpointCommitService.CommitFence fence =
+                new PrimaryCheckpointCommitService.CommitFence(
+                        request.task().runId(), request.task().id(),
+                        request.task().leaseOwner(), request.task().leaseEpoch(),
+                        request.binding().configEpoch(), checkpoint.revision());
+        commits.commitStep(fence,
+                "primary:" + checkpoint.taskId() + ":step:" + checkpoint.decisionSeq(),
+                snapshotDigest, lastError, memory);
+    }
+
+    /**
+     * CL-01 提交围栏入口：fence = 当次驱动的 task 租约身份 + 绑定 configEpoch +
+     * 驱动起点检查点 revision。STALE/CONFIG_CHANGED/RUN_TERMINAL 以
+     * {@link PrimaryCheckpointCommitService.CommitRejectedException} 上抛（调用者
+     * 立即退出本次驱动）；REPLAYED 视同已落结果正常返回。
+     */
+    private void commitCheckpoint(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, String actionKey,
+            PrimaryCheckpointCommitService.CommitMutation mutation,
+            java.util.function.Function<PrimaryCheckpoint, PrimaryCheckpoint> mutationFn) {
+        PrimaryCheckpointCommitService.CommitFence fence =
+                new PrimaryCheckpointCommitService.CommitFence(
+                        request.task().runId(), request.task().id(),
+                        request.task().leaseOwner(), request.task().leaseEpoch(),
+                        request.binding().configEpoch(), checkpoint.revision());
+        commits.commit(fence, actionKey, mutation, mutationFn);
     }
 
     /** §六 模型动作身份：绑定三元组 + 检查点计数（decision_seq 为账本动作序） */
@@ -372,7 +415,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 task.leaseEpoch(), task.leaseUntil() != null ? task.leaseUntil()
                         : task.deadlineAt(),
                 binding.configEpoch(), binding.releaseDigest(),
-                checkpoint.inputSnapshotDigest(), () -> true);
+                checkpoint.inputSnapshotDigest(),
+                com.objwww.pr.control.alert.application.ExecutionControl.aliveHeartbeat(
+                        request.callContext().controlSignal()));
     }
 
     /** R5：lastError 是否本签名的前次落痕（前缀识别——反馈文本与机器签名同槽共存） */
@@ -387,11 +432,16 @@ public class BoundedLlmRoleRunner implements RoleRunner {
      */
     private RoleRunner.RoleDriveResult modelFailureFinal(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, String errorCode) {
-        checkpoints.upsert(checkpoint.withFinal(List.of(),
-                List.of("MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code=" + errorCode
-                        + "，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；"
-                        + "已有事实由报告相位从工件面补集"),
-                clock.instant()));
+        commitCheckpoint(request, checkpoint,
+                "primary:" + checkpoint.taskId() + ":final:" + checkpoint.decisionSeq()
+                        + ":modelfail",
+                PrimaryCheckpointCommitService.CommitMutation.FINAL_PROPOSED,
+                cp -> cp.withFinal(List.of(),
+                        List.of("MODEL_FAILURE_UNRESOLVED: 模型调用同签名连续失败（code="
+                                + errorCode
+                                + "，同参重发必然同败），按 §四 终止兜底以已有事实与缺口未决结束；"
+                                + "已有事实由报告相位从工件面补集"),
+                        clock.instant()));
         log.warn("主任务同签名模型失败 ×2 → 确定性未决 FINAL（零模型调用）task={} code={}",
                 request.task().id(), errorCode);
         return new RoleRunner.RoleDriveResult(RoleRunner.RoleDriveOutcome.FINAL_READY,

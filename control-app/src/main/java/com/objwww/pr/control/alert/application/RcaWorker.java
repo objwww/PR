@@ -69,6 +69,11 @@ public class RcaWorker {
     private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
     /** 引擎执行器映射表（M6-01）：分派面唯一权威，无默认回退——缺绑定即 fail-closed */
     private final Map<RcaEngine, RcaTaskExecutor> executors;
+    /**
+     * SR §4.3：REPORT_FINALIZE 恢复执行器（task_key 分派，可空=未装配恢复面——
+     * finalize task 领取后 fail-closed 终态，与引擎缺绑定同律，不回退引擎执行器）
+     */
+    private final RcaTaskExecutor reportFinalizer;
     private final RcaRunOrchestrator orchestrator;
     private final TransactionOperations tx;
     private final AlertClock clock;
@@ -85,6 +90,8 @@ public class RcaWorker {
     private final int investigationSchemaVersion;
     /** EN-04 调度接线（A 批 A2）：loop 每拍巡回翻转过期 WAITING 切换命令（独立容错，不炸 recover 循环） */
     private final RunConfigSwitchService runConfigSwitchService;
+    /** WC-5：悬挂回收 UNKNOWN 计数（读面 unknown_action_count 的计数源） */
+    private final com.objwww.pr.control.infrastructure.observability.AlertMetrics metrics;
     private final com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
@@ -142,7 +149,73 @@ public class RcaWorker {
                      int investigationSchemaVersion,
                      RunConfigSwitchService runConfigSwitchService,
                      com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask) {
+        this(tasks, runs, attempts, investigationResults, incidents, slots, invocations,
+                toolLedger, executors, null, orchestrator, tx, clock, owner, slotScope,
+                taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace,
+                investigationSchemaVersion, runConfigSwitchService, canaryWindowTask);
+    }
+
+    /**
+     * SR §4.3 全参构造：增 REPORT_FINALIZE 恢复执行器（task_key 分派面，
+     * 可空=恢复面未装配）。
+     */
+    public RcaWorker(RcaTaskRepository tasks,
+                     RcaRunRepository runs,
+                     RcaAttemptRepository attempts,
+                     InvestigationResultRepository investigationResults,
+                     IncidentRepository incidents,
+                     SchedulerSlotRepository slots,
+                     ExternalInvocationRepository invocations,
+                     com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+                     Map<RcaEngine, RcaTaskExecutor> executors,
+                     RcaTaskExecutor reportFinalizer,
+                     RcaRunOrchestrator orchestrator,
+                     TransactionOperations tx,
+                     AlertClock clock,
+                     String owner,
+                     String slotScope,
+                     Duration taskLease,
+                     Duration heartbeatInterval,
+                     Duration pollInterval,
+                     Duration retryBackoff,
+                     Duration hangingGrace,
+                     int investigationSchemaVersion,
+                     RunConfigSwitchService runConfigSwitchService,
+                     com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask) {
+        this(tasks, runs, attempts, investigationResults, incidents, slots, invocations,
+                toolLedger, executors, reportFinalizer, orchestrator, tx, clock, owner, slotScope,
+                taskLease, heartbeatInterval, pollInterval, retryBackoff, hangingGrace,
+                investigationSchemaVersion, runConfigSwitchService, canaryWindowTask,
+                com.objwww.pr.control.infrastructure.observability.AlertMetrics.NOOP);
+    }
+
+    /** WC-5 全参构造：增对账指标面（悬挂回收 UNKNOWN 计数；NOOP=测试旧形态零行为差）。 */
+    public RcaWorker(RcaTaskRepository tasks,
+                     RcaRunRepository runs,
+                     RcaAttemptRepository attempts,
+                     InvestigationResultRepository investigationResults,
+                     IncidentRepository incidents,
+                     SchedulerSlotRepository slots,
+                     ExternalInvocationRepository invocations,
+                     com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+                     Map<RcaEngine, RcaTaskExecutor> executors,
+                     RcaTaskExecutor reportFinalizer,
+                     RcaRunOrchestrator orchestrator,
+                     TransactionOperations tx,
+                     AlertClock clock,
+                     String owner,
+                     String slotScope,
+                     Duration taskLease,
+                     Duration heartbeatInterval,
+                     Duration pollInterval,
+                     Duration retryBackoff,
+                     Duration hangingGrace,
+                     int investigationSchemaVersion,
+                     RunConfigSwitchService runConfigSwitchService,
+                     com.objwww.pr.control.release.application.CanaryWindowTask canaryWindowTask,
+                     com.objwww.pr.control.infrastructure.observability.AlertMetrics metrics) {
         this.canaryWindowTask = canaryWindowTask; // B4 可选（null=legacy 零漂移）
+        this.metrics = metrics;
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -152,6 +225,7 @@ public class RcaWorker {
         this.invocations = Objects.requireNonNull(invocations);
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.executors = Objects.requireNonNull(executors, "executors 不得为 null");
+        this.reportFinalizer = reportFinalizer;
         if (executors.isEmpty()) {
             throw new IllegalArgumentException("executors 映射表不得为空");
         }
@@ -213,7 +287,9 @@ public class RcaWorker {
     }
 
     private void markHangingInvocationsUnknown(Instant now) {
-        Instant grace = now.minus(hangingGrace);        for (ExternalInvocation invocation : invocations.findHangingStarted(grace)) {
+        Instant grace = now.minus(hangingGrace);
+        int unknownSwept = 0;
+        for (ExternalInvocation invocation : invocations.findHangingStarted(grace)) {
             ExternalInvocation unknown = new ExternalInvocation(
                     invocation.id(), invocation.invocationId(), invocation.callSeq(),
                     invocation.runId(), invocation.taskId(), invocation.attemptId(),
@@ -226,6 +302,7 @@ public class RcaWorker {
                     invocation.errorClass(), "worker-crash-recovered",
                     invocation.startedAt(), now);
             invocations.finish(unknown);
+            unknownSwept++;
             log.warn("悬挂账本 {} STARTED→UNKNOWN（崩溃回收）", invocation.id());
         }
         // M3-04：悬挂调查记录（STARTED 已落但终态未达）同样诚实标 UNKNOWN
@@ -233,13 +310,19 @@ public class RcaWorker {
             investigationResults.finishTerminal(hanging.withTerminal(
                     ExecutionStatus.UNKNOWN, ValidationStatus.NOT_VALIDATED, null,
                     null, null, null, null, null, now));
+            unknownSwept++;
             log.warn("悬挂调查记录 {} STARTED→UNKNOWN（崩溃回收）", hanging.id());
         }
         // EX-A4a（F16）：第一方工具账本 PENDING 悬挂回收（进程死后的孤儿回执永不达；
         // 单语句条件写，阈值与上两账本同源 hangingGrace——必须长于单次在途调用）
         int pendingSwept = toolLedger.reclaimPendingOlderThan(grace);
+        unknownSwept += pendingSwept;
         if (pendingSwept > 0) {
             log.warn("工具调用账本 {} 行 PENDING→UNKNOWN（崩溃回收）", pendingSwept);
+        }
+        // WC-5：三账本 UNKNOWN 合并一次上报（unknown_action_count 计数源，不按 run 维度拆标签）
+        if (unknownSwept > 0) {
+            metrics.unknownAction(unknownSwept);
         }
     }
 
@@ -311,18 +394,66 @@ public class RcaWorker {
             Runnable heartbeat = () -> {
                 Instant hb = clock.now();
                 tasks.heartbeat(work.task().id(), owner, work.task().leaseEpoch(), hb, taskLease);
+                // CL-01/§2.4：租约续期失败必须让后续动作停止——心跳仅对 LEASED 态生效，
+                // 已领取（leaseOwner 非空）任务续租后复核所有权，易主/过期即中止执行
+                //（异常穿透执行器 → retryable → finishTask epoch 栅栏诚实结算）。
+                // DAG 子任务（无租约领养驱动）所有权由检查点提交围栏守护，不在此覆盖。
+                if (work.task().leaseOwner() != null) {
+                    RcaTask current = tasks.findById(work.task().id()).orElse(null);
+                    if (current == null || !owner.equals(current.leaseOwner())
+                            || current.leaseEpoch() != work.task().leaseEpoch()
+                            || (current.leaseUntil() != null
+                                    && current.leaseUntil().isBefore(hb))) {
+                        throw new IllegalStateException(
+                                "LEASE_LOST: task 租约续期失败（易主或过期），停止后续动作 "
+                                        + work.task().id());
+                    }
+                }
                 slots.heartbeat(slotScope, work.slotNo(), owner, work.slotEpoch(), hb, taskLease);
+                // WC-3（§5.2）：Run 终态探针——取消/过期一旦落地，执行身份立即停止
+                //（本探针随心跳下发给一切直调点；模型等待/工具入口经
+                // ExecutionControl.controlSignal 共用同一事实，迟到结果只审计）
+                String stop = ExecutionControl.stopKindOf(
+                        runs.findById(work.run().id()).map(RcaRun::state).orElse(null));
+                if (stop != null) {
+                    throw new ExecutionControl.StoppedException(stop,
+                            "run " + work.run().id() + " 已终态，心跳探针停止执行");
+                }
             };
             // M6-01 引擎分派：无绑定执行器 = fail-closed（终态失败，不回退主路径——
-            // 回退会污染 Canary 证据面，INV-AM6-2 语义分歧不触发回退）
-            RcaTaskExecutor bound = executors.get(work.engine());
+            // 回退会污染 Canary 证据面，INV-AM6-2 语义分歧不触发回退）；
+            // SR §4.3：REPORT_FINALIZE 恢复 task 走独立分派（只组既有材料，不进引擎）
+            RcaTaskExecutor bound = RcaTask.REPORT_FINALIZE.equals(work.task().taskKey())
+                    ? reportFinalizer
+                    : executors.get(work.engine());
             result = bound != null
                     ? bound.execute(work.task(), work.run(), work.incident(), attempt, heartbeat)
                     : RcaTaskExecutor.ExecutionResult.terminal("EXECUTOR_MISSING",
-                            "engine 无执行器绑定: " + work.engine());
+                            RcaTask.REPORT_FINALIZE.equals(work.task().taskKey())
+                                    ? "恢复执行器未装配: REPORT_FINALIZE"
+                                    : "engine 无执行器绑定: " + work.engine());
+        } catch (ExecutionControl.StoppedException e) {
+            // WC-3：类型化停止=持久取消事实（Run 终态/失租/硬期限）→ 终态失败，
+            // 绝不折成可重试 EXECUTOR_ERROR（重试会复活已取消的执行身份）
+            log.warn("task {} 执行停止 [{}]: {}", work.task().id(), e.kind(), e.getMessage());
+            result = RcaTaskExecutor.ExecutionResult.terminal(e.kind(), e.getMessage());
         } catch (RuntimeException e) {
             log.error("task {} 执行异常", work.task().id(), e);
             result = RcaTaskExecutor.ExecutionResult.retryable("EXECUTOR_ERROR", e.getMessage());
+        }
+
+        // SR §4.3：材料预提交（收尾事务<b>前</b>独立短事务）——"执行完成→finishTask
+        // 提交"缝隙被杀时，对账可凭持久材料重入收尾。幂等无害；失败不阻断正常收尾
+        // （finishTask 事务内同材料再写一次）。
+        final RcaTaskExecutor.ExecutionResult finalResult = result;
+        if (finalResult.artifact().isPresent()) {
+            try {
+                tx.executeWithoutResult(status -> orchestrator.persistFinalizableMaterials(
+                        work.run(), attempt, finalResult, clock.now()));
+            } catch (RuntimeException e) {
+                log.warn("task {} 材料预提交失败（不阻断收尾，finishTask 同材料再写）",
+                        work.task().id(), e);
+            }
         }
 
         FinishTx finishTx = new FinishTx(work, attempt, result);

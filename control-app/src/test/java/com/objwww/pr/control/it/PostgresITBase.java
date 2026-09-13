@@ -116,7 +116,17 @@ public abstract class PostgresITBase {
             "rca_delegation_receipt", "incident_operator_material",
             // V97（EN-08 Skill 候选生命周期）——BA-41 同律：
             // PostgresSkillCandidateIT 起成为真 PG 消费者
-            "rca_skill_candidate");
+            "rca_skill_candidate",
+            // V100（CL-05 Skill 运行绑定）——BA-41 同律：
+            // PostgresRunSkillBindingIT 起成为真 PG 消费者
+            "rca_run_skill_binding",
+            // V102（CL-07 压缩尝试台账）——BA-41 同律：
+            // PostgresCompactionAttemptIT 起成为真 PG 消费者
+            "rca_compaction_attempt",
+            // V103/V104/V105（OP 批：报告反馈/回归候选/动作分析）——BA-41 同律：
+            // PostgresOpBatchIT 起成为真 PG 消费者
+            "report_feedback", "rca_regression_candidate", "rca_regression_review",
+            "rca_action_assessment");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

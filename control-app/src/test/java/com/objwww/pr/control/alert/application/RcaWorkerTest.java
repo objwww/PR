@@ -349,6 +349,124 @@ class RcaWorkerTest {
         assertThat(stores.reports.all()).hasSize(1);
     }
 
+    // ------------------------------------------------------------------ WC-3 取消传播
+
+    /** 注入执行器的 worker（wc3 系列专用：剧本执行器换任意 RcaTaskExecutor） */
+    private RcaWorker newWorkerWith(RcaTaskExecutor ex) {
+        return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
+                stores.incidents, stores.slots, stores.invocations, stores.toolLedger,
+                java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE, ex),
+                orchestrator, TransactionOperations.withoutTransaction(), clock, "worker-wc3",
+                "rca", Duration.ofMinutes(5), Duration.ofSeconds(30), Duration.ofSeconds(1),
+                Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
+                org.mockito.Mockito.mock(RunConfigSwitchService.class), null);
+    }
+
+    /** WC-5：带指标面的 worker（悬挂回收 UNKNOWN 计数用例） */
+    private RcaWorker newWorkerWithMetrics(AlertMetrics metrics) {
+        return new RcaWorker(stores.tasks, stores.runs, stores.attempts, stores.investigations,
+                stores.incidents, stores.slots, stores.invocations, stores.toolLedger,
+                java.util.Map.of(com.objwww.pr.control.alert.domain.model.RcaEngine.NATIVE,
+                        (RcaTaskExecutor) (task, run, incident, attempt, heartbeat) -> null),
+                null, orchestrator, TransactionOperations.withoutTransaction(), clock,
+                "worker-wc5", "rca", Duration.ofMinutes(5), Duration.ofSeconds(30),
+                Duration.ofSeconds(1), Duration.ofMinutes(1), Duration.ofMinutes(10), 2,
+                org.mockito.Mockito.mock(RunConfigSwitchService.class), null, metrics);
+    }
+
+    @Test
+    @DisplayName("wc5_t20 悬挂三账本 UNKNOWN 合并计数：外部调用+调查记录+工具账本 一次上报，新鲜行不计")
+    void hangingUnknownSweepsCountedIntoMetric() {
+        io.micrometer.core.instrument.simple.SimpleMeterRegistry registry =
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+        AlertMetrics metrics = new AlertMetrics(registry);
+        RcaWorker w = newWorkerWithMetrics(metrics);
+
+        Digest digest = new Digest(Digests.sha256Hex("req"));
+        UUID runId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        // 外部调用账本：2 行超宽限（-30m）+ 1 行新鲜（-1m 不回收）
+        for (int i = 0; i < 2; i++) {
+            stores.invocations.insertStarted(new ExternalInvocation(UUID.randomUUID(),
+                    UUID.randomUUID(), i + 1, runId, taskId, UUID.randomUUID(), 0,
+                    "http://holmes:8080/api/chat", digest, null,
+                    ExternalInvocationState.STARTED, null, null, null, null, null, false,
+                    null, null, null, null, null,
+                    clock.now.minus(Duration.ofMinutes(30)), null));
+        }
+        stores.invocations.insertStarted(new ExternalInvocation(UUID.randomUUID(),
+                UUID.randomUUID(), 9, runId, taskId, UUID.randomUUID(), 0,
+                "http://holmes:8080/api/chat", digest, null,
+                ExternalInvocationState.STARTED, null, null, null, null, null, false,
+                null, null, null, null, null,
+                clock.now.minus(Duration.ofMinutes(1)), null));
+        // 调查记录：1 行悬挂
+        stores.investigations.insertStartedIfAbsent(
+                com.objwww.pr.control.alert.domain.model.InvestigationResult.started(
+                        UUID.randomUUID(), UUID.randomUUID(), runId, 0, 2, null,
+                        clock.now.minus(Duration.ofMinutes(30))));
+        // 工具账本：2 行 PENDING 超宽限 + 1 行新鲜
+        for (int i = 0; i < 3; i++) {
+            UUID opId = UUID.randomUUID();
+            stores.toolLedger.open(new RcaToolInvocationLedger.InvocationIdentity(
+                    opId, runId, taskId, UUID.randomUUID(), i + 1, "am4.shadow", "1",
+                    "digest-" + i));
+            if (i < 2) {
+                stores.toolLedger.agePending(opId, clock.now.minus(Duration.ofMinutes(30)));
+            }
+        }
+
+        w.recoverExpired();
+
+        assertThat(registry.get("rca_reconcile_unknown_action_total").counter().count())
+                .as("2 外部调用 + 1 调查记录 + 2 PENDING = 5；两笔新鲜行不计")
+                .isEqualTo(5.0);
+    }
+
+    @Test
+    @DisplayName("wc3_t14 类型化停止（StoppedException）→ 终态失败收敛，不折可重试 EXECUTOR_ERROR")
+    void typedStopSettlesTerminalNotRetryable() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        RcaTaskExecutor stopping = (task, run, incident, attempt, heartbeat) -> {
+            throw new ExecutionControl.StoppedException(
+                    ExecutionControl.STOP_RUN_CANCELLED, "run 已取消，测试注入");
+        };
+        RcaWorker w = newWorkerWith(stopping);
+
+        assertThat(w.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        // 旧路径（RuntimeException catch）把同一异常折成 retryable → RETRY_WAIT；
+        // 类型化停止必须一次终态收敛（无 artifact 终态：调查记录留 STARTED 归
+        // 恢复扫描 UNKNOWN 化——与既有无材料终态同律）
+        assertThat(stores.tasks.all().get(0).state())
+                .as("停止=终态失败，不进退避重试").isEqualTo(RcaTaskState.DEAD);
+        assertThat(stores.runs.all().get(0).state()).isEqualTo(RcaRunState.FAILED);
+    }
+
+    @Test
+    @DisplayName("wc3_t15 心跳 Run 终态探针：执行中落 CANCELLED → 心跳即停，run 不复活")
+    void heartbeatProbeStopsWhenRunCancelledMidFlight() {
+        deliverFiring("checkout", "warning", "2026-09-03T09:00:00Z", "材料一");
+        RcaTaskExecutor probing = (task, run, incident, attempt, heartbeat) -> {
+            // 模拟取消事务先胜（同 markRunRunningLosesCas 案式：CAS 条件写）
+            long rev = stores.runs.currentRevision(run.id()).orElse(0L);
+            assertThat(stores.runs.updateIfRevision(new RcaRun(run.id(), run.incidentId(),
+                    run.generation(), run.trigger(), RcaRunState.CANCELLED,
+                    run.investigationHash(), run.createdAt(), clock.now, run.startedAt(),
+                    clock.now, null), rev)).isTrue();
+            heartbeat.run();   // → 心跳探针：CANCELLED → StoppedException(RUN_CANCELLED)
+            return RcaTaskExecutor.ExecutionResult.success(staticArtifact());   // 不可达
+        };
+        RcaWorker w = newWorkerWith(probing);
+
+        assertThat(w.runOneCycle()).isEqualTo(RcaWorker.CycleOutcome.EXECUTED);
+
+        assertThat(stores.runs.all().get(0).state())
+                .as("取消不复活、不被执行器改写").isEqualTo(RcaRunState.CANCELLED);
+        assertThat(stores.tasks.all().get(0).state())
+                .as("停止走终态收敛，不退避重试").isNotEqualTo(RcaTaskState.RETRY_WAIT);
+    }
+
     // ------------------------------------------------------------------ ST-A08 旧 epoch 拒写
 
     @Test

@@ -71,13 +71,15 @@ public class Am4ShadowTriggerConfig {
             MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent, ChangeAgent am4ChangeAgent,
             NativeRcaAgent am4NativeRcaAgent, SchedulerSlotRepository schedulerSlotRepository,
             EngineComparisonRecorder engineComparisonRecorder,
+            org.springframework.transaction.support.TransactionOperations tx,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender,
             @Value("${app.alert.worker.slot-scope:rca}") String slotScope,
             @Value("${am4.shadow-trigger.holmes-run-id}") UUID holmesRunId) {
         Am4ShadowTrigger trigger = new Am4ShadowTrigger(am4DeterministicSupervisor,
                 rcaRunRepository, rcaTaskRepository, evidenceRepository,
                 evidenceSnapshotRepository, am4MetricsAgent, am4LogsAgent, am4ChangeAgent,
                 am4NativeRcaAgent, schedulerSlotRepository, slotScope, AlertClock.system(),
-                engineComparisonRecorder);
+                engineComparisonRecorder, tx, rcaEventAppender);
         return args -> {
             trigger.trigger(holmesRunId);
             // 影子池非 daemon 线程会挂住 JVM——一次性入口显式退出（Spring shutdown

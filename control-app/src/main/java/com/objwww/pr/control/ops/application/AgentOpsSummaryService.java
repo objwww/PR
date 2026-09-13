@@ -59,4 +59,29 @@ public class AgentOpsSummaryService {
         return new WorkerActivityResponse(reader.workerActivity(at, window),
                 window.toMinutes(), true, at);
     }
+
+    /**
+     * OP-03 动作分析汇总（近 24h 窗；record 字段名即 JSON 契约）：
+     * duplicateRate 分母显式携带（logicalActions=0 → 0.0，前端按分母展示）；
+     * descriptiveNotCausal 恒 true——分类是描述性归因，因果声称须配对实验（§4.1）；
+     * 未分析 Run 不入分子分母（NOT_ASSESSED ≠ 0 价值）。
+     */
+    public record ActionAssessmentResponse(long logicalActions, double duplicateRate,
+            long newObservations, long confirmsOrRefutes, long noData,
+            long sourceFailed, long undetermined, long assessedRuns,
+            String assessorWindow, String confidenceKind, boolean descriptiveNotCausal,
+            Instant generatedAt) {
+    }
+
+    public ActionAssessmentResponse actionAssessment() {
+        Instant at = now.get();
+        AgentOpsReader.ActionAssessmentStats stats =
+                reader.actionAssessmentStats(at.minus(Duration.ofHours(24)));
+        double rate = stats.logicalActions() == 0 ? 0.0
+                : (double) stats.duplicateActions() / stats.logicalActions();
+        return new ActionAssessmentResponse(stats.logicalActions(), rate,
+                stats.newObservations(), stats.confirmsOrRefutes(), stats.noData(),
+                stats.sourceFailed(), stats.undetermined(), stats.assessedRuns(),
+                "24h", "deterministic-rules.v1", true, at);
+    }
 }

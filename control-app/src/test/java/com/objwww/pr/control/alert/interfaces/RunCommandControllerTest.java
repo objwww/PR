@@ -48,7 +48,9 @@ class RunCommandControllerTest {
                 RcaRunState.RUNNING, Digest.sha256Of("inv"),
                 NOW.minus(Duration.ofMinutes(5)), NOW, NOW, null, null));
         CommandService service = new CommandService(
-                stores.commands, stores.runs, stores.rcaEvents, CLOCK);
+                stores.commands, stores.runs, stores.rcaEvents,
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
+                CLOCK);
         // EN-04：CONFIG_SWITCH 分流面（代理件空史 = 一切切换快败，本类只测 HTTP 面）
         com.objwww.pr.control.alert.application.RunConfigSwitchService switchService =
                 new com.objwww.pr.control.alert.application.RunConfigSwitchService(
@@ -69,7 +71,7 @@ class RunCommandControllerTest {
                             }
                         }, CLOCK);
         mvc = MockMvcBuilders.standaloneSetup(
-                        new RunCommandController(service, switchService, stores.runs))
+                        new RunCommandController(service, switchService, stores.runs, null))
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("sre-li", null, java.util.List.of()));

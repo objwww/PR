@@ -84,7 +84,7 @@ class AlertMetricsLabelAllowlistTest {
     }
 
     @Test
-    @DisplayName("allowlist：全 registry tag 键 ⊆ {decision, validation, engine, disagree}，值无 UUID 且截断 64")
+    @DisplayName("allowlist：全 registry tag 键 ⊆ {decision, validation, engine, disagree, outcome, channel}，值无 UUID 且截断 64")
     void labelKeysStayWithinAllowlist() {
         metrics.taskDecision("COMPLETED", "HOLMES");
         metrics.taskDecision("DEAD", "x".repeat(200));
@@ -95,9 +95,20 @@ class AlertMetricsLabelAllowlistTest {
         metrics.fallbackDecision("INELIGIBLE_ERROR_CLASS");
         metrics.holmesShadowSample("RATE_NOT_SELECTED");
         metrics.holmesShadowWork("INCIDENT_BUSY");
+        // WC-5：对账观测面全部入账（channel/decision 封闭集；runId 不进标签）
+        metrics.reconcileScan("active", true, 5);
+        metrics.reconcileScan("cleanup", false, 7);
+        metrics.reconcileDecision("NOOP");
+        metrics.cancelToQuiesce(12);
+        metrics.cancelToQuiesce(-1);
+        metrics.lateCommitRejected();
+        metrics.unknownAction(3);
+        metrics.unknownAction(0);
+        metrics.reconcileScanSucceeded(123L);
+        metrics.reconcileScanObserved(50, 2);
 
         List<String> allowlist = List.of("decision", "validation", "engine", "disagree",
-                "outcome");
+                "outcome", "channel");
         for (Meter meter : registry.getMeters()) {
             for (Tag tag : meter.getId().getTags()) {
                 assertThat(allowlist).contains(tag.getKey());
@@ -105,6 +116,58 @@ class AlertMetricsLabelAllowlistTest {
                 assertThat(UUID_LIKE.matcher(tag.getValue()).matches()).isFalse();
             }
         }
+    }
+
+    @Test
+    @DisplayName("WC-5 看门狗观测面：扫描时长/失败计数分通道，gauge 覆盖写且 -1 保持上一拍")
+    void wc5ReconcileObservabilityMeters() {
+        metrics.reconcileScan("active", true, 5);
+        metrics.reconcileScan("active", false, 7);
+        metrics.reconcileScan("cleanup", false, 9);
+        assertThat(registry.get("rca_reconcile_scan_duration").timers()).hasSize(2);
+        assertThat(registry.get("rca_reconcile_scan_duration").tags("channel", "active")
+                .timer().count()).isEqualTo(2);
+        assertThat(registry.counter("rca_reconcile_scan_failure_total",
+                "channel", "active").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_reconcile_scan_failure_total",
+                "channel", "cleanup").count()).isEqualTo(1.0);
+        assertThat(registry.counter("rca_reconcile_scan_failure_total",
+                "channel", "active").count()).isEqualTo(1.0);
+
+        // gauge 族：成功拍覆盖写；读取失败拍传 -1 = 保持上一拍（不假造 0）
+        metrics.reconcileScanSucceeded(1_000L);
+        metrics.reconcileScanObserved(2_000L, 3);
+        assertThat(registry.get("rca_reconcile_last_success_epoch_ms").gauge().value())
+                .isEqualTo(1_000.0);
+        assertThat(registry.get("rca_reconcile_oldest_unseen_age_ms").gauge().value())
+                .isEqualTo(2_000.0);
+        assertThat(registry.get("rca_reconcile_terminal_run_open_tasks").gauge().value())
+                .isEqualTo(3.0);
+        metrics.reconcileScanObserved(-1, -1);
+        assertThat(registry.get("rca_reconcile_oldest_unseen_age_ms").gauge().value())
+                .isEqualTo(2_000.0);
+        assertThat(registry.get("rca_reconcile_terminal_run_open_tasks").gauge().value())
+                .isEqualTo(3.0);
+
+        // 计数族：decision/迟到提交/UNKNOWN 合并计数；负时长静默丢弃
+        metrics.reconcileDecision("NOOP");
+        metrics.reconcileDecision("NOOP");
+        metrics.reconcileDecision("FORCE_CANCEL");
+        assertThat(registry.counter("rca_reconcile_decision_total",
+                "decision", "NOOP").count()).isEqualTo(2.0);
+        assertThat(registry.counter("rca_reconcile_decision_total",
+                "decision", "FORCE_CANCEL").count()).isEqualTo(1.0);
+        metrics.lateCommitRejected();
+        assertThat(registry.get("rca_late_commit_rejected_total").counter().count())
+                .isEqualTo(1.0);
+        metrics.unknownAction(4);
+        metrics.unknownAction(0);
+        assertThat(registry.get("rca_reconcile_unknown_action_total").counter().count())
+                .isEqualTo(4.0);
+        // 负时长不落表（timer 惰性注册：无记录 = 无 meter）
+        assertThat((Object) registry.find("rca_cancel_to_quiesce").timer()).isNull();
+        metrics.cancelToQuiesce(12);
+        assertThat(registry.get("rca_cancel_to_quiesce").timer().count()).isEqualTo(1);
     }
 
     @Test

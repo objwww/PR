@@ -43,7 +43,9 @@ class CommandServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CommandService(commands, runs, appender, CLOCK);
+        service = new CommandService(commands, runs, appender,
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction(),
+                CLOCK);
     }
 
     @Test
@@ -222,6 +224,79 @@ class CommandServiceTest {
         assertThat(result.replayed()).isTrue();
     }
 
+    // ------------------------------------------------ WC-2：应用事务原子性与恢复面身份
+
+    @Test
+    void wc2_cancelApplyIsSingleTransactionBoundary() {
+        // WC-T09(UT面)：CAS/事件/命令标记三写同事务——tx 边界记录器证明全部落在
+        // apply 事务内（insert 在事务外 = phase1 先持久化不变）
+        UUID runId = run(RcaRunState.RUNNING);
+        List<String> trace = new ArrayList<>();
+        CommandService traced = new CommandService(commands, runs, appender,
+                new org.springframework.transaction.support.TransactionOperations() {
+                    @Override
+                    public <T> T execute(
+                            org.springframework.transaction.support.TransactionCallback<T> action) {
+                        trace.add("tx-begin");
+                        try {
+                            return action.doInTransaction(null);
+                        } finally {
+                            trace.add("tx-end");
+                        }
+                    }
+                }, CLOCK);
+
+        CommandService.Result result = traced.submit(runId, OperatorCommand.Type.CANCEL,
+                "op-1", 0, Map.of(), "operator");
+
+        assertThat(result.state()).isEqualTo(OperatorCommand.State.APPLIED);
+        assertThat(trace).containsExactly("tx-begin", "tx-end");
+        assertThat(commands.opOrder).as("phase1 insert 在事务外，标记在事务内")
+                .containsExactly("insert", "updateState");
+        assertThat(appender.events).hasSize(1);
+    }
+
+    @Test
+    void wc2_legacyMultiCandidateCancelNotProvenIsRejectedNotAssumed() {
+        // WC-T11(UT面)：遗留半应用行 + 多 CANCEL 候选 → 身份不可证明：不冒认 APPLIED，
+        // 按修订漂移拒绝（恢复异常已结构化留痕，交对账面）
+        UUID runId = run(RcaRunState.CANCELLED);
+        runs.revisions.put(runId, 1L);
+        UUID orphanId = UUID.randomUUID();
+        commands.rows.put(orphanId, persisted(orphanId, runId, OperatorCommand.Type.CANCEL, "op-1"));
+        UUID otherId = UUID.randomUUID();
+        commands.rows.put(otherId, new OperatorCommand(otherId, runId,
+                OperatorCommand.Type.CANCEL, "op-0", 0, Map.of(),
+                OperatorCommand.State.REJECTED_STALE, "operator-2",
+                NOW.minusSeconds(30), NOW.minusSeconds(29)));
+
+        CommandService.Result result =
+                service.submit(runId, OperatorCommand.Type.CANCEL, "op-1", 0, Map.of(), "operator");
+
+        assertThat(result.state()).as("多候选不冒认").isNotEqualTo(OperatorCommand.State.APPLIED);
+        assertThat(result.state()).isEqualTo(OperatorCommand.State.REJECTED_STALE);
+        assertThat(commands.rows.get(orphanId).state())
+                .isEqualTo(OperatorCommand.State.REJECTED_STALE);
+        assertThat(appender.events).as("恢复面零事件").isEmpty();
+    }
+
+    @Test
+    void wc2_tenReplaysAreStableWithSingleEvent() {
+        // WC-T10(UT面)：同幂等键重放 10 次结果稳定、事件恰一条
+        UUID runId = run(RcaRunState.RUNNING);
+        CommandService.Result first =
+                service.submit(runId, OperatorCommand.Type.CANCEL, "op-1", 0, Map.of(), "operator");
+        for (int i = 0; i < 10; i++) {
+            CommandService.Result replay =
+                    service.submit(runId, OperatorCommand.Type.CANCEL, "op-1", 0, Map.of(), "operator");
+            assertThat(replay.commandId()).isEqualTo(first.commandId());
+            assertThat(replay.state()).isEqualTo(OperatorCommand.State.APPLIED);
+            assertThat(replay.replayed()).isTrue();
+        }
+        assertThat(commands.rows).hasSize(1);
+        assertThat(appender.events).hasSize(1);
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     private UUID run(RcaRunState state) {
@@ -273,6 +348,26 @@ class CommandServiceTest {
             }
             rows.put(id, row.withState(state, appliedAt));
             return true;
+        }
+
+        /** WC-2 应用事务标记（from 锚 CAS；调用序记录与 updateState 同槽） */
+        @Override
+        public boolean advanceState(UUID id, OperatorCommand.State from,
+                                    OperatorCommand.State to, Instant appliedAt) {
+            opOrder.add("updateState");
+            OperatorCommand row = rows.get(id);
+            if (row == null || row.state() != from) {
+                return false;
+            }
+            rows.put(id, row.withState(to, appliedAt));
+            return true;
+        }
+
+        @Override
+        public List<OperatorCommand> findByRunAndType(UUID runId, OperatorCommand.Type type) {
+            return rows.values().stream()
+                    .filter(r -> r.runId().equals(runId) && r.type() == type)
+                    .toList();
         }
     }
 

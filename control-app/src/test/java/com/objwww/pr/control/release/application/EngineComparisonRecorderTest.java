@@ -308,6 +308,11 @@ class EngineComparisonRecorderTest {
         }
 
         @Override
+        public java.util.Optional<RcaReport> findById(UUID id) {
+            return rows.stream().filter(r -> r.id().equals(id)).findFirst();
+        }
+
+        @Override
         public List<RcaReport> findByRunId(UUID runId) {
             return rows.stream().filter(r -> r.runId().equals(runId)).toList();
         }

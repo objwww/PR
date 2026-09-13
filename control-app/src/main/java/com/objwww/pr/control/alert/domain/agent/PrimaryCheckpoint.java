@@ -28,6 +28,12 @@ import java.util.UUID;
  * （current_memory_id 面；context_snapshot 锚即 inputSnapshotDigest）。快照本体
  * 落 rca_working_memory（append-only 深冻结），检查点只存引用不复制历史——
  * 崩溃恢复重驱读同快照，不额外生成另一版（MC07）。
+ *
+ * <p>revision（V99，CL-01 提交围栏）：真正的并发修订——运行路径提交必须以
+ * {@code WHERE revision = 期望值} 条件写推进（PrimaryCheckpointCommitService），
+ * 与 decisionSeq 的"动作序"语义分型不可互代。schemaVersion 为记忆/协议批次
+ * （新 Run 启用新协议）；currentContextDigest/currentSummaryId 为摘要消费指针
+ * （CL-08）。旧形态构造（无 revision）= revision 0 的存量兼容面。
  */
 public record PrimaryCheckpoint(
         UUID taskId,
@@ -43,7 +49,21 @@ public record PrimaryCheckpoint(
         List<Map<String, Object>> finalClaims,
         List<String> finalMissingInformation,
         String lastError,
-        Instant updatedAt) {
+        Instant updatedAt,
+        long revision,
+        int schemaVersion,
+        String currentContextDigest,
+        UUID currentSummaryId) {
+
+    /** V99 前形态（revision 0）：存量调用/测试面零改动 */
+    public PrimaryCheckpoint(UUID taskId, UUID runId, int roundId, Phase phase,
+            int decisionSeq, int stepsUsed, int batchesUsed, String inputSnapshotDigest,
+            UUID memoryId, String memoryDigest, List<Map<String, Object>> finalClaims,
+            List<String> finalMissingInformation, String lastError, Instant updatedAt) {
+        this(taskId, runId, roundId, phase, decisionSeq, stepsUsed, batchesUsed,
+                inputSnapshotDigest, memoryId, memoryDigest, finalClaims,
+                finalMissingInformation, lastError, updatedAt, 0, 0, null, null);
+    }
 
     public enum Phase {PRIMARY_READY, WAITING_CHILDREN}
 
@@ -76,7 +96,8 @@ public record PrimaryCheckpoint(
     public PrimaryCheckpoint withPhase(Phase newPhase, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, newPhase, decisionSeq,
                 stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
-                finalClaims, finalMissingInformation, lastError, now);
+                finalClaims, finalMissingInformation, lastError, now,
+                revision, schemaVersion, currentContextDigest, currentSummaryId);
     }
 
     /**
@@ -93,7 +114,8 @@ public record PrimaryCheckpoint(
                 snapshotDigest != null ? snapshotDigest : inputSnapshotDigest,
                 memoryId != null ? memoryId : this.memoryId,
                 memoryDigest != null ? memoryDigest : this.memoryDigest,
-                finalClaims, finalMissingInformation, lastError, now);
+                finalClaims, finalMissingInformation, lastError, now,
+                revision, schemaVersion, currentContextDigest, currentSummaryId);
     }
 
     /**
@@ -105,7 +127,8 @@ public record PrimaryCheckpoint(
     public PrimaryCheckpoint withDecisionAdvanced(String lastError, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq + 1,
                 stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
-                finalClaims, finalMissingInformation, lastError, now);
+                finalClaims, finalMissingInformation, lastError, now,
+                revision, schemaVersion, currentContextDigest, currentSummaryId);
     }
 
     /**
@@ -117,7 +140,8 @@ public record PrimaryCheckpoint(
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
                 stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
                 finalClaims, finalMissingInformation,
-                Objects.requireNonNull(failureSignature, "failureSignature"), now);
+                Objects.requireNonNull(failureSignature, "failureSignature"), now,
+                revision, schemaVersion, currentContextDigest, currentSummaryId);
     }
 
     /** FINAL 落账：提案进检查点，phase 就地固化（后续只被报告相位消费） */
@@ -125,6 +149,29 @@ public record PrimaryCheckpoint(
             List<String> missingInformation, Instant now) {
         return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
                 stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
-                claims, missingInformation, lastError, now);
+                claims, missingInformation, lastError, now,
+                revision, schemaVersion, currentContextDigest, currentSummaryId);
+    }
+
+    /** CL-01：提交围栏推进后的修订回填（镜像 SQL revision=revision+1 的已落库值） */
+    public PrimaryCheckpoint withRevision(long newRevision) {
+        return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                finalClaims, finalMissingInformation, lastError, updatedAt,
+                newRevision, schemaVersion, currentContextDigest, currentSummaryId);
+    }
+
+    /**
+     * CL-07 摘要消费指针（CONSUME_VALIDATED）：经提交围栏 SUMMARY_CONSUMED 推进
+     * ——装配面据 currentSummaryId 读已验证摘要（CL-08），旧正文全量替换消费
+     * 待 MC34 三臂对照后再启用。零推进字段（计数/相位/快照不动），仅指针与
+     * updatedAt 变化，随 revision 条件写原子生效。
+     */
+    public PrimaryCheckpoint withSummaryConsumed(UUID summaryId, Instant now) {
+        return new PrimaryCheckpoint(taskId, runId, roundId, phase, decisionSeq,
+                stepsUsed, batchesUsed, inputSnapshotDigest, memoryId, memoryDigest,
+                finalClaims, finalMissingInformation, lastError, now,
+                revision, schemaVersion, currentContextDigest,
+                Objects.requireNonNull(summaryId, "summaryId"));
     }
 }

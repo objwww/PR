@@ -136,4 +136,16 @@ public class PostgresRcaToolInvocationLedger implements RcaToolInvocationLedger 
                         rs.getObject("result_ref", UUID.class)))
                 .list());
     }
+
+    /** WC-5 读面：run × 结算状态行数（unknownActionCount 数据面） */
+    @Override
+    public long countByRunAndState(UUID runId, ToolInvocationState state) {
+        return tx.execute(status -> jdbc.sql("""
+                        SELECT count(*) FROM rca_tool_invocation
+                         WHERE run_id = :run AND state = :state
+                        """)
+                .param("run", runId)
+                .param("state", state.name())
+                .query(Long.class).single());
+    }
 }

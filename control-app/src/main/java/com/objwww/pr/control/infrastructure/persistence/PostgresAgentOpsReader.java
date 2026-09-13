@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -150,5 +151,45 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                         rs.getTimestamp("last_activity_at").toInstant(),
                         rs.getLong("in_flight_tasks")))
                 .list();
+    }
+
+    /**
+     * OP-03：动作分析行聚合（computed_at >= since 窗）——SQL 侧计数，
+     * 未被分析的 Run 不在表内即不进任何分子分母（NOT_ASSESSED ≠ 0 价值）。
+     */
+    @Override
+    public AgentOpsReader.ActionAssessmentStats actionAssessmentStats(Instant since) {
+        Long logical = jdbc.sql("""
+                        select count(*) from rca_action_assessment
+                        where computed_at >= :since
+                        """)
+                .param("since", Timestamp.from(since))
+                .query(Long.class)
+                .single();
+        Map<String, Long> byClass = new java.util.HashMap<>();
+        jdbc.sql("""
+                        select classification, count(*) as n from rca_action_assessment
+                        where computed_at >= :since group by classification
+                        """)
+                .param("since", Timestamp.from(since))
+                .query((rs, i) -> Map.entry(rs.getString("classification"), rs.getLong("n")))
+                .list()
+                .forEach(e -> byClass.put(e.getKey(), e.getValue()));
+        Long runs = jdbc.sql("""
+                        select count(distinct run_id) from rca_action_assessment
+                        where computed_at >= :since
+                        """)
+                .param("since", Timestamp.from(since))
+                .query(Long.class)
+                .single();
+        return new AgentOpsReader.ActionAssessmentStats(
+                logical == null ? 0 : logical,
+                byClass.getOrDefault("DUPLICATE_SAME_SNAPSHOT", 0L),
+                byClass.getOrDefault("NEW_OBSERVATION", 0L),
+                byClass.getOrDefault("CONFIRMS_OR_REFUTES", 0L),
+                byClass.getOrDefault("NO_DATA", 0L),
+                byClass.getOrDefault("SOURCE_FAILED", 0L),
+                byClass.getOrDefault("UNDETERMINED", 0L),
+                runs == null ? 0 : runs);
     }
 }

@@ -80,6 +80,8 @@ public class ContextAssembler {
     private final OperatorMaterialPort operatorMaterials;
     /** EN-08 装配缝（可空=null 零漂移）：run 钉版 Skill 受控视图入信封 */
     private final SkillPort skillPort;
+    /** CL-08 消费面读缝（可空=null 零漂移）：按检查点 current_summary_id 读已验证摘要 */
+    private final SummaryMaterialPort summaryMaterials;
     private final Clock clock;
     private final ObjectMapper mapper;
 
@@ -121,6 +123,19 @@ public class ContextAssembler {
             OperatorMaterialPort operatorMaterials,
             SkillPort skillPort,
             Clock clock, ObjectMapper mapper) {
+        this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
+                delegationReceipts, operatorMaterials, skillPort, null, clock, mapper);
+    }
+
+    /** 全参构造 + Skill/摘要消费缝（CL-08 validated_summary 槽） */
+    public ContextAssembler(EvidenceRepository evidence,
+            RcaToolInvocationLedger toolLedger,
+            DelegationDecisionRepository delegations,
+            AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
+            DelegationReceiptRepository delegationReceipts,
+            OperatorMaterialPort operatorMaterials,
+            SkillPort skillPort, SummaryMaterialPort summaryMaterials,
+            Clock clock, ObjectMapper mapper) {
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.delegations = Objects.requireNonNull(delegations, "delegations");
@@ -129,6 +144,7 @@ public class ContextAssembler {
         this.delegationReceipts = delegationReceipts;
         this.operatorMaterials = operatorMaterials;
         this.skillPort = skillPort;
+        this.summaryMaterials = summaryMaterials;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
@@ -162,16 +178,56 @@ public class ContextAssembler {
     }
 
     /**
-     * Skill 装配缝（EN-08，SK-08 运行时面）：run 钉版选择（S11 首选随 Run 固定）。
-     * 返回 none=无匹配（钉空退回通用调查）；视图经
-     * SkillSelectionService（release/application）生产——S06 命中/S07 冲突/S08 只出
-     * ACTIVE 在其内部收口。
+     * Skill 装配缝（EN-08 SK-08 运行时面 + CL-05 持久绑定）：每 (run, role,
+     * configEpoch) 的选择是持久事实——roleId/configEpoch/releaseDigest 取自
+     * 冻结任务绑定（可信身份，非装配材料自报）；选择/钉空/并发取一在
+     * SkillSelectionService 收口。返回 none=钉空或消费阻断。
      */
     @FunctionalInterface
     public interface SkillPort {
 
         com.objwww.pr.control.release.application.SkillSelectionService.SkillView
-        select(UUID runId, String alertname, String service);
+        select(UUID runId, String roleId, Long configEpoch, String releaseDigest,
+                String alertname, String service);
+    }
+
+    /**
+     * CL-08 摘要消费读缝：按检查点 current_summary_id 读已提交摘要（CONSUME_
+     * VALIDATED 模式下由 CL-01 围栏钉面）。行缺失/未接缝 → 槽省略，原材料继续
+     * （消费是增益不是依赖）。全量旧正文替换消费待 MC34 三臂对照后启用。
+     */
+    @FunctionalInterface
+    public interface SummaryMaterialPort {
+
+        java.util.Optional<com.objwww.pr.control.alert.domain.agent.ContextSummary>
+        byId(UUID summaryId);
+    }
+
+    /**
+     * validated_summary 槽（CL-08 最小消费面）：经三闸验证的已提交摘要受控投影。
+     * 只在检查点钉了消费指针且行可读时入信封——kept_refs 须为 validRefs 子集
+     * （宿主生成时已保证，模型不得经摘要扩权）。
+     */
+    private void putValidatedSummary(Map<String, Object> envelope,
+            PrimaryCheckpoint checkpoint) {
+        if (summaryMaterials == null || checkpoint.currentSummaryId() == null) {
+            return;
+        }
+        summaryMaterials.byId(checkpoint.currentSummaryId()).ifPresentOrElse(row -> {
+            Map<String, Object> slot = new LinkedHashMap<>();
+            slot.put("summary_id", row.id().toString());
+            slot.put("source_snapshot_digest", row.sourceSnapshotDigest());
+            slot.put("event_seq", List.of(row.eventSeqFrom(), row.eventSeqTo()));
+            Frag text = clip(row.summaryText(), SUMMARY_LIMIT);
+            slot.put("summary", text.text());
+            slot.put("summary_truncated", text.truncated());
+            slot.put("kept_refs", row.requiredRefs());
+            slot.put("omitted_refs", row.omittedRefs());
+            slot.put("note", "经三闸验证的已提交摘要（CL-07 CONSUME_VALIDATED）；"
+                    + "全量旧正文替换消费待 MC34 三臂对照后启用");
+            envelope.put("validated_summary", slot);
+        }, () -> log.warn("current_summary_id 无已提交摘要行（原材料继续）run={} id={}",
+                checkpoint.runId(), checkpoint.currentSummaryId()));
     }
 
     /**
@@ -205,36 +261,51 @@ public class ContextAssembler {
      * 装配一步的信封与 prompt（供 BoundedLlmRoleRunner 单步驱动调用）。
      * delegationBatchesRemaining 与裁决同源（Supervisor 旋钮 − 检查点已耗），禁自读配置
      * 致漂移；stableDigest 在注入 last_error 前计算（冻结面不含反馈）。
+     *
+     * <p>CL-03（§3.1）：一次读取形成显式证据成员快照（evidence/alert 材料各恰一次
+     * 读库，投影/validRefs/included/omitted 同源不漂移）；装配零写入——工作记忆只
+     * 产候选行（memory 字段），append 副作用迁至 PrimaryCheckpointCommitService
+     * 的 STEP_COMPLETED 提交事务（模型未执行不落记忆，§3.1"不在 assemble 抢先 append"）。
      */
     public Assembly assemble(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, int delegationBatchesRemaining) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(checkpoint, "checkpoint");
+        // CL-03 单次快照：证据集合与告警材料各恰一次读库，本步内不漂移（§3.1）
+        List<EvidenceEnvelope> evidenceRows = new ArrayList<>(
+                evidence.findByRunId(request.task().runId()));
+        evidenceRows.sort(Comparator.comparing(EvidenceEnvelope::timeEnd,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(Comparator.comparing(EvidenceEnvelope::evidenceId).reversed()));
+        AlertMaterial material = alertMaterials.byRun(request.task().runId());
+
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("role", roleOf(request.profile()));
         envelope.put("run_id", request.task().runId().toString());
         envelope.put("task_id", request.task().id().toString());
         envelope.put("round_id", checkpoint.roundId());
-        envelope.put("alert", alertOf(request));
-        envelope.put("objective", objectiveOf(request));
+        envelope.put("alert", alertOf(request, material));
+        envelope.put("objective", objectiveOf(request, material));
         envelope.put("budget", budgetOf(request, checkpoint, delegationBatchesRemaining));
-        EvidenceWindow window = evidenceOf(request);
+        EvidenceWindow window = evidenceOf(request, evidenceRows);
         envelope.put("evidence", window.rows);
         ReceiptSection receiptSection = receiptsOf(request, checkpoint);
         envelope.put("child_receipts", receiptSection.rows());
         envelope.put("operator_materials", materialsOf(request));
-        Map<String, Object> skill = skillOf(request);
+        Map<String, Object> skill = skillOf(request, material);
         if (skill != null) {
             envelope.put("skill", skill);
         }
-        MemoryCommit memory = commitMemory(request, checkpoint, receiptSection);
+        MemoryCommit memory = candidateMemory(request, checkpoint, receiptSection);
         envelope.put("working_memory", memory.slots());
         envelope.put("trajectory", trajectoryOf(request));
+        putValidatedSummary(envelope, checkpoint);
         envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
                 .sorted().toList());
         // BA-112：args JSON Schema 钉版下发（Profile inputSchema 进 digest）
         envelope.put("tool_schemas", request.profile().inputSchema());
-        envelope.put("valid_artifact_refs", validRefsOf(request).stream().sorted().toList());
+        envelope.put("valid_artifact_refs",
+                validRefsOf(request, evidenceRows).stream().sorted().toList());
 
         String stablePrompt = request.profile().prompt() + "\n" + jsonOf(envelope)
                 + BoundedLlmRoleRunner.PROTOCOL_SUFFIX;
@@ -257,9 +328,9 @@ public class ContextAssembler {
     }
 
     /** 告警材料 + 冻结窗（§19.1：身份/窗为模型可读事实，非 UUID 串） */
-    private Map<String, Object> alertOf(RoleRunner.RoleDriveRequest request) {
+    private Map<String, Object> alertOf(RoleRunner.RoleDriveRequest request,
+            AlertMaterial material) {
         Map<String, Object> alert = new LinkedHashMap<>();
-        AlertMaterial material = alertMaterials.byRun(request.task().runId());
         if (material.alertname() != null) {
             alert.put("alertname", material.alertname());
         }
@@ -287,8 +358,7 @@ public class ContextAssembler {
      * 调查目标（一句话，宿主铸定非模型自撰）：从冻结材料确定性导出——
      * 装配时点无独立 objective 列，告警身份+冻结窗即目标身份（偏差登记执行日志）。
      */
-    private String objectiveOf(RoleRunner.RoleDriveRequest request) {
-        AlertMaterial material = alertMaterials.byRun(request.task().runId());
+    private String objectiveOf(RoleRunner.RoleDriveRequest request, AlertMaterial material) {
         String subject = material.alertname() != null ? material.alertname() : "告警事故";
         String scope = material.service() != null ? "（service=" + material.service() + "）" : "";
         return "调查" + subject + scope + "在冻结窗 " + request.startEpoch() + "/"
@@ -306,13 +376,13 @@ public class ContextAssembler {
         return budget;
     }
 
-    /** 证据窗：倒序 ≤20 条有界摘要 + 溢出留痕 */
-    private EvidenceWindow evidenceOf(RoleRunner.RoleDriveRequest request) {
-        List<EvidenceEnvelope> rows = new ArrayList<>(evidence.findByRunId(
-                request.task().runId()));
-        rows.sort(Comparator.comparing(EvidenceEnvelope::timeEnd,
-                        Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(Comparator.comparing(EvidenceEnvelope::evidenceId).reversed()));
+    /**
+     * 证据窗（CL-03 §3.2 有效信息投影）：倒序 ≤{@value #EVIDENCE_LIMIT} 条分型投影
+     * （日志聚合保频次、指标保数值/单位、变更保前后差异、RAG 标 REFERENCE、未知形状
+     * 诚实有界投影）+ 溢出留痕。投影源 = 本步成员快照（单次读库，§3.1）。
+     */
+    private EvidenceWindow evidenceOf(RoleRunner.RoleDriveRequest request,
+            List<EvidenceEnvelope> rows) {
         List<Map<String, Object>> summarized = new ArrayList<>();
         List<String> included = new ArrayList<>();
         List<String> omitted = new ArrayList<>();
@@ -323,16 +393,7 @@ public class ContextAssembler {
                 continue;
             }
             included.add(row.evidenceId().toString());
-            Frag summary = summarize(row.canonicalPayload());
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("ref", row.evidenceId().toString());
-            item.put("type", row.evidenceType());
-            if (row.timeEnd() != null) {
-                item.put("at", row.timeEnd().toString());
-            }
-            item.put("summary", summary.text());
-            item.put("truncated", summary.truncated());
-            summarized.add(item);
+            summarized.add(projectEvidence(row));
         }
         return new EvidenceWindow(summarized, included, omitted);
     }
@@ -341,29 +402,340 @@ public class ContextAssembler {
             List<String> includedRefs, List<String> omittedRefs) {
     }
 
-    /** 本步工作记忆提交面：信封实际下发的槽 + 深冻结快照行（未接持久面时 row=null） */
+    // ------------------------------------------------------ CL-03 §3.2 分型投影
+
+    /** 单条证据 observations 展示上限（聚合组/序列行共享同一上限） */
+    static final int OBSERVATION_LIMIT = 6;
+
+    /** 证据投影公共骨架：ref/type/source_digest/window + 分型载荷 + 截断留痕 */
+    private Map<String, Object> projectEvidence(EvidenceEnvelope row) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("ref", row.evidenceId().toString());
+        item.put("type", row.evidenceType());
+        item.put("source_digest", row.payloadDigest());
+        if (row.timeStart() != null || row.timeEnd() != null) {
+            Map<String, Object> window = new LinkedHashMap<>();
+            if (row.timeStart() != null) {
+                window.put("start", row.timeStart().toString());
+            }
+            if (row.timeEnd() != null) {
+                window.put("end", row.timeEnd().toString());
+            }
+            item.put("window", window);
+        }
+        JsonNode payload = parsePayload(row.canonicalPayload());
+        String type = row.evidenceType() == null ? "" : row.evidenceType();
+        if (type.startsWith("logs.")) {
+            projectLogs(item, payload);
+        } else if (type.startsWith("metrics.")) {
+            projectMetrics(item, payload);
+        } else if (type.startsWith("change.")) {
+            projectChange(item, payload);
+        } else if (type.startsWith("runbook.") || type.startsWith("rca_history.")) {
+            projectReference(item, payload);
+        } else {
+            projectUnknown(item, row.canonicalPayload());
+        }
+        return item;
+    }
+
+    private JsonNode parsePayload(String canonicalPayload) {
+        try {
+            return mapper.readTree(canonicalPayload == null ? "{}" : canonicalPayload);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * logs.*：data.result[{ts,service,line}] 按错误签名聚合——严重级签名优先（不同
+     * 严重错误不被重复普通日志挤掉，§3.2 表格），同级按频次降序；每组保代表行+
+     * 频次+首末时间。签名 = uuid/hex/数字 归一化后的行模板。
+     */
+    private void projectLogs(Map<String, Object> item, JsonNode payload) {
+        JsonNode result = payload == null ? null : payload.path("data").path("result");
+        if (result == null || !result.isArray()) {
+            projectUnknown(item, payload == null ? null : payload.toString());
+            return;
+        }
+        Map<String, List<JsonNode>> groups = new LinkedHashMap<>();
+        Map<String, Boolean> severe = new LinkedHashMap<>();
+        int total = 0;
+        for (JsonNode entry : result) {
+            total++;
+            String line = entry.path("line").asText("");
+            String signature = logSignature(line);
+            groups.computeIfAbsent(signature, k -> new ArrayList<>()).add(entry);
+            severe.putIfAbsent(signature, isSevereLog(line));
+        }
+        List<Map.Entry<String, List<JsonNode>>> ranked = new ArrayList<>(groups.entrySet());
+        ranked.sort((a, b) -> {
+            boolean sa = severe.get(a.getKey());
+            boolean sb = severe.get(b.getKey());
+            if (sa != sb) {
+                return sa ? -1 : 1;      // 严重级签名恒先（§3.2：不被重复普通日志挤掉）
+            }
+            return Integer.compare(b.getValue().size(), a.getValue().size());
+        });
+        List<Map<String, Object>> observations = new ArrayList<>();
+        int shown = 0;
+        for (Map.Entry<String, List<JsonNode>> group : ranked) {
+            if (observations.size() >= OBSERVATION_LIMIT) {
+                break;
+            }
+            List<JsonNode> rowsOfGroup = group.getValue();
+            // 首末时间与输入序解耦：ISO-8601 同形字符串字典序即时间序
+            JsonNode rep = rowsOfGroup.get(0);
+            String firstAt = null;
+            String lastAt = null;
+            for (JsonNode entry : rowsOfGroup) {
+                String ts = entry.path("ts").asText(null);
+                if (ts == null) {
+                    continue;
+                }
+                if (firstAt == null || ts.compareTo(firstAt) < 0) {
+                    firstAt = ts;
+                }
+                if (lastAt == null || ts.compareTo(lastAt) > 0) {
+                    lastAt = ts;
+                    rep = entry;
+                }
+            }
+            Map<String, Object> observation = new LinkedHashMap<>();
+            observation.put("at", rep.path("ts").asText(null));
+            observation.put("service", rep.path("service").asText(null));
+            observation.put("message", clip(rep.path("line").asText(""), ITEM_LIMIT).text());
+            if (rowsOfGroup.size() > 1) {
+                observation.put("count", rowsOfGroup.size());
+                observation.put("first_at", firstAt);
+                observation.put("last_at", lastAt);
+            }
+            observations.add(observation);
+            shown += rowsOfGroup.size();
+        }
+        item.put("observations", observations);
+        item.put("total_count", total);
+        item.put("shown_count", shown);
+        if (shown < total) {
+            item.put("truncated", true);
+            item.put("omission_reason", "ITEM_LIMIT");
+        }
+    }
+
+    /** 严重行判定（封闭词面：大小写不敏感子串） */
+    private static boolean isSevereLog(String line) {
+        String lower = line.toLowerCase();
+        return lower.contains("error") || lower.contains("fatal")
+                || lower.contains("panic") || lower.contains("exception")
+                || lower.contains("critical");
+    }
+
+    /** 日志签名：uuid/hex/数字 归一化（确定性——同错误模板同签名） */
+    static String logSignature(String line) {
+        return line.toLowerCase()
+                .replaceAll("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                        "<uuid>")
+                .replaceAll("\\b[0-9a-f]{12,}\\b", "<hex>")
+                .replaceAll("\\d+", "<n>");
+    }
+
+    /**
+     * metrics.*：data.result 序列投影——标签集（有界）+ value/values 实际数值 + 单位
+     * （源确有提供时，catalog 行有 unit 字段）；不展示裸 status（§3.2：不得只展示
+     * status）。
+     */
+    private void projectMetrics(Map<String, Object> item, JsonNode payload) {
+        JsonNode result = payload == null ? null : payload.path("data").path("result");
+        if (result == null || !result.isArray()) {
+            projectUnknown(item, payload == null ? null : payload.toString());
+            return;
+        }
+        List<Map<String, Object>> observations = new ArrayList<>();
+        int total = 0;
+        for (JsonNode entry : result) {
+            if (observations.size() >= OBSERVATION_LIMIT) {
+                total++;
+                continue;
+            }
+            Map<String, Object> observation = new LinkedHashMap<>();
+            JsonNode labels = entry.path("metric");
+            if (labels.isObject() && !labels.isEmpty()) {
+                Map<String, String> bounded = new LinkedHashMap<>();
+                labels.fields().forEachRemaining(f ->
+                        bounded.put(f.getKey(), clip(f.getValue().asText(""), 32).text()));
+                observation.put("labels", bounded);
+            }
+            JsonNode value = entry.path("value");
+            if (value.isArray() && value.size() >= 2) {
+                observation.put("value", value.get(1).asText());
+                observation.put("at", value.get(0).asText());
+            } else if (entry.path("values").isArray()) {
+                JsonNode values = entry.path("values");
+                List<String> picked = new ArrayList<>();
+                picked.add(values.get(0).get(1).asText());
+                if (values.size() > 2) {
+                    picked.add(values.get(values.size() / 2).get(1).asText());
+                }
+                picked.add(values.get(values.size() - 1).get(1).asText());
+                observation.put("values_first_mid_last", picked);
+                observation.put("value_count", values.size());
+            } else if (entry.isObject() && !entry.has("metric")) {
+                // catalog/label_values 行：扁平字段（name/type/unit/value…）有界直投
+                entry.fields().forEachRemaining(f -> observation.put(f.getKey(),
+                        clip(f.getValue().asText(""), ITEM_LIMIT).text()));
+            }
+            if (entry.has("unit") && entry.path("unit").asText("").isEmpty()) {
+                observation.remove("unit");   // 空单位不冒充"源确有提供"
+            }
+            observations.add(observation);
+            total++;
+        }
+        item.put("observations", observations);
+        item.put("total_count", total);
+        item.put("shown_count", observations.size());
+        if (observations.size() < total) {
+            item.put("truncated", true);
+            item.put("omission_reason", "ITEM_LIMIT");
+        }
+    }
+
+    /**
+     * change.*：变更事实投影——时间/对象/动作 + 窗前基线单列（不冒充窗内变更，
+     * §3.2）。执行器字段名不假定：常见键位（time/created_at、object/service/name、
+     * action/type/state）逐一探测，缺失字段不造数。
+     */
+    private void projectChange(Map<String, Object> item, JsonNode payload) {
+        JsonNode result = payload == null ? null : payload.path("data").path("result");
+        JsonNode baseline = payload == null ? null : payload.path("data").path("baseline");
+        if (result == null || !result.isArray()) {
+            projectUnknown(item, payload == null ? null : payload.toString());
+            return;
+        }
+        List<Map<String, Object>> observations = new ArrayList<>();
+        for (JsonNode entry : result) {
+            if (observations.size() >= OBSERVATION_LIMIT) {
+                break;
+            }
+            Map<String, Object> observation = new LinkedHashMap<>();
+            putIfPresent(observation, entry, "at", "time", "created_at", "ts");
+            putIfPresent(observation, entry, "object", "object", "service", "name");
+            putIfPresent(observation, entry, "action", "action", "type", "state");
+            observation.put("detail", clip(entry.toString(), ITEM_LIMIT).text());
+            observations.add(observation);
+        }
+        item.put("observations", observations);
+        item.put("total_count", result.size());
+        item.put("shown_count", observations.size());
+        if (observations.size() < result.size()) {
+            item.put("truncated", true);
+            item.put("omission_reason", "ITEM_LIMIT");
+        }
+        if (baseline != null && baseline.isArray() && !baseline.isEmpty()) {
+            // 窗前基线单列（§3.2：不冒充窗内变更）
+            item.put("pre_window_baseline_count", baseline.size());
+            item.put("pre_window_baseline_sample", clip(baseline.get(0).toString(),
+                    ITEM_LIMIT).text());
+        }
+    }
+
+    /** runbook 与 rca_history 证据：参考材料——标 REFERENCE，不作当前现场独立证据 */
+    private void projectReference(Map<String, Object> item, JsonNode payload) {
+        item.put("reference", true);
+        if (payload != null && payload.has("data")) {
+            JsonNode data = payload.path("data");
+            if (data.has("digest") || data.has("corpus_digest")) {
+                item.put("doc_digest", data.path("digest").asText(
+                        data.path("corpus_digest").asText(null)));
+            }
+            if (data.has("body") || data.has("content")) {
+                String body = data.has("body") ? data.path("body").asText()
+                        : data.path("content").asText();
+                Frag clipped = clip(body, SUMMARY_LIMIT);
+                item.put("body", clipped.text());
+                item.put("truncated", clipped.truncated());
+            }
+            if (data.path("result").isArray()) {
+                item.put("entries", clip(data.path("result").toString(),
+                        SUMMARY_LIMIT).text());
+            }
+        }
+    }
+
+    /**
+     * 未识别形状（§3.2 末行）：有界 JSON 投影 + 明确 unknown_shape 标记——禁止非对象
+     * 时输出空字符串却无异常标记（解析失败同路：原文截断 + 解析失败标记）。
+     */
+    private void projectUnknown(Map<String, Object> item, String canonicalPayload) {
+        item.put("unknown_shape", true);
+        if (canonicalPayload == null || canonicalPayload.isBlank()) {
+            item.put("parse_failed", true);
+            item.put("bounded_json", "");
+            return;
+        }
+        Frag clipped = clip(canonicalPayload.strip(), SUMMARY_LIMIT);
+        item.put("bounded_json", clipped.text());
+        if (clipped.truncated()) {
+            item.put("truncated", true);
+        }
+    }
+
+    /** 多候选键位逐一探测（缺失不造数；首个命中键保留原名语义归一到目标键） */
+    private static void putIfPresent(Map<String, Object> sink, JsonNode entry,
+            String targetKey, String... candidates) {
+        for (String candidate : candidates) {
+            JsonNode value = entry.path(candidate);
+            if (!value.isMissingNode() && !value.isNull() && !value.asText("").isEmpty()) {
+                sink.put(targetKey, clip(value.asText(), ITEM_LIMIT).text());
+                return;
+            }
+        }
+    }
+
+    /** 本步工作记忆候选面：信封实际下发的槽 + 候选快照行（未接持久面时 row=null） */
     record MemoryCommit(Map<String, List<String>> slots, WorkingMemory row) {
     }
 
     /**
-     * 工作记忆提交（R10）：确定性重建为候选 → append 深冻结（同修订重放返回既有行
-     * ——MC07 崩溃重驱读同快照不另生成；MC06 已提交快照不漂移），信封下发<b>返回行</b>
-     * 的槽（冻结真相，与检查点 memory_id/digest 钉面一致）。未接持久面（legacy 构造）
-     * → 只下发重建槽，不落档。MC22：反证/缺口槽由当前轮 ACCEPTED 回执供给。
+     * 工作记忆候选（R10 + CL-03 §3.1 无写入计算 + CL-06 §5.2 累计合并）：
+     * 从 checkpoint.memory_id 精确读上一版（不以 latestByTask 替代指针），父版
+     * 槽在前 + 本轮宿主可确定 delta 按内容去重追加（反证跨轮保留——MC22）；digest
+     * 构造期一次算定，<b>不在此 append</b>——落库副作用随成功动作在
+     * PrimaryCheckpointCommitService 的 STEP_COMPLETED 提交事务内发生。首期无
+     * memory_delta 决策协议，槽仍为宿主可确定四槽（§5.2 第一批边界）。
      */
-    MemoryCommit commitMemory(RoleRunner.RoleDriveRequest request,
+    MemoryCommit candidateMemory(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, ReceiptSection receiptSection) {
         Map<String, List<String>> rebuilt = rebuildMemorySlots(request, checkpoint,
                 receiptSection);
         if (workingMemory == null) {
             return new MemoryCommit(rebuilt, null);
         }
-        WorkingMemory committed = workingMemory.append(WorkingMemory.of(
+        WorkingMemory previous = checkpoint.memoryId() == null ? null
+                : workingMemory.findById(checkpoint.memoryId()).orElse(null);
+        Map<String, List<String>> merged = mergeAccumulated(previous, rebuilt);
+        WorkingMemory candidate = WorkingMemory.ofV2(
                 UUID.randomUUID(), request.task().runId(), request.task().id(),
-                checkpoint.decisionSeq(), rebuilt, null, clock.instant()));
+                checkpoint.revision(), merged, null,
+                previous == null ? null : previous.id(), clock.instant());
         Map<String, List<String>> bounded = new LinkedHashMap<>();
-        committed.slots().forEach((key, value) -> bounded.put(key, bound(value)));
-        return new MemoryCommit(bounded, committed);
+        candidate.slots().forEach((key, value) -> bounded.put(key, bound(value)));
+        return new MemoryCommit(bounded, candidate);
+    }
+
+    /** 累计合并：父版槽在前（早期反证不被新轮挤掉），本轮 delta 按内容去重追加 */
+    private static Map<String, List<String>> mergeAccumulated(WorkingMemory previous,
+            Map<String, List<String>> delta) {
+        if (previous == null) {
+            return delta;
+        }
+        Map<String, List<String>> merged = new LinkedHashMap<>();
+        for (String key : WorkingMemory.SLOT_KEYS) {
+            java.util.LinkedHashSet<String> items = new java.util.LinkedHashSet<>(
+                    previous.slots().getOrDefault(key, List.of()));
+            items.addAll(delta.getOrDefault(key, List.of()));
+            merged.put(key, new ArrayList<>(items));
+        }
+        return merged;
     }
 
     /**
@@ -452,13 +824,16 @@ public class ContextAssembler {
     static final int SKILL_BODY_LIMIT = 400;
     static final int SKILL_STEPS_LIMIT = 8;
 
-    private Map<String, Object> skillOf(RoleRunner.RoleDriveRequest request) {
+    private Map<String, Object> skillOf(RoleRunner.RoleDriveRequest request,
+            AlertMaterial material) {
         if (skillPort == null) {
             return null;
         }
         com.objwww.pr.control.release.application.SkillSelectionService.SkillView view;
-        AlertMaterial material = alertMaterials.byRun(request.task().runId());
         view = skillPort.select(request.task().runId(),
+                request.binding().roleId(),
+                request.binding().configEpoch(),
+                request.binding().releaseDigest(),
                 material.alertname() == null ? "" : material.alertname(),
                 material.service() == null ? "" : material.service());
         if (view == null || !view.present()) {
@@ -567,12 +942,12 @@ public class ContextAssembler {
         };
     }
 
-    /** 本 run 合法引用全集（X5 准入面同源）：绑定 inputRefs + run 全量证据行 id */
-    private Set<String> validRefsOf(RoleRunner.RoleDriveRequest request) {
+    /** 本 run 合法引用全集（X5 准入面同源）：绑定 inputRefs + 快照证据行 id（§3.1 单次读） */
+    private Set<String> validRefsOf(RoleRunner.RoleDriveRequest request,
+            List<EvidenceEnvelope> evidenceRows) {
         java.util.LinkedHashSet<String> refs = new java.util.LinkedHashSet<>(
                 request.binding().inputRefs());
-        evidence.findByRunId(request.task().runId())
-                .forEach(e -> refs.add(e.evidenceId().toString()));
+        evidenceRows.forEach(e -> refs.add(e.evidenceId().toString()));
         return refs;
     }
 
@@ -580,60 +955,6 @@ public class ContextAssembler {
 
     /** 摘要载体：文本 + 是否发生截断/省略 */
     record Frag(String text, boolean truncated) {
-    }
-
-    /**
-     * 证据 payload 确定性摘要（零 LLM）：canonical JSON 顶层标量 "k=v" 串接，
-     * 容器值省略计数留痕；超 {@value #SUMMARY_LIMIT} 截断并置 truncated。
-     * 形状未知/解析失败 = 原文截断（诚实降级，不造数）。
-     */
-    Frag summarize(String canonicalPayload) {
-        if (canonicalPayload == null || canonicalPayload.isBlank()) {
-            return new Frag("", false);
-        }
-        try {
-            JsonNode root = mapper.readTree(canonicalPayload);
-            StringBuilder sb = new StringBuilder();
-            boolean elided = appendTopLevel(root, sb);
-            Frag clipped = clip(sb.toString(), SUMMARY_LIMIT);
-            return new Frag(clipped.text(), clipped.truncated() || elided);
-        } catch (Exception e) {
-            log.debug("证据 payload 非对象形状，原文截断摘要");
-            Frag clipped = clip(canonicalPayload.strip(), SUMMARY_LIMIT);
-            return new Frag(clipped.text(), clipped.truncated()
-                    || canonicalPayload.length() > SUMMARY_LIMIT);
-        }
-    }
-
-    /** 顶层标量串接；容器值省略计数；返回是否发生省略 */
-    private boolean appendTopLevel(JsonNode node, StringBuilder sb) {
-        if (!node.isObject()) {
-            return false;
-        }
-        int containers = 0;
-        boolean first = true;
-        for (var fields = node.fields(); fields.hasNext(); ) {
-            var field = fields.next();
-            JsonNode value = field.getValue();
-            if (value.isValueNode()) {
-                if (!first) {
-                    sb.append("; ");
-                }
-                sb.append(field.getKey()).append('=')
-                        .append(value.asText().replace('\n', ' '));
-                first = false;
-            } else {
-                containers++;
-            }
-        }
-        if (containers > 0) {
-            if (!first) {
-                sb.append("; ");
-            }
-            sb.append("(+").append(containers).append(" struct fields)");
-            return true;
-        }
-        return false;
     }
 
     /** 定长截断（含省略号恰 ≤limit，超界置 truncated 不静默丢字） */

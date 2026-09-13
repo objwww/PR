@@ -124,6 +124,20 @@ public class PostgresOperatorCommandRepository implements OperatorCommandReposit
                 .list();
     }
 
+    /** WC-2 恢复面：run 的某类型命令全量行（created_at 稳定序，唯一候选裁决用） */
+    @Override
+    public List<OperatorCommand> findByRunAndType(UUID runId, OperatorCommand.Type type) {
+        return jdbc.sql("""
+                        SELECT * FROM operator_command
+                         WHERE run_id = :runId AND command_type = :type
+                         ORDER BY created_at, id
+                        """)
+                .param("runId", runId)
+                .param("type", type.name())
+                .query(this::mapRow)
+                .list();
+    }
+
     private OperatorCommand mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         Timestamp createdAt = rs.getTimestamp("created_at");
         Timestamp appliedAt = rs.getTimestamp("applied_at");

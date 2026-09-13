@@ -42,6 +42,12 @@ public record RcaTask(
     /** R7-X11：主 Agent 调查 task（主模式 run 的初始唯一图节点） */
     public static final String PRIMARY_INVESTIGATE = "PRIMARY_INVESTIGATE";
 
+    /**
+     * SR §4.2/§4.3：报告收尾恢复 task（RunReconciler 铸，uq(run,round,task_key) 保唯一）——
+     * 只组装/验证既有持久材料（不隐式 LLM/重查现场），走同一 finishTask 发布赢家/事务。
+     */
+    public static final String REPORT_FINALIZE = "REPORT_FINALIZE";
+
     /** 铸造点按路由引擎选 task_key（run 启动固定，引擎决定执行器分派面） */
     public static String taskKeyFor(RcaEngine engine) {
         return engine == RcaEngine.NATIVE ? NATIVE_INVESTIGATE : HOLMES_INVESTIGATE;

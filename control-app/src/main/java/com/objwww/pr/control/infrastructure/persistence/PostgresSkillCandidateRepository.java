@@ -123,6 +123,20 @@ public class PostgresSkillCandidateRepository implements SkillCandidateRepositor
                 .list();
     }
 
+    @Override
+    public Optional<SkillCandidate> findByAssetDigest(String assetDigest) {
+        return jdbc.sql("""
+                        select id, name, source_run_id, source_digest, verification_status,
+                               asset_digest, status, failure_reason, proposed_by, activated_by,
+                               activated_at, retired_by, retired_at, retire_reason,
+                               created_at, updated_at
+                          from rca_skill_candidate where asset_digest = :asset_digest
+                        """)
+                .param("asset_digest", assetDigest)
+                .query((rs, n) -> rowOf(rs))
+                .optional();
+    }
+
     private static SkillCandidate rowOf(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new SkillCandidate(
                 rs.getObject("id", UUID.class),

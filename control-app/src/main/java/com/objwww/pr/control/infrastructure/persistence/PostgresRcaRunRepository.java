@@ -8,6 +8,7 @@ import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -41,10 +42,12 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
         jdbc.sql("""
                 INSERT INTO rca_run (
                     id, incident_id, generation, trigger_kind, state, investigation_hash,
-                    created_at, updated_at, started_at, finished_at, last_error
+                    created_at, updated_at, started_at, finished_at, last_error,
+                    purpose, purpose_source, completion_kind
                 ) VALUES (
                     :id, :incidentId, :generation, :trigger, :state, :investigationHash,
-                    :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb)
+                    :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
+                    :purpose, :purposeSource, :completionKind
                 )
                 """)
                 .param("id", run.id())
@@ -58,6 +61,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("startedAt", ts(run.startedAt()))
                 .param("finishedAt", ts(run.finishedAt()))
                 .param("lastError", JsonbText.encode(run.lastError()))
+                .param("purpose", run.purpose().name())
+                .param("purposeSource", run.purposeSource())
+                .param("completionKind", run.completionKind())
                 .update();
     }
 
@@ -74,11 +80,13 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 INSERT INTO rca_run (
                     id, incident_id, generation, trigger_kind, state, investigation_hash,
                     created_at, updated_at, started_at, finished_at, last_error,
-                    engine, config_digest, stickiness_key, canary_bucket
+                    engine, config_digest, stickiness_key, canary_bucket,
+                    purpose, purpose_source, completion_kind
                 ) VALUES (
                     :id, :incidentId, :generation, :trigger, :state, :investigationHash,
                     :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
-                    :engine, :configDigest, :stickinessKey, :bucket
+                    :engine, :configDigest, :stickinessKey, :bucket,
+                    :purpose, :purposeSource, :completionKind
                 )
                 """)
                 .param("id", run.id())
@@ -97,6 +105,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                         ? null : routing.configDigest().hex())
                 .param("stickinessKey", routing.stickinessKey())
                 .param("bucket", routing.bucket())
+                .param("purpose", run.purpose().name())
+                .param("purposeSource", run.purposeSource())
+                .param("completionKind", run.completionKind())
                 .update();
         seedEpochZero(run, routing);
     }
@@ -113,12 +124,14 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                     id, incident_id, generation, trigger_kind, state, investigation_hash,
                     created_at, updated_at, started_at, finished_at, last_error,
                     engine, config_digest, stickiness_key, canary_bucket,
-                    investigation_input_digest, window_start, window_end
+                    investigation_input_digest, window_start, window_end,
+                    purpose, purpose_source, completion_kind
                 ) VALUES (
                     :id, :incidentId, :generation, :trigger, :state, :investigationHash,
                     :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
                     :engine, :configDigest, :stickinessKey, :bucket,
-                    :investigationInputDigest, :windowStart, :windowEnd
+                    :investigationInputDigest, :windowStart, :windowEnd,
+                    :purpose, :purposeSource, :completionKind
                 )
                 """)
                 .param("id", run.id())
@@ -140,6 +153,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("investigationInputDigest", inputs.inputDigest().hex())
                 .param("windowStart", Timestamp.from(inputs.windowStart()))
                 .param("windowEnd", Timestamp.from(inputs.windowEnd()))
+                .param("purpose", run.purpose().name())
+                .param("purposeSource", run.purposeSource())
+                .param("completionKind", run.completionKind())
                 .update();
         seedEpochZero(run, routing);
     }
@@ -175,7 +191,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
         return jdbc.sql("""
                 UPDATE rca_run SET
                     state = :state, started_at = :startedAt, finished_at = :finishedAt,
-                    last_error = CAST(:lastError AS jsonb), updated_at = :updatedAt
+                    last_error = CAST(:lastError AS jsonb), updated_at = :updatedAt,
+                    purpose = :purpose, purpose_source = :purposeSource,
+                    completion_kind = :completionKind
                  WHERE id = :id
                 """)
                 .param("state", run.state().name())
@@ -183,6 +201,9 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("finishedAt", ts(run.finishedAt()))
                 .param("lastError", JsonbText.encode(run.lastError()))
                 .param("updatedAt", Timestamp.from(run.updatedAt()))
+                .param("purpose", run.purpose().name())
+                .param("purposeSource", run.purposeSource())
+                .param("completionKind", run.completionKind())
                 .param("id", run.id())
                 .update() > 0;
     }
@@ -197,6 +218,8 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 UPDATE rca_run SET
                     state = :state, started_at = :startedAt, finished_at = :finishedAt,
                     last_error = CAST(:lastError AS jsonb), updated_at = :updatedAt,
+                    purpose = :purpose, purpose_source = :purposeSource,
+                    completion_kind = :completionKind,
                     last_event_seq = last_event_seq + 1
                  WHERE id = :id AND last_event_seq = :expected
                    AND state IN ('QUEUED', 'RUNNING', 'REPORTING')
@@ -206,9 +229,106 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("finishedAt", ts(run.finishedAt()))
                 .param("lastError", JsonbText.encode(run.lastError()))
                 .param("updatedAt", Timestamp.from(run.updatedAt()))
+                .param("purpose", run.purpose().name())
+                .param("purposeSource", run.purposeSource())
+                .param("completionKind", run.completionKind())
                 .param("id", run.id())
                 .param("expected", expectedRevision)
                 .update() > 0;
+    }
+
+    // ------------------------------------------------------------------ SR 对账面（V108）/ WC-4 keyset（V109）
+
+    /**
+     * WC-4 §6.1 keyset 分页：谓词与 V12 活跃集同源，排序 (created_at,id) 吃 V109
+     * 重建的部分索引；游标 null = 从头（两分支拼 SQL——参数化 OR 谓词会退化计划）。
+     */
+    @Override
+    public List<RcaRunRepository.ReconcileCandidate> findActiveForReconcileAfter(
+            Instant afterCreatedAt, UUID afterId, int limit) {
+        boolean fromHead = afterCreatedAt == null;
+        String cursor = fromHead ? "" : """
+                           AND (created_at > :afterCreatedAt
+                                OR (created_at = :afterCreatedAt AND id > :afterId))
+                """;
+        String sql = """
+                SELECT id, incident_id, state, generation,
+                       coalesce(purpose, 'LEGACY_UNKNOWN') AS purpose,
+                       created_at, updated_at,
+                       reconcile_deadline_at, reporting_started_at, recovery_attempts
+                  FROM rca_run
+                 WHERE state IN ('QUEUED', 'RUNNING', 'REPORTING')
+                """ + cursor + """
+                 ORDER BY created_at, id
+                 LIMIT :limit
+                """;
+        var stmt = jdbc.sql(sql).param("limit", limit);
+        if (!fromHead) {
+            stmt = stmt.param("afterCreatedAt", Timestamp.from(afterCreatedAt))
+                    .param("afterId", afterId);
+        }
+        return stmt.query((rs, n) -> new RcaRunRepository.ReconcileCandidate(
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("incident_id", UUID.class),
+                        RcaStateContract.parseRunState(rs.getString("state")),
+                        rs.getInt("generation"),
+                        com.objwww.pr.control.alert.domain.model.RunPurpose.valueOf(
+                                rs.getString("purpose")),
+                        rs.getTimestamp("created_at").toInstant(),
+                        rs.getTimestamp("updated_at").toInstant(),
+                        instantOf(rs.getTimestamp("reconcile_deadline_at")),
+                        instantOf(rs.getTimestamp("reporting_started_at")),
+                        rs.getInt("recovery_attempts")))
+                .list();
+    }
+
+    /** WC-4 §6.3：锁内复验用单列读（调用方已持 run 行锁） */
+    @Override
+    public Optional<Instant> reconcileDeadlineById(UUID id) {
+        return jdbc.sql("SELECT reconcile_deadline_at FROM rca_run WHERE id = :id")
+                .param("id", id)
+                .query((rs, n) -> instantOf(rs.getTimestamp("reconcile_deadline_at")))
+                .optional();
+    }
+
+    /** WC-5：最老活跃 Run（部分索引 ix_rca_run_active_reconcile 首 key 即答） */
+    @Override
+    public Optional<Instant> oldestActiveCreatedAt() {
+        return jdbc.sql("""
+                SELECT min(created_at) FROM rca_run
+                 WHERE state IN ('QUEUED', 'RUNNING', 'REPORTING')
+                """)
+                .query((rs, n) -> instantOf(rs.getTimestamp(1)))
+                .optional();
+    }
+
+    @Override
+    public void markReportingStarted(UUID id, Instant now) {
+        jdbc.sql("""
+                UPDATE rca_run SET reporting_started_at = coalesce(reporting_started_at, :now)
+                 WHERE id = :id
+                """)
+                .param("now", Timestamp.from(now))
+                .param("id", id)
+                .update();
+    }
+
+    @Override
+    public void fixReconcileDeadlineIfAbsent(UUID id, Instant deadline) {
+        jdbc.sql("""
+                UPDATE rca_run SET reconcile_deadline_at = :deadline
+                 WHERE id = :id AND reconcile_deadline_at IS NULL
+                """)
+                .param("deadline", Timestamp.from(deadline))
+                .param("id", id)
+                .update();
+    }
+
+    @Override
+    public void incrementRecoveryAttempts(UUID id) {
+        jdbc.sql("UPDATE rca_run SET recovery_attempts = recovery_attempts + 1 WHERE id = :id")
+                .param("id", id)
+                .update();
     }
 
     @Override
@@ -298,6 +418,12 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 rs.getTimestamp("updated_at").toInstant(),
                 startedAt == null ? null : startedAt.toInstant(),
                 finishedAt == null ? null : finishedAt.toInstant(),
-                JsonbText.decode(rs.getString("last_error")));
+                JsonbText.decode(rs.getString("last_error")),
+                // SR §3.1：V108 前存量行 purpose 列 NULL → 读侧归一 LEGACY_UNKNOWN
+                com.objwww.pr.control.alert.domain.model.RunPurpose.valueOf(
+                        rs.getString("purpose") == null
+                                ? "LEGACY_UNKNOWN" : rs.getString("purpose")),
+                rs.getString("purpose_source"),
+                rs.getString("completion_kind"));
     }
 }

@@ -49,9 +49,11 @@ public final class PrimaryGatewayToolPort implements BoundedLlmRoleRunner.Primar
         long callSeq = ledger.findRecoveryByTask(ctx.runId(), ctx.taskId()).stream()
                 .mapToLong(RcaToolInvocationLedger.InvocationRecovery::callSeq)
                 .max().orElse(0) + 1;
+        // WC-3：控制身份（心跳+终态探针）与动作 deadline 随物理请求下传，不重铸
         SingleToolEvidenceAgent.CallContext stepCtx = new SingleToolEvidenceAgent.CallContext(
                 ctx.runId(), ctx.taskId(), ctx.attemptId(), callSeq,
-                ctx.observedGeneration(), ctx.investigationInputDigest(), ctx.timeRange());
+                ctx.observedGeneration(), ctx.investigationInputDigest(), ctx.timeRange(),
+                ctx.controlSignal(), ctx.actionDeadline());
         SingleToolEvidenceAgent.AgentResult result = agent.investigate(stepCtx, args);
         return switch (result.outcome()) {
             case EVIDENCE_PRODUCED -> {

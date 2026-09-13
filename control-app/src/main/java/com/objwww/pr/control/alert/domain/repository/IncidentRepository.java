@@ -36,6 +36,20 @@ public interface IncidentRepository {
     /** 全列覆盖更新（调用方已持行锁；updated_at 由调用方以 DB now() 语义赋值） */
     boolean update(Incident incident);
 
+    /**
+     * WC-4 §5.3：当前 Run 指针<b>条件</b>清零——仅当指针仍指向 runId 才清
+     * （不误清新 Run 指针，WC-T22）。默认 = 行锁读 + 复核 + 全列写回（fake 语义）；
+     * 生产实现必须单语句 {@code UPDATE ... WHERE current_rca_run_id=:runId}
+     * （读-判-写竞态由 SQL 条件消解，不依赖锁序）。
+     */
+    default boolean clearCurrentRunPointerIfEquals(UUID incidentId, UUID runId,
+            java.time.Instant now) {
+        return findByIdForUpdate(incidentId)
+                .map(incident -> runId.equals(incident.currentRcaRunId())
+                        && update(incident.withCurrentRunPointerCleared(now)))
+                .orElse(false);
+    }
+
     /** 活跃 incident 数（DeferredPolicy backlog 输入；状态 FIRING） */
     int countActive();
 }

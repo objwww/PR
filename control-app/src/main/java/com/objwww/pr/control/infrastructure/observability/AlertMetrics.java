@@ -25,10 +25,27 @@ public final class AlertMetrics {
     /** engine 标签缺省值（路由面缺失的历史 run 等） */
     public static final String ENGINE_UNKNOWN = "unknown";
 
+    /** 对账扫描通道（封闭集，label allowlist 面） */
+    public static final String CHANNEL_ACTIVE = "active";
+    public static final String CHANNEL_CLEANUP = "cleanup";
+
     private final MeterRegistry registry;
+    /** WC-5：看门狗观测面 gauge 状态（强引用防 GC 回收，每拍覆盖写） */
+    private final java.util.concurrent.atomic.AtomicLong reconcileLastSuccessEpochMs =
+            new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong reconcileOldestUnseenAgeMs =
+            new java.util.concurrent.atomic.AtomicLong(-1);
+    private final java.util.concurrent.atomic.AtomicLong reconcileTerminalOpenTasks =
+            new java.util.concurrent.atomic.AtomicLong(0);
 
     public AlertMetrics(MeterRegistry registry) {
         this.registry = Objects.requireNonNull(registry);
+        registry.gauge("rca_reconcile_last_success_epoch_ms",
+                reconcileLastSuccessEpochMs, java.util.concurrent.atomic.AtomicLong::get);
+        registry.gauge("rca_reconcile_oldest_unseen_age_ms",
+                reconcileOldestUnseenAgeMs, java.util.concurrent.atomic.AtomicLong::get);
+        registry.gauge("rca_reconcile_terminal_run_open_tasks",
+                reconcileTerminalOpenTasks, java.util.concurrent.atomic.AtomicLong::get);
     }
 
     public void taskDecision(String decision, String engine) {
@@ -72,6 +89,63 @@ public final class AlertMetrics {
     public void holmesShadowWork(String outcome) {
         registry.counter("rca_holmes_shadow_work_total",
                 "outcome", safe(outcome)).increment();
+    }
+
+    // ------------------------------------------------- WC-5 看门狗/取消闭环观测面
+    // 纪律不变：runId/actionKey 不进 label（§6.4）；身份放结构化日志/事件。
+
+    /** 对账扫描单通道结局：时长恒记；失败另计 failure 计数（连续失败告警的数据面） */
+    public void reconcileScan(String channel, boolean success, long durationMillis) {
+        registry.timer("rca_reconcile_scan_duration", "channel", safe(channel))
+                .record(Duration.ofMillis(Math.max(0, durationMillis)));
+        if (!success) {
+            registry.counter("rca_reconcile_scan_failure_total",
+                    "channel", safe(channel)).increment();
+        }
+    }
+
+    /** 整轮两通道全成功即记（连续多轮不增长 = 看门狗停摆，需外部告警，WC-T29 数据面） */
+    public void reconcileScanSucceeded(long epochMillis) {
+        reconcileLastSuccessEpochMs.set(epochMillis);
+    }
+
+    /**
+     * 每拍覆盖写 gauge：最老活跃 Run 年龄（keyset 全覆盖下即"最长未扫描时长"的
+     * 上界代理）+ 终态 Run 名下未决任务存量（清理通道积压）。任一传 -1 = 该项
+     * 读取失败，保持上一拍值（不假造 0）。
+     */
+    public void reconcileScanObserved(long oldestUnseenAgeMillis, long terminalOpenTasks) {
+        if (oldestUnseenAgeMillis >= 0) {
+            reconcileOldestUnseenAgeMs.set(oldestUnseenAgeMillis);
+        }
+        if (terminalOpenTasks >= 0) {
+            reconcileTerminalOpenTasks.set(terminalOpenTasks);
+        }
+    }
+
+    /** 对账决策计数（Decision 封闭集） */
+    public void reconcileDecision(String decision) {
+        registry.counter("rca_reconcile_decision_total",
+                "decision", safe(decision)).increment();
+    }
+
+    /** 取消/终态落地 → 本地执行静默的收敛时长（清理通道收敛时观测） */
+    public void cancelToQuiesce(long millis) {
+        if (millis >= 0) {
+            registry.timer("rca_cancel_to_quiesce").record(Duration.ofMillis(millis));
+        }
+    }
+
+    /** 迟到提交被围栏拒绝（checkpoint STALE 族 / finishTask 旧代旧租约栅栏） */
+    public void lateCommitRejected() {
+        registry.counter("rca_late_commit_rejected_total").increment();
+    }
+
+    /** 结果未知动作（UNKNOWN 诚实归档）计数——WC-T20 分组观测的数据面 */
+    public void unknownAction(long count) {
+        if (count > 0) {
+            registry.counter("rca_reconcile_unknown_action_total").increment(count);
+        }
     }
 
     private static String safe(String value) {

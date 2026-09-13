@@ -40,10 +40,11 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
             WHERE id = (
                 SELECT t.id FROM rca_task t
                  WHERE t.state IN ('READY', 'RETRY_WAIT') AND t.available_at <= :now
-                   AND t.task_key IN ('HOLMES_INVESTIGATE', 'NATIVE_INVESTIGATE')
+                   AND t.task_key IN ('HOLMES_INVESTIGATE', 'NATIVE_INVESTIGATE', 'REPORT_FINALIZE')
                    AND EXISTS (SELECT 1 FROM rca_run r
                                 WHERE r.id = t.run_id
-                                  AND r.state IN ('QUEUED', 'RUNNING', 'REPORTING'))
+                                  AND r.state IN ('QUEUED', 'RUNNING', 'REPORTING')
+                                  AND coalesce(r.purpose, 'LEGACY_UNKNOWN') <> 'SHADOW')
                  ORDER BY (now() >= t.deadline_at) DESC, t.priority DESC, t.deadline_at,
                           t.created_at, t.id
                  LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -187,8 +188,32 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
     }
 
     @Override
+    public Optional<RcaTask> findByIdForUpdate(UUID id) {
+        List<RcaTask> rows = jdbc.sql(
+                        "SELECT * FROM rca_task WHERE id = :id FOR UPDATE")
+                .param("id", id)
+                .query(this::mapRow)
+                .list();
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
     public List<RcaTask> findByRunId(UUID runId) {
         return jdbc.sql("SELECT * FROM rca_task WHERE run_id = :runId ORDER BY id")
+                .param("runId", runId)
+                .query(this::mapRow)
+                .list();
+    }
+
+    /** SR §4（SR08）：按 id 序行锁——与 finishTask 的 task→run 锁序一致（防 AB-BA 死锁） */
+    @Override
+    public List<RcaTask> lockNonTerminalByRunIdForUpdate(UUID runId) {
+        return jdbc.sql("""
+                        SELECT * FROM rca_task
+                         WHERE run_id = :runId
+                           AND state IN ('READY', 'LEASED', 'RETRY_WAIT', 'BLOCKED', 'RUNNING')
+                         ORDER BY id FOR UPDATE
+                        """)
                 .param("runId", runId)
                 .query(this::mapRow)
                 .list();
@@ -204,6 +229,86 @@ public class PostgresRcaTaskRepository implements RcaTaskRepository {
                 .param("from", from.name())
                 .param("to", to.name())
                 .update() > 0;
+    }
+
+    /** WC-4 §4.1：ON CONFLICT DO NOTHING——PG 事务内唯一冲突会置 aborted，不能异常后同事务续操作 */
+    @Override
+    public boolean insertIfAbsent(RcaTask task) {
+        return jdbc.sql("""
+                INSERT INTO rca_task (
+                    id, run_id, task_key, state, priority,
+                    available_at, ready_since, deadline_at,
+                    lease_owner, lease_until, lease_epoch,
+                    attempt_count, max_attempts, created_at, updated_at, round_id
+                ) VALUES (
+                    :id, :runId, :taskKey, :state, :priority,
+                    :availableAt, :readySince, CAST(:deadlineAt AS timestamptz),
+                    :leaseOwner, :leaseUntil, :leaseEpoch,
+                    :attemptCount, :maxAttempts, :createdAt, :updatedAt, :roundId
+                )
+                ON CONFLICT DO NOTHING
+                """)
+                .param("id", task.id())
+                .param("runId", task.runId())
+                .param("taskKey", task.taskKey())
+                .param("state", task.state().name())
+                .param("priority", task.priority())
+                .param("availableAt", Timestamp.from(task.availableAt()))
+                .param("readySince", Timestamp.from(task.readySince()))
+                .param("deadlineAt", deadlineParam(task.deadlineAt()))
+                .param("leaseOwner", task.leaseOwner())
+                .param("leaseUntil", ts(task.leaseUntil()))
+                .param("leaseEpoch", task.leaseEpoch())
+                .param("attemptCount", task.attemptCount())
+                .param("maxAttempts", task.maxAttempts())
+                .param("createdAt", Timestamp.from(task.createdAt()))
+                .param("updatedAt", Timestamp.from(task.updatedAt()))
+                .param("roundId", task.roundId())
+                .update() > 0;
+    }
+
+    /** WC-4 §5.3：终态 Run 名下非终态任务 keyset 扫描（驱动面 = 非终态任务集，有界） */
+    @Override
+    public List<RcaTaskRepository.OpenTaskRef> findOpenTasksUnderTerminalRunsAfter(
+            Instant afterCreatedAt, UUID afterId, int limit) {
+        boolean fromHead = afterCreatedAt == null;
+        String cursor = fromHead ? "" : """
+                           AND (t.created_at > :afterCreatedAt
+                                OR (t.created_at = :afterCreatedAt AND t.id > :afterId))
+                """;
+        String sql = """
+                SELECT t.id AS task_id, t.run_id, t.created_at
+                  FROM rca_task t
+                  JOIN rca_run r ON r.id = t.run_id
+                 WHERE t.state IN ('READY', 'BLOCKED', 'RETRY_WAIT', 'LEASED', 'RUNNING')
+                   AND r.state NOT IN ('QUEUED', 'RUNNING', 'REPORTING')
+                """ + cursor + """
+                 ORDER BY t.created_at, t.id
+                 LIMIT :limit
+                """;
+        var stmt = jdbc.sql(sql).param("limit", limit);
+        if (!fromHead) {
+            stmt = stmt.param("afterCreatedAt", Timestamp.from(afterCreatedAt))
+                    .param("afterId", afterId);
+        }
+        return stmt.query((rs, n) -> new RcaTaskRepository.OpenTaskRef(
+                        rs.getObject("task_id", UUID.class),
+                        rs.getObject("run_id", UUID.class),
+                        rs.getTimestamp("created_at").toInstant()))
+                .list();
+    }
+
+    /** WC-5：终态 Run 名下未决任务存量（部分索引 ix_rca_task_open_cleanup 计数面） */
+    @Override
+    public long countOpenTasksUnderTerminalRuns() {
+        return jdbc.sql("""
+                SELECT count(*)
+                  FROM rca_task t
+                  JOIN rca_run r ON r.id = t.run_id
+                 WHERE t.state IN ('READY', 'BLOCKED', 'RETRY_WAIT', 'LEASED', 'RUNNING')
+                   AND r.state NOT IN ('QUEUED', 'RUNNING', 'REPORTING')
+                """)
+                .query(Long.class).single();
     }
 
     @Override

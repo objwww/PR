@@ -230,6 +230,104 @@ public class PersistenceConfig {
                 jdbc, objectMapper);
     }
 
+    /** CL-07：压缩尝试台账（V102）——insert-if-absent 单写者 + 状态 CAS 终态化 */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.CompactionAttemptPort
+    compactionAttemptPort(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresCompactionAttempt(
+                jdbc);
+    }
+
+    // ---------------- OP-04 终态报告反馈 + OP-01 回归案例准入（V103/V104） ----------------
+
+    /** OP-04：report_feedback 幂等追加面（V103；(author,idempotency_key)+uq(supersedes_id)） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.ReportFeedbackPort
+    reportFeedbackPort(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresReportFeedback(
+                jdbc, objectMapper);
+    }
+
+    /** OP-04：反馈服务——与活跃 Run 命令面分离（终态 run 才受理，不放宽 Cancel/Hint） */
+    @Bean
+    public com.objwww.pr.control.alert.application.ReportFeedbackService reportFeedbackService(
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository rcaReportRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.repository.ReportFeedbackPort reportFeedbackPort) {
+        return new com.objwww.pr.control.alert.application.ReportFeedbackService(
+                rcaReportRepository, rcaRunRepository, reportFeedbackPort,
+                java.time.Clock.systemUTC());
+    }
+
+    /** OP-01：候选/审核追加面（V104；uq(source_digest,case_key) 幂等锚 + CAS 状态） */
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.RegressionCandidatePort
+    regressionCandidatePort(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRegressionCandidate(
+                jdbc);
+    }
+
+    /** AM5 既有 insert-only 数据集仓储（V20）——materialize 落 CaseVersion 的唯一写面 */
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.DatasetVersionRepository
+    datasetVersionRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresDatasetVersionRepository(
+                jdbc);
+    }
+
+    /**
+     * OP-01：回归案例准入——反馈→候选→独立审核→ACCEPTED 入集；GT 由人工在
+     * materialize 显式提供（反馈≠GT，三层防自动采信）。
+     */
+    @Bean
+    public com.objwww.pr.control.eval.application.RegressionCaseAdmissionService
+    regressionCaseAdmissionService(
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository rcaReportRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.repository.ReportFeedbackPort reportFeedbackPort,
+            com.objwww.pr.control.eval.domain.repository.RegressionCandidatePort
+                    regressionCandidatePort,
+            com.objwww.pr.control.eval.domain.repository.DatasetVersionRepository
+                    datasetVersionRepository) {
+        return new com.objwww.pr.control.eval.application.RegressionCaseAdmissionService(
+                rcaReportRepository, rcaRunRepository, evidenceRepository,
+                reportFeedbackPort, regressionCandidatePort, datasetVersionRepository,
+                java.time.Clock.systemUTC());
+    }
+
+    // ---------------- OP-03 调查动作价值分析（V105；版本化派生台账，不改原账本） ----------------
+
+    /** OP-02：质量口径汇总（显式分母；流程成功≠质量正确） */
+    @Bean
+    public com.objwww.pr.control.eval.application.QualitySummaryService qualitySummaryService(
+            com.objwww.pr.control.eval.domain.repository.EvalRunRepository evalRunRepository) {
+        return new com.objwww.pr.control.eval.application.QualitySummaryService(
+                evalRunRepository);
+    }
+
+    /** OP-03：rca_action_assessment 只增派生面（唯一键冲突回读=重入幂等） */
+    @Bean
+    public com.objwww.pr.control.ops.domain.repository.ActionAssessmentPort actionAssessmentPort(
+            JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresActionAssessment(
+                jdbc, objectMapper);
+    }
+
+    /** OP-03：确定性动作分析（零 LLM；Run 终态后可重入） */
+    @Bean
+    public com.objwww.pr.control.ops.application.ActionAssessmentService actionAssessmentService(
+            com.objwww.pr.control.alert.domain.repository.RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger rcaToolInvocationLedger,
+            com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaReportRepository rcaReportRepository,
+            com.objwww.pr.control.ops.domain.repository.ActionAssessmentPort actionAssessmentPort) {
+        return new com.objwww.pr.control.ops.application.ActionAssessmentService(
+                rcaTaskRepository, rcaToolInvocationLedger, evidenceRepository,
+                rcaReportRepository, actionAssessmentPort,
+                java.time.Clock.systemUTC());
+    }
+
     /**
      * MC21~23：子任务回执台账持久面（V96 rca_delegation_receipt，append-only）——
      * message_id 唯一 = 幂等准入键，冲突显式抛（调用方竞态短路依据）。
@@ -294,18 +392,32 @@ public class PersistenceConfig {
     }
 
     /**
-     * EN-08 装配缝：Skill 生产选择面（run 钉版 S11/S08 只出 ACTIVE/S06+S07 匹配与
-     * 冲突）——调查 Run 信封经 ContextAssembler.SkillPort 消费。
+     * EN-08 装配缝 + CL-05 持久绑定：Skill 生产选择面（每 (run,role,epoch) 选择为
+     * 持久事实 V100；冻结允许集 ∩ ACTIVE；钉空不追溯）——调查 Run 信封经
+     * ContextAssembler.SkillPort 消费，热切经 RunConfigSwitchService 预生成。
      */
     @Bean
     public com.objwww.pr.control.release.application.SkillSelectionService
     skillSelectionService(
+            com.objwww.pr.control.release.domain.repository.SkillRunBindingRepository
+                    skillRunBindingRepository,
             com.objwww.pr.control.release.domain.repository.SkillCandidateRepository
                     skillCandidateRepository,
             com.objwww.pr.control.release.domain.repository.ReleaseAssetRepository
-                    releaseAssetRepository) {
+                    releaseAssetRepository,
+            com.objwww.pr.control.release.domain.repository.ConfigBundleRepository
+                    configBundleRepository) {
         return new com.objwww.pr.control.release.application.SkillSelectionService(
-                skillCandidateRepository, releaseAssetRepository);
+                skillRunBindingRepository, skillCandidateRepository, releaseAssetRepository,
+                configBundleRepository, java.time.Instant::now);
+    }
+
+    /** CL-05（V100）：Skill 每 Run 绑定仓储（只追加不修订） */
+    @Bean
+    public com.objwww.pr.control.release.domain.repository.SkillRunBindingRepository
+    skillRunBindingRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresSkillRunBindingRepository(jdbc);
     }
 
     @Bean
@@ -588,11 +700,20 @@ public class PersistenceConfig {
                     taskExecutionBindingRepository,
             com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
                     rcaModelCallUsageReader,
-            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore) {
+            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore,
+            com.objwww.pr.control.alert.application.tool.InFlightToolCancels
+                    am4InFlightToolCancels,
+            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger
+                    rcaToolInvocationLedger,
+            com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository
+                    operatorCommandRepository) {
+        // WC-5：取消收敛读面（terminationRequestedAt/localExecutionState/
+        // inflightCount/unknownActionCount）接线
         return new com.objwww.pr.control.alert.application.RunQueryService(
                 rcaRunRepository, rcaTaskRepository, taskEdgeRepository,
                 taskExecutionBindingRepository, rcaModelCallUsageReader,
-                claimStore, java.time.Instant::now);
+                claimStore, java.time.Instant::now, am4InFlightToolCancels,
+                rcaToolInvocationLedger, operatorCommandRepository);
     }
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------
@@ -830,9 +951,10 @@ public class PersistenceConfig {
     public com.objwww.pr.control.alert.application.CommandService commandService(
             com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository operatorCommandRepository,
             com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
-            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender) {
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender,
+            org.springframework.transaction.support.TransactionOperations tx) {
         return new com.objwww.pr.control.alert.application.CommandService(
-                operatorCommandRepository, rcaRunRepository, rcaEventAppender,
+                operatorCommandRepository, rcaRunRepository, rcaEventAppender, tx,
                 java.time.Instant::now);
     }
 
@@ -852,12 +974,36 @@ public class PersistenceConfig {
             com.objwww.pr.control.alert.application.agent.AgentRegistry am4AgentRegistry,
             com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
             com.objwww.pr.control.alert.domain.event.RcaEventAppender rcaEventAppender,
+            com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository
+                    taskExecutionBindingRepository,
+            com.objwww.pr.control.alert.domain.repository.AlertEventRepository alertEventRepository,
+            com.objwww.pr.control.release.application.SkillSelectionService skillSelectionService,
             org.springframework.transaction.support.TransactionOperations tx) {
+        // CL-05 §4.3 热切预生成：新 epoch 应用事务内为 run 的各冻结角色生成 Skill
+        // 选择记录（或明确 NONE）——roleId 来自任务冻结绑定（可信身份），材料取
+        // run→incident→最新告警事件的同款确定性投影
+        com.objwww.pr.control.alert.application.RunConfigSwitchService.SkillEpochProvisioner
+                provisioner = (runId, targetEpoch, targetReleaseDigest, sourceCommandId) -> {
+            var material = rcaRunRepository.findById(runId)
+                    .flatMap(run -> alertEventRepository.findByIncidentId(run.incidentId())
+                            .stream().reduce((first, second) -> second))
+                    .map(AlertAm4Config::materialOf)
+                    .orElse(com.objwww.pr.control.alert.application.agent.ContextAssembler
+                            .AlertMaterial.unknown());
+            taskExecutionBindingRepository.findByRun(runId).stream()
+                    .map(com.objwww.pr.control.alert.domain.model.TaskExecutionBinding::roleId)
+                    .distinct()
+                    .forEach(roleId -> skillSelectionService.provisionForEpoch(
+                            runId, roleId, targetEpoch, targetReleaseDigest,
+                            material.alertname() == null ? "" : material.alertname(),
+                            material.service() == null ? "" : material.service(),
+                            sourceCommandId));
+        };
         return new com.objwww.pr.control.alert.application.RunConfigSwitchService(
                 operatorCommandRepository, rcaRunRepository, rcaTaskRepository,
                 runConfigEpochRepository, configBundleRepository,
                 releaseQualificationRepository, am4AgentRegistry, rcaModelCallLedger,
-                rcaEventAppender, tx, java.time.Instant::now);
+                rcaEventAppender, tx, java.time.Instant::now, provisioner);
     }
 
     // ---------------- AM5 保留域（V28/V29，M5-18 装配；归档执行面 = M5-19 ArchiveService） ----------------

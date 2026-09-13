@@ -171,7 +171,10 @@ public final class FallbackService {
             //    无路由语义；task_key 按 HOLMES 选，worker 分派面走 holmes 执行器）
             runs.insert(new RcaRun(fallbackRunId, incident.id(), failedRun.generation(),
                     RunTrigger.RERUN, RcaRunState.QUEUED, failedRun.investigationHash(),
-                    now, now, null, null, null));
+                    now, now, null, null, null,
+                    // SR §3.1：兜底铸 run 也是生产准入（钩子虽随 M6-07 退场，类面保持一致）
+                    com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                    "fallback-service", null));
             tasks.insert(new RcaTask(UUID.randomUUID(), fallbackRunId,
                     RcaTask.taskKeyFor(RcaEngine.HOLMES), RcaTaskState.READY, priority,
                     now, now, sla.deadline(now, priority), null, null, 0, 0, 3, now, now));

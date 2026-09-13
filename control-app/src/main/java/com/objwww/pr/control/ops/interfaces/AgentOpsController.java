@@ -22,6 +22,8 @@ import java.time.Duration;
  *   <li>GET /api/agent-ops/workers——执行器活性投影（监控页「执行器」区，方案 §三.12）：
  *       近 windowMinutes（默认 60，clamp 5~1440）内有租约活动的 worker 清单，
  *       按租约活动推导，非心跳注册表；asOf 必带。</li>
+ *   <li>GET /api/agent-ops/action-assessment——OP-03 动作分析汇总（近 24h 窗）：
+ *       分类计数+重复查询率（分母显式）；描述性归因非因果效益。</li>
  * </ul>
  */
 @RestController
@@ -44,5 +46,10 @@ public class AgentOpsController {
     public WorkerActivityResponse workers(
             @RequestParam(required = false, defaultValue = "60") int windowMinutes) {
         return service.workers(Duration.ofMinutes(Math.clamp(windowMinutes, 5, 1440)));
+    }
+
+    @GetMapping("/action-assessment")
+    public AgentOpsSummaryService.ActionAssessmentResponse actionAssessment() {
+        return service.actionAssessment();
     }
 }

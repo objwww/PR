@@ -432,6 +432,46 @@ class RunConfigSwitchServiceTest {
     }
 
     @Test
+    @DisplayName("CL-05/E：热切应用事务内预生成新代际 Skill 绑定；预生成失败切换不半落")
+    void cl05SkillProvisionPinnedInSwitchTx() {
+        List<String> provisioned = new ArrayList<>();
+        RunConfigSwitchService service = new RunConfigSwitchService(stores.commands,
+                stores.runs, stores.tasks, epochs, bundles, qualifications, registry(),
+                stores.modelCalls, stores.rcaEvents, withoutTransaction(), () -> NOW,
+                (run, epoch, digest, commandId) -> provisioned.add(
+                        run + "/" + epoch + "/" + digest + "/" + commandId));
+        RunConfigSwitchService.Result submitted = submit(service, "op-cl05");
+        assertThat(submitted.state()).isEqualTo(OperatorCommand.State.WAITING_SAFE_POINT);
+        assertThat(provisioned).as("快败段零预生成").isEmpty();
+
+        assertThat(service.applyAtSafePoint(runId, "op-cl05", driverTaskId, 0).state())
+                .isEqualTo(OperatorCommand.State.APPLIED);
+        assertThat(provisioned).as("应用事务内按新代际+目标组合+来源命令预生成")
+                .containsExactly(runId + "/1/" + v2 + "/" + submitted.commandId());
+
+        // 预生成抛异常 = 组合不可选：异常穿透（真实事务下 epoch/命令整体回滚），
+        // 命令不推进 APPLIED（假事务下可断言的"不半落"面）。锚取切换后现行面。
+        RunConfigSwitchService failing = new RunConfigSwitchService(stores.commands,
+                stores.runs, stores.tasks, epochs, bundles, qualifications, registry(),
+                stores.modelCalls, stores.rcaEvents, withoutTransaction(), () -> NOW,
+                (run, epoch, digest, commandId) -> {
+                    throw new IllegalStateException("release 组合 Skill 不可选");
+                });
+        long revision = stores.runs.currentRevision(runId).orElseThrow();
+        assertThat(failing.submit(runId, "op-cl05b",
+                new ConfigSwitchRequest(revision, 1, v2, "切换 op-cl05b",
+                        NOW.plusSeconds(600)), "op").state())
+                .isEqualTo(OperatorCommand.State.WAITING_SAFE_POINT);
+        assertThatThrownBy(() -> failing.applyAtSafePoint(runId, "op-cl05b",
+                driverTaskId, 0))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Skill 不可选");
+        assertThat(stores.commands.find(runId, OperatorCommand.Type.CONFIG_SWITCH,
+                "op-cl05b").orElseThrow().state())
+                .isNotEqualTo(OperatorCommand.State.APPLIED);
+    }
+
+    @Test
     @DisplayName("命令形状：digest 非法/deadline 缺席拒绝；payload 双向映射稳定")
     void requestShapeGuards() {
         assertThatThrownBy(() -> new ConfigSwitchRequest(0, 0, "not-a-digest", "r",

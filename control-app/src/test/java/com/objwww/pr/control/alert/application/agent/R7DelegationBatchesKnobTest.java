@@ -124,7 +124,15 @@ class R7DelegationBatchesKnobTest {
                 stores.delegationDecisions,
                 run -> ContextAssembler.AlertMaterial.unknown(), MAPPER);
         return new BoundedLlmRoleRunner(guard, supervisor, stores.checkpoints,
-                evidence, assembler, toolPort, MAPPER, CLOCK);
+                evidence, assembler, toolPort, MAPPER, CLOCK, commitFence());
+    }
+
+    /** CL-01 提交围栏（假件面：in-place 事务 + 无代际史 epoch 源 + 记忆随提交 append） */
+    private PrimaryCheckpointCommitService commitFence() {
+        return new PrimaryCheckpointCommitService(stores.runs, stores.tasks,
+                stores.checkpoints,
+                com.objwww.pr.control.alert.domain.repository.RunConfigEpochRepository.NO_OP,
+                () -> NOW, inPlaceTx(), stores.workingMemories);
     }
 
     // ------------------------------------------------- ① 缺省=2 行为不变

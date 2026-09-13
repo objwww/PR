@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.domain.claim.ClaimStore;
 import com.objwww.pr.control.alert.domain.claim.EvidenceBasis;
 import com.objwww.pr.control.alert.domain.dag.DependencyType;
 import com.objwww.pr.control.alert.domain.dag.TaskEdge;
+import com.objwww.pr.control.alert.domain.model.OperatorCommand;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
 import com.objwww.pr.control.alert.domain.model.RcaRunState;
 import com.objwww.pr.control.alert.domain.model.RcaTask;
@@ -348,6 +349,71 @@ class RunQueryServiceTest {
         }
     }
 
+    // ------------------------------------------------ WC-5：取消收敛读面（停止进度/原因字段）
+
+    @Test
+    void wc5DetailExposesCancelConvergenceFacts() {
+        com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels =
+                new com.objwww.pr.control.alert.application.tool.InFlightToolCancels();
+        FakeCommands commands = new FakeCommands();
+        FakeLedger ledger = new FakeLedger();
+        RunQueryService svc = new RunQueryService(runs, tasks, edges, bindings, usage, claims,
+                CLOCK, cancels, ledger, commands);
+
+        // 停止中：CANCEL 已 APPLIED（多次取消取最新 appliedAt；PERSISTED 行不冒认）
+        // + cancelRun 已通知但 1 个工具等待尚未静默
+        UUID stoppingRun = run(RcaRunState.RUNNING);
+        task(stoppingRun, "ROOT_CAUSE", RcaTaskState.RUNNING);
+        commands.byRun.put(stoppingRun, List.of(
+                command(stoppingRun, "cancel-old", OperatorCommand.State.APPLIED,
+                        NOW.minus(Duration.ofMinutes(3))),
+                command(stoppingRun, "cancel-new", OperatorCommand.State.APPLIED,
+                        NOW.minus(Duration.ofMinutes(2))),
+                command(stoppingRun, "cancel-still-persisted", OperatorCommand.State.PERSISTED,
+                        null)));
+        java.util.concurrent.CompletableFuture<Object> inflight =
+                new java.util.concurrent.CompletableFuture<>();
+        cancels.register(stoppingRun, inflight);
+        cancels.cancelRun(stoppingRun);
+        ledger.unknownByRun.put(stoppingRun, 2L);
+
+        Map<String, Object> stopping = svc.detail(stoppingRun).orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> stoppingHead = (Map<String, Object>) stopping.get("run");
+        assertThat(stoppingHead.get("terminationRequestedAt"))
+                .isEqualTo(NOW.minus(Duration.ofMinutes(2)).toString());
+        assertThat(stoppingHead.get("localExecutionState")).isEqualTo("STOPPING");
+        assertThat(stoppingHead.get("inflightCount")).isEqualTo(1);
+        assertThat(stoppingHead.get("unknownActionCount")).isEqualTo(2L);
+
+        // 已静默：终态 run + 在途清零（unregister 即移除面）
+        UUID quiescedRun = run(RcaRunState.CANCELLED);
+        task(quiescedRun, "ROOT_CAUSE", RcaTaskState.STALE);
+        Map<String, Object> quiesced = svc.detail(quiescedRun).orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> quiescedHead = (Map<String, Object>) quiesced.get("run");
+        assertThat(quiescedHead.get("terminationRequestedAt")).isNull();
+        assertThat(quiescedHead.get("localExecutionState")).isEqualTo("QUIESCED");
+        assertThat(quiescedHead.get("inflightCount")).isEqualTo(0);
+        assertThat(quiescedHead.get("unknownActionCount")).isEqualTo(0L);
+
+        // 旧装配（7 参构造）无取消/账本/命令面：四字段按"无知识"降级，不伪造
+        Map<String, Object> legacy = service.detail(stoppingRun).orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> legacyHead = (Map<String, Object>) legacy.get("run");
+        assertThat(legacyHead.get("terminationRequestedAt")).isNull();
+        assertThat(legacyHead.get("localExecutionState")).isNull();
+        assertThat(legacyHead.get("inflightCount")).isEqualTo(0);
+        assertThat(legacyHead.get("unknownActionCount")).isEqualTo(0L);
+    }
+
+    private static OperatorCommand command(UUID runId, String key,
+            OperatorCommand.State state, Instant appliedAt) {
+        return new OperatorCommand(UUID.randomUUID(), runId, OperatorCommand.Type.CANCEL,
+                key, 0, Map.of(), state, "operator-1", NOW.minus(Duration.ofMinutes(5)),
+                appliedAt);
+    }
+
     private static Map<String, Object> byBucket(List<Map<String, Object>> rows, String bucket) {
         return rows.stream().filter(r -> bucket.equals(r.get("bucket"))).findFirst().orElseThrow();
     }
@@ -532,6 +598,63 @@ class RunQueryServiceTest {
         @Override
         public List<ClaimRow> findByRunId(UUID runId) {
             return byRun.getOrDefault(runId, List.of());
+        }
+    }
+
+    /** WC-5 内存命令桩：只有 findByRunAndType 读面（读面测试唯一入口） */
+    static final class FakeCommands
+            implements com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository {
+        final Map<UUID, List<OperatorCommand>> byRun = new LinkedHashMap<>();
+
+        @Override
+        public void insert(OperatorCommand command) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<OperatorCommand> find(UUID runId, OperatorCommand.Type type,
+                String idempotencyKey) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean updateState(UUID id, OperatorCommand.State state, Instant appliedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<OperatorCommand> findByRunAndType(UUID runId, OperatorCommand.Type type) {
+            return byRun.getOrDefault(runId, List.of());
+        }
+    }
+
+    /** WC-5 内存账本桩：只有 countByRunAndState 读面 */
+    static final class FakeLedger
+            implements com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger {
+        final Map<UUID, Long> unknownByRun = new LinkedHashMap<>();
+
+        @Override
+        public void open(InvocationIdentity identity) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean succeed(UUID operationId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean fail(UUID operationId,
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState terminal,
+                com.objwww.pr.control.alert.domain.tool.ToolReasonCode reasonCode) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long countByRunAndState(UUID runId,
+                com.objwww.pr.control.alert.domain.tool.ToolInvocationState state) {
+            return state == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.UNKNOWN
+                    ? unknownByRun.getOrDefault(runId, 0L) : 0L;
         }
     }
 }

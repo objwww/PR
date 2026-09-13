@@ -217,12 +217,20 @@ public class SkillCandidateService {
     /**
      * EVALUATING→QUALIFIED（仅 PASS 且未撤销）或 REJECTED（FAIL/INCONCLUSIVE 留痕；
      * S09：MATCHED 只对账不背书，费用 MATCHED 也不能绕质量门）。
+     * §7.4：证明行必须钉住<b>本候选的确切 assetDigest</b>——任意 PASS 对象不能
+     * 认可当前候选（改正文=新 digest=旧证明失效，与 S10 激活对账同律）。
      */
     public SkillCandidate recordQualification(UUID candidateId,
             ReleaseQualification qualification) {
         Objects.requireNonNull(qualification, "qualification");
         SkillCandidate candidate = candidates.findById(candidateId).orElseThrow(
                 () -> new IllegalArgumentException("候选不存在: " + candidateId));
+        if (candidate.assetDigest() == null || !qualification.candidateDigest().hex()
+                .equals(candidate.assetDigest())) {
+            throw new IllegalStateException("资格证明钉的 candidateDigest（"
+                    + qualification.candidateDigest().hex() + "）与候选当前 assetDigest（"
+                    + candidate.assetDigest() + "）不一致——不能以他人证明认可本候选");
+        }
         Instant now = clock.instant();
         if (qualification.passQualified()) {
             SkillCandidate qualified = candidate.qualify(now);

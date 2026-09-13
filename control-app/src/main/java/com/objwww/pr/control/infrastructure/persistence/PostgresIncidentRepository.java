@@ -35,6 +35,22 @@ public class PostgresIncidentRepository implements IncidentRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    /**
+     * WC-4 §5.3：单语句条件 UPDATE——仅当指针仍指向 runId 才清（WC-T22 不误清新
+     * Run 指针）；读-判-写竞态由 WHERE 条件消解，不依赖锁序叠加。
+     */
+    @Override
+    public boolean clearCurrentRunPointerIfEquals(UUID incidentId, UUID runId, Instant now) {
+        return jdbc.sql("""
+                UPDATE incident SET current_rca_run_id = null, updated_at = :now
+                 WHERE id = :incidentId AND current_rca_run_id = :runId
+                """)
+                .param("now", Timestamp.from(now))
+                .param("incidentId", incidentId)
+                .param("runId", runId)
+                .update() > 0;
+    }
+
     @Override
     public Optional<Incident> findByIdForUpdate(UUID id) {
         List<Incident> rows = jdbc.sql(SELECT_BASE + " WHERE id = :id FOR UPDATE")

@@ -276,6 +276,39 @@ class MetricsAgentTest {
                 schemaHash, MetricsAgent.argsOf(query()), TIME_RANGE, SNAPSHOT));        assertThat(ledger.rows.get(0).actionDigest()).isEqualTo(expected);
     }
 
+    // ------------------------------------------------------------------ WC-3 取消传播
+
+    @Test
+    void wc3_t16_停止信号入口即拒_零资格零触网零落账() {
+        // WC-3 §5.2：Run 终态在单工具入口被探针拦截——复用/熔断/预算判定全部
+        // 不再进行（零新资格），异常类型化上抛（worker 记终态失败，不折 FAILED 回执）
+        java.util.concurrent.atomic.AtomicInteger remote = new java.util.concurrent.atomic.AtomicInteger();
+        MetricsAgent agent = agent(args -> {
+            remote.incrementAndGet();
+            return fixtureBytes();
+        }, policyFor("prometheus.query"));
+        MetricsAgent.CallContext stopped = new MetricsAgent.CallContext(RUN, TASK, ATTEMPT,
+                1, 3L, SNAPSHOT, TIME_RANGE,
+                () -> {
+                    throw new com.objwww.pr.control.alert.application.ExecutionControl
+                            .StoppedException(
+                            com.objwww.pr.control.alert.application.ExecutionControl
+                                    .STOP_RUN_CANCELLED, "run 已取消");
+                },
+                null);
+
+        assertThatThrownBy(() -> agent.investigate(stopped, query()))
+                .isInstanceOfSatisfying(
+                        com.objwww.pr.control.alert.application.ExecutionControl
+                                .StoppedException.class,
+                        e -> assertThat(e.kind()).isEqualTo(
+                                com.objwww.pr.control.alert.application.ExecutionControl
+                                        .STOP_RUN_CANCELLED));
+        assertThat(remote.get()).as("停止先于触网").isZero();
+        assertThat(ledger.rows).as("停止先于一切资格判定：零账本行").isEmpty();
+        assertThat(evidence.rows).as("零证据").isEmpty();
+    }
+
     // ------------------------------------------------------------------ EX-A1 预算门（P1-02）
 
     @Test

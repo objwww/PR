@@ -26,4 +26,7 @@ public interface SkillCandidateRepository {
 
     /** 状态过滤列表（activeSkills 生产读面 = listByStatus(ACTIVE)；S08 隔离面） */
     List<SkillCandidate> listByStatus(String status);
+
+    /** 资产指针查面（CL-05：持久绑定按 digest 回读候选行名/状态；行永不删故必中） */
+    Optional<SkillCandidate> findByAssetDigest(String assetDigest);
 }
