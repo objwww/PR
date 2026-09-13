@@ -1,0 +1,243 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 83 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 339 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.alert.application.CommandServiceTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.251 s -- in com.objwww.pr.control.alert.application.CommandServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.RcaWorkerTest
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (E:\ProgramInstall\maven\apache-maven-3.9.16\maven-repository\net\bytebuddy\byte-buddy-agent\1.15.11\byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+10:16:39.025 [main] INFO com.objwww.pr.control.alert.application.RcaWorker -- RcaWorker ���� owner=worker-expire scope=rca
+10:16:39.428 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.425391700Z","run_id":"e3929712-40e0-4579-8fb9-d3158a636197","decision":"COMPLETED","latency_ms":0,"attempt_id":"afe9bb84-66db-4d5b-bf65-5e1aef2d5d76","task_id":"e4014fb7-8a78-4801-84dd-1affb395c333"}
+10:16:39.439 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- incident bf3907c7-9fcb-4bcb-8994-4075d128fe86 ���ϱ仯���� RERUN run
+10:16:39.442 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"report_publication_loser","ts":"2026-09-13T02:16:39.441914600Z","generation":0,"incident_id":"bf3907c7-9fcb-4bcb-8994-4075d128fe86","run_id":"74f961b5-88a1-450b-95b7-c22437ec8b6b","report_id":"f586efe0-4a57-461d-a3f4-f67ea6b2fa6e"}
+10:16:39.442 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- report f586efe0-4a57-461d-a3f4-f67ea6b2fa6e ��� generation ����Ӯ�ң�incident=bf3907c7-9fcb-4bcb-8994-4075d128fe86, gen=0�����䵵������
+10:16:39.443 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.443914700Z","run_id":"74f961b5-88a1-450b-95b7-c22437ec8b6b","decision":"COMPLETED","latency_ms":0,"attempt_id":"b0398041-dcd2-4415-b824-88f24a23789b","task_id":"beea8b66-3214-4e97-8595-cdcefb298b7d"}
+10:16:39.453 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.453599200Z","run_id":"f1faacbe-9f61-44b0-95b9-1722f08a2139","decision":"RETRY_SCHEDULED","latency_ms":0,"attempt_id":"a8d0d8e7-7435-4dd2-ad86-c77d23439088","task_id":"bc9c63bd-4cac-4e4c-9939-1635d35e1eea"}
+10:16:39.453 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.453599200Z","run_id":"f1faacbe-9f61-44b0-95b9-1722f08a2139","decision":"RETRY_SCHEDULED","latency_ms":0,"attempt_id":"69ace32c-2c26-41ba-8f59-e21d8601ce0a","task_id":"bc9c63bd-4cac-4e4c-9939-1635d35e1eea"}
+10:16:39.454 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.454600Z","run_id":"f1faacbe-9f61-44b0-95b9-1722f08a2139","decision":"DEAD","latency_ms":0,"attempt_id":"a2630a78-366a-4d22-b3b3-db667bd56278","task_id":"bc9c63bd-4cac-4e4c-9939-1635d35e1eea"}
+10:16:39.473 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 675a5247-d9ab-4141-b283-4625c8fb4904 ��Լ���ڻ��� owner=worker-a �� RETRY_WAIT
+10:16:39.473 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- �����˱� c3c1211e-caf5-4448-985b-d0672c7876a4 STARTED��UNKNOWN���������գ�
+10:16:39.485 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:39.484713300Z","run_id":"ca04ec3c-c7f1-41de-9c35-441bcd9b011b","decision":"COMPLETED","latency_ms":0,"attempt_id":"b8c698ba-06d0-4797-aceb-ea7d3d18c084","task_id":"cd405fee-cbcc-41fd-8ad0-fac3526233d2"}
+10:16:39.493 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- ���ҵ����¼ fc6b2a5e-c67a-44f3-a0cc-093e3d60d970 STARTED��UNKNOWN���������գ�
+10:16:39.511 [main] INFO com.objwww.pr.control.alert.application.RcaWorker -- RcaWorker ���� owner=worker-expire-fail scope=rca
+10:16:39.511 [rca-worker-worker-expire-fail] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 3bddedef-8aba-4f55-975e-dd1fb0914ea9 ��Լ���ڻ��� owner=dead-worker �� STALE
+10:16:39.512 [rca-worker-worker-expire-fail] ERROR com.objwww.pr.control.alert.application.RcaWorker -- expireOverdue ��ʧ�ܣ���������
+java.lang.RuntimeException: expireOverdue ��ʧ��ģ��
+	at com.objwww.pr.control.alert.application.RunConfigSwitchService.expireOverdue(RunConfigSwitchService.java:189)
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:434)
+	at java.base/java.lang.VirtualThread.run(VirtualThread.java:329)
+10:16:39.572 [rca-worker-worker-expire-fail] ERROR com.objwww.pr.control.alert.application.RcaWorker -- expireOverdue ��ʧ�ܣ���������
+java.lang.RuntimeException: expireOverdue ��ʧ��ģ��
+	at com.objwww.pr.control.alert.application.RunConfigSwitchService.expireOverdue(RunConfigSwitchService.java:189)
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:434)
+	at java.base/java.lang.VirtualThread.run(VirtualThread.java:329)
+10:16:39.635 [rca-worker-worker-expire-fail] ERROR com.objwww.pr.control.alert.application.RcaWorker -- expireOverdue ��ʧ�ܣ���������
+java.lang.RuntimeException: expireOverdue ��ʧ��ģ��
+	at com.objwww.pr.control.alert.application.RunConfigSwitchService.expireOverdue(RunConfigSwitchService.java:189)
+	at com.objwww.pr.control.alert.application.RcaWorker.loop(RcaWorker.java:434)
+	at java.base/java.lang.VirtualThread.run(VirtualThread.java:329)
+10:16:39.660 [main] INFO com.objwww.pr.control.alert.application.RcaWorker -- RcaWorker ���� owner=worker-expire-stop scope=rca
+10:16:40.312 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.312575500Z","run_id":"65572150-22a0-4a94-8283-14f8f1a62cae","decision":"DEAD","latency_ms":0,"attempt_id":"301fd162-aa53-483b-ac8d-30453b4b4d46","task_id":"6d24822c-dc94-40c2-a007-330e71db4b60"}
+10:16:40.317 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- ���ߵ����˱� 1 �� PENDING��UNKNOWN���������գ�
+10:16:40.322 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 0be13b41-9d44-4834-8782-33761510bb5d ��Լ���ڻ��� owner=worker-a �� STALE
+10:16:40.327 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.327845300Z","run_id":"955720c8-bdfa-48ca-9f2f-c8eb2eeb0d4c","decision":"COMPLETED","latency_ms":0,"attempt_id":"1862a2c2-da95-457c-827c-4a9235f89a46","task_id":"92db0646-97af-4070-b283-9584ab20270e"}
+10:16:40.331 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.331347800Z","run_id":"cb34178e-f8ee-46d3-8964-f245aa1598b8","decision":"RETRY_SCHEDULED","latency_ms":0,"attempt_id":"7df4c40f-4232-4277-848a-16b144b8354f","task_id":"92bfc20f-28a0-4381-b2b2-eb84aff136af"}
+10:16:40.331 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.331347800Z","run_id":"cb34178e-f8ee-46d3-8964-f245aa1598b8","decision":"COMPLETED","latency_ms":0,"attempt_id":"88a597c4-46d8-499f-878e-e92a4478626a","task_id":"92bfc20f-28a0-4381-b2b2-eb84aff136af"}
+10:16:40.336 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.336034700Z","run_id":"8a48a3bf-697b-4098-b166-cf80d31ea00d","decision":"COMPLETED","latency_ms":0,"attempt_id":"f8a05f9e-9e7a-49b8-b3f5-2711c0167724","task_id":"84fc36ac-828b-4c74-91fc-f4aa14256312"}
+10:16:40.341 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.341125800Z","run_id":"62514b2e-a2b2-40fa-8bbf-827b846673dd","decision":"STALE_GENERATION","run_state":"SUPERSEDED","attempt_id":"034b3cae-7363-4846-aef3-2da5e0076896","task_id":"1b2ab130-c0a2-40ce-b67c-ce328924445c"}
+10:16:40.341 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 1b2ab130-c0a2-40ce-b67c-ce328924445c �ɴ�������ϣ�run 62514b2e-a2b2-40fa-8bbf-827b846673dd state=SUPERSEDED����task��STALE ���䵵
+10:16:40.345 [main] WARN com.objwww.pr.control.alert.application.RcaWorker -- task 14d96e10-51eb-4664-a228-1fdcd661f5ad ��Լ���ڻ��� owner=worker-a �� RETRY_WAIT
+10:16:40.346 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-13T02:16:40.346807400Z","run_id":"94469877-47b5-4aeb-a721-e1c3b3b7460e","decision":"COMPLETED","latency_ms":0,"attempt_id":"52dafbb5-533d-4a2e-9ce3-b1af474d27e8","task_id":"14d96e10-51eb-4664-a228-1fdcd661f5ad"}
+10:16:40.346 [main] WARN com.objwww.pr.control.alert.application.RcaRunOrchestrator -- task 14d96e10-51eb-4664-a228-1fdcd661f5ad ����Լ�ύ���� owner=worker-a epoch=1
+[INFO] Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.265 s -- in com.objwww.pr.control.alert.application.RcaWorkerTest
+[INFO] Running com.objwww.pr.control.alert.application.RunReconcilerTest
+10:16:40.365 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.364696800Z","deadline":"2026-09-13T09:59:59Z","proposed":"AUTO_EXPIRE ����״̬����ֹ����EXPIRED��","mode":"ALERT_ONLY","state":"REPORTING","recovery_attempts":0,"run_id":"a53078b6-455e-422a-8269-ecefcd602d92","purpose":"PRODUCTION","decision":"HARD_DEADLINE_EXPIRED"}
+10:16:40.365 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run a53078b6-455e-422a-8269-ecefcd602d92 ���˾��� HARD_DEADLINE_EXPIRED��mode=ALERT_ONLY deadline=2026-09-13T09:59:59Z����AUTO_EXPIRE ����״̬����ֹ����EXPIRED��
+10:16:40.375 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.375571Z","deadline":"null","proposed":"SAFE_RECOVER ���� REPORT_FINALIZE ��β����","mode":"ALERT_ONLY","state":"REPORTING","recovery_attempts":0,"run_id":"1f744ef8-0fbe-4fd6-b7c1-9498b0b392b7","purpose":"PRODUCTION","decision":"FINALIZE_CANDIDATE"}
+10:16:40.375 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 1f744ef8-0fbe-4fd6-b7c1-9498b0b392b7 ���˾��� FINALIZE_CANDIDATE��mode=ALERT_ONLY deadline=null����SAFE_RECOVER ���� REPORT_FINALIZE ��β����
+10:16:40.378 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 1f744ef8-0fbe-4fd6-b7c1-9498b0b392b7 ���˻ָ����� REPORT_FINALIZE ��β����ֻ����в��ϣ�
+10:16:40.381 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.379084300Z","deadline":"null","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","mode":"SAFE_RECOVER","state":"REPORTING","recovery_attempts":1,"run_id":"1f744ef8-0fbe-4fd6-b7c1-9498b0b392b7","purpose":"PRODUCTION","decision":"WAIT_BACKOFF"}
+10:16:40.382 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 1f744ef8-0fbe-4fd6-b7c1-9498b0b392b7 ���˾��� WAIT_BACKOFF��mode=SAFE_RECOVER deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+10:16:40.385 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.384592500Z","deadline":"null","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","mode":"AUTO_EXPIRE","state":"REPORTING","recovery_attempts":0,"run_id":"b031deb9-624e-4e6b-9e24-d8f90e28fc14","purpose":"PRODUCTION","decision":"WAIT_RECLAIM"}
+10:16:40.385 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run b031deb9-624e-4e6b-9e24-d8f90e28fc14 ���˾��� WAIT_RECLAIM��mode=AUTO_EXPIRE deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+10:16:40.387 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.387998100Z","deadline":"2026-09-13T10:30:00Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","mode":"AUTO_EXPIRE","state":"RUNNING","recovery_attempts":0,"run_id":"84053ac8-e490-4d2d-86e9-8a62fe1f17b1","purpose":"PRODUCTION","decision":"WAIT_ACTIVE_LEASE"}
+10:16:40.388 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 84053ac8-e490-4d2d-86e9-8a62fe1f17b1 ���˾��� WAIT_ACTIVE_LEASE��mode=AUTO_EXPIRE deadline=2026-09-13T10:30:00Z�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+10:16:40.393 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 73cc0b0a-e83f-47e9-9ff8-2bea70b63977 �������Ӳ���ޣ�������ֹ��REPORTING��
+10:16:40.394 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.394646700Z","deadline":"null","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","mode":"AUTO_EXPIRE","state":"RUNNING","recovery_attempts":0,"run_id":"da3c3dde-09a1-44b1-a17f-bfd7dc25c8b3","purpose":"LEGACY_UNKNOWN","decision":"WAIT_ACTIVE_LEASE"}
+10:16:40.394 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run da3c3dde-09a1-44b1-a17f-bfd7dc25c8b3 ���˾��� WAIT_ACTIVE_LEASE��mode=AUTO_EXPIRE deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+10:16:40.396 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.396657400Z","deadline":"null","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","mode":"AUTO_EXPIRE","state":"QUEUED","recovery_attempts":0,"run_id":"a6d35698-fd45-40ee-92bf-e8001846266c","purpose":"PRODUCTION","decision":"ORPHAN_NO_DRIVER"}
+10:16:40.397 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run a6d35698-fd45-40ee-92bf-e8001846266c ���˾��� ORPHAN_NO_DRIVER��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+10:16:40.398 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run f69279f7-4e4e-4962-be5d-e6d6e97b1f1a �������Ӳ���ޣ�������ֹ��RUNNING��
+10:16:40.403 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.403163400Z","deadline":"null","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","mode":"AUTO_EXPIRE","state":"REPORTING","recovery_attempts":0,"run_id":"57daa10e-cfd9-4c69-8b8c-ba254621aa15","purpose":"LEGACY_UNKNOWN","decision":"ORPHAN_MATERIALS_INCOMPLETE"}
+10:16:40.403 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 57daa10e-cfd9-4c69-8b8c-ba254621aa15 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+10:16:40.406 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.406310300Z","deadline":"null","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","mode":"SAFE_RECOVER","state":"REPORTING","recovery_attempts":0,"run_id":"d6d0f874-8670-4945-8fe2-0f813de1bcff","purpose":"PRODUCTION","decision":"ORPHAN_MATERIALS_INCOMPLETE"}
+10:16:40.406 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run d6d0f874-8670-4945-8fe2-0f813de1bcff ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=SAFE_RECOVER deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+10:16:40.409 [main] ERROR com.objwww.pr.control.alert.application.RunReconciler -- run 0d1939a3-51c6-4686-9fc0-db3c5cdfc9c8 ����ʧ�ܣ��������֣�
+java.lang.IllegalStateException: event sink down
+	at com.objwww.pr.control.alert.application.RunReconcilerTest$1.append(RunReconcilerTest.java:316)
+	at com.objwww.pr.control.alert.application.RunReconciler.lambda$castFinalizeTask$2(RunReconciler.java:311)
+	at org.springframework.transaction.support.WithoutTransactionOperations.execute(WithoutTransactionOperations.java:45)
+	at com.objwww.pr.control.alert.application.RunReconciler.castFinalizeTask(RunReconciler.java:289)
+	at com.objwww.pr.control.alert.application.RunReconciler.act(RunReconciler.java:238)
+	at com.objwww.pr.control.alert.application.RunReconciler.decide(RunReconciler.java:228)
+	at com.objwww.pr.control.alert.application.RunReconciler.scanOnce(RunReconciler.java:186)
+	at com.objwww.pr.control.alert.application.RunReconcilerTest.sr12_candidateActionFailureDoesNotKillScan(RunReconcilerTest.java:330)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:767)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8(TestMethodTestDescriptor.java:217)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:213)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:138)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:68)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.apache.maven.surefire.junitplatform.LazyLauncher.execute(LazyLauncher.java:56)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:194)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:150)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:124)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+10:16:40.413 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T02:16:40.413265600Z","deadline":"2026-09-13T09:59:00Z","proposed":"AUTO_EXPIRE ����״̬����ֹ��QUEUED��FAILED+QUEUE_DEADLINE��","mode":"SAFE_RECOVER","state":"QUEUED","recovery_attempts":0,"run_id":"79e764e8-4380-4087-93b2-a47b90ff5c6f","purpose":"PRODUCTION","decision":"HARD_DEADLINE_EXPIRED"}
+10:16:40.413 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 79e764e8-4380-4087-93b2-a47b90ff5c6f ���˾��� HARD_DEADLINE_EXPIRED��mode=SAFE_RECOVER deadline=2026-09-13T09:59:00Z����AUTO_EXPIRE ����״̬����ֹ��QUEUED��FAILED+QUEUE_DEADLINE��
+10:16:40.414 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 79e764e8-4380-4087-93b2-a47b90ff5c6f �������Ӳ���ޣ�������ֹ��QUEUED��
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.062 s -- in com.objwww.pr.control.alert.application.RunReconcilerTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.261 s -- in com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 52, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.063 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.879 s]
+[INFO] control-app ........................................ SUCCESS [ 33.825 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  35.244 s
+[INFO] Finished at: 2026-09-13T10:16:40+08:00
+[INFO] ------------------------------------------------------------------------

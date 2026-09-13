@@ -1,0 +1,184 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 73 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 604 source files with javac [debug parameters release 21] to target\classes
+[WARNING] /E:/kimiCode/control-app/src/main/java/com/objwww/pr/control/infrastructure/model/RawHttpErrorCapture.java:[23,17] org.springframework.web.client.ResponseErrorHandler �е� handleError(org.springframework.http.client.ClientHttpResponse) �ѹ�ʱ, �ұ��Ϊ��ɾ��
+[INFO] /E:/kimiCode/control-app/src/main/java/com/objwww/pr/control/alert/domain/agent/AgentProfile.java: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+[INFO] /E:/kimiCode/control-app/src/main/java/com/objwww/pr/control/alert/domain/agent/AgentProfile.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+[INFO] /E:/kimiCode/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+[INFO] /E:/kimiCode/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 325 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.alert.application.agent.ContextAssemblerTest
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.564 s -- in com.objwww.pr.control.alert.application.agent.ContextAssemblerTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.ContextCompactionServiceTest
+02:27:40.468 [main] INFO com.objwww.pr.control.alert.application.agent.ContextCompactionService -- ������ѹ���ύ run=d69b65b2-3b77-45f8-b220-bb9a06e75755 task=6de1318f-cbf6-44a8-9497-b22c53844042 source=src-digest-1 ����=[0,1] token 800��2 required=1 omitted=0
+02:27:40.490 [main] INFO com.objwww.pr.control.alert.application.agent.ContextCompactionService -- ������ѹ���ύ run=65587634-09e2-47b8-b92b-f53b7dc0012b task=7c94cfa2-b045-47b7-b00d-cf185413ba4c source=src-digest-1 ����=[3,3] token 800��3 required=1 omitted=0
+02:27:40.493 [main] INFO com.objwww.pr.control.alert.application.agent.ContextCompactionService -- ������ѹ���ύ run=4968e675-51a3-4e2d-84ce-846e9534186e task=b2cd2a6f-d472-4c4e-8375-21a83fa84d38 source=src-digest-1 ����=[0,1] token 800��5 required=1 omitted=0
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.126 s -- in com.objwww.pr.control.alert.application.agent.ContextCompactionServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.agent.R7RoleRunnerTest
+02:27:40.595 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.594641900Z","role":"primary@1","run_id":"62b0d905-3701-41ff-844c-508e77b548c1","task_id":"51f3432c-84e6-4921-8511-b9016d6119bf"}
+02:27:40.670 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=51f3432c-84e6-4921-8511-b9016d6119bf claims=2 downgraded=1 stripped=1
+02:27:40.677 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.676593800Z","role":"primary@1","run_id":"ef7108f9-2f4f-4236-bd56-fc7721f76164","task_id":"bd289861-110b-4fa6-b090-6e99969cba69"}
+02:27:40.678 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- ���������ľ� �� ȷ����δ�� FINAL����ģ�͵��ã�task=bd289861-110b-4fa6-b090-6e99969cba69 steps=1
+02:27:40.697 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.697577100Z","role":"primary@1","run_id":"c39e193a-d0cc-4b0a-b3e8-0f59c6261e03","task_id":"6a2d695f-f2fc-47a2-a6c3-869e794b4e66"}
+02:27:40.702 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- TOOL_CALL ������״�ܾ���INVALID_ARGS�����Ʋ����� task=6a2d695f-f2fc-47a2-a6c3-869e794b4e66 tool=logs.query
+02:27:40.708 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.708639200Z","role":"primary@1","run_id":"efd16010-5961-49ed-8b03-960663e1f54c","task_id":"2445b0cf-f086-4b2c-9b4c-fa13eebde07e"}
+02:27:40.711 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �����߲��ɽ�����JsonParseException�����Ʋ����� task=2445b0cf-f086-4b2c-9b4c-fa13eebde07e
+02:27:40.716 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.714576800Z","role":"primary@1","run_id":"1518bef2-57ae-4b8b-ae2d-e52c715f441a","task_id":"8d40a6df-c6f7-4f5f-9813-82dc5e98b9ac"}
+02:27:40.720 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:40.720115600Z","approved":1,"task_id":"8d40a6df-c6f7-4f5f-9813-82dc5e98b9ac","run_id":"1518bef2-57ae-4b8b-ae2d-e52c715f441a","batch_accepted":true,"requests":1}
+02:27:40.727 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.727653800Z","role":"primary@1","run_id":"64ad937e-3438-4910-8d20-f0facf170d54","task_id":"6e5606b6-13c0-4311-9cee-149c305296d1"}
+02:27:40.728 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:40.728653500Z","approved":1,"task_id":"6e5606b6-13c0-4311-9cee-149c305296d1","run_id":"64ad937e-3438-4910-8d20-f0facf170d54","batch_accepted":true,"requests":1}
+02:27:40.737 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.737920600Z","role":"primary@1","run_id":"e826de24-f2bc-4290-a6a6-dfd75271b835","task_id":"194a1d53-5474-445a-9a12-3418bf701a91"}
+02:27:40.759 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- ������ͬǩ��ģ��ʧ�� ��2 �� ȷ����δ�� FINAL����ģ�͵��ã�task=194a1d53-5474-445a-9a12-3418bf701a91 code=PROTOCOL_ERROR
+02:27:40.765 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.764688700Z","role":"primary@1","run_id":"ca88322b-0f3c-473d-ab9b-ba15f0a8a15d","task_id":"cb3c247c-e607-4673-b509-088f1514c722"}
+02:27:40.767 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:40.767221800Z","approved":0,"task_id":"cb3c247c-e607-4673-b509-088f1514c722","run_id":"ca88322b-0f3c-473d-ab9b-ba15f0a8a15d","batch_accepted":false,"requests":1}
+02:27:40.772 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=80f56ab1-089b-40c2-81c1-492bea26f880 claims=0 downgraded=0 stripped=0
+02:27:40.778 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.778200800Z","role":"primary@1","run_id":"338ba174-2c52-463d-bda0-9bbacd2d7f6d","task_id":"e0e47525-11cf-404c-8039-a8d76e6c2d05"}
+02:27:40.779 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=e0e47525-11cf-404c-8039-a8d76e6c2d05 claims=0 downgraded=0 stripped=0
+02:27:40.783 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.783400Z","role":"primary@1","run_id":"c68f4c7c-0ea1-49ae-ba9d-c1ecf5d0793b","task_id":"a3477937-a106-4459-a0e0-cc4efbd48880"}
+02:27:40.789 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.789001900Z","role":"primary@1","run_id":"08daeeda-08ff-47b6-910d-013c932b4349","task_id":"3443e125-adaf-498b-8ccf-7837afe76ff0"}
+02:27:40.791 [main] WARN com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- TOOL_CALL ԽȨ�ܾ������� allowlist�����Ʋ����� task=3443e125-adaf-498b-8ccf-7837afe76ff0 tool=code.search
+02:27:40.796 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.795683800Z","role":"primary@1","run_id":"669e1925-569b-4e82-93b0-db00ec0517bd","task_id":"c77b6270-5763-4a5a-884a-a02fa6a1e5fd"}
+02:27:40.807 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.806148400Z","role":"primary@1","run_id":"04ab9ab9-d903-4db4-95d3-172dd62d4129","task_id":"414f6738-a7d4-4478-9646-5a1e788fa270"}
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.280 s -- in com.objwww.pr.control.alert.application.agent.R7RoleRunnerTest
+[INFO] Running com.objwww.pr.control.alert.application.RunConfigSwitchServiceTest
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.106 s -- in com.objwww.pr.control.alert.application.RunConfigSwitchServiceTest
+[INFO] Running com.objwww.pr.control.infrastructure.nativeexec.R7PrimaryModeExecutorTest
+02:27:40.992 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:40.992089300Z","role":"primary@1","run_id":"fa8ded80-9cf7-4cdb-b96c-bdbc396e5869","task_id":"8e51ebf4-278c-4c3f-9944-215a9dc2ae83"}
+02:27:40.992 [main] WARN com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- run fa8ded80-9cf7-4cdb-b96c-bdbc396e5869 �޶���ʱ�䴰�������м����棩������ִ��ʱ���ڡ���F14 ��������ȱʧ
+02:27:41.006 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:41.006067Z","approved":1,"task_id":"8e51ebf4-278c-4c3f-9944-215a9dc2ae83","run_id":"fa8ded80-9cf7-4cdb-b96c-bdbc396e5869","batch_accepted":true,"requests":1}
+02:27:41.007 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������תί�ɵȴ���sweep ת�������񣬽�����ѣ�task=8e51ebf4-278c-4c3f-9944-215a9dc2ae83 reason=null
+02:27:41.008 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������תί�ɵȴ���sweep ת�������񣬽�����ѣ�task=8e51ebf4-278c-4c3f-9944-215a9dc2ae83 reason=CHILDREN_UNSETTLED
+02:27:41.013 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=8e51ebf4-278c-4c3f-9944-215a9dc2ae83 claims=1 downgraded=0 stripped=0
+02:27:41.013 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������ FINAL �᰸���� �� DONE task=8e51ebf4-278c-4c3f-9944-215a9dc2ae83 reason=null
+02:27:41.019 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-12T18:27:41.019548100Z","run_id":"fa8ded80-9cf7-4cdb-b96c-bdbc396e5869"}
+02:27:41.019 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run fa8ded80-9cf7-4cdb-b96c-bdbc396e5869 ȫ������̬ �� REPORTING����������װ��
+02:27:41.064 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native ȫ����� run=fa8ded80-9cf7-4cdb-b96c-bdbc396e5869 reportOutcome=UNRESOLVED claims=1 validation=STRUCTURE_VALIDATED ����=13d46b4255646143f757380c7deeb29ba173c094037d39ba24c8b0ceab785526 ��ģʽ=true
+02:27:41.075 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:41.075644800Z","role":"primary@1","run_id":"1e4ecb5c-2691-488d-83ee-a18fe945d555","task_id":"a912e771-b997-4e1e-8fe2-2149bb3af513"}
+02:27:41.075 [main] WARN com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- run 1e4ecb5c-2691-488d-83ee-a18fe945d555 �޶���ʱ�䴰�������м����棩������ִ��ʱ���ڡ���F14 ��������ȱʧ
+02:27:41.078 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=a912e771-b997-4e1e-8fe2-2149bb3af513 claims=1 downgraded=0 stripped=0
+02:27:41.078 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������ FINAL �᰸���� �� DONE task=a912e771-b997-4e1e-8fe2-2149bb3af513 reason=null
+02:27:41.078 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-12T18:27:41.078997600Z","run_id":"1e4ecb5c-2691-488d-83ee-a18fe945d555"}
+02:27:41.078 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 1e4ecb5c-2691-488d-83ee-a18fe945d555 ȫ������̬ �� REPORTING����������װ��
+02:27:41.087 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native ȫ����� run=1e4ecb5c-2691-488d-83ee-a18fe945d555 reportOutcome=UNRESOLVED claims=1 validation=STRUCTURE_VALIDATED ����=a3c71174484e428491c46e1df9c11732cf3541383816311de29c4f0c8e0848c7 ��ģʽ=true
+02:27:41.092 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:41.092699Z","role":"primary@1","run_id":"aec093b4-9e4e-44c6-8454-4e52a5c4063d","task_id":"0b50786d-dbba-4af7-8040-188e0942cbb5"}
+02:27:41.092 [main] WARN com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- run aec093b4-9e4e-44c6-8454-4e52a5c4063d �޶���ʱ�䴰�������м����棩������ִ��ʱ���ڡ���F14 ��������ȱʧ
+02:27:41.096 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=0b50786d-dbba-4af7-8040-188e0942cbb5 claims=0 downgraded=0 stripped=0
+02:27:41.096 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������ FINAL �᰸���� �� DONE task=0b50786d-dbba-4af7-8040-188e0942cbb5 reason=null
+02:27:41.097 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-12T18:27:41.096628300Z","run_id":"aec093b4-9e4e-44c6-8454-4e52a5c4063d"}
+02:27:41.097 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run aec093b4-9e4e-44c6-8454-4e52a5c4063d ȫ������̬ �� REPORTING����������װ��
+02:27:41.097 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native ȫ����� run=aec093b4-9e4e-44c6-8454-4e52a5c4063d reportOutcome=UNRESOLVED claims=0 validation=STRUCTURE_VALIDATED ����=dd510beb40809bcb1186f3329d07d712b8a5678029d2d73a876a7f9868a7199a ��ģʽ=true
+02:27:41.102 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:41.102577100Z","role":"primary@1","run_id":"33b0a41d-ad4e-4f3d-a2f7-0dc04003056a","task_id":"3fb8753e-78d9-4cb7-bc5c-a057fa0f2ed2"}
+02:27:41.103 [main] WARN com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- run 33b0a41d-ad4e-4f3d-a2f7-0dc04003056a �޶���ʱ�䴰�������м����棩������ִ��ʱ���ڡ���F14 ��������ȱʧ
+02:27:41.106 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=3fb8753e-78d9-4cb7-bc5c-a057fa0f2ed2 claims=1 downgraded=0 stripped=0
+02:27:41.106 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������ FINAL �᰸���� �� DONE task=3fb8753e-78d9-4cb7-bc5c-a057fa0f2ed2 reason=null
+02:27:41.107 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-12T18:27:41.107882700Z","run_id":"33b0a41d-ad4e-4f3d-a2f7-0dc04003056a"}
+02:27:41.107 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 33b0a41d-ad4e-4f3d-a2f7-0dc04003056a ȫ������̬ �� REPORTING����������װ��
+02:27:41.108 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native ȫ����� run=33b0a41d-ad4e-4f3d-a2f7-0dc04003056a reportOutcome=UNRESOLVED claims=1 validation=STRUCTURE_VALIDATED ����=a3c71174484e428491c46e1df9c11732cf3541383816311de29c4f0c8e0848c7 ��ģʽ=true
+02:27:41.121 [main] INFO com.objwww.pr.control.alert.application.RcaRunOrchestrator -- {"event":"rca_task_decision","ts":"2026-09-12T18:27:41.121374200Z","attempt_id":"947cd988-a6cf-440b-9936-dc30d780042a","task_id":"b224b818-8c0b-45bc-a192-ba7c49a36d39","run_id":"33b0a41d-ad4e-4f3d-a2f7-0dc04003056a","decision":"COMPLETED","latency_ms":0}
+02:27:41.124 [main] WARN com.objwww.pr.control.alert.application.agent.PrimaryFinalClaimProjector -- �� FINAL �᰸��֤�����ã����ɶ��ԣ�����������棩run=e379cbc4-ec32-4d9f-82c1-75815bfe7e00 claim=c3
+02:27:41.129 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:41.129369500Z","role":"primary@1","run_id":"2c1aa897-151d-4533-9183-0133e04de2e9","task_id":"8551e1dc-10e0-4dbf-8550-9b459e1b244c"}
+02:27:41.130 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:41.130381100Z","approved":0,"task_id":"8551e1dc-10e0-4dbf-8550-9b459e1b244c","run_id":"2c1aa897-151d-4533-9183-0133e04de2e9","batch_accepted":false,"requests":1}
+02:27:41.137 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_primary_started","ts":"2026-09-12T18:27:41.137897100Z","role":"primary@1","run_id":"03ce0b39-ff9f-44eb-8734-78f796e961f6","task_id":"1e9113e2-e2c2-4d70-9dee-45bce49f4ab0"}
+02:27:41.138 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"r7_delegation_adjudicated","ts":"2026-09-12T18:27:41.138898700Z","approved":1,"task_id":"1e9113e2-e2c2-4d70-9dee-45bce49f4ab0","run_id":"03ce0b39-ff9f-44eb-8734-78f796e961f6","batch_accepted":true,"requests":1}
+02:27:41.139 [main] WARN com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- run 03ce0b39-ff9f-44eb-8734-78f796e961f6 �޶���ʱ�䴰�������м����棩������ִ��ʱ���ڡ���F14 ��������ȱʧ
+02:27:41.141 [main] INFO com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner -- �� FINAL �᰸����� task=1e9113e2-e2c2-4d70-9dee-45bce49f4ab0 claims=1 downgraded=0 stripped=0
+02:27:41.141 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- ������ FINAL �᰸���� �� DONE task=1e9113e2-e2c2-4d70-9dee-45bce49f4ab0 reason=null
+02:27:41.141 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- {"event":"am4_run_reporting","ts":"2026-09-12T18:27:41.141899200Z","run_id":"03ce0b39-ff9f-44eb-8734-78f796e961f6"}
+02:27:41.141 [main] INFO com.objwww.pr.control.alert.application.DeterministicSupervisor -- run 03ce0b39-ff9f-44eb-8734-78f796e961f6 ȫ������̬ �� REPORTING����������װ��
+02:27:41.142 [main] INFO com.objwww.pr.control.infrastructure.nativeexec.NativeInvestigationExecutor -- native ȫ����� run=03ce0b39-ff9f-44eb-8734-78f796e961f6 reportOutcome=UNRESOLVED claims=1 validation=STRUCTURE_VALIDATED ����=a3c71174484e428491c46e1df9c11732cf3541383816311de29c4f0c8e0848c7 ��ģʽ=true
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.207 s -- in com.objwww.pr.control.infrastructure.nativeexec.R7PrimaryModeExecutorTest
+[INFO] Running com.objwww.pr.control.release.application.SkillCuratorServiceTest
+02:27:41.162 [main] INFO com.objwww.pr.control.release.application.SkillCuratorService -- Skill Դͷ������run=66da10e3-8a18-4055-8af1-9eb2c690bfbe name=heap-runbook �� REJECTED��verified=false��
+02:27:41.171 [main] INFO com.objwww.pr.control.release.application.SkillCandidateService -- Skill ��ѡ DRAFT �䵵��S01����name=heap-runbook asset=e491a4c3�����κ� ACTIVE ��
+02:27:41.171 [main] INFO com.objwww.pr.control.release.application.SkillCuratorService -- Skill Դͷ������run=7f3da461-f42b-40ed-a2ba-b4fe8d646f88 name=heap-runbook �� DRAFT��verified=true��
+02:27:41.174 [main] INFO com.objwww.pr.control.release.application.SkillCandidateService -- Skill ��ѡ DRAFT �䵵��S01����name=heap-runbook asset=ac3b1704�����κ� ACTIVE ��
+02:27:41.174 [main] INFO com.objwww.pr.control.release.application.SkillCuratorService -- Skill Դͷ������run=08204ce5-1bfc-475b-9fe6-f79c10e4c4b4 name=heap-runbook �� DRAFT��verified=true��
+02:27:41.174 [main] INFO com.objwww.pr.control.release.application.SkillCandidateService -- Skill ��ѡ�ݵ��طţ�S14����name=heap-runbook source=201499cc
+02:27:41.174 [main] INFO com.objwww.pr.control.release.application.SkillCuratorService -- Skill Դͷ������run=08204ce5-1bfc-475b-9fe6-f79c10e4c4b4 name=heap-runbook �� DRAFT��verified=true��
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.030 s -- in com.objwww.pr.control.release.application.SkillCuratorServiceTest
+[INFO] Running com.objwww.pr.control.release.application.SkillSelectionServiceTest
+02:27:41.185 [main] INFO com.objwww.pr.control.release.application.SkillSelectionService -- Skill ���棨S11����run=4cdf2a29-337a-462d-904e-f84acc141224 name=v1 digest=9bd1bbe0��conflictSuppressed=false��
+02:27:41.192 [main] INFO com.objwww.pr.control.release.application.SkillSelectionService -- Skill ���棨S11����run=9a5a652c-08c1-4e80-9f05-cc61ed0afe9a name=v2 digest=7fdcb497��conflictSuppressed=false��
+02:27:41.196 [main] INFO com.objwww.pr.control.release.application.SkillSelectionService -- Skill ���棨S11����run=de93c7c7-6b79-4ba8-b4d6-0e205b1f01c7 name=real digest=f9c74290��conflictSuppressed=false��
+02:27:41.203 [main] INFO com.objwww.pr.control.release.application.SkillSelectionService -- Skill ���棨S11����run=0eeb340f-1f66-4a47-acbd-f162f5ff580e name=alpha digest=41ee30cd��conflictSuppressed=true��
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.objwww.pr.control.release.application.SkillSelectionServiceTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 82, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.051 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.728 s]
+[INFO] control-app ........................................ SUCCESS [ 46.569 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  47.774 s
+[INFO] Finished at: 2026-09-13T02:27:41+08:00
+[INFO] ------------------------------------------------------------------------

@@ -1,0 +1,22 @@
+[
+  {
+    "case": "empty_parent_vacuous_pass",
+    "reported": "ASSERT-OVERALL: PASS",
+    "exit_code": 0
+  },
+  {
+    "case": "digest_mismatch_returns_success_exit",
+    "reported": "ASSERT-OVERALL: FAIL",
+    "exit_code": 0
+  },
+  {
+    "case": "missing_counter_evidence_returns_success_exit",
+    "reported": "ASSERT-OVERALL: FAIL",
+    "exit_code": 0
+  },
+  {
+    "case": "parent_prefix_reordered_not_rejected",
+    "reported": "ASSERT-OVERALL: PASS",
+    "exit_code": 0
+  }
+]

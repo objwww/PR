@@ -1,0 +1,235 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 84 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 345 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.alert.application.CommandServiceTest
+13:32:56.304 [main] INFO com.objwww.pr.control.alert.application.CommandService -- {"event":"command_recovery_ambiguous","ts":"2026-09-13T05:32:56.299631700Z","cancel_candidates":2,"command_id":"4531ae3e-f6dc-4811-aa05-ad78441b1484","run_id":"16379f62-08ef-4c26-bc10-fc768e3622aa"}
+13:32:56.312 [main] INFO com.objwww.pr.control.alert.application.CommandService -- {"event":"command_recovery_ambiguous","ts":"2026-09-13T05:32:56.312598500Z","cancel_candidates":2,"command_id":"23a358dc-efa1-4901-9fa2-fd4a08d927de","run_id":"4b5a65c2-6cb2-437f-9161-e22b7af00def"}
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.342 s -- in com.objwww.pr.control.alert.application.CommandServiceTest
+[INFO] Running com.objwww.pr.control.alert.application.RunReconcilerFairnessTest
+13:32:56.427 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.426107400Z","proposed":"finalizer ����̬��Ԥ��ľ����������˱ܲ����������˹��ӹ�","deadline":"null","decision":"RECOVERY_EXHAUSTED","purpose":"PRODUCTION","run_id":"8c32ee12-e03a-4eb8-9bff-1b46207635b6","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.427 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 8c32ee12-e03a-4eb8-9bff-1b46207635b6 ���˾��� RECOVERY_EXHAUSTED��mode=SAFE_RECOVER deadline=null����finalizer ����̬��Ԥ��ľ����������˱ܲ����������˹��ӹ�
+13:32:56.429 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.429954100Z","proposed":"finalizer ����̬��Ԥ��ľ����������˱ܲ����������˹��ӹ�","deadline":"null","decision":"RECOVERY_EXHAUSTED","purpose":"PRODUCTION","run_id":"22604a3d-19e4-45e4-a301-6c95a490b516","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.429 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 22604a3d-19e4-45e4-a301-6c95a490b516 ���˾��� RECOVERY_EXHAUSTED��mode=SAFE_RECOVER deadline=null����finalizer ����̬��Ԥ��ľ����������˱ܲ����������˹��ӹ�
+13:32:56.431 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.431985500Z","proposed":"finalizer DONE �Ҳ��������� Run δ�տڣ�������ʵ�˲飬�˹�ȷ������β","deadline":"null","decision":"FINALIZER_DONE_RUN_OPEN","purpose":"PRODUCTION","run_id":"585cd5ae-e7bc-48c0-9407-70dac4410b11","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.433 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 585cd5ae-e7bc-48c0-9407-70dac4410b11 ���˾��� FINALIZER_DONE_RUN_OPEN��mode=SAFE_RECOVER deadline=null����finalizer DONE �Ҳ��������� Run δ�տڣ�������ʵ�˲飬�˹�ȷ������β
+13:32:56.459 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.458266400Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"1d03a8cf-bdb4-4ed0-8585-baab56f7672d","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.459 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 1d03a8cf-bdb4-4ed0-8585-baab56f7672d ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.459 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.459264700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"6635a42f-2b19-47bb-a568-5fb3a4331d52","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.460 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 6635a42f-2b19-47bb-a568-5fb3a4331d52 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.460 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.460265600Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"9414792a-c253-48aa-b67d-e53a47a30958","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.460 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 9414792a-c253-48aa-b67d-e53a47a30958 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.461 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.461265900Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"8b0e2241-da89-4e86-8f68-35571ad6bb8b","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.461 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 8b0e2241-da89-4e86-8f68-35571ad6bb8b ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.461 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.461770600Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"2bcb01bd-59f1-4787-899a-f629443596cb","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.461 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 2bcb01bd-59f1-4787-899a-f629443596cb ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.461 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.461770600Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"1d03a8cf-bdb4-4ed0-8585-baab56f7672d","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.461 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 1d03a8cf-bdb4-4ed0-8585-baab56f7672d ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.463 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.461770600Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"6635a42f-2b19-47bb-a568-5fb3a4331d52","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.463 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 6635a42f-2b19-47bb-a568-5fb3a4331d52 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.468 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run a8e18990-e6d6-4499-af57-5b184ac314f8 ���ھ������ߣ�������β/ȡ��������أ����㸱����
+13:32:56.481 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run d7f386bd-f84d-4d52-a614-d3b32f68e2e4 ��̬����������1 ������̬���� �� CANCELLED���ʸ������˱�������
+13:32:56.487 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run d010a2e6-7fae-45f7-bfdb-63a53f416b90 ��̬����������2 ������̬���� �� CANCELLED���ʸ������˱�������
+13:32:56.493 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.492390700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"d48a925b-ee19-494c-a331-be71079c6e10","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.493 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run d48a925b-ee19-494c-a331-be71079c6e10 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.494 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.493399Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"e8d1f865-f456-4289-a23e-cd06ec4303a5","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.494 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run e8d1f865-f456-4289-a23e-cd06ec4303a5 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.494 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.494903700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"279f06e9-1159-4841-9c21-76b6735db6fc","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.495 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 279f06e9-1159-4841-9c21-76b6735db6fc ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.495 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.495408600Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"388dd36c-2199-46d8-8077-312a20e8ddf9","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.495 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 388dd36c-2199-46d8-8077-312a20e8ddf9 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.496 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.496417200Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"d48a925b-ee19-494c-a331-be71079c6e10","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.496 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run d48a925b-ee19-494c-a331-be71079c6e10 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.496 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.496417200Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"e8d1f865-f456-4289-a23e-cd06ec4303a5","recovery_attempts":0,"state":"REPORTING","mode":"ALERT_ONLY"}
+13:32:56.496 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run e8d1f865-f456-4289-a23e-cd06ec4303a5 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=ALERT_ONLY deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.502 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.502884700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"400b2233-97ad-443b-8434-efd6a05475f5","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.502 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 400b2233-97ad-443b-8434-efd6a05475f5 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.504 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.502884700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"2b51d2ac-06aa-4a5b-bb52-066a3a0cf29c","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.504 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 2b51d2ac-06aa-4a5b-bb52-066a3a0cf29c ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.504 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.504272700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"92d9e84d-3caf-47a8-b1aa-cfa512d64f92","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.505 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 92d9e84d-3caf-47a8-b1aa-cfa512d64f92 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.505 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.505278900Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"194a6226-c780-48a2-9842-922cdd8c59c0","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.505 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 194a6226-c780-48a2-9842-922cdd8c59c0 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.509 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 6de61cda-4b90-4e82-a5c4-f40e68b3c9ec �������Ӳ���ޣ�������ֹ��REPORTING��
+13:32:56.515 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.515310100Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","deadline":"null","decision":"WAIT_BACKOFF","purpose":"PRODUCTION","run_id":"1a0a4f08-f1c3-4a72-8ccf-345654ae5e52","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.515 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 1a0a4f08-f1c3-4a72-8ccf-345654ae5e52 ���˾��� WAIT_BACKOFF��mode=SAFE_RECOVER deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+13:32:56.516 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.515816200Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","deadline":"null","decision":"WAIT_BACKOFF","purpose":"PRODUCTION","run_id":"140e331b-e86c-4a20-b563-23f3108e7a7c","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.516 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 140e331b-e86c-4a20-b563-23f3108e7a7c ���˾��� WAIT_BACKOFF��mode=SAFE_RECOVER deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+13:32:56.516 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.516822600Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","deadline":"null","decision":"WAIT_RECLAIM","purpose":"PRODUCTION","run_id":"45eb9358-b15b-4812-a6b6-1ea99eaab5f4","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.516 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 45eb9358-b15b-4812-a6b6-1ea99eaab5f4 ���˾��� WAIT_RECLAIM��mode=SAFE_RECOVER deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+13:32:56.516 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.516822600Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","deadline":"null","decision":"WAIT_ACTIVE_LEASE","purpose":"PRODUCTION","run_id":"619b4dba-1b23-41e5-9a24-3b6b3529e5c2","recovery_attempts":0,"state":"REPORTING","mode":"SAFE_RECOVER"}
+13:32:56.517 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 619b4dba-1b23-41e5-9a24-3b6b3529e5c2 ���˾��� WAIT_ACTIVE_LEASE��mode=SAFE_RECOVER deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+13:32:56.529 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.529457700Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"e7915dcc-5d32-445b-b8f2-a50dd377ee49","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.529 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run e7915dcc-5d32-445b-b8f2-a50dd377ee49 ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.530 [main] ERROR com.objwww.pr.control.alert.application.RunReconciler -- run 1ed1e02e-d10f-4c8a-abb1-5aec521c2b2e ����ʧ�ܣ�Խ�����α����ƣ�
+java.lang.IllegalStateException: wc-t02 �������
+	at com.objwww.pr.control.alert.application.RunReconcilerFairnessTest$1.append(RunReconcilerFairnessTest.java:162)
+	at com.objwww.pr.control.alert.application.RunReconciler.lambda$expireRun$7(RunReconciler.java:535)
+	at org.springframework.transaction.support.WithoutTransactionOperations.execute(WithoutTransactionOperations.java:45)
+	at com.objwww.pr.control.alert.application.RunReconciler.expireRun(RunReconciler.java:512)
+	at com.objwww.pr.control.alert.application.RunReconciler.act(RunReconciler.java:399)
+	at com.objwww.pr.control.alert.application.RunReconciler.decide(RunReconciler.java:345)
+	at com.objwww.pr.control.alert.application.RunReconciler.scanActiveBatch(RunReconciler.java:289)
+	at com.objwww.pr.control.alert.application.RunReconciler.scanOnce(RunReconciler.java:233)
+	at com.objwww.pr.control.alert.application.RunReconcilerFairnessTest.wc4_t02_failingCandidateDoesNotStallCursor(RunReconcilerFairnessTest.java:178)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:767)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8(TestMethodTestDescriptor.java:217)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:213)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:138)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:68)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.apache.maven.surefire.junitplatform.LazyLauncher.execute(LazyLauncher.java:56)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:194)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:150)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:124)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+13:32:56.536 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.536337200Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"428b221f-1132-474d-9cef-88b2a5d61e3d","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.536 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run 428b221f-1132-474d-9cef-88b2a5d61e3d ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.537 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.536842500Z","proposed":"�ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�","deadline":"null","decision":"ORPHAN_MATERIALS_INCOMPLETE","purpose":"PRODUCTION","run_id":"e9dfb872-4695-424a-86cd-2b7ff26d0ecf","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.537 [main] WARN com.objwww.pr.control.alert.application.RunReconciler -- run e9dfb872-4695-424a-86cd-2b7ff26d0ecf ���˾��� ORPHAN_MATERIALS_INCOMPLETE��mode=AUTO_EXPIRE deadline=null�����ṹ��һ�£��澯�˹��ӹܣ����½�����Զ��ָ�
+13:32:56.541 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- {"event":"run_reconcile_decision","ts":"2026-09-13T05:32:56.541361500Z","proposed":"�ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�","deadline":"null","decision":"WAIT_BACKOFF","purpose":"PRODUCTION","run_id":"4f225c41-1e9f-4882-928c-0d25836bb416","recovery_attempts":0,"state":"REPORTING","mode":"AUTO_EXPIRE"}
+13:32:56.541 [main] INFO com.objwww.pr.control.alert.application.RunReconciler -- run 4f225c41-1e9f-4882-928c-0d25836bb416 ���˾��� WAIT_BACKOFF��mode=AUTO_EXPIRE deadline=null�����ȴ�����¼�ȴ�ԭ�򣬲�����Լ�����ܣ�
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.198 s -- in com.objwww.pr.control.alert.application.RunReconcilerFairnessTest
+[INFO] Running com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.517 s -- in com.objwww.pr.control.alert.application.tool.ToolGatewayTest
+[INFO] Running com.objwww.pr.control.alert.domain.agent.WorkingMemoryTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.objwww.pr.control.alert.domain.agent.WorkingMemoryTest
+[INFO] Running com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutorTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.613 s -- in com.objwww.pr.control.infrastructure.tool.LokiAggregateExecutorTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 46, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.046 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.678 s]
+[INFO] control-app ........................................ SUCCESS [ 42.662 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  43.833 s
+[INFO] Finished at: 2026-09-13T13:32:59+08:00
+[INFO] ------------------------------------------------------------------------
