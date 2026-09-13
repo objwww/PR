@@ -1,0 +1,53 @@
+== 0. 静态资源与未认证门禁 ==
+GET /                     -> 200 (387B)
+GET /login                -> 200
+GET /overview(SPA回退)    -> 200
+未认证 GET /api/v1/overview/summary -> 401（期望401）
+== 1. 登录 ==
+POST /auth/login -> 200
+GET /auth/me -> 200
+== 2. 已认证 GET 矩阵（25 路由的后端依赖面） ==
+GET /api/v1/overview/summary -> 200 (4400B)
+GET /api/v1/incidents?page=0&size=5 -> 200 (26190B)
+GET /api/v1/incidents/facets -> 200 (2126B)
+GET /api/v1/incidents/summary -> 200 (135B)
+GET /api/v1/incidents?status=RESOLVED&size=3 -> 200 (9279B)
+GET /api/rca-runs?size=5 -> 200 (119315B)
+GET /api/agent-ops/summary -> 200 (247B)
+GET /api/agent-ops/workers -> 200 (209B)
+GET /api/metrics/query_range?query=up&start=2026-09-13T07:00:00Z&end=2026-09-13T07:10:00Z&step=60 -> 400 (134B)
+GET /api/cases?page=0&size=5 -> 200 (2B)
+GET /api/cases/summary -> 200 (116B)
+GET /api/duty/schedule -> 200 (383B)
+GET /api/duty/schedule/snapshot -> 200 (938B)
+GET /api/duty/members -> 200 (201B)
+GET /api/duty/channels -> 200 (570B)
+GET /api/duty/overrides -> 403 (21B)
+GET /api/duty/notifications?page=0&size=5 -> 200 (5670B)
+GET /api/duty/notifications/feed -> 200 (9206B)
+GET /api/eval/runs?page=0&size=5 -> 200 (28101B)
+GET /api/eval/datasets -> 200 (328B)
+GET /api/eval/reviews/assignments -> 400 (35B)
+GET /api/eval/reviews/disagreements -> 400 (35B)
+GET /api/eval/compare?baseline=x&candidate=y -> 400 (48B)
+GET /api/release-assets -> 200 (5827B)
+GET /api/drills -> 200 (112B)
+GET /api/drills/templates -> 200 (4456B)
+GET /api/mcp-servers -> 403 (21B)
+== 3. 详情类（取真实 id 逐层下钻） ==
+样本 run=
+GET /api/rca-runs/ -> 403 (21B)
+GET /api/rca-runs//events -> 403 (21B)
+GET /api/rca-runs//report -> 403 (21B)
+样本 incident=10e9911e-7486-45e0-88c5-7609161f1107
+GET /api/v1/incidents/10e9911e-7486-45e0-88c5-7609161f1107 -> 200 (1233B)
+样本 eval run=d87a6719-6762-4770-96fe-2b5afc1e3eb6
+GET /api/eval/runs/d87a6719-6762-4770-96fe-2b5afc1e3eb6 -> 200 (1320B)
+GET /api/eval/runs/d87a6719-6762-4770-96fe-2b5afc1e3eb6/cases -> 200 (30B)
+GET /api/eval/runs/d87a6719-6762-4770-96fe-2b5afc1e3eb6/usage -> 200 (137B)
+GET /api/eval/runs/d87a6719-6762-4770-96fe-2b5afc1e3eb6/review-progress -> 200 (204B)
+== 4. SSE 票据面 ==
+GET /api/rca-runs//events/stream-ticket -> 403
+== 5. 登出 ==
+POST /auth/logout -> 200
+登出后 GET /api/v1/overview/summary -> 401（期望401）

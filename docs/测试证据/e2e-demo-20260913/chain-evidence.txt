@@ -1,0 +1,30 @@
+== 跑 A：run d122eb0b-af2b-4068-9428-b60b9356aa2a（2026-09-13 07:28Z）==
+RUN: state=SUCCEEDED engine=NATIVE trigger_kind=RERUN
+TASKS: NATIVE_INVESTIGATE/DONE, PRIMARY_INVESTIGATE/DONE, DELEGATE-g1/DONE, DELEGATE-g2/DONE
+TOOLCALLS: logs.query SUCCESS×1, prometheus.metric_value SUCCESS×3, prometheus.query SUCCESS×3
+EVIDENCE: metrics.metric_value(prometheus)×1, metrics.query_range(prometheus)×3
+CLAIM: HYPOTHESIS|UNKNOWN|ACTIVE|refs=2|sources=["prometheus"]
+  reason: "checkout 服务在冻结窗口内出现 UNKNOWN 错误主导的调用失败，主要集中在
+  oteldemo.PaymentService/Charge 方法，但缺乏日志面证据支撑根因判定。
+  {f0f46256-...:SUPPORTS, acf5122c-...（evidence_roles 协议 v2 采纳面）}"
+MODELCALLS: qwen3-max-preview SUCCESS×8（prompt 1534~5615 tokens，completion 41~334）
+REPORT: 6e90f68c STRUCTURE_VALIDATED model=native-deterministic-v1
+PUBLICATION: 零行——control-app 日志 07:28:29Z：
+  report_publication_loser report_id=6e90f68c run_id=d122eb0b incident=141c5cb3 gen=1
+  "输给 generation 发布赢家，落档不发布"（重复调查仲裁设计行为）
+
+== 跑 B：run 8c0c30ef-9831-48ae-bb3a-0a8a78d2a9f7（2026-09-13 07:33Z，新 incident）==
+RUN: state=SUCCEEDED engine=NATIVE trigger_kind=INITIAL generation=0
+TASKS: PRIMARY_INVESTIGATE/DONE（恰 1，零 DELEGATE——phase4 PASS）
+TOOLCALLS: prometheus.metric_value SUCCESS×4, prometheus.query SUCCESS×4
+CLAIMS: 零提案（模型保守收敛）
+REPORT: 37115887 STRUCTURE_VALIDATED model=native-deterministic-v1
+WINNER: report_generation_winner(incident=a1da7b24-b762-43a0-b4f0-f8b707edfd09,
+  generation=0, winner_run_id=8c0c30ef, winner_report_id=37115887)
+PUBLICATION: 19a89dd3 state=SENT attempt_count=0
+OUTBOX: 3cb782e3 SENT channel=oncall sent_at=2026-09-13T07:33:57.235Z
+        8523eca6 SENT channel=test   sent_at=2026-09-13T07:33:57.252Z
+
+== 查询方法（可复算）==
+-- 链验证 SQL 见同目录 inspect-run.sql / inspect4.sql（var/e2e-demo-20260913/ 有副本）
+-- 发布仲裁日志：docker logs deploy-control-app-1 | grep report_publication
