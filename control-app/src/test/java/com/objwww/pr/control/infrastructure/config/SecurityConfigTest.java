@@ -39,7 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>机器面 CSRF 豁免（/webhooks/**、/api/config-bundles/**、/api/canary/**——
  *       防的是浏览器 cookie 自动携带，bearer 头无此面）；</li>
  *   <li>SSE 开流 GET 凭票 permitAll（FUT-34 票即能力凭证）；/actuator/health
- *       permitAll；其余 anyRequest denyAll；</li>
+ *       与 /actuator/prometheus（监控页抓取面，宿主 loopback 绑定）permitAll；
+ *       其余 anyRequest denyAll；</li>
  *   <li>浏览器半边：CSRF 引导（XSRF-TOKEN cookie）→ formLogin JSON → 会话授权
  *       → logout 失效；登录成功/失败/登出审计一行一事（RecordingAuthEvents 假仓，
  *       真 PG 面由 195 部署段 drill 验证）。</li>
@@ -146,6 +147,16 @@ class SecurityConfigTest {
     @DisplayName("health permitAll（未认证 200）")
     void healthIsPermitAll() throws Exception {
         mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("prometheus permitAll（未认证不由安全链 401；无处理器则 404）")
+    void prometheusIsPermitAll() throws Exception {
+        // 默认 profile 无 PG 仓储不影响本端点；断言核心是不过安全链（≠401/403）
+        mvc.perform(get("/actuator/prometheus"))
+                .andExpect(result -> org.assertj.core.api.Assertions.assertThat(
+                                result.getResponse().getStatus())
+                        .isNotIn(401, 403));
     }
 
     @Test

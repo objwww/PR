@@ -94,6 +94,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- 监控页 run_throughput 实源（2026-09-14）：Prometheus 拉取面 /actuator/prometheus；
+             OTEL_EXPORTER_OTLP_ENDPOINT 仅是声明面（类路径无 OTLP 依赖，实测 otelcol-control
+             9465 零指标），rca_attempt_finished_total 经本 registry 暴露给 AM0 抓取 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
         <!-- M3-29：tracing API + brave 桥（无 exporter 时 span 仅内存态；异步边界
              关联由 TracedTasks + 测试钉死，OTel collector 上线后零改动接通） -->
         <dependency>

@@ -107,6 +107,9 @@ public class SecurityConfig {
                         // AUTH-1：平台账号管理面归 operator（浏览器会话与 machine:operator-line 同权）
                         .requestMatchers("/api/auth/users", "/api/auth/users/**").hasRole("OPERATOR")
                         .requestMatchers("/actuator/health").permitAll()
+                        // 监控页 run_throughput 实源（2026-09-14）：AM0 Prometheus 容器内网抓取，
+                        // 无凭据可带；宿主端口 127.0.0.1 绑定（INV-AM0-1），公网零暴露
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         // SSE 换票后的开流端点：EventSource 无法带头，票即能力凭证（30s 单次）
                         .requestMatchers(HttpMethod.GET, "/api/rca-runs/*/events/stream").permitAll()
                         .requestMatchers("/webhooks/**").hasRole("MACHINE_WEBHOOK")

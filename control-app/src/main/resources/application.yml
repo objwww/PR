@@ -92,11 +92,13 @@ app:
 
 # M3-28：actuator 最小暴露面——health/metrics 仅运维面（宿主端口本就 127.0.0.1 绑定，
 # INV-AM0-1）；env/heapdump 等敏感端点一律不开
+# 2026-09-14 增 prometheus：监控页 run_throughput 白名单键（rca_attempt_finished_total）
+# 的实源，AM0 容器内网抓取；对外仍 loopback 绑定零暴露
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: never
