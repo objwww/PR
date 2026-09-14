@@ -1,0 +1,17 @@
+=== 1. SAFE-02 能力读面与 L 发起拒绝 ===
+launch code=400 body={"error":"评测发起当前已关闭：L 与演练共享环境互斥未落地（共享占用协议交付前不接受任何发起），已支持的能力面仅只读查询与预检","code":"LAUNCH_DISABLED","supported":{"launchEnabled":false,"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+command rows before=0 after=0
+=== 2. SAFE-04 演练启动面关闭 ===
+templates ready:false x 5
+drill create code=409 body={"error":"演练启动面当前已关闭：停止/恢复推进链未交付（SAFE-04），交付后经 app.drill.launch-enabled 显式重开"}
+drill rows before=1 after=1
+=== 3. SAFE-01 CSRF 过滤链行为（bearer 认证 + cookie jar；浏览器会话四变体已由
+    MockMvc 全覆盖，生产面无明文口令不作登录复刻；此处验证同一 CsrfFilter 链） ===
+csrf: cookie jar, NO header -> 403
+csrf: cookie jar, WRONG header -> 403
+csrf: cookie jar, CORRECT header -> 409 body={"error":"演练启动面当前已关闭：停止/恢复推进链未交付（SAFE-04），交付后经 app.drill.launch-enabled 显式重开"}
+csrf: header only, NO cookie -> 403
+=== 4. 前端资产（EvalNewView 能力禁用文案） ===
+eval chunk: assets/EvalNewView-BerF2wHB.js（含能力禁用文案）
+==============================
+SAFE-195-VERIFY: ALL PASS
