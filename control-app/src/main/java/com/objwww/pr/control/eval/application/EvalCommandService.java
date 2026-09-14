@@ -1,5 +1,6 @@
 package com.objwww.pr.control.eval.application;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.EvalRun;
 import com.objwww.pr.control.eval.domain.model.EvalLaunchPlan;
@@ -47,18 +48,24 @@ public class EvalCommandService {
     private final EvalRunCommandRepository commands;
     private final EvalQueryReader reader;
     private final ObjectMapper mapper;
+    private final EvalLaunchGate gate;
 
     public EvalCommandService(EvalRunCommandRepository commands, EvalQueryReader reader,
-                              ObjectMapper mapper) {
+                              ObjectMapper mapper, EvalLaunchGate gate) {
         this.commands = Objects.requireNonNull(commands, "commands");
         this.reader = Objects.requireNonNull(reader, "reader");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
+        this.gate = Objects.requireNonNull(gate, "gate");
     }
 
     // ------------------------------------------------------------------ 发起
 
-    /** 幂等发起：新命令落库 → ACCEPTED；同键同计划 → REPLAYED（原 run）；异计划 → CONFLICT */
+    /**
+     * 幂等发起：能力闸门（PAGE-03：未实现的模式/覆盖项/限额入队前拒绝，零落库）→
+     * 新命令落库 ACCEPTED；同键同计划 → REPLAYED（原 run）；异计划 → CONFLICT。
+     */
     public LaunchResult launch(EvalLaunchPlan plan, String idempotencyKey, String actor) {
+        gate.check(plan);
         validateKey(idempotencyKey);
         UUID runId = UUID.randomUUID();
         EvalRunCommand command = EvalRunCommand.pending(UUID.randomUUID(),
@@ -124,6 +131,41 @@ public class EvalCommandService {
             return Optional.of(new CancelResult(CancelStatus.REPLAYED, runId, winner.id()));
         }
         return Optional.of(new CancelResult(CancelStatus.ACCEPTED, runId, command.id()));
+    }
+
+    // ------------------------------------------------------------------ 受理投影（PAGE-10）
+
+    /** 已受理但 run 行未落的 LAUNCH 命令投影（详情 404 前探；payload 解析失败按 empty 论） */
+    public record AcceptedLaunch(UUID commandId, String commandState, Instant createdAt,
+                                 String displayName, String mode, String datasetVersion) {
+    }
+
+    /**
+     * 按预定 runId 找最近的 LAUNCH 命令（202 受理到 worker 领取落 run 行之间的等待窗口）：
+     * run 详情在此之前如实 404 的缺口由本投影补齐——命令存在即"已受理"，状态/计划取自
+     * 命令行真相源（V81 select 授权面）。
+     */
+    public Optional<AcceptedLaunch> acceptedLaunch(UUID runId) {
+        return commands.findLatestLaunch(runId).map(command -> {
+            String displayName = null;
+            String mode = null;
+            String datasetVersion = null;
+            try {
+                JsonNode node = mapper.readTree(command.payloadJson());
+                displayName = textOrNull(node, "displayName");
+                mode = textOrNull(node, "mode");
+                datasetVersion = textOrNull(node, "datasetVersion");
+            } catch (Exception e) {
+                // payload 不可解析：命令存在性仍可信，计划字段如实缺失（不猜）
+            }
+            return new AcceptedLaunch(command.id(), command.state().name(),
+                    command.createdAt(), displayName, mode, datasetVersion);
+        });
+    }
+
+    private static String textOrNull(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
     }
 
     // ------------------------------------------------------------------ 内部

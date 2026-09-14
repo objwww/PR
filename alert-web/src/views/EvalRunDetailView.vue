@@ -345,6 +345,31 @@
       </div>
     </template>
 
+    <!-- PAGE-10：已受理、等待执行（run 行由 worker 领取命令后落库）——
+         有界轮询跟踪，落库后自动切换正常详情；排队中暂不支持取消（诚实禁用） -->
+    <div v-else-if="pageState === 'accepted'" class="card panel accepted-panel">
+      <el-result icon="info" title="实验已受理，等待执行"
+        sub-title="202 受理后 run 行要等 worker 领取命令才落库；本页每 3 秒自动跟踪，落库后自动显示进度。">
+        <template #extra>
+          <div class="acc-grid">
+            <div class="acc-item"><span class="acc-k">实验 ID</span><span class="mono break">{{ runId }}</span></div>
+            <div class="acc-item"><span class="acc-k">名称</span>{{ acceptedInfo?.displayName ?? '未统计' }}</div>
+            <div class="acc-item"><span class="acc-k">模式</span>{{ acceptedInfo?.mode ?? '未统计' }}</div>
+            <div class="acc-item"><span class="acc-k">数据集</span>{{ acceptedInfo?.datasetVersion ?? '未统计' }}</div>
+            <div class="acc-item"><span class="acc-k">受理时间</span>{{ acceptedInfo?.acceptedAt ? fmtTime(acceptedInfo.acceptedAt) : '未统计' }}</div>
+            <div class="acc-item"><span class="acc-k">命令状态</span>{{ acceptedInfo?.commandState ?? '未统计' }}</div>
+          </div>
+          <el-alert v-if="acceptedInfo?.commandState === 'FAILED'" type="error" :closable="false" show-icon
+            title="受理的执行命令已被 worker 标记失败且无 run 记录；请返回重新发起实验。"
+            class="acc-alert" />
+          <el-alert v-else type="info" :closable="false" show-icon
+            title="排队中暂不支持取消（run 未落库，取消面要求 run 存在）；worker 领取后可在本页取消。"
+            class="acc-alert" />
+        </template>
+      </el-result>
+    </div>
+    <EmptyState v-else-if="pageState === 'notfound'" kind="empty"
+      description="实验不存在（404）：ID 可能有误或对象不可见。已停止自动重试。" />
     <EmptyState v-else-if="pageState === 'forbidden'" kind="forbidden" />
     <EmptyState v-else-if="pageState === 'error'" kind="error" @retry="loadRun" />
     <div v-else v-loading="true" class="loading-box card" />
@@ -478,7 +503,7 @@
 // 两端点 403/404（后端未部署）→ 显式降级空态，不伪造证据/计数；NO_REPORT/NO_REFS 如实区分。
 // R6/EV-06 接线：“用量与对账”页签接 GET /eval/runs/{runId}/usage（分组投影）；
 // usage_missing/unpriced 显“用量未知/未定价”，绝不显 0（R4 契约）；403/404 降级空态。
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
@@ -520,7 +545,55 @@ function normalizeTab(v) {
 const tab = ref(normalizeTab(str(route.query.tab)))
 
 const run = ref(null)
-const pageState = ref('loading') // loading | ok | error | forbidden
+const pageState = ref('loading') // loading | ok | accepted | notfound | error | forbidden
+const acceptedInfo = ref(null) // PAGE-10 受理投影（acceptedOnly 响应）
+
+// PAGE-10 有界跟踪：等待窗口每 3 秒重查详情，落库自动转正常视图；卸载/切换即停
+const ACCEPTED_POLL_MS = 3000
+let acceptedTimer = null
+function startAcceptedPoll() {
+  if (acceptedTimer) return
+  acceptedTimer = setInterval(() => {
+    if (document.hidden) return
+    loadRun(true)
+  }, ACCEPTED_POLL_MS)
+}
+function stopAcceptedPoll() {
+  if (acceptedTimer) {
+    clearInterval(acceptedTimer)
+    acceptedTimer = null
+  }
+}
+
+async function loadRun(silent = false) {
+  const id = runId.value
+  const seq = ++runSeq
+  runCtl?.abort()
+  const ctl = new AbortController()
+  runCtl = ctl
+  if (!silent) pageState.value = 'loading'
+  try {
+    const r = await api(`/eval/runs/${encodeURIComponent(id)}`, { signal: ctl.signal })
+    if (seq !== runSeq || id !== runId.value) return // 旧响应不覆盖新实验
+    if (r?.acceptedOnly) {
+      // PAGE-10：已受理未落库——投影展示 + 持续跟踪；命令失败则停表明示
+      acceptedInfo.value = r
+      pageState.value = 'accepted'
+      if (r.commandState === 'FAILED' || r.commandState === 'DONE') stopAcceptedPoll()
+      else startAcceptedPoll()
+      return
+    }
+    run.value = r
+    pageState.value = 'ok'
+    stopAcceptedPoll()
+  } catch (e) {
+    if (ctl.signal.aborted || seq !== runSeq) return
+    const st = e?.response?.status
+    // PAGE-10：真 404（run 与受理命令都不存在）→ 明确不存在，不做无限重试
+    pageState.value = st === 404 ? 'notfound' : st === 403 ? 'forbidden' : 'error'
+    stopAcceptedPoll()
+  }
+}
 
 const verdict = ref(str(route.query.verdict))
 const cases = ref([])
@@ -557,24 +630,6 @@ let runCtl = null
 let casesCtl = null
 let summaryCtl = null
 let usageCtl = null
-
-async function loadRun() {
-  const id = runId.value
-  const seq = ++runSeq
-  runCtl?.abort()
-  const ctl = new AbortController()
-  runCtl = ctl
-  pageState.value = 'loading'
-  try {
-    const r = await api(`/eval/runs/${encodeURIComponent(id)}`, { signal: ctl.signal })
-    if (seq !== runSeq || id !== runId.value) return // 旧响应不覆盖新实验
-    run.value = r
-    pageState.value = 'ok'
-  } catch (e) {
-    if (ctl.signal.aborted || seq !== runSeq) return
-    pageState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
-  }
-}
 
 function caseParams(cursor) {
   const p = { limit: 50 }
@@ -838,6 +893,8 @@ watch(() => route.query, q => {
 // RV04：同组件切换到另一实验——取消在飞请求、清空案例缓存、按新身份重载
 watch(runId, (id, old) => {
   if (!id || id === old) return
+  stopAcceptedPoll()
+  acceptedInfo.value = null
   runCtl?.abort()
   casesCtl?.abort()
   summaryCtl?.abort()
@@ -871,10 +928,18 @@ onMounted(() => {
   if (tab.value === 'cases') ensureCasesTabLoaded()
   if (tab.value === 'usage') ensureUsageTabLoaded()
 })
+
+onUnmounted(stopAcceptedPoll)
 </script>
 
 <style scoped>
 .run-detail { display: flex; flex-direction: column; gap: var(--section-gap); }
+
+.accepted-panel { padding: var(--card-pad); }
+.acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 24px; text-align: left; margin-bottom: 14px; }
+.acc-item { font-size: var(--fs-body); color: var(--ink); }
+.acc-k { display: block; font-size: var(--fs-aux); color: var(--ink-2); }
+.acc-alert { margin-top: 6px; }
 
 .crumb { font-size: 13px; color: var(--ink-2); }
 .crumb-cancel { margin-left: auto; }

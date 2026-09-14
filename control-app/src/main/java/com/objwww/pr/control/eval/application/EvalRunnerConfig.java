@@ -271,6 +271,19 @@ public class EvalRunnerConfig {
                 .PostgresEvalPhaseEventSink(jdbc);
     }
 
+    /** PAGE-03 能力闸门（worker 侧复验源）：模式/数据集版本取本装配真实事实源，
+     *  覆盖项与限额执行面未实现全闭——开放任一项时先补执行面再改这里 */
+    @Bean
+    public EvalLaunchGate evalLaunchGate(
+            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
+            @Value("${app.eval.launch.modes:L}") String modes,
+            @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
+            @Value("${app.eval.launch.max-rounds:10}") int maxRounds) {
+        return EvalLaunchGate.closed(java.util.Arrays.stream(modes.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
+                datasetVersion, maxConcurrency, maxRounds);
+    }
+
     @Bean
     public EvalLaunchExecutor evalLaunchExecutor(
             GoldenScenarioRegistry registry,
@@ -286,13 +299,14 @@ public class EvalRunnerConfig {
             com.objwww.pr.control.eval.domain.repository.EvalPhaseEventSink phaseSink,
             com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository commands,
             EvalRunMetadata metadata,
+            EvalLaunchGate gate,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId) {
         return new EvalLaunchExecutor(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
                         "InfrastructureScenarioDriver", infra),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
-                phaseSink, commands, metadata, 2, systemClock(), workerId);
+                phaseSink, commands, metadata, 2, systemClock(), workerId, gate);
     }
 
     @Bean

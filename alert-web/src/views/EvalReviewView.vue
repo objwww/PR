@@ -303,6 +303,7 @@ const wsOpen = ref(false)
 const ws = ref(null)
 const wsState = ref('loading') // loading | ok | error | notfound
 let wsAssignmentId = null
+let wsSeq = 0 // 每次打开/刷新递增：迟到的旧工作区响应不回写（PAGE-05）
 
 const defaultRubricVersion = ref('')
 
@@ -449,20 +450,35 @@ async function claim(row) {
 function openWorkspace(assignmentId) {
   wsAssignmentId = assignmentId
   wsOpen.value = true
+  resetForm() // 草稿按任务隔离：切任务不继承上一任务的评分与理由（PAGE-05）
   reloadWorkspace()
 }
 
 async function reloadWorkspace() {
-  if (!wsAssignmentId) return
+  const id = wsAssignmentId
+  if (!id) return
+  const seq = ++wsSeq
+  ws.value = null
   wsState.value = 'loading'
   try {
-    const d = await api(`/eval/reviews/assignments/${encodeURIComponent(wsAssignmentId)}`)
+    const d = await api(`/eval/reviews/assignments/${encodeURIComponent(id)}`)
+    if (seq !== wsSeq || id !== wsAssignmentId) return // 响应乱序：旧工作区不覆盖新选择
     ws.value = d
     wsState.value = 'ok'
     form.rubricVersion = form.rubricVersion || defaultRubricVersion.value
   } catch (e) {
+    if (seq !== wsSeq || id !== wsAssignmentId) return
     wsState.value = e?.response?.status === 404 ? 'notfound' : 'error'
   }
+}
+
+function resetForm() {
+  form.rubricVersion = ''
+  form.verdict = 'CORRECT'
+  form.score = null
+  form.labelsText = ''
+  form.reason = ''
+  form.evidenceRefsText = ''
 }
 
 function csvList(text) {
@@ -471,9 +487,16 @@ function csvList(text) {
 
 async function submitReview() {
   if (!canSubmitReview.value || submitting.value) return
+  // 提交身份取自当前已加载工作区（非任意选中值），且必须与当前打开任务一致：
+  // revision 也取自同一对象——显示 A 就提交给 A，不可能错配（PAGE-05）
+  const wsCurrent = ws.value
+  const id = wsCurrent?.assignment?.assignmentId
+  if (!id || id !== wsAssignmentId || wsState.value !== 'ok') return
+  if (wsCurrent.assignment?.effectiveStatus !== 'IN_PROGRESS') return
+  const captured = { id, revision: wsCurrent.assignment.revision, seq: wsSeq }
   submitting.value = true
   try {
-    await api(`/eval/reviews/assignments/${encodeURIComponent(wsAssignmentId)}/submit`, {
+    await api(`/eval/reviews/assignments/${encodeURIComponent(captured.id)}/submit`, {
       method: 'POST',
       body: {
         rubricVersion: form.rubricVersion.trim(),
@@ -482,9 +505,14 @@ async function submitReview() {
         labels: csvList(form.labelsText),
         reason: form.reason.trim(),
         evidenceRefs: csvList(form.evidenceRefsText),
-        expectedRevision: ws.value?.assignment?.revision,
+        expectedRevision: captured.revision,
       },
     })
+    // 返回时工作区身份已变：只告知真实提交对象，不清空/覆写新工作区（PRT-19）
+    if (captured.id !== wsAssignmentId || captured.seq !== wsSeq) {
+      ElMessage.success(`评分已提交（任务 ${captured.id.slice(0, 8)}…）；当前工作区已切换，请刷新查看`)
+      return
+    }
     ElMessage.success('评分已提交（insert-only，不可改；更正请生成新任务）')
     form.reason = ''
     form.evidenceRefsText = ''
@@ -495,11 +523,13 @@ async function submitReview() {
     const st = e?.response?.status
     const msg = e?.response?.data?.error
     if (st === 409) {
-      ElMessage.warning(msg || '提交冲突')
-      reloadWorkspace() // revision 漂移/状态变化 → 重取工作区
-      loadAssignments()
+      ElMessage.warning(msg || '提交冲突（租约/状态/revision 漂移）；草稿已保留，请刷新后核对再提交')
+      if (captured.id === wsAssignmentId && captured.seq === wsSeq) {
+        reloadWorkspace() // revision 漂移/状态变化 → 重取工作区（草稿保留不丢）
+        loadAssignments()
+      }
     } else {
-      ElMessage.error(msg || '提交失败，请检查后重试')
+      ElMessage.error(msg || '提交失败，请检查后重试（草稿已保留）')
     }
   } finally {
     submitting.value = false

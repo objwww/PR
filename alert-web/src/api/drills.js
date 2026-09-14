@@ -1,20 +1,20 @@
 import { api } from './client'
 
-// 故障演练 API（DR-01/DR-02）：调用方必须区分「接口未就绪（403/404）」与「真实错误」，
-// 不得把未就绪渲染成空数据。
+// 故障演练 API（DR-01/DR-02）：调用方必须区分「权限/不存在/不可用」与「真实错误」，
+// 不得把非 2xx 一律渲染成空数据。PAGE-02：错误分类保留原始 HTTP status，
+// 403=无权限、404=资源不存在或接口未部署，由视图按 status 分文案。
 export class ApiNotReadyError extends Error {
-  constructor(path) {
-    super(`接口未就绪：${path}`)
+  constructor(path, status) {
+    super(`接口不可用（${status}）：${path}`)
     this.name = 'ApiNotReadyError'
     this.path = path
+    this.status = status
   }
 }
 
 function classify(path, err) {
-  // 实测：未实现的 /api/drills* 在认证后由 Spring Security 默认拒绝返回 403，未登录为 401；
-  // 两类「路由不存在」语义统一归为接口未就绪
   const s = err?.response?.status
-  if (s === 404 || s === 403) return new ApiNotReadyError(path)
+  if (s === 404 || s === 403) return new ApiNotReadyError(path, s)
   return err
 }
 
@@ -30,12 +30,13 @@ export async function listDrills({ cursor, limit } = {}) {
   }
 }
 
+// PAGE-01：client.baseURL 已带 /api——传入路径不得再写 /api 前缀（曾产生 /api/api/drills/…）
 export async function getDrill(drillId) {
-  const path = `/api/drills/${encodeURIComponent(drillId)}`
+  const path = `/drills/${encodeURIComponent(drillId)}`
   try {
     return await api(path)
   } catch (e) {
-    throw classify(path, e)
+    throw classify(`/api${path}`, e)
   }
 }
 
@@ -72,11 +73,11 @@ export async function createDrill(plan) {
 // DR-02 停止并恢复：202 受理（state=RECOVERING/CANCELLING——受理≠恢复完成，§7.4）；
 // 409（终态/RECOVERY_FAILED 占位）不归类，由调用方展示服务端 error 文案
 export async function stopDrill(drillId, idempotencyKey) {
-  const path = `/api/drills/${encodeURIComponent(drillId)}/stop`
+  const path = `/drills/${encodeURIComponent(drillId)}/stop`
   try {
     return await api(path, { method: 'POST', body: { idempotencyKey } })
   } catch (e) {
-    throw classify(path, e)
+    throw classify(`/api${path}`, e)
   }
 }
 
@@ -84,14 +85,14 @@ export async function stopDrill(drillId, idempotencyKey) {
 // {items:[{eventId, seq, eventType, fromState, toState, actor, payload, createdAt}], nextCursor, asOf}；
 // 游标 = seq（drill_event identity 单调序），afterSeq 严格大于续页，满页才给 nextCursor
 export async function listDrillEvents(drillId, { afterSeq, limit } = {}) {
-  const path = `/api/drills/${encodeURIComponent(drillId)}/events`
+  const path = `/drills/${encodeURIComponent(drillId)}/events`
   const params = {}
   if (afterSeq != null) params.afterSeq = afterSeq
   if (limit != null) params.limit = limit
   try {
     return await api(path, { params })
   } catch (e) {
-    throw classify(path, e)
+    throw classify(`/api${path}`, e)
   }
 }
 

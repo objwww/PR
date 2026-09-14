@@ -777,14 +777,29 @@ public class PersistenceConfig {
                 .PostgresEvalRunCommandRepository(jdbc);
     }
 
+    /** PAGE-03 能力闸门（命令面）：与 worker 侧同一支持范围契约——模式/数据集版本
+     *  经配置对齐部署事实，覆盖项与限额执行面未实现全闭（默认值与 eval worker 装配一致） */
+    @Bean
+    public com.objwww.pr.control.eval.application.EvalLaunchGate evalLaunchGate(
+            @Value("${app.eval.launch.modes:L}") String modes,
+            @Value("${app.eval.launch.dataset-versions:eval-ds-1}") String datasetVersions,
+            @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
+            @Value("${app.eval.launch.max-rounds:10}") int maxRounds) {
+        return com.objwww.pr.control.eval.application.EvalLaunchGate.closed(
+                java.util.Arrays.stream(modes.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
+                datasetVersions, maxConcurrency, maxRounds);
+    }
+
     @Bean
     public com.objwww.pr.control.eval.application.EvalCommandService evalCommandService(
             com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository
                     evalRunCommandRepository,
             com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            com.objwww.pr.control.eval.application.EvalLaunchGate evalLaunchGate) {
         return new com.objwww.pr.control.eval.application.EvalCommandService(
-                evalRunCommandRepository, evalQueryReader, objectMapper);
+                evalRunCommandRepository, evalQueryReader, objectMapper, evalLaunchGate);
     }
 
     // ---------------- EV-07 配对工作台（GET /api/eval/compare 读面 + POST /api/eval/comparisons 落档；V85 授权面——control_app 对 eval_comparison 只增读） ----------------

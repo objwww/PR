@@ -4,6 +4,7 @@
       <template #actions>
         <span class="updated-at">数据更新于 {{ fmtTime(summary?.generatedAt) }}</span>
         <el-tag v-if="dataStale" type="warning" size="small">数据陈旧</el-tag>
+        <el-tag v-if="summaryError" type="danger" size="small" :title="summaryError">摘要刷新失败</el-tag>
         <el-button :loading="refreshing" @click="loadAll">刷新</el-button>
       </template>
     </PageHeader>
@@ -52,8 +53,10 @@
         <span class="panel-title">近 24h 告警接收 / 恢复趋势</span>
         <span class="panel-meta">
           窗口：近 24 小时 ｜ 单位：条/小时 ｜ 最新数据点 {{ fmtTime(lastBucketStart) }}
+          <el-tag v-if="trendError" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
         </span>
       </div>
+      <div v-if="trendError" class="stale-note">趋势刷新失败（{{ trendError }}）；下图保留 {{ fmtTime(trendLastSuccessAt) }} 最近成功数据，失败与陈旧独立于顶栏更新时间。</div>
       <template v-if="trendState === 'ok'">
         <VChart v-if="trend.length" :option="trendOption" autoresize class="trend-chart" />
         <EmptyState v-else kind="empty" description="近 24 小时无告警数据" />
@@ -72,11 +75,18 @@
           <span class="panel-title">{{ c.title }}</span>
           <span class="panel-meta">
             窗口：近 1 小时 ｜ 单位：{{ c.unit }} ｜ 最新数据点 {{ fmtTime(lastPointAt(c)) }}
+            <el-tag v-if="c.state === 'ok' && allStale(c)" type="warning" size="small">数据陈旧</el-tag>
+            <el-tag v-else-if="c.state === 'ok' && staleSeriesNames(c).length" type="warning" size="small"
+              :title="`以下实例最近数据点已超 3 个采集周期：${staleSeriesNames(c).join('、')}`"
+            >部分实例陈旧：{{ staleSeriesNames(c).length }}</el-tag>
+            <el-tag v-if="c.state === 'ok' && c.lastError" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
           </span>
-          <el-tag v-if="c.state === 'ok' && chartStale(c)" type="warning" size="small">数据陈旧</el-tag>
         </div>
         <template v-if="c.state === 'ok'">
-          <VChart v-if="c.series.length" :option="hostOption(c)" autoresize class="host-chart" />
+          <!-- 渲染条件 = 至少一个有效样本点；NaN/空序列与真实零值区分（PAGE-08） -->
+          <VChart v-if="validSeries(c).length" :option="hostOption(c)" autoresize class="host-chart" />
+          <EmptyState v-else-if="c.series.length" kind="empty"
+            description="所选窗口无有效样本：数据源返回空序列或全部为无效数值（未知≠零，不画假曲线）。" />
           <EmptyState v-else kind="empty"
             description="未采集：当前 Prometheus 未接入该主机指标（无 node_exporter 抓取），显示未知而非估算" />
         </template>
@@ -96,8 +106,10 @@
         <span class="panel-title">执行器活性（按租约活动推导，非心跳注册表）</span>
         <span class="panel-meta">
           窗口：近 {{ workers?.windowMinutes ?? 60 }} 分钟 ｜ 数据更新于 {{ fmtTime(workers?.asOf) }}
+          <el-tag v-if="workersError" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
         </span>
       </div>
+      <div v-if="workersError" class="stale-note">执行器活性刷新失败（{{ workersError }}）；下表保留 {{ fmtTime(workersLastSuccessAt) }} 最近成功数据，与顶栏摘要更新时间无关。</div>
       <template v-if="workersState === 'ok'">
         <el-table v-if="workersList.length" :data="workersList" size="small">
           <el-table-column label="来源" width="90">
@@ -177,20 +189,26 @@ const router = useRouter()
 
 const summary = ref(null)
 const summaryState = ref('loading') // loading | ok | error | forbidden
+const summaryError = ref('') // 有数据但刷新失败：保留旧图 + 显式失败标记（PAGE-08）
 const trend = ref([])
 const trendState = ref('loading')
+const trendError = ref('')
+const trendLastSuccessAt = ref(null)
+const workersError = ref('')
+const workersLastSuccessAt = ref(null)
 const refreshing = ref(false)
 const now = ref(Date.now())
 let timer = null
 
 // 「主机」区（§三.12）：白名单键固定三张卡，窗口近 1 小时、step 60s
-// 每卡 state: loading | ok | unavailable(503) | error | forbidden
+// 每卡 state: loading | ok | unavailable(503) | error | forbidden；
+// lastError/lastSuccessAt 让"刷新失败"与"数据陈旧"两个维度独立可见（PAGE-08）
 const HOST_WINDOW_SEC = 3600
 const HOST_STEP_SEC = 60
 const hostCharts = ref([
-  { key: 'host_cpu_usage', title: '主机 CPU 使用率', unit: '%', state: 'loading', series: [], asOf: null },
-  { key: 'host_mem_usage', title: '主机内存使用率', unit: '%', state: 'loading', series: [], asOf: null },
-  { key: 'host_disk_usage', title: '主机磁盘使用率', unit: '%', state: 'loading', series: [], asOf: null },
+  { key: 'host_cpu_usage', title: '主机 CPU 使用率', unit: '%', state: 'loading', series: [], asOf: null, lastError: '', lastSuccessAt: null },
+  { key: 'host_mem_usage', title: '主机内存使用率', unit: '%', state: 'loading', series: [], asOf: null, lastError: '', lastSuccessAt: null },
+  { key: 'host_disk_usage', title: '主机磁盘使用率（按挂载点）', unit: '%', state: 'loading', series: [], asOf: null, lastError: '', lastSuccessAt: null },
 ])
 
 // 「执行器」区（§三.12）：workers 应答 + asOf；state 同 summary 族
@@ -212,9 +230,12 @@ async function loadSummary() {
   try {
     summary.value = await api('/agent-ops/summary')
     summaryState.value = 'ok'
+    summaryError.value = ''
   } catch (e) {
-    // 已有旧数据时保留展示（配合「数据陈旧」标记），仅首屏失败进错误态
-    if (!summary.value) {
+    // 已有旧数据时保留展示并显式标失败（与顶栏 generatedAt 独立），仅首屏失败进错误态
+    if (summary.value) {
+      summaryError.value = e?.response?.data?.error || '请求失败'
+    } else {
       summaryState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
     }
   }
@@ -225,15 +246,19 @@ async function loadTrend() {
     const d = await api('/v1/overview/summary')
     trend.value = d.alertTrend24h ?? []
     trendState.value = 'ok'
+    trendError.value = ''
+    trendLastSuccessAt.value = new Date().toISOString()
   } catch (e) {
-    if (!trend.value.length) {
+    if (trend.value.length) {
+      trendError.value = e?.response?.data?.error || '请求失败'
+    } else {
       trendState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
     }
   }
 }
 
 // 主机三维：一次窗内三键并发；503 → unavailable（「监控数据源未配置/不可达」），
-// 已有旧序列时保留展示（陈旧标记由 chartStale 承担），仅无数据失败才翻错误态
+// 已有旧序列时保留展示并标"刷新失败，当前为缓存数据"（失败≠陈旧，两维独立）
 async function loadHost() {
   const end = Math.floor(Date.now() / 1000)
   const start = end - HOST_WINDOW_SEC
@@ -246,8 +271,12 @@ async function loadHost() {
       c.unit = d.unit ?? c.unit
       c.asOf = d.asOf ?? null
       c.state = 'ok'
+      c.lastError = ''
+      c.lastSuccessAt = new Date().toISOString()
     } catch (e) {
-      if (!c.series.length) {
+      if (c.series.length) {
+        c.lastError = e?.response?.data?.error || '请求失败'
+      } else {
         const st = e?.response?.status
         c.state = st === 403 ? 'forbidden' : st === 503 ? 'unavailable' : 'error'
       }
@@ -259,8 +288,12 @@ async function loadWorkers() {
   try {
     workers.value = await api('/agent-ops/workers', { params: { windowMinutes: 60 } })
     workersState.value = 'ok'
+    workersError.value = ''
+    workersLastSuccessAt.value = new Date().toISOString()
   } catch (e) {
-    if (!workers.value) {
+    if (workers.value) {
+      workersError.value = e?.response?.data?.error || '请求失败'
+    } else {
       workersState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
     }
   }
@@ -278,22 +311,33 @@ function go(path) { router.push({ path }) }
 
 function num(v) { return v == null ? '—' : v }
 
-// 序列最新数据点（epoch 秒 → ms，供 fmtTime）；无点 → null → '—'
+// 有效点：值存在且有限（NaN/Inf 点后端已剔除，前端二次防御——缺失≠零≠有效）
+const hasValidPoints = s => (s.points ?? []).some(p => p.value != null && Number.isFinite(p.value))
+const validSeries = c => c.series.filter(hasValidPoints)
+
+// 序列最新有效点（epoch 秒 → ms，供 fmtTime）；无有效点 → null → '—'
 function lastPointAt(c) {
   let latest = null
-  for (const s of c.series) {
+  for (const s of validSeries(c)) {
     for (const p of s.points ?? []) {
+      if ((p.value == null || !Number.isFinite(p.value))) continue
       if (latest == null || p.epochSec > latest) latest = p.epochSec
     }
   }
   return latest == null ? null : latest * 1000
 }
 
-// 新鲜度：最新数据点落后于 now 超过 3 个 step 周期 → 陈旧
-function chartStale(c) {
-  const latest = lastPointAt(c)
-  if (latest == null) return false
-  return now.value - latest > HOST_STEP_SEC * 3 * 1000
+// 新鲜度按序列判断（PAGE-08）：单实例停更不再被另一新鲜实例掩盖
+const STALE_CUTOFF_MS = HOST_STEP_SEC * 3 * 1000
+function staleSeriesNames(c) {
+  const cutoff = now.value - STALE_CUTOFF_MS
+  return validSeries(c)
+    .filter(s => Math.max(...(s.points ?? []).filter(p => p.value != null && Number.isFinite(p.value)).map(p => p.epochSec), 0) * 1000 < cutoff)
+    .map(s => s.name)
+}
+const allStale = c => {
+  const valid = validSeries(c)
+  return valid.length > 0 && staleSeriesNames(c).length === valid.length
 }
 
 const SOURCE_LABELS = { rca: '调查', eval: '评测', drill: '演练' }
@@ -347,18 +391,21 @@ const toolsOption = computed(() => ({
 }))
 
 // 主机小趋势图：x 轴时间（epoch 秒 → ms），一序列一条线（多实例并排）；
-// 多序列时才出图例，单位打在 y 轴标签上（面板 meta 同时注明窗口/单位/最新点）
+// 只画含有效点的序列；多序列时才出图例，单位打在 y 轴标签上（面板 meta 同时注明窗口/单位/最新点）
 function hostOption(c) {
+  const series = validSeries(c)
   return {
-    grid: { left: 8, right: 16, top: c.series.length > 1 ? 30 : 12, bottom: 8, containLabel: true },
+    grid: { left: 8, right: 16, top: series.length > 1 ? 30 : 12, bottom: 8, containLabel: true },
     tooltip: { trigger: 'axis' },
-    legend: c.series.length > 1 ? { data: c.series.map(s => s.name), top: 0, right: 0 } : undefined,
+    legend: series.length > 1 ? { data: series.map(s => s.name), top: 0, right: 0 } : undefined,
     xAxis: { type: 'time' },
     yAxis: { type: 'value', axisLabel: { formatter: v => `${v}${c.unit}` } },
-    series: c.series.map(s => ({
+    series: series.map(s => ({
       name: s.name, type: 'line', smooth: true, showSymbol: false,
       areaStyle: { opacity: 0.12 },
-      data: (s.points ?? []).map(p => [p.epochSec * 1000, p.value]),
+      data: (s.points ?? [])
+        .filter(p => p.value != null && Number.isFinite(p.value))
+        .map(p => [p.epochSec * 1000, p.value]),
     })),
   }
 }
@@ -391,6 +438,8 @@ onBeforeUnmount(() => {
 .monitor-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
 .updated-at { font-size: var(--fs-aux); color: var(--ink-2); align-self: center; }
+
+.stale-note { font-size: var(--fs-aux); color: var(--warn, #b26a00); margin-bottom: 8px; }
 
 /* stat 卡行 */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }

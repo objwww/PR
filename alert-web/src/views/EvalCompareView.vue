@@ -427,7 +427,7 @@ async function loadRuns() {
     if (seq !== reqSeq) return
     runs.value = d.items ?? []
     runsState.value = 'ok'
-    validateQuery()
+    await resolveQueryIds()
     if (pairReady.value) loadCompare()
   } catch (e) {
     if (seq !== reqSeq) return
@@ -435,15 +435,30 @@ async function loadRuns() {
   }
 }
 
-// query 合法性：非空但不在已加载列表 → 记入引导提示（不报错、不静默吞掉）
-function validateQuery() {
-  const ids = new Set(runs.value.map(r => r.runId))
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// query 指定但不在最近列表里的 ID：单独查详情补入选项（列表仅供选择，不作存在性判据）；
+// 只有真实 404/403 或 ID 格式非法才记失效并清空（PAGE-09：老基线不再被误判链接失效）
+async function resolveQueryIds() {
   const bad = []
-  if (baselineId.value && !ids.has(baselineId.value)) bad.push(`基线 ${shortId(baselineId.value)}`)
-  if (candidateId.value && !ids.has(candidateId.value)) bad.push(`候选 ${shortId(candidateId.value)}`)
+  for (const [which, idRef] of [['基线', baselineId], ['候选', candidateId]]) {
+    const id = idRef.value
+    if (!id || runs.value.some(r => r.runId === id)) continue
+    if (!UUID_RE.test(id)) {
+      bad.push(`${which} ${shortId(id)}（ID 格式非法）`)
+      idRef.value = ''
+      continue
+    }
+    try {
+      const d = await api(`/eval/runs/${encodeURIComponent(id)}`)
+      runs.value.push(d) // 合法历史对象补入下拉选项
+    } catch (e) {
+      const st = e?.response?.status
+      bad.push(`${which} ${shortId(id)}（${st === 403 ? '无权限' : st === 404 ? '不存在' : '加载失败'}）`)
+      idRef.value = ''
+    }
+  }
   invalidQuery.value = bad
-  if (baselineId.value && !ids.has(baselineId.value)) baselineId.value = ''
-  if (candidateId.value && !ids.has(candidateId.value)) candidateId.value = ''
 }
 
 const baselineRun = computed(() => runs.value.find(r => r.runId === baselineId.value) ?? null)
@@ -525,18 +540,24 @@ function loadMore() {
   if (nextCursor.value && !appending.value) loadCompare(true)
 }
 
-// 落档：POST /api/eval/comparisons；未部署（403/404）显式提示，不假装成功
+// 落档：POST /api/eval/comparisons；捕获发起时的实验对身份（PAGE-09：等待期间切换
+// 选择后，返回的旧结果只指向真实对象，不并入新对比）
 async function saveComparison() {
   if (!pairReady.value || saving.value) return
+  const captured = { baseline: baselineId.value, candidate: candidateId.value }
   saving.value = true
   try {
     const d = await api('/eval/comparisons', {
       method: 'POST',
-      body: { baselineRunId: baselineId.value, candidateRunId: candidateId.value },
+      body: { baselineRunId: captured.baseline, candidateRunId: captured.candidate },
     })
-    savedRecordId.value = d?.gateRecord?.recordId ?? ''
-    if (cmp.value && d?.gateRecord) cmp.value = { ...cmp.value, gateRecord: d.gateRecord }
-    ElMessage.success(savedRecordId.value ? `已落档：${savedRecordId.value}` : '已落档')
+    if (baselineId.value === captured.baseline && candidateId.value === captured.candidate) {
+      savedRecordId.value = d?.gateRecord?.recordId ?? ''
+      if (cmp.value && d?.gateRecord) cmp.value = { ...cmp.value, gateRecord: d.gateRecord }
+      ElMessage.success(savedRecordId.value ? `已落档：${savedRecordId.value}` : '已落档')
+    } else {
+      ElMessage.info(`已落档（记录 ${shortId(d?.gateRecord?.recordId) ?? '—'}）：你已切换到其他实验对，当前显示未变更`)
+    }
   } catch (e) {
     const st = e?.response?.status
     if (st === 403 || st === 404) {
@@ -549,21 +570,22 @@ async function saveComparison() {
   }
 }
 
-// 标注（R12）：对候选侧案例生成 EV-08 评审任务（POST review-assignments，ensure 幂等：
-// 重复生成 created=0），人工结论在评审页 claim/submit 独立留档，不覆盖机器评分
+// 标注（R12）：对候选侧案例生成 EV-08 评审任务；候选 run 与 caseId 在发起时捕获，
+// 成功提示与跳转都使用捕获身份（不读当前选择，防等待期间切换串台）
 async function annotate(row) {
   const caseId = row.candidate?.caseExecutionId
   if (!caseId || annotating.value) return
+  const capturedRun = candidateId.value
   annotating.value = String(caseId)
   try {
-    const d = await api(`/eval/runs/${encodeURIComponent(candidateId.value)}/review-assignments`, {
+    const d = await api(`/eval/runs/${encodeURIComponent(capturedRun)}/review-assignments`, {
       method: 'POST',
       body: { caseExecutionIds: [caseId], assignmentsPerCase: 1 },
     })
     ElMessage.success(d?.created > 0
-      ? `已生成评审任务 ${d.created} 份，请到评审页领取并提交结论`
-      : '该案例已有评审任务，请到评审页领取')
-    router.push({ path: '/eval/review', query: { runId: candidateId.value } })
+      ? `已为案例 ${shortId(caseId)} 生成评审任务 ${d.created} 份，请到评审页领取并提交结论`
+      : `案例 ${shortId(caseId)} 已有评审任务，请到评审页领取`)
+    router.push({ path: '/eval/review', query: { runId: capturedRun } })
   } catch (e) {
     const st = e?.response?.status
     if (st === 403 || st === 404) ElMessage.warning('评审任务接口不可用（403/404），请检查后端版本与权限')
@@ -607,7 +629,7 @@ watch(() => route.query, q => {
   if (b === baselineId.value && c === candidateId.value) return
   baselineId.value = b
   candidateId.value = c
-  if (runsState.value === 'ok') validateQuery()
+  if (runsState.value === 'ok') resolveQueryIds()
 })
 
 // 选择变化：重置旧投影并按新对重新加载（含交换基线/候选）

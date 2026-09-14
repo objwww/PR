@@ -66,6 +66,14 @@ public class EvalCommandController {
         EvalCommandService.LaunchResult result;
         try {
             result = service.launch(plan, idempotencyKey, truncate(AuthenticatedActor.name()));
+        } catch (com.objwww.pr.control.eval.application.EvalLaunchGate.EvalLaunchUnsupportedException e) {
+            // PAGE-03 能力闸门：未实现的模式/覆盖项/限额入队前拒绝（400 + 结构化支持范围，
+            // 前端与文档同源），零命令落库——旧客户端同样被拒，不静默忽略
+            Map<String, Object> rejection = new LinkedHashMap<>();
+            rejection.put("error", e.getMessage());
+            rejection.put("code", e.code());
+            rejection.put("supported", e.supported());
+            return ResponseEntity.badRequest().body(rejection);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

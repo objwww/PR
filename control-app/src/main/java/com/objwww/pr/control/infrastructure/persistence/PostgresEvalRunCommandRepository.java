@@ -86,6 +86,15 @@ public class PostgresEvalRunCommandRepository implements EvalRunCommandRepositor
     }
 
     @Override
+    public Optional<EvalRunCommand> findLatestLaunch(UUID evalRunId) {
+        return jdbc.sql("SELECT " + COLS + " FROM eval_run_command"
+                        + " WHERE command_type = 'LAUNCH' AND eval_run_id = :runId"
+                        + " ORDER BY created_at DESC, id DESC LIMIT 1")
+                .param("runId", evalRunId)
+                .query(this::map).optional();
+    }
+
+    @Override
     public boolean cancelAccepted(UUID evalRunId) {
         return Boolean.TRUE.equals(jdbc.sql("""
                         SELECT EXISTS(

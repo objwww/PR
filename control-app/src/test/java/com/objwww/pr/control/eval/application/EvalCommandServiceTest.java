@@ -54,6 +54,14 @@ class EvalCommandServiceTest {
         }
 
         @Override
+        public Optional<EvalRunCommand> findLatestLaunch(UUID evalRunId) {
+            return byKey.values().stream()
+                    .filter(c -> c.commandType() == EvalRunCommand.Type.LAUNCH
+                            && c.evalRunId().equals(evalRunId))
+                    .max(java.util.Comparator.comparing(EvalRunCommand::createdAt));
+        }
+
+        @Override
         public boolean cancelAccepted(UUID evalRunId) {
             return byKey.values().stream().anyMatch(c -> c.evalRunId().equals(evalRunId)
                     && c.commandType() == EvalRunCommand.Type.CANCEL);
@@ -188,7 +196,11 @@ class EvalCommandServiceTest {
     void setUp() {
         commands = new InMemoryCommands();
         reader = new StubReader();
-        service = new EvalCommandService(commands, reader, new ObjectMapper());
+        // EU09/取消语义沿用全支持面闸门（budget/deadline 放行）——能力拒绝语义归
+        // closed 闸门专项用例（本类末尾 + EvalLaunchGateTest）
+        service = new EvalCommandService(commands, reader, new ObjectMapper(),
+                new EvalLaunchGate(java.util.Set.of("E", "B", "L"), java.util.Set.of("eval-ds-1"),
+                        32, 100, true, true, true, true));
     }
 
     private static EvalLaunchPlan plan(String name) {
@@ -335,5 +347,105 @@ class EvalCommandServiceTest {
         assertThat(second.status()).isEqualTo(EvalCommandService.CancelStatus.ACCEPTED);
         assertThat(commands.inserted).hasSize(2);
         assertThat(commands.cancelAccepted(runId)).isTrue();
+    }
+
+    // ------------------------------------------------------------------ PAGE-03 能力闸门
+
+    /** 生产同款闭面闸门（仅 L、固定并发 1、覆盖项/限额全闭） */
+    private EvalCommandService closedGateService() {
+        return new EvalCommandService(commands, reader, new ObjectMapper(),
+                EvalLaunchGate.closed(java.util.Set.of("L"), "eval-ds-1", 1, 10));
+    }
+
+    @Test
+    @DisplayName("PAGE-03 入队前拒绝：E/B 模式、覆盖项、非空限额全部 400 族异常且零命令落库")
+    void closedGateRejectsUnsupportedLaunchesBeforeInsert() {
+        EvalCommandService gated = closedGateService();
+
+        record Case(String name, EvalLaunchPlan plan, String code) {}
+        java.util.List<Case> cases = List.of(
+                new Case("mode E", new EvalLaunchPlan("n", "E", "eval-ds-1", null, null,
+                        null, null, null, null), "MODE_NOT_SUPPORTED"),
+                new Case("mode B", new EvalLaunchPlan("n", "B", "eval-ds-1", null, null,
+                        null, null, null, null), "MODE_NOT_SUPPORTED"),
+                new Case("model 覆盖", new EvalLaunchPlan("n", "L", "eval-ds-1",
+                        "qwen-x", null, null, null, null, null), "MODEL_OVERRIDE_NOT_SUPPORTED"),
+                new Case("prompt 覆盖", new EvalLaunchPlan("n", "L", "eval-ds-1", null,
+                        "p9", null, null, null, null), "PROMPT_OVERRIDE_NOT_SUPPORTED"),
+                new Case("动态数据集", new EvalLaunchPlan("n", "L", "eval-ds-99", null,
+                        null, null, null, null, null), "DATASET_VERSION_NOT_SUPPORTED"),
+                new Case("预算", new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                        10000L, null, null, null), "BUDGET_NOT_SUPPORTED"),
+                new Case("截止", new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                        null, null, 3600L, null), "DEADLINE_NOT_SUPPORTED"),
+                new Case("并发 2", new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                        null, 2, null, null), "CONCURRENCY_NOT_SUPPORTED"),
+                new Case("轮次超限", new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                        null, null, null, 11), "ROUNDS_OUT_OF_RANGE"));
+
+        for (Case c : cases) {
+            assertThatThrownBy(() -> gated.launch(c.plan, "key-" + c.code(), "operator"))
+                    .as(c.name())
+                    .isInstanceOf(EvalLaunchGate.EvalLaunchUnsupportedException.class)
+                    .satisfies(e -> assertThat(
+                            ((EvalLaunchGate.EvalLaunchUnsupportedException) e).code())
+                            .isEqualTo(c.code()));
+        }
+        assertThat(commands.inserted).as("能力拒绝零命令落库").isEmpty();
+    }
+
+    @Test
+    @DisplayName("PAGE-03 闭面放行：L + 部署版本 + 缺省覆盖/限额 + 轮次上限内 → 正常受理")
+    void closedGateAcceptsSupportedLaunch() {
+        EvalCommandService gated = closedGateService();
+
+        EvalCommandService.LaunchResult result = gated.launch(
+                new EvalLaunchPlan("n", "L", "eval-ds-1", null, null, null, null, null, 10),
+                "key-ok", "operator");
+
+        assertThat(result.status()).isEqualTo(EvalCommandService.LaunchStatus.ACCEPTED);
+        assertThat(commands.inserted).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("PAGE-03 异常携带支持范围（与 /launch-capability 同源），供 400 应答透出")
+    void unsupportedExceptionCarriesSupportedDescribe() {
+        EvalCommandService gated = closedGateService();
+
+        assertThatThrownBy(() -> gated.launch(
+                new EvalLaunchPlan("n", "E", "eval-ds-1", null, null, null, null, null, null),
+                "key-e", "operator"))
+                .isInstanceOfSatisfying(EvalLaunchGate.EvalLaunchUnsupportedException.class,
+                        e -> {
+                            assertThat(e.supported())
+                                    .containsEntry("modes", List.of("L"))
+                                    .containsEntry("maxConcurrency", 1)
+                                    .containsEntry("budgetMaxTokens", false);
+                        });
+    }
+
+    // ------------------------------------------------------------------ PAGE-10 受理投影
+
+    @Test
+    @DisplayName("PAGE-10 acceptedLaunch：run 未落库窗口按预定 runId 读到命令，计划字段取自 payload")
+    void acceptedLaunchProjectsCommandAndWaitPlan() {
+        EvalLaunchPlan plan = new EvalLaunchPlan("排队中的实验", "L", "eval-ds-1",
+                null, null, null, null, null, 2);
+        EvalCommandService.LaunchResult launch = service.launch(plan, "key-p10", "operator");
+
+        EvalCommandService.AcceptedLaunch accepted =
+                service.acceptedLaunch(launch.runId()).orElseThrow();
+
+        assertThat(accepted.commandId()).isEqualTo(launch.commandId());
+        assertThat(accepted.commandState()).isEqualTo("PENDING");
+        assertThat(accepted.displayName()).isEqualTo("排队中的实验");
+        assertThat(accepted.mode()).isEqualTo("L");
+        assertThat(accepted.datasetVersion()).isEqualTo("eval-ds-1");
+    }
+
+    @Test
+    @DisplayName("PAGE-10 未知 runId 前探 → empty（404 面，不做无限等待）")
+    void acceptedLaunchUnknownRunIsEmpty() {
+        assertThat(service.acceptedLaunch(UUID.randomUUID())).isEmpty();
     }
 }

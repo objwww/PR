@@ -19,38 +19,39 @@ function classify(path, err) {
 }
 
 export async function listAssets(kind, limit = 50) {
-  const path = '/api/release-assets'
+  // PAGE-01：client.baseURL 已带 /api，传入路径不再重复前缀
+  const path = '/release-assets'
   try {
     return await api(path, { params: { ...(kind ? { kind } : {}), limit } })
   } catch (e) {
-    throw classify(path, e)
+    throw classify('/api' + path, e)
   }
 }
 
 export async function listBundles() {
-  const path = '/api/release-assets/bundles'
+  const path = '/release-assets/bundles'
   try {
     return await api(path)
   } catch (e) {
-    throw classify(path, e)
+    throw classify('/api' + path, e)
   }
 }
 
 export async function getAssetDetail(kind, digest) {
-  const path = `/api/release-assets/${encodeURIComponent(kind)}/${encodeURIComponent(digest)}`
+  const path = `/release-assets/${encodeURIComponent(kind)}/${encodeURIComponent(digest)}`
   try {
     return await api(path)
   } catch (e) {
-    throw classify(path, e)
+    throw classify('/api' + path, e)
   }
 }
 
 export async function getRunConfigEpochs(runId) {
-  const path = `/api/rca-runs/${encodeURIComponent(runId)}/config-epochs`
+  const path = `/rca-runs/${encodeURIComponent(runId)}/config-epochs`
   try {
     return await api(path)
   } catch (e) {
-    throw classify(path, e)
+    throw classify('/api' + path, e)
   }
 }
 

@@ -52,11 +52,17 @@ public class EvalQueryController {
 
     private final EvalQueryService query;
     private final com.objwww.pr.control.eval.application.QualitySummaryService qualityService;
+    private final com.objwww.pr.control.eval.application.EvalCommandService commands;
+    private final com.objwww.pr.control.eval.application.EvalLaunchGate launchGate;
 
     public EvalQueryController(EvalQueryService query,
-            com.objwww.pr.control.eval.application.QualitySummaryService qualityService) {
+            com.objwww.pr.control.eval.application.QualitySummaryService qualityService,
+            com.objwww.pr.control.eval.application.EvalCommandService commands,
+            com.objwww.pr.control.eval.application.EvalLaunchGate launchGate) {
         this.query = query;
         this.qualityService = qualityService;
+        this.commands = commands;
+        this.launchGate = launchGate;
     }
 
     @GetMapping("/runs")
@@ -78,8 +84,36 @@ public class EvalQueryController {
         }
         return query.detail(id)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> acceptedOrNotFound(id));
+    }
+
+    /**
+     * PAGE-10：run 行未落时前探 LAUNCH 命令——已受理（202 到 worker 领取落库之间的
+     * 等待窗口）返回 200 + acceptedOnly 投影（含命令状态），真正未知 id 才 404。
+     * 命令也不存在 = 随机/越权 id，不做无限重试面。
+     */
+    private ResponseEntity<?> acceptedOrNotFound(UUID runId) {
+        return commands.acceptedLaunch(runId)
+                .<ResponseEntity<?>>map(a -> {
+                    Map<String, Object> out = new java.util.LinkedHashMap<>();
+                    out.put("acceptedOnly", true);
+                    out.put("runId", runId.toString());
+                    out.put("commandId", a.commandId().toString());
+                    out.put("commandState", a.commandState());
+                    out.put("acceptedAt", a.createdAt().toString());
+                    out.put("displayName", a.displayName());
+                    out.put("mode", a.mode());
+                    out.put("datasetVersion", a.datasetVersion());
+                    return ResponseEntity.ok(out);
+                })
                 .orElseGet(() -> ResponseEntity.status(404)
                         .body(Map.of("error", "eval run 不存在")));
+    }
+
+    /** PAGE-03 能力读面：与命令面闸门同源的支持范围（前端禁用不可用模式/字段的唯一数据源） */
+    @GetMapping("/launch-capability")
+    public Map<String, Object> launchCapability() {
+        return launchGate.describe();
     }
 
     @GetMapping("/runs/{runId}/cases")

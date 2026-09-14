@@ -41,6 +41,7 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
     private final int defaultRounds;
     private final EvalBatchRunner.EvalClock clock;
     private final String workerId;
+    private final EvalLaunchGate gate;
 
     public EvalLaunchExecutor(GoldenScenarioRegistry registry,
                               Map<String, ScenarioDriver> driversByRole,
@@ -55,7 +56,8 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
                               EvalRunMetadata baseMetadata,
                               int defaultRounds,
                               EvalBatchRunner.EvalClock clock,
-                              String workerId) {
+                              String workerId,
+                              EvalLaunchGate gate) {
         this.registry = Objects.requireNonNull(registry);
         this.driversByRole = Objects.requireNonNull(driversByRole);
         this.alertProbe = Objects.requireNonNull(alertProbe);
@@ -70,11 +72,17 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
         this.defaultRounds = defaultRounds;
         this.clock = Objects.requireNonNull(clock);
         this.workerId = Objects.requireNonNull(workerId);
+        this.gate = Objects.requireNonNull(gate);
     }
 
-    /** 执行一条已领取的 LAUNCH 命令（run id = 命令预定身份）；异常上抛归 worker 收口 */
+    /**
+     * 执行一条已领取的 LAUNCH 命令（run id = 命令预定身份）；异常上抛归 worker 收口。
+     * 领取后先过能力闸门复验（PAGE-03：服务层校验不可信作唯一防线；不支持的
+     * 模式/配置在此拒绝，零驱动装配、零注入端口触达）。
+     */
     public EvalBatchRunner.BatchResult execute(EvalRunCommand command) {
         EvalLaunchPlan plan = parsePlan(command.payloadJson());
+        gate.check(plan);
         EvalRunMetadata overlaid = overlay(baseMetadata, plan);
         EvalBatchRunner.RunLifecycle lifecycle = new EvalBatchRunner.RunLifecycle(
                 plan.mode(), plan.displayName(), command.payloadJson(), workerId,

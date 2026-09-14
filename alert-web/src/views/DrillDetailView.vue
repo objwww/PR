@@ -3,7 +3,7 @@
     <!-- 页头固定：场景 / 靶场 / 当前状态 / 停止并恢复（DR-02 真实接线，降级显式注明） -->
     <PageHeader :title="`演练详情 ${shortId}`" subtitle="页面刷新或关闭后作业继续；重新打开恢复真实状态，断网不显示假成功。">
       <template #actions>
-        <el-button @click="loadDetail" :loading="loading">刷新</el-button>
+        <el-button @click="loadDetail(false)" :loading="loading">刷新</el-button>
         <el-button
           type="danger"
           :disabled="!!stopDisabledReason || stopping"
@@ -38,22 +38,34 @@
       </div>
     </div>
 
-    <!-- 接口未就绪 / 作业不存在：诚实提示，不渲染假详情 -->
+    <!-- 权限 / 不存在 / 接口不可用分状态：不把 403 与 404 混同为「未部署」（PAGE-02） -->
     <el-result
-      v-if="detailState === 'not-ready'"
+      v-if="detailState === 'notfound'"
       icon="warning"
-      title="演练作业不存在或接口未就绪"
-      :sub-title="`GET /api/drills/${route.params.drillId} 当前被拒绝（接口不存在，实测 403/404）：后端作业链 DR-02~04 未交付，无法确认该演练作业是否存在。`"
+      title="演练作业不存在"
+      :sub-title="`GET /api/drills/${route.params.drillId} 返回 404：该作业不存在或当前不可见（ID 可能有误）。`"
     >
       <template #extra>
-        <el-button :loading="loading" @click="loadDetail">重试</el-button>
+        <el-button :loading="loading" @click="loadDetail(false)">重试</el-button>
+        <el-button @click="router.push('/drills')">返回列表</el-button>
       </template>
     </el-result>
-    <EmptyState v-else-if="detailState === 'error'" kind="error" @retry="loadDetail" />
+    <el-result
+      v-else-if="detailState === 'not-ready'"
+      icon="warning"
+      title="演练详情接口不可用（403/404）"
+      sub-title="GET /api/drills/{id} 被拒绝：可能无操作权限（403）或后端版本滞后未部署（404）。无法确认该作业状态。"
+    >
+      <template #extra>
+        <el-button :loading="loading" @click="loadDetail(false)">重试</el-button>
+      </template>
+    </el-result>
+    <EmptyState v-else-if="detailState === 'error'" kind="error" @retry="loadDetail(false)" />
 
-    <!-- DU10 断网诚实面：轮询失败不翻错误态、不显示假成功，只标最近成功加载时间 -->
+    <!-- DU10 断网诚实面：轮询失败保留旧数据；详情/事件分别标失败，互不顶替（PAGE-07） -->
     <div v-if="connIssue" class="card conn-note">
-      连接中断：显示 {{ fmtTime(lastLoadedAt) }} 最近成功加载的数据；作业在服务端继续，恢复连接后自动刷新。
+      连接中断：{{ connIssueText }}；显示 {{ fmtTime(lastLoadedAt) }} 最近成功加载的数据，
+      作业在服务端继续，恢复连接后自动刷新。
     </div>
 
     <!-- 时间线：八阶段（§7.2）；详情接口 timeline 有真实相位时高亮当前阶段，enteredAt 只取真实事件 -->
@@ -116,12 +128,12 @@
           <el-button v-if="eventsHasMore" :loading="eventsFetching" @click="loadMoreEvents">加载更多</el-button>
         </div>
       </template>
-      <!-- 403/404 = 接口未就绪，与真实错误、真实空账本三态区分，不伪造空态 -->
+      <!-- 403/404 分状态：无权限 / 接口未部署 / 真实错误 / 真实空账本区分，不伪造空态 -->
       <el-result
         v-else-if="eventsState === 'not-ready'"
         icon="warning"
-        title="事件流接口未就绪"
-        sub-title="GET /api/drills/{id}/events 当前被拒绝（接口不存在，实测 403/404）：依赖 DR-02/DR-06 事件投影，接口就绪前不展示任何模拟事件。"
+        title="事件流接口不可用（403/404）"
+        sub-title="GET /api/drills/{id}/events 被拒绝：可能无操作权限（403）或事件投影未部署（404）。就绪前不展示任何模拟事件。"
       >
         <template #extra>
           <el-button :loading="eventsLoading" @click="loadEvents">重试</el-button>
@@ -167,7 +179,7 @@
 // 当前阶段（ACTIVE），无事件 enteredAt 如实「—」。事件流分区取 GET /{id}/events：
 // seq 游标增量（加载更多 + DU10 有界轮询，终态/隐藏/卸载即停），接口未就绪（403/404）/
 // 加载失败/真实空账本三态区分。断网保留旧数据并如实标「连接中断」，不显示假成功（DU10）。
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import EmptyState from '../components/common/EmptyState.vue'
@@ -178,12 +190,22 @@ import { fmtTime } from '../utils/format'
 const route = useRoute()
 const router = useRouter()
 
+// PAGE-07：按 drillId 建立本页生命周期——路由切到另一演练时取消旧请求语义、
+// 清空详情/事件/cursor/展开状态、递增 generation，旧响应一律不回写
+const drillId = computed(() => String(route.params.drillId ?? ''))
+let generation = 0
+
 const drill = ref(null)
-const detailState = ref('loading') // loading | ok | not-ready | error
+const detailState = ref('loading') // loading | ok | notfound | not-ready | error
 const loading = ref(false)
 const stopping = ref(false)
-const connIssue = ref(false)      // 轮询失败：保留旧数据，如实标连接中断（DU10）
+const detailIssue = ref(false)    // 详情路轮询失败（保留旧数据，DU10）
+const eventsIssue = ref(false)    // 事件路失败（与详情路独立，互不顶替）
 const lastLoadedAt = ref(null)
+
+const connIssue = computed(() => detailIssue.value || eventsIssue.value)
+const connIssueText = computed(() =>
+  [detailIssue.value && '详情', eventsIssue.value && '事件流'].filter(Boolean).join('与') + '加载失败')
 
 // 事件流（drill_event 原始账本）
 const events = ref([])
@@ -204,11 +226,12 @@ const shortId = computed(() => {
 // §7.4 终态集：停止非法（后端 409 CONFLICT_TERMINAL）
 const TERMINAL = new Set(['CLOSED', 'CANCELLED', 'FAILED'])
 
-// 停止按钮禁用原因：接口未就绪/终态/已受理——显式注明，不伪造可点；RECOVERY_FAILED 占位
-// 保持可点，由服务端 409 如实返回「需处理恢复而非停止」
+// 停止按钮禁用原因：接口不可用/不存在/终态/已受理——显式注明，不伪造可点；RECOVERY_FAILED
+// 占位保持可点，由服务端 409 如实返回「需处理恢复而非停止」
 const stopDisabledReason = computed(() => {
+  if (detailState.value === 'notfound') return '作业不存在（404），无可停止对象'
   if (detailState.value === 'not-ready') {
-    return '停止命令接口未就绪（POST /api/drills/{id}/stop 依赖 DR-02，实测 403/404）：作业状态无法确认，不允许盲停'
+    return '作业状态无法确认（详情接口 403/404）：不允许盲停'
   }
   if (detailState.value !== 'ok') return '作业详情加载后可操作'
   if (TERMINAL.has(drill.value?.state)) return `作业已终态（${drill.value.state}），停止非法（§7.4）`
@@ -301,23 +324,27 @@ function togglePayload(seq) {
 
 const lastSeq = () => (events.value.length ? events.value[events.value.length - 1].seq : 0)
 
-// 增量拉取（加载更多/轮询共用）：afterSeq = 已加载末条 seq；按 seq 去重防竞态重条
+// 增量拉取（加载更多/轮询共用）：afterSeq = 已加载末条 seq；按 seq 去重防竞态重条；
+// 迟到响应（generation 已推进）一律丢弃，不拼进新演练的账本（PAGE-07）
 async function fetchEventsAfter(afterSeq, limit) {
   if (eventsFetching.value) return false
   eventsFetching.value = true
+  const gen = generation
   try {
-    const d = await listDrillEvents(route.params.drillId, { afterSeq, limit })
+    const d = await listDrillEvents(drillId.value, { afterSeq, limit })
+    if (gen !== generation) return false
     const seen = new Set(events.value.map(e => e.seq))
     events.value = events.value.concat((d.items ?? []).filter(e => !seen.has(e.seq)))
     eventsHasMore.value = d.nextCursor != null
     eventsState.value = 'ok'
-    connIssue.value = false
+    eventsIssue.value = false
     return true
   } catch (e) {
+    if (gen !== generation) return false
     if (e instanceof ApiNotReadyError) {
       eventsState.value = 'not-ready'
     } else if (eventsState.value === 'ok') {
-      connIssue.value = true // 已有账本时断轮询不翻错误态（DU10：断网不显示假成功）
+      eventsIssue.value = true // 已有账本时断轮询不翻错误态（DU10：断网不显示假成功）
     } else {
       eventsState.value = 'error'
     }
@@ -330,12 +357,16 @@ async function fetchEventsAfter(afterSeq, limit) {
 // 首屏/重试：从头（afterSeq=0）整页重拉——重开浏览器状态一致，不依赖客户端记忆（DU10）
 async function loadEvents() {
   eventsLoading.value = true
+  const gen = generation
   try {
-    const d = await listDrillEvents(route.params.drillId, { afterSeq: 0, limit: 50 })
+    const d = await listDrillEvents(drillId.value, { afterSeq: 0, limit: 50 })
+    if (gen !== generation) return
     events.value = d.items ?? []
     eventsHasMore.value = d.nextCursor != null
     eventsState.value = 'ok'
+    eventsIssue.value = false
   } catch (e) {
+    if (gen !== generation) return
     eventsState.value = e instanceof ApiNotReadyError ? 'not-ready' : 'error'
   } finally {
     eventsLoading.value = false
@@ -344,14 +375,16 @@ async function loadEvents() {
 
 async function loadMoreEvents() {
   const ok = await fetchEventsAfter(lastSeq(), 50)
-  if (!ok && connIssue.value) ElMessage.error('加载更多失败，请重试')
+  if (!ok && eventsIssue.value && gen() === generation) ElMessage.error('加载更多失败，请重试')
 }
+const gen = () => generation
 
-// ---------------------------------------------------------------- 有界轮询（DU10）
+// ---------------------------------------------------------------- 有界轮询（DU10/PAGE-07）
 
 let pollTimer = null
+let pollBusy = false // 上一轮未完成不叠加（慢请求不再堆积）
 function startPoll() {
-  stopPoll()
+  if (pollTimer) return // 已在轮询：不重置计时器（避免手动刷新后 cadence 漂移）
   pollTimer = setInterval(pollTick, POLL_MS)
 }
 function stopPoll() {
@@ -361,29 +394,46 @@ function stopPoll() {
   }
 }
 async function pollTick() {
-  if (document.hidden) return // 隐藏页面停止轮询（方案 §7 性能纪律）
+  if (document.hidden) return // 隐藏页面暂停（恢复可见时立即补一次）
+  if (pollBusy) return
+  if (detailState.value === 'loading') return // 首屏仍在加载：本轮跳过，绝不当作终态停轮询
   if (detailState.value !== 'ok' || TERMINAL.has(drill.value?.state)) {
-    stopPoll() // 终态即停：有界
+    stopPoll() // 终态/不可用即停：有界
     return
   }
-  await loadDetail(true)
-  if (eventsState.value === 'ok') await fetchEventsAfter(lastSeq(), 200)
+  pollBusy = true
+  try {
+    await loadDetail(true)
+    if (eventsState.value === 'ok') await fetchEventsAfter(lastSeq(), 200)
+  } finally {
+    pollBusy = false
+  }
 }
 
+// 首屏/手动刷新/轮询三态共用：成功非终态确保轮询在跑（首屏慢、手动重试成功都恢复）；
+// 终态即停；notfound/not-ready 无可轮询对象也停
 async function loadDetail(silent = false) {
+  const gen0 = generation
   if (!silent) loading.value = true
   try {
-    drill.value = await getDrill(route.params.drillId)
+    const d = await getDrill(drillId.value)
+    if (gen0 !== generation) return
+    drill.value = d
     detailState.value = 'ok'
     lastLoadedAt.value = new Date().toISOString()
-    connIssue.value = false
-    if (TERMINAL.has(drill.value?.state)) stopPoll() // 终态即停：有界轮询（DU10）
+    detailIssue.value = false
+    if (TERMINAL.has(d?.state)) stopPoll()
+    else startPoll()
   } catch (e) {
+    if (gen0 !== generation) return
     if (silent) {
-      connIssue.value = true // 轮询失败保留旧数据，如实标连接中断
+      detailIssue.value = true // 轮询失败保留旧数据，如实标连接中断
       return
     }
-    detailState.value = e instanceof ApiNotReadyError ? 'not-ready' : 'error'
+    if (e instanceof ApiNotReadyError && e.status === 404) detailState.value = 'notfound'
+    else if (e instanceof ApiNotReadyError) detailState.value = 'not-ready'
+    else detailState.value = 'error'
+    stopPoll()
   } finally {
     if (!silent) loading.value = false
   }
@@ -402,7 +452,7 @@ async function onStop() {
   }
   stopping.value = true
   try {
-    const res = await stopDrill(route.params.drillId, newIdempotencyKey())
+    const res = await stopDrill(drillId.value, newIdempotencyKey())
     if (res?.alreadyRequested) {
       ElMessage.info(`停止请求此前已受理（异键幂等，零新副作用，DU14）；当前相位 ${res.state ?? '—'}`)
     } else if (res?.replayed) {
@@ -412,15 +462,17 @@ async function onStop() {
     } else {
       ElMessage.success('停止请求已受理（202）：恢复中（RECOVERING）——受理≠恢复完成，核验完成才 CLOSED')
     }
-    await loadDetail()
+    await loadDetail(false)
     if (eventsState.value === 'ok') await fetchEventsAfter(lastSeq(), 50) // STOP_REQUESTED 已同步落账
   } catch (e) {
-    if (e instanceof ApiNotReadyError) {
-      ElMessage.warning('停止接口未就绪（POST /api/drills/{id}/stop 依赖 DR-02，实测 403/404）')
+    if (e instanceof ApiNotReadyError && e.status === 403) {
+      ElMessage.error('无操作权限（403）：停止命令被拒绝')
+    } else if (e instanceof ApiNotReadyError) {
+      ElMessage.warning('停止接口不可用（404）：后端版本可能滞后，未产生任何注入')
     } else if (e?.response?.status === 409) {
       // 终态 / RECOVERY_FAILED 占位：服务端文案如实透出（「需处理恢复而非停止」）
       ElMessage.error(e.response.data?.error || '停止冲突（409）')
-      await loadDetail()
+      await loadDetail(false)
     } else {
       ElMessage.error(e?.response?.data?.error || '停止请求失败，请重试')
     }
@@ -429,12 +481,43 @@ async function onStop() {
   }
 }
 
+// 路由 A→B：停轮询、推进 generation 使旧请求作废、清空全部状态后按新身份重拉（PAGE-07）
+watch(drillId, (id, old) => {
+  if (!id || id === old) return
+  stopPoll()
+  generation++
+  detailIssue.value = false
+  eventsIssue.value = false
+  lastLoadedAt.value = null
+  drill.value = null
+  detailState.value = 'loading'
+  events.value = []
+  eventsHasMore.value = false
+  eventsState.value = 'loading'
+  expandedSeqs.value = new Set()
+  loadDetail(false)
+  loadEvents()
+})
+
+// 隐藏暂停 / 恢复可见立即刷新（有界轮询纪律）
+function onVisibility() {
+  if (document.hidden) stopPoll()
+  else if (detailState.value === 'ok' && !TERMINAL.has(drill.value?.state)) {
+    loadDetail(true)
+    startPoll()
+  }
+}
+
 onMounted(() => {
-  loadDetail()
+  loadDetail(false)
   loadEvents()
   startPoll()
+  document.addEventListener('visibilitychange', onVisibility)
 })
-onUnmounted(stopPoll)
+onBeforeUnmount(() => {
+  stopPoll()
+  document.removeEventListener('visibilitychange', onVisibility)
+})
 </script>
 
 <style scoped>

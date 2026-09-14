@@ -92,6 +92,11 @@ public class EvalRunWorker {
             EvalBatchRunner.BatchResult result = executor.execute(command);
             reconcileUsage(result.evalRunId());
             commands.finish(command.id(), EvalRunCommand.State.DONE, clock.now());
+        } catch (EvalLaunchGate.EvalLaunchUnsupportedException e) {
+            // PAGE-03 能力拒绝（领取后复验）：命令 REJECTED 留痕——从未执行（与跑批
+            // 失败 FAILED 区分），run 行零落库；旧客户端漏网命令在此收口
+            log.warn("eval worker {} 拒绝 LAUNCH（{}）：{}", workerId, e.code(), e.getMessage());
+            commands.finish(command.id(), EvalRunCommand.State.REJECTED, clock.now());
         } catch (RuntimeException e) {
             // 批件异常：EvalBatchRunner 已把 run 终态化 FAILED（batch_error 卡因），
             // 这里只收口命令行——异常不吞，命令 FAILED 留痕

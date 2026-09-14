@@ -30,6 +30,9 @@ public interface EvalRunCommandRepository {
     /** 幂等重放/409 比对的查找面 */
     Optional<EvalRunCommand> findByKey(EvalRunCommand.Type type, String idempotencyKey);
 
+    /** 该 run 最近一条 LAUNCH 命令（PAGE-10：202 受理到 run 落库之间等待窗口的受理投影；select 授权面） */
+    Optional<EvalRunCommand> findLatestLaunch(UUID evalRunId);
+
     /** 该 run 是否已有被受理的 CANCEL 命令（PENDING/CLAIMED/DONE；worker 检查点信号） */
     boolean cancelAccepted(UUID evalRunId);
 

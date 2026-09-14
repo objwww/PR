@@ -57,9 +57,11 @@ public class MetricsWhitelistService {
                 "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"),
         HOST_MEM_USAGE("host_mem_usage", "%",
                 "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100"),
+        // 磁盘按 instance+mountpoint 出序列（PAGE-08 P2 口径修正）：容量加权总和会把
+        // 小分区将满掩盖在大分区空闲里；逐挂载点序列让危险分区在图例中可见
         HOST_DISK_USAGE("host_disk_usage", "%",
-                "100 * (1 - (sum by (instance) (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"})"
-                        + " / sum by (instance) (node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"})))"),
+                "100 * (1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"}"
+                        + " / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"}))"),
         ALERT_RECEIVE_RATE("alert_receive_rate", "条/秒",
                 "sum(rate(alertmanager_alerts_received_total[5m]))"),
         // 真实计数器（AlertMetrics.attemptFinished）：attempt 级完成吞吐近似 run 级
@@ -192,13 +194,18 @@ public class MetricsWhitelistService {
         return series;
     }
 
-    /** 序列名：instance 标签优先；无则全标签 k=v 串；零标签兜底 value */
+    /** 序列名：instance 标签优先（磁盘类带 mountpoint，同主机多挂载点不重名）；
+     *  无 instance 则全标签 k=v 串；零标签兜底 value */
     private static String seriesName(JsonNode metric) {
         if (!metric.isObject() || metric.isEmpty()) {
             return "value";
         }
         JsonNode instance = metric.get("instance");
         if (instance != null && instance.isTextual()) {
+            JsonNode mountpoint = metric.get("mountpoint");
+            if (mountpoint != null && mountpoint.isTextual()) {
+                return instance.asText() + ":" + mountpoint.asText();
+            }
             return instance.asText();
         }
         StringBuilder sb = new StringBuilder();

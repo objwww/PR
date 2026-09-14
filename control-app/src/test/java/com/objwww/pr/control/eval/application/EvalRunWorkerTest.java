@@ -66,6 +66,11 @@ class EvalRunWorkerTest {
         }
 
         @Override
+        public Optional<EvalRunCommand> findLatestLaunch(UUID evalRunId) {
+            return Optional.empty();
+        }
+
+        @Override
         public boolean cancelAccepted(UUID evalRunId) {
             return false;
         }
@@ -239,6 +244,25 @@ class EvalRunWorkerTest {
         return command -> {
             throw new IllegalStateException("arena map missing");
         };
+    }
+
+    @Test
+    @DisplayName("PAGE-03 领取后能力拒绝：命令 REJECTED 留痕（从未执行，区别于跑批 FAILED），"
+            + "run 行零落库")
+    void capabilityRejectionFinishesCommandRejected() {
+        EvalRunWorker worker = worker(command -> {
+            throw new EvalLaunchGate.EvalLaunchUnsupportedException("MODE_NOT_SUPPORTED",
+                    "模式 E 在当前环境未实现隔离执行，已拒绝", java.util.Map.of("modes", "L"));
+        });
+
+        EvalRunCommand cmd = launch("k-reject", "E");
+        commands.enqueue(cmd);
+        assertThat(worker.tick()).isTrue();
+
+        assertThat(commands.byId.get(cmd.id()).state())
+                .isEqualTo(EvalRunCommand.State.REJECTED);
+        assertThat(commands.byId.get(cmd.id()).finishedAt()).isNotNull();
+        assertThat(evalRuns.runs).isEmpty();
     }
 
     // ------------------------------------------------------------------ 孤儿清扫

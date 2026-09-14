@@ -2,7 +2,7 @@
   <div class="create-page">
     <PageHeader
       title="新建演练"
-      subtitle="三步发起一次完整演练作业；场景目录、服务端预检与启动命令走 DR-02 真实接口，接口未部署时如实降级。"
+      subtitle="三步发起一次完整演练作业；场景目录、服务端预检与启动命令走 DR-02 真实接口，接口不可用时如实降级。"
     >
       <template #actions>
         <el-button @click="router.push('/drills')">返回列表</el-button>
@@ -22,13 +22,13 @@
       <div class="step-title">选择场景</div>
       <template v-if="templatesState === 'not-ready'">
         <el-alert type="info" :closable="false" show-icon class="step-alert"
-          title="场景目录接口（GET /api/drills/templates）依赖 DR-02，后端未部署（实测 403/404）"
+          title="场景目录不可用（403/404）：可能无操作权限，或后端版本滞后未部署"
         >
           以下为 deploy/alert/eval/eval-scenarios.yml（registry v2）的静态说明文案，仅供了解场景内容，
-          <b>当前不可选择</b>。接口部署后本步将展示真实目录：ready=false 的场景注明原因且不可选。
+          <b>当前不可选择</b>。目录恢复后本步将展示真实目录：ready=false 的场景注明原因且不可选。
         </el-alert>
         <div class="scenario-grid">
-          <div v-for="s in staticScenarios" :key="s.id" class="scenario-card disabled" :title="'场景目录接口未就绪（依赖 DR-02），暂不可选择'">
+          <div v-for="s in staticScenarios" :key="s.id" class="scenario-card disabled" :title="'场景目录不可用（403/404），暂不可选择'">
             <div class="sc-head">
               <span class="sc-id mono">{{ s.id }}</span>
               <span class="sc-name">{{ s.name }}</span>
@@ -36,7 +36,7 @@
             <div class="sc-row"><span class="sc-k">类型</span>{{ s.type }}</div>
             <div class="sc-row"><span class="sc-k">故障源</span>{{ s.source }}</div>
             <div class="sc-row"><span class="sc-k">症状</span>{{ s.symptom }}</div>
-            <div class="sc-state">不可用：场景目录接口依赖 DR-02</div>
+            <div class="sc-state">不可用：场景目录 403/404，无法核验可启动性</div>
           </div>
         </div>
       </template>
@@ -93,8 +93,8 @@
           </el-select>
         </el-form-item>
         <el-form-item label="靶场">
-          <el-input v-model="targetEnv" :disabled="!selected" placeholder="部署靶场白名单由服务端强制" class="param-ctl" />
-          <span class="param-note">服务端白名单强制（DU04）；预检 TARGET_ENV_WHITELIST 真值核验</span>
+          <el-input v-model="targetEnv" :disabled="!selected" placeholder="输入部署环境标识，服务端白名单强制校验" class="param-ctl" />
+          <span class="param-note">服务端白名单强制（DU04）；预检 TARGET_ENV_WHITELIST 真值核验，非法标识将被拒绝</span>
         </el-form-item>
         <el-form-item label="关联评测版本">
           <el-input
@@ -174,7 +174,7 @@
 // ② 配置受限参数：取值受场景 params 白名单约束（服务端 DU04 强制）；
 // ③ 检查并发起：POST /api/drills/preview 逐项渲染 checks（OK 绿 / FAIL 红 / UNKNOWN 灰「无法核验」），
 //    canLaunch 才允许 POST /api/drills（幂等键 crypto.randomUUID，202 跳详情，409 展示服务端 checks）。
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import EmptyState from '../components/common/EmptyState.vue'
@@ -245,18 +245,20 @@ function buildPlan() {
 
 const previewState = ref('idle') // idle | loading | ok | not-ready | error
 const preview = ref(null)
-const launchKey = ref(null) // 预检通过时生成一次，重试同键（DU02 幂等）；换场景/新预检重新生成
+const previewPlan = ref(null) // 预检发起时冻结的规范化计划：启动只提交这一份（PAGE-06）
+let previewSeq = 0            // 迟到的预检响应（切场景/改参数后到达）一律丢弃
+const launchKey = ref(null)   // 预检通过时生成一次，重试同键同冻结体（DU02 幂等）
 const launching = ref(false)
 const launchError = ref('')
 
 // 预检按钮禁用原因（显式降级注明，不伪造可点）
 const previewDisabledReason = computed(() => {
   if (templatesState.value === 'not-ready') {
-    return '预检接口依赖 DR-02：目录接口实测 403/404（后端未部署），预检同属本批接口面，暂不开放'
+    return '场景目录不可用（403/404）：可能无权限或后端版本滞后，预检同属该接口面，暂不开放'
   }
   if (templatesState.value !== 'ok') return '场景目录加载完成后可执行预检'
-  if (previewState.value === 'not-ready') return '预检接口（POST /api/drills/preview）未部署（403/404），待 DR-02 后端部署后开放'
-  if (!selected.value) return '请先在第一步选择场景（本期五场景 ready=false 均未开放启动，原因见卡片）'
+  if (previewState.value === 'not-ready') return '预检接口不可用（403/404）：可能无权限或后端版本滞后'
+  if (!selected.value) return '请先在第一步选择场景（ready=false 的场景不可选，原因见卡片）'
   return ''
 })
 
@@ -274,9 +276,16 @@ const launchDisabledReason = computed(() => {
 function resetPreview() {
   if (previewState.value !== 'not-ready') previewState.value = 'idle'
   preview.value = null
+  previewPlan.value = null
   launchKey.value = null
   launchError.value = ''
 }
+
+// PAGE-06：计划任何字段变化（时长/流量/靶场/关联版本）立即作废旧预检——
+// 用户确认过的必须是当前这一份计划；服务端 launch 时仍会重预检兜底
+watch([durationSeconds, trafficScale, targetEnv, linkedEvalVersion], () => {
+  if (previewState.value !== 'idle' || preview.value || previewPlan.value) resetPreview()
+})
 
 const CHECK_VIEW = {
   OK: ['通过', 'ck-ok'],
@@ -288,13 +297,19 @@ const checkCls = s => CHECK_VIEW[s]?.[1] ?? 'ck-unknown'
 
 async function runPreview() {
   if (!selected.value || previewDisabledReason.value) return
+  const plan = buildPlan()
+  const seq = ++previewSeq
+  previewPlan.value = plan // 冻结本次预检的计划签名
   previewState.value = 'loading'
   launchError.value = ''
   try {
-    preview.value = await previewDrill(buildPlan())
+    const d = await previewDrill(plan)
+    if (seq !== previewSeq) return // 计划已变/已重发：旧响应不覆盖新状态（PAGE-06）
+    preview.value = d
     previewState.value = 'ok'
-    launchKey.value = preview.value?.canLaunch ? newIdempotencyKey() : null
+    launchKey.value = d?.canLaunch ? newIdempotencyKey() : null
   } catch (e) {
+    if (seq !== previewSeq) return
     if (e instanceof ApiNotReadyError) {
       previewState.value = 'not-ready'
       preview.value = null
@@ -306,16 +321,19 @@ async function runPreview() {
 }
 
 async function launch() {
-  if (!canLaunchNow.value) return
+  if (!canLaunchNow.value || !previewPlan.value) return
+  const plan = previewPlan.value // 冻结体：重试同 key 同 body，不重建计划（PAGE-06/PRT-24）
   launching.value = true
   launchError.value = ''
   try {
-    const res = await createDrill({ idempotencyKey: launchKey.value, ...buildPlan() })
+    const res = await createDrill({ idempotencyKey: launchKey.value, ...plan })
     ElMessage.success(`演练作业已受理（${res.replayed ? '200 幂等重放' : '202'}）：受理≠完成，以详情页真实状态为准`)
     router.push(`/drills/${res.drillId}`)
   } catch (e) {
-    if (e instanceof ApiNotReadyError) {
-      launchError.value = '启动接口（POST /api/drills）未部署（403/404），待 DR-02 后端部署后开放'
+    if (e instanceof ApiNotReadyError && e.status === 403) {
+      launchError.value = '无操作权限（403）：启动被服务端拒绝'
+    } else if (e instanceof ApiNotReadyError) {
+      launchError.value = '启动接口不可用（404）：后端版本可能滞后'
     } else if (e?.response?.status === 409) {
       const d = e.response.data ?? {}
       launchError.value = d.error || '启动冲突（409）'
@@ -326,7 +344,7 @@ async function launch() {
         launchKey.value = null
       }
     } else {
-      launchError.value = e?.response?.data?.error || '启动请求失败，请重试'
+      launchError.value = e?.response?.data?.error || '启动请求失败，请重试（同键同参）'
     }
   } finally {
     launching.value = false

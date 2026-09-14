@@ -9,6 +9,7 @@ import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalPhaseEve
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.KeysetCursor;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -107,12 +108,81 @@ class EvalQueryControllerTest {
         // standalone 装配不挂 Boot 自动配置，jsr310 需显式注册并关时间戳——与生产序列化
         // （ISO 字符串）对齐，沿 MetricsQueryControllerTest 惯例
         mvc = MockMvcBuilders.standaloneSetup(new EvalQueryController(service,
-                new com.objwww.pr.control.eval.application.QualitySummaryService(emptyRuns)))
+                new com.objwww.pr.control.eval.application.QualitySummaryService(emptyRuns),
+                commandService(), com.objwww.pr.control.eval.application.EvalLaunchGate
+                        .closed(java.util.Set.of("L"), "eval-ds-1", 1, 10)))
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(
                         Jackson2ObjectMapperBuilder.json()
                                 .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                                 .build()))
                 .build();
+    }
+
+    /** PAGE-10/03 控制面依赖：内存命令账本（acceptCommand 预置受理行）+ 闭面闸门 */
+    private final java.util.List<com.objwww.pr.control.eval.domain.model.EvalRunCommand>
+            launched = new java.util.ArrayList<>();
+    private com.objwww.pr.control.eval.domain.model.EvalRunCommand acceptedCommand;
+
+    private com.objwww.pr.control.eval.application.EvalCommandService commandService() {
+        com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository repo =
+                new com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository() {
+                    @Override
+                    public void insert(com.objwww.pr.control.eval.domain.model.EvalRunCommand c) {
+                        launched.add(c);
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.eval.domain.model.EvalRunCommand> findLatestLaunch(
+                            UUID runId) {
+                        return acceptedCommand != null
+                                && acceptedCommand.evalRunId().equals(runId)
+                                ? Optional.of(acceptedCommand) : Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.eval.domain.model.EvalRunCommand> findByKey(
+                            com.objwww.pr.control.eval.domain.model.EvalRunCommand.Type t,
+                            String k) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public boolean cancelAccepted(UUID runId) {
+                        return false;
+                    }
+
+                    @Override
+                    public Optional<Instant> cancelRequestedAt(UUID runId) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.eval.domain.model.EvalRunCommand> claimNextLaunch(
+                            String w, Instant at) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public boolean finish(UUID id,
+                            com.objwww.pr.control.eval.domain.model.EvalRunCommand.State s,
+                            Instant at) {
+                        return true;
+                    }
+
+                    @Override
+                    public List<com.objwww.pr.control.eval.domain.model.EvalRunCommand> findOrphanedClaims(
+                            Instant before) {
+                        return List.of();
+                    }
+
+                    @Override
+                    public boolean requeue(UUID id) {
+                        return false;
+                    }
+                };
+        return new com.objwww.pr.control.eval.application.EvalCommandService(repo,
+                reader, new ObjectMapper(), com.objwww.pr.control.eval.application.EvalLaunchGate
+                        .closed(java.util.Set.of("L"), "eval-ds-1", 1, 10));
     }
 
     // ------------------------------------------------------------------ 正常页 / 末页 / 续页
@@ -212,6 +282,49 @@ class EvalQueryControllerTest {
     }
 
     // ------------------------------------------------------------------ 桩与行构造
+
+    @Test
+    @DisplayName("PAGE-10：run 未落库但有已受理 LAUNCH 命令 → 200 acceptedOnly 投影（非 404）")
+    void acceptedButNotCreatedRunProjectsCommand() throws Exception {
+        UUID pendingRunId = UUID.randomUUID();
+        acceptedCommand = com.objwww.pr.control.eval.domain.model.EvalRunCommand.pending(
+                UUID.randomUUID(),
+                com.objwww.pr.control.eval.domain.model.EvalRunCommand.Type.LAUNCH,
+                pendingRunId, "k",
+                "{\"displayName\":\"排队实验\",\"mode\":\"L\",\"datasetVersion\":\"eval-ds-1\"}",
+                "h".repeat(64), "operator", T0);
+        reader.run = null;
+
+        mvc.perform(get("/api/eval/runs/" + pendingRunId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acceptedOnly").value(true))
+                .andExpect(jsonPath("$.commandState").value("PENDING"))
+                .andExpect(jsonPath("$.displayName").value("排队实验"))
+                .andExpect(jsonPath("$.mode").value("L"));
+    }
+
+    @Test
+    @DisplayName("PAGE-10：run 与命令都不存在 → 404（随机 id 不进等待轮询面）")
+    void unknownRunWithoutCommandStays404() throws Exception {
+        reader.run = null;
+        acceptedCommand = null;
+
+        mvc.perform(get("/api/eval/runs/" + UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("eval run 不存在"));
+    }
+
+    @Test
+    @DisplayName("PAGE-03 能力读面：/launch-capability 与闸门同源（modes/maxConcurrency/闭面标记）")
+    void launchCapabilityExposesGateDescribe() throws Exception {
+        mvc.perform(get("/api/eval/launch-capability"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modes[0]").value("L"))
+                .andExpect(jsonPath("$.maxConcurrency").value(1))
+                .andExpect(jsonPath("$.budgetMaxTokens").value(false))
+                .andExpect(jsonPath("$.deadlineSeconds").value(false))
+                .andExpect(jsonPath("$.modelOverride").value(false));
+    }
 
     private static EvalRunRow runRow(UUID id) {
         return new EvalRunRow(id, "ds-v1", "reg-digest", "model-x", "pv1", "cfg",
