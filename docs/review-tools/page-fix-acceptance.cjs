@@ -63,7 +63,7 @@ const tick = async () => { await Promise.resolve(); await vue.nextTick(); };
   const n = page('EvalNewView', 'submit,form,loadCapability,loadDatasets,capability,capabilityState,get pendingIntent(){return pendingIntent}', {
     Date: FakeDate,
     api: async (url, opts = {}) => {
-      if (url === '/eval/launch-capability') { n.capability.value = { modes: ['L'], datasetVersions: ['eval-ds-1'], maxConcurrency: 1, maxRoundsPerScenario: 10, modelOverride: false, promptOverride: false, budgetMaxTokens: false, deadlineSeconds: false }; n.capabilityState.value = 'ok'; return n.capability.value; }
+      if (url === '/eval/launch-capability') { n.capability.value = { modes: ['L'], datasetVersions: ['eval-ds-1'], maxConcurrency: 1, maxRoundsPerScenario: 10, modelOverride: false, promptOverride: false, budgetMaxTokens: false, deadlineSeconds: false, launchEnabled: true }; n.capabilityState.value = 'ok'; return n.capability.value; }
       if (url === '/eval/datasets') return { items: [{ version: 'eval-ds-1', caseCount: 6 }] };
       posts.push({ url, body: opts.body }); throw Object.assign(new Error('timeout'), { response: undefined });
     },

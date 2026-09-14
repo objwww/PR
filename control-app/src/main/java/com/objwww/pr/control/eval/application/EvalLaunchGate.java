@@ -62,12 +62,13 @@ public final class EvalLaunchGate {
     private final boolean promptOverrideSupported;
     private final boolean budgetSupported;
     private final boolean deadlineSupported;
+    private final boolean launchEnabled;
 
     /** 全支持面构造（测试对照用）；生产装配用 {@link #closed(Set, String, int, int)} */
     public EvalLaunchGate(Set<String> modes, Set<String> datasetVersions, int maxConcurrency,
                           int maxRounds, boolean modelOverrideSupported,
                           boolean promptOverrideSupported, boolean budgetSupported,
-                          boolean deadlineSupported) {
+                          boolean deadlineSupported, boolean launchEnabled) {
         if (modes == null || modes.isEmpty()) {
             throw new IllegalArgumentException("modes 不得为空（至少一个已实现模式）");
         }
@@ -88,18 +89,35 @@ public final class EvalLaunchGate {
         this.promptOverrideSupported = promptOverrideSupported;
         this.budgetSupported = budgetSupported;
         this.deadlineSupported = deadlineSupported;
+        this.launchEnabled = launchEnabled;
     }
 
-    /** 生产装配：执行隔离未实现的字段全闭（model/prompt 覆盖与 budget/deadline 不支持） */
+    /** 生产装配：执行隔离未实现的字段全闭（model/prompt 覆盖与 budget/deadline 不支持），
+     *  发起面开放 */
     public static EvalLaunchGate closed(Set<String> modes, String datasetVersion,
                                         int maxConcurrency, int maxRounds) {
         return new EvalLaunchGate(modes, Set.of(datasetVersion), maxConcurrency, maxRounds,
-                false, false, false, false);
+                false, false, false, false, true);
+    }
+
+    /** SAFE-02 生产装配：同 closed 但发起面整体关闭——L 与 drill 共享环境互斥未落地
+     *  前，服务端拒绝一切发起（不是警告）；开放需先落地共享占用（评审资源与恢复包） */
+    public static EvalLaunchGate launchDisabled(Set<String> modes, String datasetVersion,
+                                                int maxConcurrency, int maxRounds) {
+        return new EvalLaunchGate(modes, Set.of(datasetVersion), maxConcurrency, maxRounds,
+                false, false, false, false, false);
     }
 
     /** 入队前 / 领取后统一校验：不支持即抛 {@link EvalLaunchUnsupportedException} */
     public void check(EvalLaunchPlan plan) {
         Objects.requireNonNull(plan, "plan 不得为 null");
+        if (!launchEnabled) {
+            // SAFE-02：发起面整体关闭（L 与 drill 共享环境互斥未落地）——两入口
+            // （命令面 + worker 领取复验）同源拒绝，而非警告；EST-05 面零注入
+            throw new EvalLaunchUnsupportedException("LAUNCH_DISABLED",
+                    "评测发起当前已关闭：L 与演练共享环境互斥未落地（共享占用协议交付前"
+                            + "不接受任何发起），已支持的能力面仅只读查询与预检", describe());
+        }
         if (!modes.contains(plan.mode())) {
             throw new EvalLaunchUnsupportedException("MODE_NOT_SUPPORTED",
                     "模式 " + plan.mode() + " 在当前环境未实现隔离执行，已拒绝（支持："
@@ -146,6 +164,7 @@ public final class EvalLaunchGate {
     /** 能力读面（/api/eval/launch-capability 与 400 应答的 supported 同源；只读） */
     public Map<String, Object> describe() {
         Map<String, Object> out = new LinkedHashMap<>();
+        out.put("launchEnabled", launchEnabled);
         out.put("modes", List.copyOf(modes));
         out.put("datasetVersions", List.copyOf(datasetVersions));
         out.put("maxConcurrency", maxConcurrency);

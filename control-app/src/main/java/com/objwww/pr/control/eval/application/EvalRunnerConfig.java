@@ -272,16 +272,19 @@ public class EvalRunnerConfig {
     }
 
     /** PAGE-03 能力闸门（worker 侧复验源）：模式/数据集版本取本装配真实事实源，
-     *  覆盖项与限额执行面未实现全闭——开放任一项时先补执行面再改这里 */
+     *  覆盖项与限额执行面未实现全闭——开放任一项时先补执行面再改这里。
+     *  SAFE-02：launch-enabled 默认关闭，与命令面同源拒绝（领取后复验 → REJECTED） */
     @Bean
     public EvalLaunchGate evalLaunchGate(
             @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
             @Value("${app.eval.launch.modes:L}") String modes,
             @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
-            @Value("${app.eval.launch.max-rounds:10}") int maxRounds) {
-        return EvalLaunchGate.closed(java.util.Arrays.stream(modes.split(","))
+            @Value("${app.eval.launch.max-rounds:10}") int maxRounds,
+            @Value("${app.eval.launch.enabled:false}") boolean launchEnabled) {
+        return new EvalLaunchGate(java.util.Arrays.stream(modes.split(","))
                 .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
-                datasetVersion, maxConcurrency, maxRounds);
+                java.util.Set.of(datasetVersion), maxConcurrency, maxRounds,
+                false, false, false, false, launchEnabled);
     }
 
     @Bean

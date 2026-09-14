@@ -155,6 +155,12 @@ public class DrillController {
                 out.put("checks", result.precheck().checks());
                 yield ResponseEntity.status(409).body(out);
             }
+            case LAUNCH_DISABLED -> {
+                // SAFE-04：启动能力位关闭——零作业行落库，只读面不受影响
+                out.put("error", "演练启动面当前已关闭：停止/恢复推进链未交付（SAFE-04），"
+                        + "交付后经 app.drill.launch-enabled 显式重开");
+                yield ResponseEntity.status(409).body(out);
+            }
         };
     }
 

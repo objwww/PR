@@ -331,24 +331,43 @@ class SecurityConfigTest {
 
     // -------------------------------------------------------------- 浏览器半边
 
-    /** CSRF 引导：cookie XSRF-TOKEN + body token 同值（SPA 双面取用） */
-    private String bootstrapCsrf() throws Exception {
+    /** SAFE-01 CSRF 引导面：真实 cookie jar——cookie 持原始 token（SPA 头提交契约的
+     *  提交值来源），响应体 token 是 XOR 编码值（仅供表单参数面解码用，与 cookie 值
+     *  不同）。后续写请求必须带 cookie（期望值锚）+ 头（= cookie 原始值）；不带
+     *  cookie 时仓储按缺 cookie 重新生成期望值，比对必败（负例语义） */
+    private record CsrfBootstrap(String headerToken, String bodyToken,
+                                 jakarta.servlet.http.Cookie cookie) {
+    }
+
+    private CsrfBootstrap bootstrapCsrf() throws Exception {
         MvcResult result = mvc.perform(get("/api/auth/csrf"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.headerName").value(XSRF))
                 .andReturn();
-        assertThat(result.getResponse().getCookie("XSRF-TOKEN")).isNotNull();
-        return com.jayway.jsonpath.JsonPath.read(
-                result.getResponse().getContentAsString(), "$.token");
+        jakarta.servlet.http.Cookie cookie = result.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(cookie).isNotNull();
+        return new CsrfBootstrap(cookie.getValue(),
+                com.jayway.jsonpath.JsonPath.read(
+                        result.getResponse().getContentAsString(), "$.token"),
+                cookie);
+    }
+
+    private MvcResult loginWith(CsrfBootstrap csrf, String user, String password)
+            throws Exception {
+        return mvc.perform(post("/api/auth/login")
+                        .cookie(csrf.cookie()).header(XSRF, csrf.headerToken())
+                        .param("username", user).param("password", password))
+                .andReturn();
     }
 
     @Test
     @DisplayName("登录→会话授权→登出→会话失效；审计 LOGIN_SUCCESS/LOGOUT 各一行")
     void loginSessionLogoutFlow() throws Exception {
-        String token = bootstrapCsrf();
+        CsrfBootstrap csrf = bootstrapCsrf();
 
         MvcResult login = mvc.perform(post("/api/auth/login")
-                        .header(XSRF, token)
+                        .cookie(csrf.cookie())
+                        .header(XSRF, csrf.headerToken())
                         .param("username", "operator").param("password", "operator"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(true))
@@ -366,7 +385,7 @@ class SecurityConfigTest {
                 .andExpect(status().isForbidden());
 
         mvc.perform(post("/api/auth/logout")
-                        .header(XSRF, token).session(session))
+                        .cookie(csrf.cookie()).header(XSRF, csrf.headerToken()).session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(true));
         assertThat(audit().rows).hasSize(2);
@@ -380,10 +399,11 @@ class SecurityConfigTest {
     @Test
     @DisplayName("错误口令 → 401 {\"error\":\"login_failed\"}；审计 LOGIN_FAILURE actor=提交账号")
     void wrongPasswordIs401AndAudited() throws Exception {
-        String token = bootstrapCsrf();
+        CsrfBootstrap csrf = bootstrapCsrf();
 
         mvc.perform(post("/api/auth/login")
-                        .header(XSRF, token)
+                        .cookie(csrf.cookie())
+                        .header(XSRF, csrf.headerToken())
                         .param("username", "operator").param("password", "wrong"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("login_failed"));
@@ -402,15 +422,97 @@ class SecurityConfigTest {
         assertThat(audit().rows).isEmpty();
     }
 
+    // ------------------------------------------------------ SAFE-01 CSRF 值校验负例
+
+    @Test
+    @DisplayName("SAFE-01 错误令牌：有 cookie、头为任意错值 → 403（提交值必须真实参与比对，"
+            + "不得回退服务端期望值）")
+    void wrongCsrfTokenValueIs403() throws Exception {
+        CsrfBootstrap csrf = bootstrapCsrf();
+
+        mvc.perform(post("/api/auth/login")
+                        .cookie(csrf.cookie())
+                        .header(XSRF, "not-the-real-token")
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isForbidden());
+        assertThat(audit().rows).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SAFE-01 仅头无 cookie：服务端按缺 cookie 生成新期望值，提交值比对必败 → 403"
+            + "（不得由 handler 用期望值替用户补齐）")
+    void headerWithoutCookieIs403() throws Exception {
+        CsrfBootstrap csrf = bootstrapCsrf();
+
+        mvc.perform(post("/api/auth/login")
+                        .header(XSRF, csrf.headerToken())
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isForbidden());
+        assertThat(audit().rows).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SAFE-01 他会话令牌：cookie 来自 A 引导、头提交 B 引导的值 → 403（期望锚=请求 cookie）")
+    void crossSessionTokenIs403() throws Exception {
+        CsrfBootstrap cookieSource = bootstrapCsrf();
+        CsrfBootstrap tokenSource = bootstrapCsrf();
+        assertThat(cookieSource.headerToken()).isNotEqualTo(tokenSource.headerToken());
+
+        mvc.perform(post("/api/auth/login")
+                        .cookie(cookieSource.cookie())
+                        .header(XSRF, tokenSource.headerToken())
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isForbidden());
+        assertThat(audit().rows).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SAFE-01 头/参契约分离：响应体 token 是 XOR 编码值（表单参数面），走头提交=错值 → 403；"
+            + "头面契约 = cookie 原始值（axios 与 op-smoke 既有调用面不变）")
+    void bodyEncodedTokenViaHeaderIs403() throws Exception {
+        CsrfBootstrap csrf = bootstrapCsrf();
+        assertThat(csrf.bodyToken()).isNotEqualTo(csrf.headerToken());
+
+        mvc.perform(post("/api/auth/login")
+                        .cookie(csrf.cookie())
+                        .header(XSRF, csrf.bodyToken())
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isForbidden());
+        assertThat(audit().rows).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SAFE-01 正常链回归：登出后重新引导取新令牌，新令牌可再次登录（轮换后旧值不作假通过）")
+    void rebootstrapAfterLogoutIssuesFreshUsableToken() throws Exception {
+        CsrfBootstrap first = bootstrapCsrf();
+        MvcResult login = mvc.perform(post("/api/auth/login")
+                        .cookie(first.cookie()).header(XSRF, first.headerToken())
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isOk())
+                .andReturn();
+        MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
+        mvc.perform(post("/api/auth/logout")
+                        .cookie(first.cookie()).header(XSRF, first.headerToken()).session(session))
+                .andExpect(status().isOk());
+
+        CsrfBootstrap fresh = bootstrapCsrf();
+        mvc.perform(post("/api/auth/login")
+                        .cookie(fresh.cookie()).header(XSRF, fresh.headerToken())
+                        .param("username", "operator").param("password", "operator"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+    }
+
     // -------------------------------------------------------------- AUTH-1 平台账号登录
 
     @Test
     @DisplayName("AUTH-1：在职平台账号可登录（200 + 会话放行 operator 面）；审计 actor=登录名")
     void platformUserLoginSucceeds() throws Exception {
-        String token = bootstrapCsrf();
+        CsrfBootstrap csrf = bootstrapCsrf();
 
         MvcResult login = mvc.perform(post("/api/auth/login")
-                        .header(XSRF, token)
+                        .cookie(csrf.cookie())
+                        .header(XSRF, csrf.headerToken())
                         .param("username", "alice").param("password", "alice-pass-88"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(true))
@@ -432,13 +534,13 @@ class SecurityConfigTest {
     @DisplayName("AUTH-1：非账号 / 停用账号一律 401 login_failed"
             + "（统一 BadCredentials，不区分原因），各落 LOGIN_FAILURE 一行")
     void platformUserLoginRejectsUnknownAndInactive() throws Exception {
-        String token = bootstrapCsrf();
+        CsrfBootstrap csrf = bootstrapCsrf();
 
-        mvc.perform(post("/api/auth/login").header(XSRF, token)
+        mvc.perform(post("/api/auth/login").cookie(csrf.cookie()).header(XSRF, csrf.headerToken())
                         .param("username", "ghost").param("password", "alice-pass-88"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("login_failed"));
-        mvc.perform(post("/api/auth/login").header(XSRF, token)
+        mvc.perform(post("/api/auth/login").cookie(csrf.cookie()).header(XSRF, csrf.headerToken())
                         .param("username", "bob").param("password", "alice-pass-88"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("login_failed"));

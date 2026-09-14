@@ -63,7 +63,7 @@ public class DrillJobService {
                                   Instant checkedAt) {
     }
 
-    public enum CreateStatus {ACCEPTED, REPLAYED, CONFLICT_KEY, CONFLICT_ENV, PRECHECK_FAILED}
+    public enum CreateStatus {ACCEPTED, REPLAYED, CONFLICT_KEY, CONFLICT_ENV, PRECHECK_FAILED, LAUNCH_DISABLED}
 
     public record CreateResult(CreateStatus status, UUID drillId,
                                DrillPrecheck.Result precheck) {
@@ -118,10 +118,16 @@ public class DrillJobService {
     private final DrillTemplateCatalog catalog;
     private final ObjectMapper mapper;
     private final List<String> allowedEnvs;
+    /**
+     * SAFE-04 启动能力位：OBSERVING 停止消费与 RECOVERING→VERIFYING→CLOSED 推进链
+     * 交付前，服务端关闭新作业发起（复审边界"模板 ready 关闭或能力位由服务强制"的
+     * 能力位形态）——预检/目录/详情只读面保留，e03 类遗留占用语义不变。
+     */
+    private final boolean launchEnabled;
 
     public DrillJobService(DrillJobRepository jobs, DrillEventRepository events,
                            DrillTemplateCatalog catalog, ObjectMapper mapper,
-                           List<String> allowedEnvs) {
+                           List<String> allowedEnvs, boolean launchEnabled) {
         this.jobs = Objects.requireNonNull(jobs);
         this.events = Objects.requireNonNull(events);
         this.catalog = Objects.requireNonNull(catalog);
@@ -130,6 +136,7 @@ public class DrillJobService {
         if (this.allowedEnvs.isEmpty()) {
             throw new IllegalArgumentException("靶场白名单不得为空");
         }
+        this.launchEnabled = launchEnabled;
     }
 
     // ------------------------------------------------------------------ 模板目录
@@ -154,8 +161,11 @@ public class DrillJobService {
         params.put("trafficScales", t.params().trafficScales());
         params.put("linkedEvalVersionAllowed", t.params().linkedEvalVersionAllowed());
         Map<String, Object> execution = new LinkedHashMap<>();
-        execution.put("ready", t.execution().ready());
-        execution.put("reason", t.execution().reason());
+        // SAFE-04：启动面关闭时目录如实呈现不可启动（卡片不可选），理由指向能力位而非模板自身
+        execution.put("ready", t.execution().ready() && launchEnabled);
+        execution.put("reason", launchEnabled ? t.execution().reason()
+                : "演练启动面已关闭：停止/恢复推进链未交付（SAFE-04），交付后经 "
+                        + "app.drill.launch-enabled 显式重开");
         return new TemplateCard(t.scenarioId(), t.name(), t.scenarioType(), t.faultSource(),
                 t.driver(), t.chaosFamily(), t.target(), t.symptomCodes(),
                 t.symptomDisplay(), t.impact(), timing, params, execution);
@@ -185,6 +195,10 @@ public class DrillJobService {
             return new CreateResult(winner.payloadHash().equals(payloadHash)
                     ? CreateStatus.REPLAYED : CreateStatus.CONFLICT_KEY,
                     winner.id(), null);
+        }
+        if (!launchEnabled) {
+            // SAFE-04：重放面之后、预检之前拒绝——不产生新作业行，只读预检仍可另调
+            return new CreateResult(CreateStatus.LAUNCH_DISABLED, null, null);
         }
         DrillPrecheck.Result precheck = DrillPrecheck.run(template, plan.targetEnv(),
                 allowedEnvs, jobs.findActiveOccupant(plan.targetEnv(), null).orElse(null));

@@ -22,6 +22,9 @@
         >
           <el-button size="small" text type="primary" @click="loadCapability">重试</el-button>
         </el-alert>
+        <el-alert v-else-if="capability?.launchEnabled === false" type="warning" :closable="false" show-icon class="cap-alert"
+          title="评测发起当前已关闭（服务端 SAFE-02 能力位）：L 与演练共享环境互斥未落地，开放前不接受发起；本页保留只读配置面。"
+        />
         <el-form label-width="120px" class="form">
           <el-form-item label="实验名称" required>
             <el-input v-model="form.displayName" placeholder="例如：qwen3-max-preview 基线回归" maxlength="128" show-word-limit />
@@ -293,6 +296,7 @@ function sameIntent(body) {
 
 const canSubmit = computed(() =>
   capabilityState.value === 'ok'
+  && capability.value?.launchEnabled === true
   && modeSupported(form.mode)
   && form.displayName.trim().length > 0
   && form.datasetVersion.length > 0
@@ -300,6 +304,9 @@ const canSubmit = computed(() =>
 
 const submitBlockedReason = computed(() => {
   if (capabilityState.value !== 'ok') return '能力面未就绪：无法确认当前支持范围，不可提交（服务端亦会拒绝）。'
+  if (capability.value?.launchEnabled === false) {
+    return '评测发起当前已关闭（服务端）：L 与演练共享环境互斥未落地（SAFE-02），开放前不接受发起；本页保留只读配置面。'
+  }
   if (!form.displayName.trim().length || !form.datasetVersion.length) {
     return '实验名称与数据集版本为契约必填项，补齐后可提交。'
   }
@@ -371,9 +378,11 @@ async function submit() {
       clearIntent()
       ElMessage.error('无评测发起权限（需 OPERATOR 角色），未产生任何执行')
     } else if (st === 400 && data.code) {
-      // 能力拒绝（模式/覆盖项/限额）：意图可废弃——服务端明确拒绝且零落库
+      // 能力拒绝（发起面关闭/模式/覆盖项/限额）：意图可废弃——服务端明确拒绝且零落库
       clearIntent()
-      ElMessage.error(data.error || '提交被服务端拒绝：包含当前环境不支持的能力项')
+      ElMessage.error(data.code === 'LAUNCH_DISABLED'
+        ? '评测发起当前已关闭（SAFE-02：共享环境互斥未落地），未产生任何执行'
+        : data.error || '提交被服务端拒绝：包含当前环境不支持的能力项')
     } else {
       // 超时/网络/5xx：结果未知——保留意图，重试原样重发
       ElMessage.error(data.error || '提交失败（结果未知）；可点「重试提交」原样重发，或放弃后重新填写')

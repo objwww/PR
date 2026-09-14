@@ -778,17 +778,21 @@ public class PersistenceConfig {
     }
 
     /** PAGE-03 能力闸门（命令面）：与 worker 侧同一支持范围契约——模式/数据集版本
-     *  经配置对齐部署事实，覆盖项与限额执行面未实现全闭（默认值与 eval worker 装配一致） */
+     *  经配置对齐部署事实，覆盖项与限额执行面未实现全闭（默认值与 eval worker 装配一致）。
+     *  SAFE-02：launch-enabled 默认关闭——L 与 drill 共享环境互斥未落地前服务端拒绝
+     *  一切发起；共享占用协议交付后经配置显式重开 */
     @Bean
     public com.objwww.pr.control.eval.application.EvalLaunchGate evalLaunchGate(
             @Value("${app.eval.launch.modes:L}") String modes,
             @Value("${app.eval.launch.dataset-versions:eval-ds-1}") String datasetVersions,
             @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
-            @Value("${app.eval.launch.max-rounds:10}") int maxRounds) {
-        return com.objwww.pr.control.eval.application.EvalLaunchGate.closed(
+            @Value("${app.eval.launch.max-rounds:10}") int maxRounds,
+            @Value("${app.eval.launch.enabled:false}") boolean launchEnabled) {
+        return new com.objwww.pr.control.eval.application.EvalLaunchGate(
                 java.util.Arrays.stream(modes.split(","))
                         .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
-                datasetVersions, maxConcurrency, maxRounds);
+                java.util.Set.of(datasetVersions), maxConcurrency, maxRounds,
+                false, false, false, false, launchEnabled);
     }
 
     @Bean
@@ -899,12 +903,14 @@ public class PersistenceConfig {
             com.objwww.pr.control.drill.application.DrillTemplateCatalog
                     drillTemplateCatalog,
             ObjectMapper objectMapper,
-            @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
+            @Value("${app.drill.launch-enabled:false}") boolean launchEnabled) {
         return new com.objwww.pr.control.drill.application.DrillJobService(
                 drillJobRepository, drillEventRepository, drillTemplateCatalog,
                 objectMapper,
                 java.util.Arrays.stream(targetEnvs.split(","))
-                        .map(String::trim).filter(s -> !s.isEmpty()).toList());
+                        .map(String::trim).filter(s -> !s.isEmpty()).toList(),
+                launchEnabled);
     }
 
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------

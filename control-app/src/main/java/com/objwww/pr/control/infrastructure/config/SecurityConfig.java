@@ -284,6 +284,11 @@ public class SecurityConfig {
     /**
      * SPA 标准 CSRF 请求处理（Spring Security 官方文档形）：写请求经头提交时取
      * cookie 原始值，经参数提交时走 XOR 解码。
+     *
+     * <p>SAFE-01：两路 resolve 都必须返回<b>客户端实际提交值</b>参与后续等值比对，
+     * 绝不能返回 {@code csrfToken.getToken()}（那是服务端期望值——返回它会使比较
+     * 恒等，任何令牌都能通过）。头提交走 plain resolver 直读原始头值；参数提交
+     * 走 XOR resolver 解码表单值。
      */
     static final class SpaCsrfTokenRequestHandler
             extends CsrfTokenRequestAttributeHandler implements CsrfTokenRequestHandler {
@@ -299,9 +304,9 @@ public class SecurityConfig {
         @Override
         public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
             if (StringUtils.hasText(request.getHeader(csrfToken.getHeaderName()))) {
-                return csrfToken.getToken();
+                return super.resolveCsrfTokenValue(request, csrfToken);
             }
-            return super.resolveCsrfTokenValue(request, csrfToken);
+            return this.delegate.resolveCsrfTokenValue(request, csrfToken);
         }
     }
 }

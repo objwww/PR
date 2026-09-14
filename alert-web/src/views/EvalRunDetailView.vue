@@ -348,8 +348,10 @@
     <!-- PAGE-10：已受理、等待执行（run 行由 worker 领取命令后落库）——
          有界轮询跟踪，落库后自动切换正常详情；排队中暂不支持取消（诚实禁用） -->
     <div v-else-if="pageState === 'accepted'" class="card panel accepted-panel">
-      <el-result icon="info" title="实验已受理，等待执行"
-        sub-title="202 受理后 run 行要等 worker 领取命令才落库；本页每 3 秒自动跟踪，落库后自动显示进度。">
+      <el-result icon="info" :title="acceptedTitle"
+        :sub-title="acceptedTerminal
+          ? '执行命令已到终态，本页已停止跟踪。'
+          : '202 受理后 run 行要等 worker 领取命令才落库；本页每 3 秒自动跟踪，落库后自动显示进度。'">
         <template #extra>
           <div class="acc-grid">
             <div class="acc-item"><span class="acc-k">实验 ID</span><span class="mono break">{{ runId }}</span></div>
@@ -359,8 +361,14 @@
             <div class="acc-item"><span class="acc-k">受理时间</span>{{ acceptedInfo?.acceptedAt ? fmtTime(acceptedInfo.acceptedAt) : '未统计' }}</div>
             <div class="acc-item"><span class="acc-k">命令状态</span>{{ acceptedInfo?.commandState ?? '未统计' }}</div>
           </div>
-          <el-alert v-if="acceptedInfo?.commandState === 'FAILED'" type="error" :closable="false" show-icon
+          <el-alert v-if="acceptedInfo?.commandState === 'REJECTED'" type="warning" :closable="false" show-icon
+            title="受理的执行命令已被 worker 拒绝（当前环境不接受该计划，SAFE-02 发起面关闭期领取后复验落 REJECTED）；不会再执行，请等待重新开放后重新发起。"
+            class="acc-alert" />
+          <el-alert v-else-if="acceptedInfo?.commandState === 'FAILED'" type="error" :closable="false" show-icon
             title="受理的执行命令已被 worker 标记失败且无 run 记录；请返回重新发起实验。"
+            class="acc-alert" />
+          <el-alert v-else-if="acceptedInfo?.commandState === 'DONE'" type="error" :closable="false" show-icon
+            title="执行命令已结束但 run 记录不存在（异常收尾）；请重新发起实验。"
             class="acc-alert" />
           <el-alert v-else type="info" :closable="false" show-icon
             title="排队中暂不支持取消（run 未落库，取消面要求 run 存在）；worker 领取后可在本页取消。"
@@ -548,25 +556,45 @@ const run = ref(null)
 const pageState = ref('loading') // loading | ok | accepted | notfound | error | forbidden
 const acceptedInfo = ref(null) // PAGE-10 受理投影（acceptedOnly 响应）
 
-// PAGE-10 有界跟踪：等待窗口每 3 秒重查详情，落库自动转正常视图；卸载/切换即停
+// PAGE-10/SAFE-07 受理等待：完成链式轮询（上一次请求结束后才安排下一次，
+// 不再用 interval 反复 abort 长响应）；命令终态（含 REJECTED）即停并如实分文案
 const ACCEPTED_POLL_MS = 3000
+const ACCEPTED_TERMINAL = new Set(['DONE', 'FAILED', 'REJECTED'])
 let acceptedTimer = null
-function startAcceptedPoll() {
-  if (acceptedTimer) return
-  acceptedTimer = setInterval(() => {
-    if (document.hidden) return
-    loadRun(true)
+let acceptedPollStopped = true
+function scheduleAcceptedTick() {
+  acceptedTimer = setTimeout(async () => {
+    try {
+      if (!document.hidden) await loadRun(true)
+    } finally {
+      // 静默失败（网络抖动）不翻等待视图，下一拍继续；终态/视图切换才停
+      if (!acceptedPollStopped && pageState.value === 'accepted') scheduleAcceptedTick()
+    }
   }, ACCEPTED_POLL_MS)
 }
+function startAcceptedPoll() {
+  if (acceptedPollStopped && !acceptedTimer) scheduleAcceptedTick()
+  acceptedPollStopped = false
+}
 function stopAcceptedPoll() {
+  acceptedPollStopped = true
   if (acceptedTimer) {
-    clearInterval(acceptedTimer)
+    clearTimeout(acceptedTimer)
     acceptedTimer = null
   }
 }
 
+// SAFE-07：命令终态的标题/副题如实区分，不把 REJECTED/FAILED 继续显示成"等待执行"
+const acceptedTerminal = computed(() => ACCEPTED_TERMINAL.has(acceptedInfo.value?.commandState))
+const acceptedTitle = computed(() => ({
+  REJECTED: '实验已被拒绝执行',
+  FAILED: '实验执行命令失败',
+  DONE: '执行命令已结束（无 run 记录）',
+}[acceptedInfo.value?.commandState] ?? '实验已受理，等待执行'))
+
 async function loadRun(silent = false) {
   const id = runId.value
+  const wasAccepted = pageState.value === 'accepted'
   const seq = ++runSeq
   runCtl?.abort()
   const ctl = new AbortController()
@@ -576,10 +604,10 @@ async function loadRun(silent = false) {
     const r = await api(`/eval/runs/${encodeURIComponent(id)}`, { signal: ctl.signal })
     if (seq !== runSeq || id !== runId.value) return // 旧响应不覆盖新实验
     if (r?.acceptedOnly) {
-      // PAGE-10：已受理未落库——投影展示 + 持续跟踪；命令失败则停表明示
+      // PAGE-10：已受理未落库——投影展示 + 持续跟踪；命令终态（DONE/FAILED/REJECTED）停
       acceptedInfo.value = r
       pageState.value = 'accepted'
-      if (r.commandState === 'FAILED' || r.commandState === 'DONE') stopAcceptedPoll()
+      if (ACCEPTED_TERMINAL.has(r.commandState)) stopAcceptedPoll()
       else startAcceptedPoll()
       return
     }
@@ -588,6 +616,7 @@ async function loadRun(silent = false) {
     stopAcceptedPoll()
   } catch (e) {
     if (ctl.signal.aborted || seq !== runSeq) return
+    if (silent && wasAccepted) return // 等待窗口的轮询抖动：保持等待视图，链式下一拍重试
     const st = e?.response?.status
     // PAGE-10：真 404（run 与受理命令都不存在）→ 明确不存在，不做无限重试
     pageState.value = st === 404 ? 'notfound' : st === 403 ? 'forbidden' : 'error'

@@ -219,14 +219,17 @@ class DrillJobServiceTest {
     private FakeEvents events;
     private DrillJobService readyService;
     private DrillJobService unreadyService;
+    private DrillJobService launchDisabledService;
 
     @BeforeEach
     void setUp() {
         jobs = new FakeJobs();
         events = new FakeEvents();
         ObjectMapper mapper = new ObjectMapper();
-        readyService = new DrillJobService(jobs, events, catalog(true), mapper, ENVS);
-        unreadyService = new DrillJobService(jobs, events, catalog(false), mapper, ENVS);
+        readyService = new DrillJobService(jobs, events, catalog(true), mapper, ENVS, true);
+        unreadyService = new DrillJobService(jobs, events, catalog(false), mapper, ENVS, true);
+        launchDisabledService =
+                new DrillJobService(jobs, events, catalog(true), mapper, ENVS, false);
     }
 
     private static DrillLaunchPlan plan() {
@@ -248,6 +251,33 @@ class DrillJobServiceTest {
         assertThat(stored.paramsJson()).contains("\"ttlSeconds\":1260")
                 .contains("\"trafficScale\":\"RECIPE\"")
                 .contains("\"durationSeconds\":600");
+    }
+
+    @Test
+    @DisplayName("SAFE-04 启动能力位关闭：create → LAUNCH_DISABLED 零作业行；同键重放语义保留；"
+            + "目录卡片如实 ready=false 且理由指向能力位")
+    void launchDisabledRejectsNewJobsButKeepsReplayAndCatalogTruth() throws Exception {
+        // 先落一个既有作业（占用者身份），关闭后同键重放仍返回原作业（重放不新建）
+        DrillJobService.CreateResult prior = readyService.create(plan(), "key-e03", "operator");
+
+        DrillJobService.CreateResult fresh =
+                launchDisabledService.create(plan(), "key-new", "operator");
+        assertThat(fresh.status()).isEqualTo(DrillJobService.CreateStatus.LAUNCH_DISABLED);
+
+        DrillJobService.CreateResult replay =
+                launchDisabledService.create(plan(), "key-e03", "operator");
+        assertThat(replay.status()).isEqualTo(DrillJobService.CreateStatus.REPLAYED);
+        assertThat(replay.drillId()).isEqualTo(prior.drillId());
+        assertThat(jobs.byId).hasSize(1);
+
+        DrillJobService.TemplateListResponse catalog = launchDisabledService.templates();
+        assertThat(catalog.templates()).allSatisfy(card -> {
+            assertThat(card.execution().get("ready")).isEqualTo(false);
+            assertThat((String) card.execution().get("reason")).contains("SAFE-04");
+        });
+        // 打开能力位后同目录恢复 ready=true（能力位而非模板自身语义）
+        assertThat(readyService.templates().templates())
+                .allSatisfy(card -> assertThat(card.execution().get("ready")).isEqualTo(true));
     }
 
     @Test

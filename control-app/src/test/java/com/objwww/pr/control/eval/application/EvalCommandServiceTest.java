@@ -200,7 +200,7 @@ class EvalCommandServiceTest {
         // closed 闸门专项用例（本类末尾 + EvalLaunchGateTest）
         service = new EvalCommandService(commands, reader, new ObjectMapper(),
                 new EvalLaunchGate(java.util.Set.of("E", "B", "L"), java.util.Set.of("eval-ds-1"),
-                        32, 100, true, true, true, true));
+                        32, 100, true, true, true, true, true));
     }
 
     private static EvalLaunchPlan plan(String name) {
@@ -405,6 +405,21 @@ class EvalCommandServiceTest {
 
         assertThat(result.status()).isEqualTo(EvalCommandService.LaunchStatus.ACCEPTED);
         assertThat(commands.inserted).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("SAFE-02 发起面关闭：launchDisabled 闸门下支持面内的 L 也被拒（LAUNCH_DISABLED），"
+            + "零命令落库——服务/worker 两端同源拒绝")
+    void launchDisabledGateRejectsEvenSupportedPlan() {
+        EvalCommandService gated = new EvalCommandService(commands, reader, new ObjectMapper(),
+                EvalLaunchGate.launchDisabled(java.util.Set.of("L"), "eval-ds-1", 1, 10));
+
+        assertThatThrownBy(() -> gated.launch(
+                new EvalLaunchPlan("n", "L", "eval-ds-1", null, null, null, null, null, null),
+                "key-disabled", "operator"))
+                .isInstanceOfSatisfying(EvalLaunchGate.EvalLaunchUnsupportedException.class,
+                        e -> assertThat(e.code()).isEqualTo("LAUNCH_DISABLED"));
+        assertThat(commands.inserted).isEmpty();
     }
 
     @Test

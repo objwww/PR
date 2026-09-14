@@ -63,7 +63,7 @@ class EvalLaunchGateTest {
     @DisplayName("全支持面闸门：E/B/覆盖项/预算/截止/高并发按构造参数放行")
     void permissiveGateAcceptsConfiguredScope() {
         EvalLaunchGate gate = new EvalLaunchGate(Set.of("E", "B", "L"), Set.of("ds-1", "ds-2"),
-                8, 20, true, true, true, true);
+                8, 20, true, true, true, true, true);
 
         assertThatCode(() -> gate.check(plan("E", "ds-2", "m", "p", 5L, 8, 60L, 20)))
                 .doesNotThrowAnyException();
@@ -87,6 +87,30 @@ class EvalLaunchGateTest {
         // 描述面只读：调用方改不动支持范围（防前端读面被篡改语义）
         assertThatThrownBy(() -> gate.describe().put("modes", java.util.List.of("E")))
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    @DisplayName("SAFE-02 launchDisabled：任何计划（即便支持面内的 L）一律 LAUNCH_DISABLED 拒绝，"
+            + "describe 暴露 launchEnabled=false")
+    void launchDisabledRejectsEverythingAndDescribesItself() {
+        EvalLaunchGate gate = EvalLaunchGate.launchDisabled(Set.of("L"), "eval-ds-1", 1, 10);
+
+        EvalLaunchGate.EvalLaunchUnsupportedException e =
+                new EvalLaunchGate.EvalLaunchUnsupportedException("X", "msg", gate.describe());
+        assertThat(e.supported()).containsEntry("launchEnabled", false);
+        assertThatThrownBy(() -> gate.check(plan("L", "eval-ds-1", null, null, null, null, null, null)))
+                .isInstanceOfSatisfying(EvalLaunchGate.EvalLaunchUnsupportedException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("LAUNCH_DISABLED"));
+        assertThatThrownBy(() -> gate.check(plan("E", "eval-ds-1", null, null, null, null, null, null)))
+                .isInstanceOfSatisfying(EvalLaunchGate.EvalLaunchUnsupportedException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("LAUNCH_DISABLED"));
+    }
+
+    @Test
+    @DisplayName("SAFE-02 describe：closed 闸门 launchEnabled=true（发起开放面与拒绝面可区分）")
+    void closedGateDescribesLaunchEnabled() {
+        assertThat(EvalLaunchGate.closed(Set.of("L"), "eval-ds-1", 1, 10).describe())
+                .containsEntry("launchEnabled", true);
     }
 
     @Test

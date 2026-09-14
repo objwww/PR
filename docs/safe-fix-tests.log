@@ -1,0 +1,257 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 84 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 353 source files with javac [debug parameters release 21] to target\test-classes
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: 某些输入文件使用或覆盖了已过时的 API。
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/mcp/McpMountManagerTest.java: 有关详细信息, 请使用 -Xlint:deprecation 重新编译。
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: 某些输入文件使用了未经检查或不安全的操作。
+[INFO] /E:/kimiCode/control-app/src/test/java/com/objwww/pr/control/alert/application/PlanCompilerTest.java: 有关详细信息, 请使用 -Xlint:unchecked 重新编译。
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.473 s -- in com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillPrecheckTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.objwww.pr.control.drill.application.DrillPrecheckTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillWorkerTest
+15:46:44.778 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=66b085ac-83a9-4148-829e-2422b7098cf0 scenario=T1 env=arena-195
+15:46:44.784 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill 66b085ac-83a9-4148-829e-2422b7098cf0 已进入 OBSERVING——症状等待/恢复/核验推进随 DR-03/04 接线交付，本拍到此为止（作业保持活动占位）
+15:46:44.789 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=f0a46329-a3e6-4bfa-988e-051720487a43 scenario=T1 env=arena-195
+15:46:44.798 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=f2de1d17-be98-4446-8aa3-684a5f566f80 scenario=T1 env=arena-195
+15:46:44.809 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=f6a8459b-e25c-4783-bfef-25f89885fab1 scenario=T1 env=arena-195
+15:46:44.821 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- 孤儿 drill ecb26f47-0d36-48e2-9a3a-85a710209e24 → RECOVERY_FAILED（worker_lost，保留占位）
+15:46:44.827 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- 孤儿 drill e3e13b2f-8d14-40e9-b5fd-74b8fdbc16e0 重排队（state=PRECHECK）
+15:46:44.830 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=02f0ca29-9941-49be-922b-f300d993244a scenario=T1 env=arena-195
+15:46:44.836 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 领取作业：drill=ba55c5f9-5ea2-4f94-81b2-df52bb3ad0cb scenario=T1 env=arena-195
+15:46:44.840 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- 孤儿 drill f8fcf47a-81be-4495-9f75-a3e0a0587fe5 → RECOVERY_FAILED（worker_lost，保留占位）
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.079 s -- in com.objwww.pr.control.drill.application.DrillWorkerTest
+[INFO] Running com.objwww.pr.control.drill.application.FlagdRestoreSweeperTest
+15:46:44.853 [main] WARN com.objwww.pr.control.drill.application.FlagdRestoreSweeper -- flagd 截止清扫：flag=paymentFailure 冲突待处理（current=90%,generation=g1（非本次写入面：他者已改写——不覆盖、不宣称恢复成功））——不覆盖他者改写
+15:46:44.858 [main] WARN com.objwww.pr.control.drill.application.FlagdRestoreSweeper -- flagd 截止清扫：flag=paymentFailure 已条件恢复原值（restored=off）
+15:46:44.861 [main] WARN com.objwww.pr.control.drill.application.FlagdRestoreSweeper -- flagd 截止清扫：flag=paymentFailure 暂不可恢复（read_failed:flagd-admin 不可达）——留可恢复面重试
+15:46:44.861 [main] WARN com.objwww.pr.control.drill.application.FlagdRestoreSweeper -- flagd 截止清扫：flag=paymentFailure 已条件恢复原值（restored=off）
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in com.objwww.pr.control.drill.application.FlagdRestoreSweeperTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalLaunchExecutorGateTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.objwww.pr.control.eval.application.EvalLaunchExecutorGateTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalLaunchGateTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 s -- in com.objwww.pr.control.eval.application.EvalLaunchGateTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalRunWorkerTest
+15:46:44.947 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- eval worker worker-ut 领取 LAUNCH：command=95a2d139-11fd-4a5f-bdaa-b653c01e69b9 run=d2ade4dd-fece-4468-af22-56f6c7b84e52
+15:46:44.947 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- eval worker worker-ut 拒绝 LAUNCH（MODE_NOT_SUPPORTED）：模式 E 在当前环境未实现隔离执行，已拒绝
+15:46:44.952 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- 孤儿 run 28c0c4be-8ebc-4f55-842a-0780ff7bdf01 终态化 FAILED（worker_lost）
+15:46:44.955 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- 孤儿命令 89f7d1ed-0865-4517-8a9e-938fc72938b1 重排队（run 0b805249-69f2-4b6d-b63f-f61cfb5d8634 从未落库）
+15:46:44.960 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- 孤儿命令 9ccf94a8-f532-4d9a-9ca0-8fb265bc0ed3 对齐 run 终态 SUCCEEDED
+15:46:44.961 [main] WARN com.objwww.pr.control.eval.application.EvalRunWorker -- eval worker worker-ut 领取 LAUNCH：command=006abb99-d6e1-44ee-956b-effe9d6b07fa run=496c3a40-056d-4a1c-a51a-0906bc4e3599
+15:46:44.962 [main] ERROR com.objwww.pr.control.eval.application.EvalRunWorker -- eval run 496c3a40-056d-4a1c-a51a-0906bc4e3599 跑批失败: arena map missing
+java.lang.IllegalStateException: arena map missing
+	at com.objwww.pr.control.eval.application.EvalRunWorkerTest.lambda$newFailingExecutor$1(EvalRunWorkerTest.java:245)
+	at com.objwww.pr.control.eval.application.EvalRunWorker.tick(EvalRunWorker.java:92)
+	at com.objwww.pr.control.eval.application.EvalRunWorkerTest.tickClaimsExecutesAndFinishes(EvalRunWorkerTest.java:236)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:767)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8(TestMethodTestDescriptor.java:217)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:213)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:138)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:68)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:156)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.apache.maven.surefire.junitplatform.LazyLauncher.execute(LazyLauncher.java:56)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:194)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:150)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:124)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in com.objwww.pr.control.eval.application.EvalRunWorkerTest
+[INFO] Running com.objwww.pr.control.eval.application.FlagdScenarioDriverTest
+15:46:44.972 [main] WARN com.objwww.pr.control.eval.application.FlagdScenarioDriver -- flagd 条件恢复冲突：flag=paymentFailure current=50%,generation=g3（非本次写入面：他者已改写——不覆盖、不宣称恢复成功）——不覆盖他者改写，不宣称恢复成功
+15:46:44.976 [main] WARN com.objwww.pr.control.eval.application.FlagdScenarioDriver -- flagd 条件恢复冲突：flag=paymentFailure current=75%,generation=g3（非本次写入面：他者已改写——不覆盖、不宣称恢复成功）——不覆盖他者改写，不宣称恢复成功
+15:46:44.980 [main] WARN com.objwww.pr.control.eval.application.FlagdScenarioDriver -- flagd 条件恢复冲突：flag=paymentFailure current=90%,generation=g3（非本次写入面：他者已改写——不覆盖、不宣称恢复成功）——不覆盖他者改写，不宣称恢复成功
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.eval.application.FlagdScenarioDriverTest
+[INFO] Running com.objwww.pr.control.eval.interfaces.EvalQueryControllerTest
+15:46:45.324 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.324 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.327 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:46:45.444 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.444 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.444 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.486 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.486 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.486 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.526 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.527 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.527 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.545 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.545 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.545 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.559 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.559 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.559 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.577 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.577 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.578 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:46:45.592 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.592 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.592 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.613 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.613 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.613 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:46:45.627 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:46:45.627 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:46:45.627 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.648 s -- in com.objwww.pr.control.eval.interfaces.EvalQueryControllerTest
+[INFO] Running com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+15:46:45.842 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.control.ControlApplication for test class com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-14T15:46:46.217+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : Starting SecurityConfigTest using Java 21.0.12 with PID 43388 (started by wangp in E:\kimiCode\control-app)
+2026-09-14T15:46:46.219+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : No active profile set, falling back to 1 default profile: "default"
+2026-09-14T15:46:47.863+08:00  WARN 43388 --- [control-app] [           main] [                                                 ] r$InitializeUserDetailsManagerConfigurer : Found 2 UserDetailsService beans, with names [authUserDetailsService, platformUserDetailsService]. Global Authentication Manager will not use a UserDetailsService for username/password login. Consider publishing a single UserDetailsService bean.
+2026-09-14T15:46:48.389+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-14T15:46:49.154+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-09-14T15:46:49.154+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-14T15:46:49.155+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-14T15:46:49.252+08:00  INFO 43388 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : Started SecurityConfigTest in 3.299 seconds (process running for 5.696)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (E:\ProgramInstall\maven\apache-maven-3.9.16\maven-repository\net\bytebuddy\byte-buddy-agent\1.15.11\byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.372 s -- in com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 100, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.041 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.585 s]
+[INFO] control-app ........................................ SUCCESS [ 20.930 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  21.930 s
+[INFO] Finished at: 2026-09-14T15:46:51+08:00
+[INFO] ------------------------------------------------------------------------
