@@ -16,8 +16,8 @@ import java.util.UUID;
  * "生效面" = 同 (baseline,candidate) 对最新落档（created_at DESC, id DESC 稳定落点）。
  *
  * <p>授权面（V85）：control_app select,insert；eval_app 与生产角色显式 revoke。
- * jsonb 列（dimension_diffs/stats_snapshot/gate_reasons）以 ::text 原文出入，
- * 结构装配归应用服务。
+ * jsonb 列（dimension_diffs/stats_snapshot/readiness_snapshot(V110/FUP-02)/gate_reasons）
+ * 以 ::text 原文出入，结构装配归应用服务。
  */
 public class PostgresEvalComparisonRepository implements EvalComparisonRepository {
 
@@ -34,13 +34,16 @@ public class PostgresEvalComparisonRepository implements EvalComparisonRepositor
                             id, baseline_run_id, candidate_run_id, comparable,
                             dimension_diffs, paired_count, unpaired_count,
                             improved_count, regressed_count, flat_count,
-                            stats_snapshot, gate_outcome, gate_reasons, gate_rule_version,
+                            stats_snapshot, readiness_snapshot,
+                            gate_outcome, gate_reasons, gate_rule_version,
                             actor, created_at
                         ) values (
                             :id, :baseline, :candidate, :comparable,
                             cast(:dimensionDiffs as jsonb), :paired, :unpaired,
                             :improved, :regressed, :flat,
-                            cast(:statsSnapshot as jsonb), :gateOutcome,
+                            cast(:statsSnapshot as jsonb),
+                            cast(:readinessSnapshot as jsonb),
+                            :gateOutcome,
                             cast(:gateReasons as jsonb), :gateRuleVersion,
                             :actor, :createdAt
                         )
@@ -56,6 +59,7 @@ public class PostgresEvalComparisonRepository implements EvalComparisonRepositor
                 .param("regressed", record.regressedCount())
                 .param("flat", record.flatCount())
                 .param("statsSnapshot", record.statsSnapshotJson())
+                .param("readinessSnapshot", record.readinessSnapshotJson())
                 .param("gateOutcome", record.gateOutcome())
                 .param("gateReasons", toJsonArray(record.gateReasons()))
                 .param("gateRuleVersion", record.gateRuleVersion())
@@ -72,6 +76,7 @@ public class PostgresEvalComparisonRepository implements EvalComparisonRepositor
                                dimension_diffs::text as dimension_diffs_json,
                                paired_count, unpaired_count, improved_count, regressed_count,
                                flat_count, stats_snapshot::text as stats_snapshot_json,
+                               readiness_snapshot::text as readiness_snapshot_json,
                                gate_outcome, gate_reasons::text as gate_reasons_json,
                                gate_rule_version, actor, created_at
                         from eval_comparison
@@ -91,6 +96,7 @@ public class PostgresEvalComparisonRepository implements EvalComparisonRepositor
                         rs.getInt("improved_count"), rs.getInt("regressed_count"),
                         rs.getInt("flat_count"),
                         rs.getString("stats_snapshot_json"),
+                        rs.getString("readiness_snapshot_json"),
                         rs.getString("gate_outcome"),
                         fromJsonArray(rs.getString("gate_reasons_json")),
                         rs.getString("gate_rule_version"),

@@ -27,7 +27,7 @@ class EvalCompareTest {
                                        String driverVersion, String model) {
         return new CompareRunMeta(UUID.randomUUID(), datasetVersion, registryDigest,
                 alertRuleDigest, lexiconVersion, driverVersion, model, "p1",
-                "c".repeat(64), "SUCCEEDED");
+                "c".repeat(64), "SUCCEEDED", null);
     }
 
     private static CompareRunMeta base() {
@@ -178,7 +178,7 @@ class EvalCompareTest {
         assertThat(p.differenceNote()).isNull();
     }
 
-    // ------------------------------------------------------------------ 对比质量门（eval-compare-gate-v1 六分支）
+    // ------------------------------------------------------------------ 对比质量门（FUP-02：eval-compare-gate-v2 分支序）
 
     private static PairedTrialStats.StatsResult stats(int clusters, double point,
                                                       Double ciLower, Double ciUpper,
@@ -187,44 +187,141 @@ class EvalCompareTest {
                 PairedTrialStats.ALGORITHM_VERSION, 1000, PairedTrialStats.CI_METHOD, verdict);
     }
 
+    /** 全绿就绪度（双侧 SUCCEEDED + 冻结计划全覆盖 + 身份全核验） */
+    private static EvalCompare.EvidenceReadiness ready() {
+        return new EvalCompare.EvidenceReadiness("SUCCEEDED", "SUCCEEDED",
+                EvalCompare.PLAN_SOURCE_LAUNCH_PLAN, 10, 10, 10, 10, 0, 0, 0, List.of());
+    }
+
     @Test
     void gateBranchOrderIsFrozen() {
-        // 1. 可比性未过 → NOT_EVALUABLE
-        assertThat(EvalCompare.gate(false, false, 5, 0, null).outcome())
+        // 1. 可比性未过 → NOT_EVALUABLE（readiness 短路面传 null）
+        assertThat(EvalCompare.gate(false, false, null, 5, 0, null).outcome())
                 .isEqualTo(EvalComparisonRecord.OUTCOME_NOT_EVALUABLE);
-        assertThat(EvalCompare.gate(false, true, 0, 0, null).reasons())
+        assertThat(EvalCompare.gate(false, true, null, 0, 0, null).reasons())
                 .containsExactly(EvalCompare.REASON_COMPARABILITY_CHECK_FAILED);
-        // 2. 扫描截断 → INCONCLUSIVE(DATA_TRUNCATED)
-        EvalCompare.GateResult truncated = EvalCompare.gate(true, true, 10, 1,
+        // 2. FUP-02：任一 run 未终态 → INCONCLUSIVE(RUN_NOT_FINAL)
+        assertThat(EvalCompare.gate(true, false, withStates("RUNNING", "SUCCEEDED"),
+                10, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_RUN_NOT_FINAL);
+        // 3. FUP-02：不完整终态（FAILED/CANCELLED）→ INCONCLUSIVE(RUN_INCOMPLETE)
+        assertThat(EvalCompare.gate(true, false, withStates("SUCCEEDED", "FAILED"),
+                10, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_RUN_INCOMPLETE);
+        assertThat(EvalCompare.gate(true, false, withStates("CANCELLED", "SUCCEEDED"),
+                10, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_RUN_INCOMPLETE);
+        // 4. 扫描截断 → INCONCLUSIVE(DATA_TRUNCATED)
+        EvalCompare.GateResult truncated = EvalCompare.gate(true, true, ready(), 10, 1,
                 stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE));
         assertThat(truncated.outcome()).isEqualTo(EvalComparisonRecord.OUTCOME_INCONCLUSIVE);
         assertThat(truncated.reasons()).containsExactly(EvalCompare.REASON_DATA_TRUNCATED);
-        // 3. 无配对 → INCONCLUSIVE(NO_PAIRED_CASES)
-        assertThat(EvalCompare.gate(true, false, 0, 0, null).reasons())
+        // 5. FUP-02：无冻结计划分母 → INCONCLUSIVE(PLAN_SET_UNAVAILABLE)
+        assertThat(EvalCompare.gate(true, false,
+                new EvalCompare.EvidenceReadiness("SUCCEEDED", "SUCCEEDED",
+                        EvalCompare.PLAN_SOURCE_UNAVAILABLE, null, null, 10, 10, 0,
+                        null, null, List.of()),
+                10, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_PLAN_SET_UNAVAILABLE);
+        // 6. FUP-02：计划键未全部有效配对 → INCONCLUSIVE(PLAN_CASES_MISSING)
+        assertThat(EvalCompare.gate(true, false,
+                new EvalCompare.EvidenceReadiness("SUCCEEDED", "SUCCEEDED",
+                        EvalCompare.PLAN_SOURCE_LAUNCH_PLAN, 10, 6, 5, 5, 0, 5, 0,
+                        List.of(new EvalCompare.MissingCase("s9", 1, "MISSING_IN_BOTH"))),
+                5, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_PLAN_CASES_MISSING);
+        // 7. FUP-02：身份未核验 → INCONCLUSIVE(IDENTITY_UNVERIFIED)
+        assertThat(EvalCompare.gate(true, false,
+                new EvalCompare.EvidenceReadiness("SUCCEEDED", "SUCCEEDED",
+                        EvalCompare.PLAN_SOURCE_LAUNCH_PLAN, 10, 10, 10, 8, 2, 0, 0,
+                        List.of()),
+                10, 0, stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE))
+                .reasons()).containsExactly(EvalCompare.REASON_IDENTITY_UNVERIFIED);
+        // 8. 无配对 → INCONCLUSIVE(NO_PAIRED_CASES)
+        assertThat(EvalCompare.gate(true, false, ready(), 0, 0, null).reasons())
                 .containsExactly(EvalCompare.REASON_NO_PAIRED_CASES);
-        // 4. 簇不足/统计 INCONCLUSIVE → INCONCLUSIVE(INSUFFICIENT_CLUSTERS)
-        assertThat(EvalCompare.gate(true, false, 4, 0,
+        // 9. 簇不足/统计 INCONCLUSIVE → INCONCLUSIVE(INSUFFICIENT_CLUSTERS)
+        assertThat(EvalCompare.gate(true, false, ready(), 4, 0,
                 stats(4, 0.0, null, null, PairedTrialStats.Verdict.INCONCLUSIVE)).reasons())
                 .containsExactly(EvalCompare.REASON_INSUFFICIENT_CLUSTERS);
-        assertThat(EvalCompare.gate(true, false, 10, 0, null).reasons())
+        assertThat(EvalCompare.gate(true, false, ready(), 10, 0, null).reasons())
                 .containsExactly(EvalCompare.REASON_INSUFFICIENT_CLUSTERS);
-        // 5. 退化率超阈值 → FAIL（2/10 = 0.2 > 0.10）
-        EvalCompare.GateResult regression = EvalCompare.gate(true, false, 10, 2,
+        // 10. 退化率超阈值 → FAIL（2/10 = 0.2 > 0.10）
+        EvalCompare.GateResult regression = EvalCompare.gate(true, false, ready(), 10, 2,
                 stats(5, 0.0, 0.0, 0.0, PairedTrialStats.Verdict.CONCLUSIVE));
         assertThat(regression.outcome()).isEqualTo(EvalComparisonRecord.OUTCOME_FAIL);
         assertThat(regression.reasons())
                 .containsExactly(EvalCompare.REASON_REGRESSION_RATE_EXCEEDED);
-        // 6. CI 下界越限 → FAIL（1/10 = 0.1 不越线，ciLower -0.1 < -0.05）
-        EvalCompare.GateResult ci = EvalCompare.gate(true, false, 10, 1,
+        // 11. CI 下界越限 → FAIL（1/10 = 0.1 不越线，ciLower -0.1 < -0.05）
+        EvalCompare.GateResult ci = EvalCompare.gate(true, false, ready(), 10, 1,
                 stats(5, -0.05, -0.1, 0.0, PairedTrialStats.Verdict.CONCLUSIVE));
         assertThat(ci.outcome()).isEqualTo(EvalComparisonRecord.OUTCOME_FAIL);
         assertThat(ci.reasons()).containsExactly(EvalCompare.REASON_CI_LOWER_BELOW_MARGIN);
-        // 7. 全过 → PASS（原因空，落档 CHECK 同律）
-        EvalCompare.GateResult pass = EvalCompare.gate(true, false, 10, 1,
+        // 12. 全过 → PASS（原因空，落档 CHECK 同律；规则版本 v2）
+        EvalCompare.GateResult pass = EvalCompare.gate(true, false, ready(), 10, 1,
                 stats(5, 0.0, -0.02, 0.05, PairedTrialStats.Verdict.CONCLUSIVE));
         assertThat(pass.outcome()).isEqualTo(EvalComparisonRecord.OUTCOME_PASS);
         assertThat(pass.reasons()).isEmpty();
         assertThat(pass.ruleVersion()).isEqualTo(EvalCompare.GATE_RULE_VERSION);
+        assertThat(pass.ruleVersion()).isEqualTo("eval-compare-gate-v2");
+    }
+
+    private static EvalCompare.EvidenceReadiness withStates(String baselineState,
+                                                            String candidateState) {
+        return new EvalCompare.EvidenceReadiness(baselineState, candidateState,
+                EvalCompare.PLAN_SOURCE_LAUNCH_PLAN, 10, 10, 10, 10, 0, 0, 0, List.of());
+    }
+
+    // ------------------------------------------------------------------ FUP-02 就绪度核算
+
+    @Test
+    void readinessCountsPlanMissingIncludingBothSidesAbsent() {
+        // FCT-12 纯函数面：计划 3 键 × 1 轮，双侧都只有 s1/s2 → s3 双侧同缺
+        // （并集查不出，必须按计划分母查出）
+        CompareRunMeta b = base();
+        CompareRunMeta c = base();
+        List<CompareCaseRow> baseline = List.of(
+                caseRow("s1", 1, "DECIDABLE", true, "d1", "fam-a"),
+                caseRow("s2", 1, "DECIDABLE", true, "d2", "fam-a"));
+        List<CompareCaseRow> candidate = List.of(
+                caseRow("s1", 1, "DECIDABLE", true, "d1", "fam-a"),
+                caseRow("s2", 1, "DECIDABLE", true, "d2", "fam-a"));
+        EvalCompare.Pairing pairing = EvalCompare.pair(MAPPER, baseline, candidate, 42L);
+
+        EvalCompare.EvidenceReadiness out = EvalCompare.readiness(b, c, baseline, candidate,
+                pairing, new EvalCompare.FrozenPlan(java.util.Set.of("s1", "s2", "s3"), 1, 1));
+
+        assertThat(out.planSetSource()).isEqualTo(EvalCompare.PLAN_SOURCE_LAUNCH_PLAN);
+        assertThat(out.expectedCount()).isEqualTo(3);
+        assertThat(out.completedCount()).isEqualTo(2);
+        assertThat(out.pairedCount()).isEqualTo(2);
+        assertThat(out.verifiedCount()).isEqualTo(2);
+        assertThat(out.unverifiedCount()).isZero();
+        assertThat(out.missingCount()).isEqualTo(1);
+        assertThat(out.missingCases()).containsExactly(
+                new EvalCompare.MissingCase("s3", 1, EvalCompare.MISSING_IN_BOTH));
+        assertThat(out.unexpectedCount()).isZero();
+    }
+
+    @Test
+    void readinessDegradesHonestlyWhenPlanUnavailable() {
+        CompareRunMeta b = base();
+        CompareRunMeta c = base();
+        List<CompareCaseRow> baseline = List.of(
+                caseRow("s1", 1, "DECIDABLE", true, null, "fam-a"));
+        List<CompareCaseRow> candidate = List.of(
+                caseRow("s1", 1, "DECIDABLE", true, null, "fam-a"));
+        EvalCompare.Pairing pairing = EvalCompare.pair(MAPPER, baseline, candidate, 42L);
+
+        EvalCompare.EvidenceReadiness out = EvalCompare.readiness(b, c, baseline, candidate,
+                pairing, null);
+
+        assertThat(out.planSetSource()).isEqualTo(EvalCompare.PLAN_SOURCE_UNAVAILABLE);
+        assertThat(out.expectedCount()).isNull();
+        assertThat(out.missingCount()).isNull();
+        assertThat(out.missingCases()).isEmpty();
+        assertThat(out.pairedCount()).isEqualTo(1);
+        assertThat(out.unverifiedCount()).isEqualTo(1);
     }
 
     @Test

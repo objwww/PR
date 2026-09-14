@@ -406,10 +406,11 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
 
     @Override
     public Optional<CompareRunMeta> findCompareMeta(UUID runId) {
+        // FUP-02：launch_plan 快照原文一并投影（冻结计划分母来源；旧跑批行 NULL 如实）
         return jdbc.sql("""
                         select id, dataset_version, registry_digest, alert_rule_digest,
                                lexicon_version, scenario_driver_version, model, prompt_version,
-                               config_digest, state
+                               config_digest, state, launch_plan::text as launch_plan_json
                         from eval_run where id = :id
                         """)
                 .param("id", runId)
@@ -420,8 +421,24 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getObject("lexicon_version", Integer.class),
                         rs.getString("scenario_driver_version"), rs.getString("model"),
                         rs.getString("prompt_version"), rs.getString("config_digest"),
-                        rs.getString("state")))
+                        rs.getString("state"), rs.getString("launch_plan_json")))
                 .optional();
+    }
+
+    @Override
+    public List<String> listPlanCaseKeys(String datasetVersion) {
+        // FUP-02：与 listCasesForCompare 身份解析同口径（dv.version 精确键；
+        // 同名版本多行/重复键去重——计划键集只做分母核算，歧义面已由身份列 null 覆盖）
+        return jdbc.sql("""
+                        select distinct cv.case_key
+                        from case_version cv
+                        join dataset_version dv on dv.id = cv.dataset_version_id
+                        where dv.version = :version
+                        order by cv.case_key
+                        """)
+                .param("version", datasetVersion)
+                .query((rs, i) -> rs.getString("case_key"))
+                .list();
     }
 
     @Override

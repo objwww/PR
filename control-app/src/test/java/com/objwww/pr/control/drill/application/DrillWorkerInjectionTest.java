@@ -318,9 +318,10 @@ class DrillWorkerInjectionTest {
                 registry, ENVS,
                 new ArenaChaosDrillInjection(chaos, probe, traffic, "ds-drill"),
                 new FlagdDrillInjection(new FlagdScenarioDriver(
-                        new NoopFlagAdminClient(), probe)));
+                        new NoopFlagAdminClient(), probe)),
+                new DrillExecutionPolicy(true, ENVS));
         return new DrillWorker(jobs, events, catalog, injection, clock, ENVS,
-                "drill-worker-1", 5, 900);
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS));
     }
 
     // ------------------------------------------------------------------ 用例

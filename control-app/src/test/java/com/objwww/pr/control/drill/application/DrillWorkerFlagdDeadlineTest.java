@@ -177,11 +177,11 @@ class DrillWorkerFlagdDeadlineTest {
         events = new FakeEvents();
     }
 
-    /** 旧九参装配面（关联 disabled/无台账清扫）——截止对账不依赖新接线 */
+    /** 旧装配面（关联 disabled/无台账清扫）——截止对账不依赖新接线 */
     private DrillWorker worker(Instant now) {
         return new DrillWorker(jobs, events, catalog(),
                 new DrillInjectionPort.NotImplemented(), new FixedClock(now), ENVS,
-                "drill-worker-1", 5, 900);
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS));
     }
 
     private static DrillTemplateCatalog catalog() {

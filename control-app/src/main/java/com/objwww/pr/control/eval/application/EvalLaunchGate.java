@@ -161,6 +161,11 @@ public final class EvalLaunchGate {
         }
     }
 
+    /** SAFE-02/FUP-01 能力位读口（CLI once 入口与命令面/worker 同源闭面判定用） */
+    public boolean launchEnabled() {
+        return launchEnabled;
+    }
+
     /** 能力读面（/api/eval/launch-capability 与 400 应答的 supported 同源；只读） */
     public Map<String, Object> describe() {
         Map<String, Object> out = new LinkedHashMap<>();

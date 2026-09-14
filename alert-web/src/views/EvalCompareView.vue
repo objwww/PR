@@ -112,6 +112,9 @@
           <span v-else-if="cmp?.gateRecord" class="ops-note">
             最新落档：<span class="mono">{{ shortId(cmp.gateRecord.recordId) }}</span>
             （{{ gateText(cmp.gateRecord.outcome) }} · {{ fmtTime(cmp.gateRecord.createdAt) }}）
+            <el-tag
+              v-if="isLegacyRecord" size="small" type="info" effect="plain" disable-transitions
+            >历史规则 {{ cmp.gateRecord.ruleVersion }}</el-tag>
           </span>
           <span v-if="cmp?.asOf" class="ops-note">数据截至 {{ fmtClock(cmp.asOf) }}</span>
         </div>
@@ -140,17 +143,35 @@
             </div>
           </div>
 
-          <!-- 对比质量门：缺席如实“未统计” -->
+          <!-- 对比质量门：缺席如实“未统计”；FUP-02：前端只映射机器码，不自行判门 -->
           <div class="gate-row">
             <span class="gate-label">对比质量门</span>
             <template v-if="cmp.gate">
               <el-tag :type="gateConf(cmp.gate.outcome).type" disable-transitions>{{ gateConf(cmp.gate.outcome).text }}</el-tag>
+              <el-tag
+                v-for="b in readinessBadges" :key="b.text"
+                :type="b.type" size="small" effect="plain" disable-transitions
+              >{{ b.text }}</el-tag>
               <span v-if="cmp.gate.reasons?.length" class="gate-reasons">
                 {{ cmp.gate.reasons.map(reasonZh).join('；') }}
               </span>
               <span class="gate-meta">规则 {{ cmp.gate.ruleVersion }}</span>
             </template>
             <span v-else class="gate-meta">未统计</span>
+          </div>
+          <!-- FUP-02 就绪度分母：paired/expected 明确展示，缺口可跳缺失清单 -->
+          <div v-if="cmp.readiness" class="readiness-row">
+            <template v-if="cmp.readiness.planSetSource === 'LAUNCH_PLAN'">
+              冻结计划 {{ cmp.readiness.expectedCount }} 例 · 双侧完成 {{ cmp.readiness.completedCount }} 例
+              · 有效配对 {{ cmp.readiness.pairedCount }} 例
+              <template v-if="cmp.readiness.unverifiedCount > 0"> · 身份未核验 {{ cmp.readiness.unverifiedCount }} 例</template>
+              <template v-if="cmp.readiness.missingCount > 0">
+                · <a class="missing-link" @click="missingOpen = ['missing']">缺失 {{ cmp.readiness.missingCount }} 例</a>
+              </template>
+            </template>
+            <template v-else>
+              无冻结计划快照（历史运行缺 launch_plan）：完整性分母不可得，门已如实降级，不以上述配对数冒充计划完整。
+            </template>
           </div>
           <div v-if="cmp.scanTruncated" class="cmp-note">
             单侧案例扫描超上限，读面已截断：门结论如实转为 INCONCLUSIVE，部分数据不出资格结论。
@@ -252,6 +273,28 @@
             </el-table>
           </el-collapse-item>
         </el-collapse>
+
+        <!-- FUP-02 计划缺失案例清单（后端返回才渲染；含双侧同缺 MISSING_IN_BOTH） -->
+        <el-collapse v-if="cmp?.readiness?.missingCount > 0" v-model="missingOpen" class="unpaired">
+          <el-collapse-item name="missing">
+            <template #title>
+              计划缺失案例（{{ cmp.readiness.missingCount }}）
+              <span v-if="cmp.readiness.missingTruncated" class="up-note">仅展示前 500 条，计数为全集</span>
+            </template>
+            <el-table :data="cmp.readiness.missingCases" size="small">
+              <el-table-column label="场景" min-width="160">
+                <template #default="{ row }">
+                  <span class="mono">{{ row.scenarioId }}</span>
+                  <span class="round">第 {{ row.roundNo }} 轮</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="原因" min-width="160">
+                <template #default="{ row }">{{ unpairedReasonZh(row.reason) }}</template>
+              </el-table-column>
+              <template #empty><span class="up-none">无缺失案例</span></template>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
       </div>
     </template>
   </div>
@@ -266,6 +309,9 @@
 // 成本任一侧未定价/用量未知/跨币种 → delta=null 如实展示 costNote 机器码，不猜 0（R4 同律）；
 // 标注：对候选侧案例发起 EV-08 评审任务（ensure 幂等，人工结论独立留档，不覆盖机器评分），跳评审页领取提交。
 // 判定/维度/原因等机器码词表：未收录枚举原样透出（不虚构词表）。
+// FUP-02（gate v2）：暂态分析/结果不完整/身份未核验徽章只映射 gate.reasons 机器码
+// （前端不自行判门）；readiness 块给出 paired/expected 明确分母与缺失案例清单跳转；
+// 落档记录规则版本 ≠ 当前规则版本 → 标“历史规则”（历史审计不改写）。
 import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElTag } from 'element-plus'
@@ -379,6 +425,12 @@ const REASON_ZH = {
   INSUFFICIENT_CLUSTERS: '独立簇不足',
   REGRESSION_RATE_EXCEEDED: '退化率超限',
   CI_LOWER_BELOW_MARGIN: '置信区间下界低于余量',
+  // FUP-02 gate v2：证据就绪度分支
+  RUN_NOT_FINAL: '运行未终态',
+  RUN_INCOMPLETE: '运行不完整终态（失败/取消）',
+  PLAN_SET_UNAVAILABLE: '无冻结计划快照',
+  PLAN_CASES_MISSING: '计划案例缺失',
+  IDENTITY_UNVERIFIED: '输入身份未核验',
 }
 const reasonZh = r => REASON_ZH[r] ?? r
 const SIDE_ZH = { BASELINE_ONLY: '仅基线有', CANDIDATE_ONLY: '仅候选有' }
@@ -387,6 +439,7 @@ const UNPAIRED_REASON_ZH = {
   MISSING_IN_BASELINE: '基线缺失',
   MISSING_IN_CANDIDATE: '候选缺失',
   INPUT_DIGEST_MISMATCH: '输入摘要不一致',
+  MISSING_IN_BOTH: '双侧均缺（计划内未执行）',
 }
 const unpairedReasonZh = r => UNPAIRED_REASON_ZH[r] ?? r
 
@@ -484,6 +537,26 @@ const mismatchDims = computed(() => {
   const byName = new Map((c.dimensions ?? []).map(d => [d.name, d]))
   return (c.mismatches ?? []).map(n => byName.get(n) ?? { name: n, baseline: null, candidate: null })
 })
+
+// FUP-02 就绪度徽章：只映射后端机器码（gate.reasons），前端不自行判门
+const readinessBadges = computed(() => {
+  const reasons = cmp.value?.gate?.reasons ?? []
+  const badges = []
+  if (reasons.includes('RUN_NOT_FINAL')) badges.push({ text: '暂态分析（运行未终态）', type: 'warning' })
+  if (reasons.includes('RUN_INCOMPLETE') || reasons.includes('PLAN_CASES_MISSING')
+      || reasons.includes('PLAN_SET_UNAVAILABLE')) {
+    badges.push({ text: '结果不完整', type: 'warning' })
+  }
+  if (reasons.includes('IDENTITY_UNVERIFIED')) badges.push({ text: '身份未核验', type: 'warning' })
+  return badges
+})
+// FUP-02：落档记录规则版本 ≠ 当前计算规则版本 → 历史规则标注（不改写旧审计）
+const isLegacyRecord = computed(() => {
+  const rec = cmp.value?.gateRecord
+  return !!(rec?.ruleVersion && cmp.value?.gate?.ruleVersion
+    && rec.ruleVersion !== cmp.value.gate.ruleVersion)
+})
+const missingOpen = ref([])
 
 // 分组标签计数：三件套 OK → “分子（百分比）”；UNKNOWN/缺席 → 未统计；NOT_APPLICABLE → 不适用
 function tabCount(key) {
@@ -697,6 +770,8 @@ onMounted(loadRuns)
 .gate-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .gate-reasons { font-size: var(--fs-aux); color: var(--head); }
 .gate-meta { font-size: var(--fs-aux); color: var(--ink-2); }
+.readiness-row { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 8px; }
+.missing-link { color: var(--warn, #b26a00); cursor: pointer; text-decoration: underline; }
 
 .group-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .gt {

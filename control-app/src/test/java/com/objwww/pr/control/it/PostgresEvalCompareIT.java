@@ -165,6 +165,8 @@ class PostgresEvalCompareIT extends PostgresITBase {
         assertThat(meta.scenarioDriverVersion()).isEqualTo("scenario-driver-v1");
         assertThat(meta.model()).isEqualTo("deepseek-v3");
         assertThat(meta.state()).isEqualTo("RUNNING");
+        // FUP-02：launch_plan 快照原文同投影（命令侧未回填 → 如实 null = 计划源降级面）
+        assertThat(meta.launchPlanJson()).isNull();
         assertThat(reader.findCompareMeta(UUID.randomUUID())).isEmpty();
     }
 
@@ -231,7 +233,7 @@ class PostgresEvalCompareIT extends PostgresITBase {
     private EvalComparisonRecord recordOf(UUID baseline, UUID candidate, String outcome,
                                           List<String> reasons) {
         return new EvalComparisonRecord(UUID.randomUUID(), baseline, candidate, true,
-                "[]", 10, 0, 0, 0, 10, null, outcome, reasons, "eval-compare-gate-v1",
+                "[]", 10, 0, 0, 0, 10, null, null, outcome, reasons, "eval-compare-gate-v1",
                 "it-actor", Instant.now());
     }
 

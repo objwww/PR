@@ -13,6 +13,9 @@ import java.util.Objects;
  * kind 适配器（{@link ArenaChaosDrillInjection} / {@link FlagdDrillInjection}），
  * 公共闸门在分派前统一把守——
  * <ul>
+ *   <li>FUP-01 最终边界：同源 {@link DrillExecutionPolicy} 最先复验——launch=false
+ *       时一切调用（含绕过 API/worker 的应用内直调）NOT_PERFORMED + LAUNCH_DISABLED，
+ *       任何网络/管理面调用之前拒绝（确定零副作用）；</li>
  *   <li>场景未登记 / 靶场不在部署白名单 / 模板未 ready（如实带模板原因，不绕过）/
  *       模板缺 driver / 执行域注册表缺场景 / 目录与注册表 driver 漂移 /
  *       未知驱动 → NOT_PERFORMED + 具体卡因（确定零副作用，INJECTING→FAILED
@@ -33,21 +36,31 @@ public final class CompositeDrillInjection implements DrillInjectionPort {
     private final List<String> allowedEnvs;
     private final ArenaChaosDrillInjection arena;
     private final FlagdDrillInjection flagd;
+    private final DrillExecutionPolicy policy;
 
     public CompositeDrillInjection(DrillTemplateCatalog catalog,
                                    GoldenScenarioRegistry registry,
                                    List<String> allowedEnvs,
                                    ArenaChaosDrillInjection arena,
-                                   FlagdDrillInjection flagd) {
+                                   FlagdDrillInjection flagd,
+                                   DrillExecutionPolicy policy) {
         this.catalog = Objects.requireNonNull(catalog);
         this.registry = Objects.requireNonNull(registry);
         this.allowedEnvs = List.copyOf(allowedEnvs);
         this.arena = Objects.requireNonNull(arena);
         this.flagd = Objects.requireNonNull(flagd);
+        this.policy = Objects.requireNonNull(policy);
     }
 
     @Override
     public Outcome inject(DrillJob job) {
+        // FUP-01 最终副作用边界：绕过 API/worker 的应用内直调也在此被同源政策拦下
+        // （确定零副作用——任何网络/管理面调用之前拒绝）。政策启动时加载，翻转需
+        // 重启生效，不宣称即时急停
+        if (!policy.launchEnabled()) {
+            return Outcome.notPerformed(policy.disabledReason()
+                    + "（注入端口最终边界复验；确定零副作用）");
+        }
         DrillTemplate template = catalog.byScenarioId(job.scenarioId()).orElse(null);
         if (template == null) {
             return Outcome.notPerformed("SCENARIO_KNOWN: 场景未注册于模板目录"

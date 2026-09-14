@@ -905,12 +905,15 @@ public class PersistenceConfig {
             ObjectMapper objectMapper,
             @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
             @Value("${app.drill.launch-enabled:false}") boolean launchEnabled) {
+        java.util.List<String> envs = java.util.Arrays.stream(targetEnvs.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        // FUP-01：执行政策与 eval worker 进程（EvalRunnerConfig drillExecutionPolicy）
+        // 同名配置同源构造——能力响应携带 policyVersion/policyFingerprint 供跨进程核对
         return new com.objwww.pr.control.drill.application.DrillJobService(
                 drillJobRepository, drillEventRepository, drillTemplateCatalog,
-                objectMapper,
-                java.util.Arrays.stream(targetEnvs.split(","))
-                        .map(String::trim).filter(s -> !s.isEmpty()).toList(),
-                launchEnabled);
+                objectMapper, envs,
+                new com.objwww.pr.control.drill.application.DrillExecutionPolicy(
+                        launchEnabled, envs));
     }
 
     // ---------------- UI-6 监控大盘聚合（/api/agent-ops/**；HTTP 面 = ops/interfaces AgentOpsController） ----------------

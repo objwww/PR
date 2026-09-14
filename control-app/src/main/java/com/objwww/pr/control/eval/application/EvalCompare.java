@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 
@@ -19,6 +20,11 @@ import java.util.UUID;
  * EV-07 配对工作台的纯函数段（EvalLogCompare 同模式，假输入可测；方案 §3.5/EV-07 卡）：
  * 可比性检查 → 案例配对 → 改善/退化/持平分类与判定变化矩阵 → 簇统计（PairedTrialStats
  * 簇级 bootstrap 复用）→ 对比质量门（冻结规则版本 {@value #GATE_RULE_VERSION}）。
+ *
+ * <p>FUP-02（v2）：EvidenceReadiness 输入区分"能展示差异"与"能产生最终结论"——
+ * 运行未终态/不完整终态、无冻结计划分母、计划案例缺失、输入身份未核验一律
+ * INCONCLUSIVE（暂态分析可展示，最终门不出 PASS）。v1 历史落档保留原结论与
+ * 规则版本，不回读改写。
  *
  * <p>纪律：
  * <ul>
@@ -37,8 +43,12 @@ import java.util.UUID;
  */
 final class EvalCompare {
 
-    /** 对比质量门规则版本（冻结；阈值/分支序变更必须升版） */
-    static final String GATE_RULE_VERSION = "eval-compare-gate-v1";
+    /** 对比质量门规则版本（冻结；阈值/分支序变更必须升版）。
+     *  FUP-02：v1 → v2 引入 EvidenceReadiness 前置分支（运行终态/冻结计划覆盖/
+     *  身份核验），v1 历史落档不改写 */
+    static final String GATE_RULE_VERSION = "eval-compare-gate-v2";
+    /** v1 历史规则版本（FUP-02 前落档行；只读比对用，不再产出） */
+    static final String GATE_RULE_VERSION_V1 = "eval-compare-gate-v1";
     /** 退化率阈值（regressed/paired 超过即 FAIL；方案 §3.5 "退化率超阈值" 面） */
     static final double MAX_REGRESSION_RATE = 0.10;
     /** 配对差值 CI 下界余量（ciLower &lt; -margin → FAIL；QualityGate 分支3 同构） */
@@ -51,6 +61,22 @@ final class EvalCompare {
     static final String REASON_INSUFFICIENT_CLUSTERS = "INSUFFICIENT_CLUSTERS";
     static final String REASON_REGRESSION_RATE_EXCEEDED = "REGRESSION_RATE_EXCEEDED";
     static final String REASON_CI_LOWER_BELOW_MARGIN = "CI_LOWER_BELOW_MARGIN";
+    // FUP-02 v2 新增：证据就绪度分支机器码
+    static final String REASON_RUN_NOT_FINAL = "RUN_NOT_FINAL";
+    static final String REASON_RUN_INCOMPLETE = "RUN_INCOMPLETE";
+    static final String REASON_PLAN_SET_UNAVAILABLE = "PLAN_SET_UNAVAILABLE";
+    static final String REASON_PLAN_CASES_MISSING = "PLAN_CASES_MISSING";
+    static final String REASON_IDENTITY_UNVERIFIED = "IDENTITY_UNVERIFIED";
+
+    /** 计划分母来源词表（FUP-02）：冻结计划键集 / 无快照降级 */
+    static final String PLAN_SOURCE_LAUNCH_PLAN = "LAUNCH_PLAN";
+    static final String PLAN_SOURCE_UNAVAILABLE = "UNAVAILABLE";
+
+    /** 运行终态性（FUP-02）：SUCCEEDED = 完整终态；FAILED/CANCELLED = 不完整终态；
+     *  其余（RUNNING/PENDING/未知值）= 未终态 */
+    private static final String FINALITY_FINAL = "FINAL";
+    private static final String FINALITY_NOT_FINAL = "NOT_FINAL";
+    private static final String FINALITY_TERMINAL_INCOMPLETE = "TERMINAL_INCOMPLETE";
 
     /** 分组词表（前端改善/退化/持平三区） */
     static final String GROUP_IMPROVED = "IMPROVED";
@@ -286,34 +312,194 @@ final class EvalCompare {
         return out;
     }
 
-    // ------------------------------------------------------------------ 对比质量门（eval-compare-gate-v1）
+    // ------------------------------------------------------------------ FUP-02 证据就绪度（gate v2 输入）
+
+    /** 配对/计划核算共用的键编码（与 byKey 同式：scenarioId + '\b' + 补零 roundNo） */
+    private static String key(String scenarioId, int roundNo) {
+        return scenarioId + "\b" + String.format("%06d", roundNo);
+    }
+
+    /** FUP-02 缺失案例行（reason 词表 = 未配对三路 + MISSING_IN_BOTH 双侧同缺） */
+    record MissingCase(String scenarioId, int roundNo, String reason) {
+    }
+
+    static final String MISSING_IN_BOTH = "MISSING_IN_BOTH";
+
+    /**
+     * FUP-02 冻结计划面（服务层从 eval_run.launch_plan 快照 + 数据集案例键集装配）：
+     * caseKeys = 数据集版本下可见 case_version.case_key 集；baselineRounds/
+     * candidateRounds = 各侧 roundsPerScenario。null 整体 = 无冻结计划快照降级
+     * （旧 CLI 跑批 launch_plan 为 NULL 等历史面），门按 PLAN_SET_UNAVAILABLE 处理。
+     */
+    record FrozenPlan(Set<String> caseKeys, int baselineRounds,
+                      int candidateRounds) {
+    }
+
+    /**
+     * FUP-02 证据就绪度（区分"能展示差异"与"能产生最终结论"）：
+     * 运行状态原样携带；expected/completed/missing/unexpected 按计划键集
+     * （caseKey × roundNo）核算——计划源不可用（UNAVAILABLE）时四项如实 null
+     * （不拿双侧并集冒充计划分母：两侧一起漏同一案例时并集也缺）。
+     * verified = 配对中输入 digest MATCH 数；UNVERIFIED 可展示差异但不计身份已核验。
+     */
+    record EvidenceReadiness(String baselineState, String candidateState,
+                             String planSetSource, Integer expectedCount,
+                             Integer completedCount, int pairedCount, int verifiedCount,
+                             int unverifiedCount, Integer missingCount,
+                             Integer unexpectedCount, List<MissingCase> missingCases) {
+    }
+
+    /**
+     * 就绪度核算（纯函数）：配对/未配对结果 + 冻结计划键集 → expected/completed/
+     * paired/verified/missing/unexpected 与缺失清单（按 (scenarioId, roundNo) 升序，
+     * 截断归服务层）。计划键未有效配对的三路归属：单侧缺席沿用未配对原因、
+     * digest 冲突沿用 INPUT_DIGEST_MISMATCH、双侧同缺 MISSING_IN_BOTH。
+     */
+    static EvidenceReadiness readiness(CompareRunMeta baseline, CompareRunMeta candidate,
+                                       List<CompareCaseRow> baselineCases,
+                                       List<CompareCaseRow> candidateCases,
+                                       Pairing pairing, FrozenPlan plan) {
+        int verified = 0;
+        int unverified = 0;
+        Map<String, PairedCase> pairedByKey = new TreeMap<>();
+        for (PairedCase p : pairing.pairs()) {
+            pairedByKey.put(key(p.scenarioId(), p.roundNo()), p);
+            if ("MATCH".equals(p.inputDigestMatch())) {
+                verified++;
+            } else {
+                unverified++;
+            }
+        }
+        if (plan == null) {
+            return new EvidenceReadiness(baseline.state(), candidate.state(),
+                    PLAN_SOURCE_UNAVAILABLE, null, null, pairing.pairs().size(),
+                    verified, unverified, null, null, List.of());
+        }
+        // 期望键集：计划案例键 × 轮次（两侧轮次不同取并集 = 较大轮次全覆盖）
+        Map<String, MissingCase> expectedParts = new TreeMap<>();
+        int rounds = Math.max(plan.baselineRounds(), plan.candidateRounds());
+        for (String caseKey : plan.caseKeys()) {
+            for (int r = 1; r <= rounds; r++) {
+                expectedParts.put(key(caseKey, r), new MissingCase(caseKey, r, null));
+            }
+        }
+        Map<String, CompareCaseRow> baselineByKey = byKey(baselineCases);
+        Map<String, CompareCaseRow> candidateByKey = byKey(candidateCases);
+        Map<String, String> unpairedReason = new TreeMap<>();
+        for (UnpairedCase u : pairing.unpaired()) {
+            // digest 冲突出双行（各侧一条）：合并时 INPUT_DIGEST_MISMATCH 优先
+            unpairedReason.merge(key(u.scenarioId(), u.roundNo()), u.reason(),
+                    (a, b) -> "INPUT_DIGEST_MISMATCH".equals(a) ? a : b);
+        }
+        int completed = 0;
+        List<MissingCase> missing = new ArrayList<>();
+        for (Map.Entry<String, MissingCase> e : expectedParts.entrySet()) {
+            String k = e.getKey();
+            if (baselineByKey.containsKey(k) && candidateByKey.containsKey(k)) {
+                completed++;
+            }
+            if (pairedByKey.containsKey(k)) {
+                continue;
+            }
+            MissingCase parts = e.getValue();
+            missing.add(new MissingCase(parts.scenarioId(), parts.roundNo(),
+                    unpairedReason.getOrDefault(k, MISSING_IN_BOTH)));
+        }
+        int unexpected = 0;
+        Map<String, Boolean> observed = new TreeMap<>();
+        baselineByKey.keySet().forEach(k -> observed.put(k, Boolean.TRUE));
+        candidateByKey.keySet().forEach(k -> observed.put(k, Boolean.TRUE));
+        for (String k : observed.keySet()) {
+            if (!expectedParts.containsKey(k)) {
+                unexpected++;
+            }
+        }
+        return new EvidenceReadiness(baseline.state(), candidate.state(),
+                PLAN_SOURCE_LAUNCH_PLAN, expectedParts.size(), completed,
+                pairing.pairs().size(), verified, unverified, missing.size(), unexpected,
+                List.copyOf(missing));
+    }
+
+    /** 运行终态性分类（FUP-02；词表外未知值一律按未终态处理，不猜） */
+    private static String finality(String state) {
+        if ("SUCCEEDED".equals(state)) {
+            return FINALITY_FINAL;
+        }
+        if ("FAILED".equals(state) || "CANCELLED".equals(state)) {
+            return FINALITY_TERMINAL_INCOMPLETE;
+        }
+        return FINALITY_NOT_FINAL;
+    }
+
+    // ------------------------------------------------------------------ 对比质量门（eval-compare-gate-v2）
 
     /** 门结论（ruleVersion + outcome + 机器码原因；EvaluationRecordV1 解释完整性同律） */
     record GateResult(String ruleVersion, String outcome, List<String> reasons) {
     }
 
     /**
-     * 对比质量门（冻结分支序；QualityGate 五分支的对比面同构）：
+     * 对比质量门（冻结分支序；QualityGate 五分支的对比面同构）。
+     * FUP-02 v2：在统计判定之前插入证据就绪度前置分支——
      * <ol>
      *   <li>可比性未过 → NOT_EVALUABLE（不出配对结论）；</li>
+     *   <li>任一 run 未终态（RUNNING/PENDING/未知值）→ INCONCLUSIVE(RUN_NOT_FINAL)
+     *       ——暂态分析可展示，最终门不出结论；</li>
+     *   <li>任一 run 不完整终态（FAILED/CANCELLED）→ INCONCLUSIVE(RUN_INCOMPLETE)
+     *       ——局部命中率再好也不成最终 PASS；</li>
      *   <li>读面扫描闸截断 → INCONCLUSIVE（部分数据不出资格结论）；</li>
+     *   <li>无冻结计划分母（历史 run 缺 launch_plan 快照）→ INCONCLUSIVE
+     *       (PLAN_SET_UNAVAILABLE)——明确降级，不拿双侧并集冒充计划完整；</li>
+     *   <li>计划键未全部有效配对（含单侧缺席/digest 冲突/双侧同缺）→ INCONCLUSIVE
+     *       (PLAN_CASES_MISSING)——应配对全部配对才有最终门；</li>
+     *   <li>配对中存在输入身份未核验（digest UNVERIFIED）→ INCONCLUSIVE
+     *       (IDENTITY_UNVERIFIED)——可展示差异，不算身份已核验；</li>
      *   <li>无配对案例 → INCONCLUSIVE；</li>
      *   <li>独立簇不足 → INCONCLUSIVE（EU24：不伪造显著性）；</li>
      *   <li>退化率 &gt; {@value #MAX_REGRESSION_RATE} → FAIL；</li>
      *   <li>配对差值 CI 下界 &lt; -{@value #CI_MARGIN} → FAIL；</li>
      *   <li>全部通过 → PASS。</li>
      * </ol>
+     * readiness 仅分支 2~7 消费；分支 1 短路时服务层传 null。
      */
-    static GateResult gate(boolean comparable, boolean scanTruncated, int pairedCount,
+    static GateResult gate(boolean comparable, boolean scanTruncated,
+                           EvidenceReadiness readiness, int pairedCount,
                            int regressedCount, PairedTrialStats.StatsResult stats) {
         if (!comparable) {
             return new GateResult(GATE_RULE_VERSION,
                     EvalComparisonRecord.OUTCOME_NOT_EVALUABLE,
                     List.of(REASON_COMPARABILITY_CHECK_FAILED));
         }
+        Objects.requireNonNull(readiness, "comparable 面 readiness 不得为 null");
+        String baselineFinality = finality(readiness.baselineState());
+        String candidateFinality = finality(readiness.candidateState());
+        if (FINALITY_NOT_FINAL.equals(baselineFinality)
+                || FINALITY_NOT_FINAL.equals(candidateFinality)) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE, List.of(REASON_RUN_NOT_FINAL));
+        }
+        if (FINALITY_TERMINAL_INCOMPLETE.equals(baselineFinality)
+                || FINALITY_TERMINAL_INCOMPLETE.equals(candidateFinality)) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE, List.of(REASON_RUN_INCOMPLETE));
+        }
         if (scanTruncated) {
             return new GateResult(GATE_RULE_VERSION,
                     EvalComparisonRecord.OUTCOME_INCONCLUSIVE, List.of(REASON_DATA_TRUNCATED));
+        }
+        if (!PLAN_SOURCE_LAUNCH_PLAN.equals(readiness.planSetSource())) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE,
+                    List.of(REASON_PLAN_SET_UNAVAILABLE));
+        }
+        if (readiness.missingCount() != null && readiness.missingCount() > 0) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE,
+                    List.of(REASON_PLAN_CASES_MISSING));
+        }
+        if (readiness.unverifiedCount() > 0) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE,
+                    List.of(REASON_IDENTITY_UNVERIFIED));
         }
         if (pairedCount == 0) {
             return new GateResult(GATE_RULE_VERSION,

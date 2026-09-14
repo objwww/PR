@@ -226,10 +226,13 @@ class DrillJobServiceTest {
         jobs = new FakeJobs();
         events = new FakeEvents();
         ObjectMapper mapper = new ObjectMapper();
-        readyService = new DrillJobService(jobs, events, catalog(true), mapper, ENVS, true);
-        unreadyService = new DrillJobService(jobs, events, catalog(false), mapper, ENVS, true);
+        readyService = new DrillJobService(jobs, events, catalog(true), mapper, ENVS,
+                new DrillExecutionPolicy(true, ENVS));
+        unreadyService = new DrillJobService(jobs, events, catalog(false), mapper, ENVS,
+                new DrillExecutionPolicy(true, ENVS));
         launchDisabledService =
-                new DrillJobService(jobs, events, catalog(true), mapper, ENVS, false);
+                new DrillJobService(jobs, events, catalog(true), mapper, ENVS,
+                        new DrillExecutionPolicy(false, ENVS));
     }
 
     private static DrillLaunchPlan plan() {
@@ -278,6 +281,39 @@ class DrillJobServiceTest {
         // 打开能力位后同目录恢复 ready=true（能力位而非模板自身语义）
         assertThat(readyService.templates().templates())
                 .allSatisfy(card -> assertThat(card.execution().get("ready")).isEqualTo(true));
+    }
+
+    @Test
+    @DisplayName("FCT-24：无占用 + ready 模板 + launch=false → preview canLaunch=false，"
+            + "LAUNCH_ENABLED FAIL 与 create 的 409 LAUNCH_DISABLED 同码（FUP-04 口径一致）")
+    void previewReflectsLaunchDisabledSameCode() {
+        DrillJobService.PreviewResponse closed = launchDisabledService.preview(plan());
+        assertThat(closed.canLaunch()).isFalse();
+        assertThat(closed.checks()).anySatisfy(c -> {
+            assertThat(c.name()).isEqualTo("LAUNCH_ENABLED");
+            assertThat(c.status()).isEqualTo(DrillPrecheck.Status.FAIL);
+            assertThat(c.detail()).contains("LAUNCH_DISABLED");
+        });
+        // 能力开放面（对照）：LAUNCH_ENABLED OK 且 canLaunch=true（无占用 ready 模板）
+        DrillJobService.PreviewResponse open = readyService.preview(plan());
+        assertThat(open.canLaunch()).isTrue();
+        assertThat(open.checks()).anySatisfy(c -> {
+            assertThat(c.name()).isEqualTo("LAUNCH_ENABLED");
+            assertThat(c.status()).isEqualTo(DrillPrecheck.Status.OK);
+        });
+    }
+
+    @Test
+    @DisplayName("FUP-01 能力响应指纹：目录携带 policyVersion/policyFingerprint，"
+            + "同配置同指纹、异能力位异指纹（API 与 worker 跨进程核对锚）")
+    void templatesCarryPolicyFingerprint() {
+        DrillJobService.TemplateListResponse closed = launchDisabledService.templates();
+        assertThat(closed.policyVersion())
+                .isEqualTo(DrillExecutionPolicy.POLICY_VERSION);
+        assertThat(closed.policyFingerprint()).isNotBlank()
+                .isEqualTo(new DrillExecutionPolicy(false, ENVS).policyFingerprint());
+        assertThat(closed.policyFingerprint())
+                .isNotEqualTo(readyService.templates().policyFingerprint());
     }
 
     @Test

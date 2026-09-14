@@ -25,6 +25,9 @@ import java.util.UUID;
  * @param regressedCount   退化计数（baseline 命中 & candidate 未命中）
  * @param flatCount        持平计数（两侧命中面一致）
  * @param statsSnapshotJson PairedTrialStats 溯源快照原文；null = 无配对（不伪造统计面）
+ * @param readinessSnapshotJson FUP-02 证据就绪度快照原文（V110 列；含规则版本/阈值/
+ *                              计划分母核算）；null = v1 历史行或可比性未过面（不回填、
+ *                              不冒充——历史审计保留原始结论与规则版本）
  * @param gateOutcome      对比质量门结论 PASS/FAIL/INCONCLUSIVE/NOT_EVALUABLE
  * @param gateReasons      机器码原因（PASS 空，非 PASS 必非空——解释完整性）
  * @param gateRuleVersion  门规则版本锚（eval-compare-gate-vN）
@@ -42,6 +45,7 @@ public record EvalComparisonRecord(UUID id,
                                    int regressedCount,
                                    int flatCount,
                                    String statsSnapshotJson,
+                                   String readinessSnapshotJson,
                                    String gateOutcome,
                                    List<String> gateReasons,
                                    String gateRuleVersion,

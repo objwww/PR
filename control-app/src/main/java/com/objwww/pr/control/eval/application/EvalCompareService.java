@@ -1,5 +1,6 @@
 package com.objwww.pr.control.eval.application;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.model.EvalComparisonRecord;
 import com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository;
@@ -37,6 +38,10 @@ import java.util.UUID;
  *   <li>有界面：单侧扫描闸 {@value #MAX_SCAN_ROWS_PER_RUN} 行（超出 → scanTruncated
  *       + 门 INCONCLUSIVE）；逐例列表游标分页（group 过滤 + (scenarioId, roundNo)
  *       键集）；unpaired 列表上限 {@value #MAX_UNPAIRED_LISTED}（超出截断标记）。</li>
+ *   <li>FUP-02（门 v2）：EvidenceReadiness 区分"能展示差异"与"能产生最终结论"——
+ *       运行未终态/不完整终态、无冻结计划分母（历史 run 缺 launch_plan 快照降级
+ *       UNAVAILABLE）、计划案例缺失、身份未核验 → 最终门只出 INCONCLUSIVE，差异
+ *       照常展示（暂态分析）；新落档带 readiness 快照（V110），v1 历史行不改写。</li>
  * </ul>
  *
  * <p>R12 逐例差值（EV-07+）：配对双方按 caseExecutionId 稳定投影间直接作差——
@@ -116,8 +121,34 @@ public class EvalCompareService {
                             double maxRegressionRate, double ciMargin) {
     }
 
-    /** 同对最新落档引用（无落档 → 整块 null 如实） */
-    public record GateRecordRef(UUID recordId, String outcome, Instant createdAt) {
+    /** 同对最新落档引用（无落档 → 整块 null 如实；ruleVersion 供前端标"历史规则"） */
+    public record GateRecordRef(UUID recordId, String outcome, String ruleVersion,
+                                Instant createdAt) {
+    }
+
+    /** FUP-02 缺失案例项（reason 机器码：MISSING_IN_BASELINE/MISSING_IN_CANDIDATE/
+     *  INPUT_DIGEST_MISMATCH/MISSING_IN_BOTH） */
+    public record MissingCaseItem(String scenarioId, int roundNo, String reason) {
+    }
+
+    /**
+     * FUP-02 证据就绪度块（区分"能展示差异"与"能产生最终结论"）：planSetSource =
+     * LAUNCH_PLAN（冻结计划键集分母）/ UNAVAILABLE（历史 run 无 launch_plan 快照，
+     * 明确降级——expected/completed/missing/unexpected 如实 null，不拿双侧并集冒充
+     * 计划完整）；coverageRatio = completed/expected（分母 0/未知 → null）。
+     */
+    public record ReadinessBlock(String baselineState, String candidateState,
+                                 String planSetSource, Integer expectedCount,
+                                 Integer completedCount, int pairedCount, int verifiedCount,
+                                 int unverifiedCount, Integer missingCount,
+                                 Integer unexpectedCount, Double coverageRatio,
+                                 List<MissingCaseItem> missingCases,
+                                 boolean missingTruncated) {
+    }
+
+    /** FUP-02 落档就绪度快照（V110 readiness_snapshot 列原文；v1 历史行 NULL 不回填） */
+    public record ReadinessSnapshot(String ruleVersion, double maxRegressionRate,
+                                    double ciMargin, ReadinessBlock readiness) {
     }
 
     /** 配对汇总（计数三件套分母 = pairedCount；matrix = 判定变化矩阵 基线判定→候选判定） */
@@ -139,11 +170,14 @@ public class EvalCompareService {
 
     /**
      * 对比响应（GET 实时面 / POST 落档面同构）。comparable=false 时 summary=null、
-     * cases/unpaired 空表、gate=NOT_EVALUABLE——不出配对结论。
+     * readiness=null、cases/unpaired 空表、gate=NOT_EVALUABLE——不出配对结论。
+     * readiness（FUP-02）= 证据就绪度：暂态分析（运行未终态等）下差异照常展示，
+     * 最终门结论只认 gate。
      */
     public record EvalCompareResponse(UUID baselineRunId, UUID candidateRunId,
                                       ComparabilityBlock comparability, CompareSummary summary,
                                       GateBlock gate, GateRecordRef gateRecord,
+                                      ReadinessBlock readiness,
                                       List<CompareCaseItem> cases,
                                       List<UnpairedItem> unpaired,
                                       boolean unpairedTruncated, boolean scanTruncated,
@@ -186,11 +220,13 @@ public class EvalCompareService {
                 computation.pairing() == null ? 0 : computation.pairing().unpaired().size(),
                 computation.counts()[1], computation.counts()[2], computation.counts()[3],
                 computation.stats() == null ? null : toJson(statsBlock(computation.stats())),
+                computation.readinessSnapshotJson(mapper),
                 computation.gate().outcome(), computation.gate().reasons(),
                 computation.gate().ruleVersion(), actor, Instant.now());
         comparisons.insert(record);
         return Optional.of(computation.response(mapper,
-                new GateRecordRef(record.id(), record.gateOutcome(), record.createdAt())));
+                new GateRecordRef(record.id(), record.gateOutcome(), record.gateRuleVersion(),
+                        record.createdAt())));
     }
 
     // ------------------------------------------------------------------ 编排（纯函数段归 EvalCompare）
@@ -200,6 +236,7 @@ public class EvalCompareService {
                                EvalCompare.Comparability comparability,
                                EvalCompare.Pairing pairing, int[] counts,
                                PairedTrialStats.StatsResult stats,
+                               EvalCompare.EvidenceReadiness readiness,
                                EvalCompare.GateResult gate, boolean scanTruncated,
                                String group, Keyset keyset, int limit,
                                Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
@@ -212,7 +249,7 @@ public class EvalCompareService {
                     gate.reasons(), EvalCompare.MAX_REGRESSION_RATE, EvalCompare.CI_MARGIN);
             if (!comparability.comparable()) {
                 return new EvalCompareResponse(baseline.runId(), candidate.runId(),
-                        comparabilityBlock, null, gateBlock, persistedRef,
+                        comparabilityBlock, null, gateBlock, persistedRef, null,
                         List.of(), List.of(), false, false, null, Instant.now());
             }
             CompareSummary summary = new CompareSummary(pairing.pairs().size(),
@@ -235,9 +272,49 @@ public class EvalCompareService {
             }
             return new EvalCompareResponse(baseline.runId(), candidate.runId(),
                     comparabilityBlock, summary, gateBlock, persistedRef,
-                    slice.items(), List.copyOf(unpairedItems),
+                    readinessBlock(), slice.items(), List.copyOf(unpairedItems),
                     pairing.unpaired().size() > MAX_UNPAIRED_LISTED, scanTruncated,
                     slice.nextCursor(), Instant.now());
+        }
+
+        /** FUP-02 就绪度块装配（缺失清单截断 {@value #MAX_UNPAIRED_LISTED}，
+         *  计数仍按全集如实） */
+        ReadinessBlock readinessBlock() {
+            if (readiness == null) {
+                return null;
+            }
+            List<MissingCaseItem> missing = new ArrayList<>(
+                    Math.min(readiness.missingCases().size(), MAX_UNPAIRED_LISTED));
+            for (EvalCompare.MissingCase m : readiness.missingCases()) {
+                if (missing.size() >= MAX_UNPAIRED_LISTED) {
+                    break;
+                }
+                missing.add(new MissingCaseItem(m.scenarioId(), m.roundNo(), m.reason()));
+            }
+            Double coverage = readiness.expectedCount() == null
+                    || readiness.expectedCount() == 0 ? null
+                    : (double) readiness.completedCount() / readiness.expectedCount();
+            return new ReadinessBlock(readiness.baselineState(), readiness.candidateState(),
+                    readiness.planSetSource(), readiness.expectedCount(),
+                    readiness.completedCount(), readiness.pairedCount(),
+                    readiness.verifiedCount(), readiness.unverifiedCount(),
+                    readiness.missingCount(), readiness.unexpectedCount(), coverage,
+                    List.copyOf(missing),
+                    readiness.missingCases().size() > MAX_UNPAIRED_LISTED);
+        }
+
+        /** FUP-02 落档就绪度快照（规则版本/阈值随快照携带 = 复现锚） */
+        String readinessSnapshotJson(ObjectMapper mapper) {
+            if (readiness == null) {
+                return null;
+            }
+            try {
+                return mapper.writeValueAsString(new ReadinessSnapshot(gate.ruleVersion(),
+                        EvalCompare.MAX_REGRESSION_RATE, EvalCompare.CI_MARGIN,
+                        readinessBlock()));
+            } catch (Exception e) {
+                throw new IllegalStateException("落档就绪度快照序列化失败", e);
+            }
         }
     }
 
@@ -273,13 +350,18 @@ public class EvalCompareService {
                 baseline.get(), candidate.get(),
                 policyVersions(baselineCases), policyVersions(candidateCases));
         if (!comparability.comparable()) {
-            EvalCompare.GateResult gate = EvalCompare.gate(false, false, 0, 0, null);
+            EvalCompare.GateResult gate = EvalCompare.gate(false, false, null, 0, 0, null);
             return new Computation(baseline.get(), candidate.get(), comparability, null,
-                    new int[4], null, gate, false, effectiveGroup, keyset, limit, Map.of());
+                    new int[4], null, null, gate, false, effectiveGroup, keyset, limit,
+                    Map.of());
         }
         long seed = EvalCompare.statsSeed(baselineRunId, candidateRunId);
         EvalCompare.Pairing pairing = EvalCompare.pair(mapper, baselineCases, candidateCases,
                 seed);
+        // FUP-02 证据就绪度：冻结计划分母 + 运行终态 + 配对/身份核验（gate v2 前置分支输入）
+        EvalCompare.EvidenceReadiness readiness = EvalCompare.readiness(baseline.get(),
+                candidate.get(), baselineCases, candidateCases, pairing,
+                frozenPlan(baseline.get(), candidate.get()));
         // R12 逐例差值输入：双 run usage 链一次取回（禁 N+1），按案例 rca_run_id 分组
         Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun = new LinkedHashMap<>();
         for (EvalQueryReader.UsageCallRow row : reader.listUsageCallsForRuns(
@@ -295,11 +377,50 @@ public class EvalCompareService {
                 default -> counts[3]++;
             }
         }
-        EvalCompare.GateResult gate = EvalCompare.gate(true, scanTruncated,
+        EvalCompare.GateResult gate = EvalCompare.gate(true, scanTruncated, readiness,
                 pairing.pairs().size(), counts[2], pairing.stats());
         return new Computation(baseline.get(), candidate.get(), comparability, pairing,
-                counts, pairing.stats(), gate, scanTruncated, effectiveGroup, keyset, limit,
-                Map.copyOf(usageByRcaRun));
+                counts, pairing.stats(), readiness, gate, scanTruncated, effectiveGroup,
+                keyset, limit, Map.copyOf(usageByRcaRun));
+    }
+
+    /** worker 默认轮次（EvalLaunchPlan 契约：roundsPerScenario 空 = 现有 5×2 编排的 2） */
+    private static final int DEFAULT_ROUNDS_PER_SCENARIO = 2;
+
+    /**
+     * FUP-02 冻结计划装配：双侧 launch_plan 快照均在且数据集案例键集非空 →
+     * LAUNCH_PLAN 分母（键集 × 各侧轮次）；任一缺失（旧 CLI 跑批 launch_plan 为
+     * NULL、快照解析失败、版本无可见案例）→ null 如实降级 UNAVAILABLE（不猜轮次、
+     * 不拿双侧并集冒充计划完整）。
+     */
+    private EvalCompare.FrozenPlan frozenPlan(CompareRunMeta baseline,
+                                              CompareRunMeta candidate) {
+        Integer baselineRounds = planRounds(baseline.launchPlanJson());
+        Integer candidateRounds = planRounds(candidate.launchPlanJson());
+        if (baselineRounds == null || candidateRounds == null) {
+            return null;
+        }
+        // 可比性已过 = 双侧 datasetVersion 全等，任取一侧
+        List<String> keys = reader.listPlanCaseKeys(baseline.datasetVersion());
+        if (keys.isEmpty()) {
+            return null;
+        }
+        return new EvalCompare.FrozenPlan(Set.copyOf(keys), baselineRounds, candidateRounds);
+    }
+
+    /** launch_plan 快照 → roundsPerScenario（空值 = worker 默认 2，EvalLaunchPlan 契约
+     *  同律）；无快照/解析失败 → null（历史面不猜轮次） */
+    private Integer planRounds(String launchPlanJson) {
+        if (launchPlanJson == null) {
+            return null;
+        }
+        try {
+            JsonNode rounds = mapper.readTree(launchPlanJson).path("roundsPerScenario");
+            return rounds.isInt() && rounds.asInt() > 0
+                    ? rounds.asInt() : DEFAULT_ROUNDS_PER_SCENARIO;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 逐案例 selection_policy_version 去重升序集（评分器语义锚维度） */
@@ -477,10 +598,12 @@ public class EvalCompareService {
         }
     }
 
-    /** GET 面的同对最新落档引用（无落档如实 null） */
+    /** GET 面的同对最新落档引用（无落档如实 null；v1 历史行 ruleVersion 原样携带，
+     *  前端据此标"历史规则"，不改写旧审计） */
     public GateRecordRef latestGateRecord(UUID baselineRunId, UUID candidateRunId) {
         return comparisons.findLatestByPair(baselineRunId, candidateRunId)
-                .map(r -> new GateRecordRef(r.id(), r.gateOutcome(), r.createdAt()))
+                .map(r -> new GateRecordRef(r.id(), r.gateOutcome(), r.gateRuleVersion(),
+                        r.createdAt()))
                 .orElse(null);
     }
 }

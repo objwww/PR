@@ -188,11 +188,13 @@ public interface EvalQueryReader {
      * alert_rule_digest/同义词典/场景驱动）+ 信息面维度（model/prompt_version——
      * 模型差异正是对比动机，不参与严格判定）。无 grader 版本列（偏差如实：
      * 评分器语义锚 = 逐案例 selection_policy_version，见 CompareCaseRow）。
+     * FUP-02：state 直读运行终态性判定输入；launchPlanJson = V81 launch_plan 快照
+     * 原文（冻结计划分母来源；旧 CLI 跑批行如实 NULL → 计划源降级 UNAVAILABLE）。
      */
     record CompareRunMeta(UUID runId, String datasetVersion, String registryDigest,
                           String alertRuleDigest, Integer lexiconVersion,
                           String scenarioDriverVersion, String model, String promptVersion,
-                          String configDigest, String state) {
+                          String configDigest, String state, String launchPlanJson) {
     }
 
     /**
@@ -218,6 +220,14 @@ public interface EvalQueryReader {
      * 调用方传上限+1 判 truncated，超出行不得进入统计）。run 无案例 → 空表。
      */
     List<CompareCaseRow> listCasesForCompare(UUID runId, int limit);
+
+    /**
+     * FUP-02 冻结计划案例键集（就绪度分母面）：数据集版本下 control_app 可见的
+     * case_version.case_key 去重升序集——与 listCasesForCompare 身份解析同一精确键
+     * 口径（dv.version 字符串匹配 + HOLDOUT RLS 不可见行天然缺席 = 与执行面同视界，
+     * 不冒充全量计划）。版本无可见案例 → 空表（调用方按"计划不可解析"降级）。
+     */
+    List<String> listPlanCaseKeys(String datasetVersion);
 
     // ------------------------------------------------------------------ R6/EV-06 usage 投影
 

@@ -44,8 +44,28 @@ class EvalCompareServiceTest {
     private static final UUID CANDIDATE = UUID.randomUUID();
 
     private static CompareRunMeta meta(UUID runId) {
+        return meta(runId, "SUCCEEDED", 2);
+    }
+
+    private static CompareRunMeta meta(UUID runId, String state) {
+        return meta(runId, state, 2);
+    }
+
+    private static CompareRunMeta meta(UUID runId, String state, Integer rounds) {
         return new CompareRunMeta(runId, "ds-v1", "r".repeat(64), "a".repeat(64), 3,
-                "driver-v1", "gpt-5", "p1", "c".repeat(64), "SUCCEEDED");
+                "driver-v1", "gpt-5", "p1", "c".repeat(64), state,
+                launchPlanJson(rounds));
+    }
+
+    /** launch_plan 快照原文（EvalCommandService 契约字段名；rounds 空 = worker 默认 2） */
+    private static String launchPlanJson(Integer rounds) {
+        return "{\"displayName\":\"t\",\"mode\":\"E\",\"datasetVersion\":\"ds-v1\","
+                + "\"roundsPerScenario\":" + (rounds == null ? "null" : rounds) + "}";
+    }
+
+    /** FUP-02 冻结计划分母：数据集 ds-v1 的案例键集登记 */
+    private void setupPlan(String... caseKeys) {
+        reader.planKeysByDataset.put("ds-v1", List.of(caseKeys));
     }
 
     private static CompareCaseRow caseRow(String scenarioId, int roundNo, String verdict,
@@ -67,11 +87,13 @@ class EvalCompareServiceTest {
         reader.metaById.put(CANDIDATE, meta(CANDIDATE));
     }
 
-    /** 5 簇 × 2 对全命中（持平）→ 统计 CONCLUSIVE、退化率 0 → 门 PASS */
+    /** 5 簇 × 2 对全命中（持平）→ 统计 CONCLUSIVE、退化率 0 → 门 PASS（计划键同步登记） */
     private void setupFiveFlatClusters() {
         List<CompareCaseRow> b = new ArrayList<>();
         List<CompareCaseRow> c = new ArrayList<>();
+        List<String> planKeys = new ArrayList<>();
         for (int f = 0; f < 5; f++) {
+            planKeys.add("fam" + f + "-s");
             for (int r = 1; r <= 2; r++) {
                 b.add(caseRow("fam" + f + "-s", r, "DECIDABLE", true, "fam" + f));
                 c.add(caseRow("fam" + f + "-s", r, "DECIDABLE", true, "fam" + f));
@@ -79,6 +101,7 @@ class EvalCompareServiceTest {
         }
         reader.casesByRun.put(BASELINE, b);
         reader.casesByRun.put(CANDIDATE, c);
+        reader.planKeysByDataset.put("ds-v1", List.copyOf(planKeys));
     }
 
     // ------------------------------------------------------------------ 400/404 面
@@ -103,7 +126,8 @@ class EvalCompareServiceTest {
     void incomparableRunsYieldNoPairingConclusion() {
         setupComparableRuns();
         reader.metaById.put(CANDIDATE, new CompareRunMeta(CANDIDATE, "ds-v2", "r".repeat(64),
-                "a".repeat(64), 3, "driver-v1", "gpt-5", "p1", "c".repeat(64), "SUCCEEDED"));
+                "a".repeat(64), 3, "driver-v1", "gpt-5", "p1", "c".repeat(64), "SUCCEEDED",
+                launchPlanJson(2)));
         setupFiveFlatClusters();
 
         EvalCompareService.EvalCompareResponse out =
@@ -157,8 +181,13 @@ class EvalCompareServiceTest {
         assertThat(summary.stats().algorithmVersion())
                 .isEqualTo(PairedTrialStatsAdapter.ALGORITHM_VERSION);
         // 门：退化率 1/12 ≈ 0.083 ≤ 0.10 → 看 CI（确定性种子下结果稳定，见断言）
-        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v1");
+        // FUP-02：r3 三行不在冻结计划（轮次 1..2）内 = unexpected，不阻断最终门
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
         assertThat(out.gate().outcome()).isIn("PASS", "FAIL");
+        assertThat(out.readiness().planSetSource()).isEqualTo("LAUNCH_PLAN");
+        assertThat(out.readiness().expectedCount()).isEqualTo(10);
+        assertThat(out.readiness().unexpectedCount()).isEqualTo(3);
+        assertThat(out.readiness().verifiedCount()).isEqualTo(12);
         // 逐例列表与 unpaired
         assertThat(out.cases()).hasSize(12);
         assertThat(out.unpaired()).hasSize(1);
@@ -173,6 +202,7 @@ class EvalCompareServiceTest {
     @Test
     void zeroPairedCasesYieldNotApplicableRatiosAndInconclusiveGate() {
         setupComparableRuns();
+        setupPlan("s1", "s2");
         reader.casesByRun.put(BASELINE, List.of(caseRow("s1", 1, "DECIDABLE", true, "fam-a")));
         reader.casesByRun.put(CANDIDATE, List.of(caseRow("s2", 1, "DECIDABLE", true, "fam-a")));
 
@@ -185,8 +215,12 @@ class EvalCompareServiceTest {
         assertThat(out.summary().regressed().status()).isEqualTo("NOT_APPLICABLE");
         assertThat(out.summary().flat().status()).isEqualTo("NOT_APPLICABLE");
         assertThat(out.summary().stats()).isNull();
+        // FUP-02 v2：计划内键全部未配对 → 先报 PLAN_CASES_MISSING（NO_PAIRED_CASES
+        // 仍在分支序中兜底，但计划缺失原因更可解释）
         assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
-        assertThat(out.gate().reasons()).containsExactly("NO_PAIRED_CASES");
+        assertThat(out.gate().reasons()).containsExactly("PLAN_CASES_MISSING");
+        assertThat(out.readiness().expectedCount()).isEqualTo(4);
+        assertThat(out.readiness().missingCount()).isEqualTo(4);
         assertThat(out.unpaired()).hasSize(2);
     }
 
@@ -298,13 +332,18 @@ class EvalCompareServiceTest {
         assertThat(record.flatCount()).isEqualTo(10);
         assertThat(record.gateOutcome()).isEqualTo("PASS");
         assertThat(record.gateReasons()).isEmpty();
-        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v1");
+        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
         assertThat(record.actor()).isEqualTo("op-1");
         assertThat(record.dimensionDiffsJson()).contains("datasetVersion");
         assertThat(record.statsSnapshotJson()).contains("cluster-bootstrap-v1");
-        // 响应携带本行落档引用
+        // FUP-02：v2 落档携带就绪度快照（规则版本/阈值/计划分母核算）
+        assertThat(record.readinessSnapshotJson()).contains("eval-compare-gate-v2")
+                .contains("LAUNCH_PLAN").contains("\"expectedCount\":10")
+                .contains("\"verifiedCount\":10");
+        // 响应携带本行落档引用（含规则版本）
         assertThat(out.gateRecord().recordId()).isEqualTo(record.id());
         assertThat(out.gateRecord().outcome()).isEqualTo("PASS");
+        assertThat(out.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v2");
 
         // 重落档 = 换新 id 一行（insert-only 不覆盖）；GET 面引用最新落档
         service.record(BASELINE, CANDIDATE, "op-1");
@@ -324,11 +363,286 @@ class EvalCompareServiceTest {
         assertThat(comparisons.inserted).isEmpty();
     }
 
+    // ------------------------------------------------------------------ FUP-02 质量门 v2（FCT-09 ~ FCT-17）
+
+    /** FCT-09：候选 RUNNING → GET 可展示暂态差异，最终门不 PASS；POST 落档同口径 */
+    @Test
+    void fct09CandidateRunningShowsTransientDiffsButFinalGateNotPass() {
+        setupComparableRuns();
+        reader.metaById.put(CANDIDATE, meta(CANDIDATE, "RUNNING"));
+        setupFiveFlatClusters();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        // 暂态分析面照常：配对/逐例差异可展示
+        assertThat(out.summary().pairedCount()).isEqualTo(10);
+        assertThat(out.cases()).hasSize(10);
+        // 最终门：只能 INCONCLUSIVE + RUN_NOT_FINAL
+        assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(out.gate().reasons()).containsExactly("RUN_NOT_FINAL");
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(out.readiness().candidateState()).isEqualTo("RUNNING");
+        assertThat(out.readiness().expectedCount()).isEqualTo(10);
+
+        // 落档 = 同一计算的非最终结论快照（允许保存诊断快照，但不是 PASS）
+        EvalCompareService.EvalCompareResponse rec =
+                service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
+        EvalComparisonRecord record = comparisons.inserted.get(0);
+        assertThat(record.gateOutcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(record.gateReasons()).containsExactly("RUN_NOT_FINAL");
+        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(record.readinessSnapshotJson()).contains("RUNNING")
+                .contains("eval-compare-gate-v2");
+        assertThat(rec.gate().outcome()).isEqualTo("INCONCLUSIVE");
+    }
+
+    /** FCT-10：FAILED/CANCELLED 不完整终态——局部命中率再好也不能成为最终 PASS */
+    @Test
+    void fct10FailedOrCancelledRunsCannotPassOnPartialHits() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        for (String state : List.of("FAILED", "CANCELLED")) {
+            reader.metaById.put(CANDIDATE, meta(CANDIDATE, state));
+            EvalCompareService.EvalCompareResponse out =
+                    service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+            assertThat(out.gate().outcome()).as(state).isEqualTo("INCONCLUSIVE");
+            assertThat(out.gate().reasons()).as(state).containsExactly("RUN_INCOMPLETE");
+            service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
+        }
+        assertThat(comparisons.inserted).hasSize(2);
+        assertThat(comparisons.inserted).allSatisfy(r -> {
+            assertThat(r.gateOutcome()).isEqualTo("INCONCLUSIVE");
+            assertThat(r.gateReasons()).containsExactly("RUN_INCOMPLETE");
+        });
+    }
+
+    /** FCT-11：基线 50 例候选 5 例（缺 45），5 簇全命中 → INCONCLUSIVE + 分母可解释 */
+    @Test
+    void fct11CandidateMissing45PlanCasesIsInconclusiveWithExplainableDenominator() {
+        setupComparableRuns();
+        List<CompareCaseRow> b = new ArrayList<>();
+        List<CompareCaseRow> c = new ArrayList<>();
+        List<String> planKeys = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            planKeys.add("sc" + i);
+            for (int r = 1; r <= 2; r++) {
+                b.add(caseRow("sc" + i, r, "DECIDABLE", true, "fam" + i % 5));
+            }
+        }
+        // 候选只完成 5 例（5 个独立簇各 1 对且全部持平 = 局部命中率满分，v1 下曾 PASS）
+        for (int i = 0; i < 5; i++) {
+            c.add(caseRow("sc" + i, 1, "DECIDABLE", true, "fam" + i % 5));
+        }
+        reader.casesByRun.put(BASELINE, b);
+        reader.casesByRun.put(CANDIDATE, c);
+        reader.planKeysByDataset.put("ds-v1", List.copyOf(planKeys));
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(out.summary().pairedCount()).isEqualTo(5);
+        assertThat(out.summary().clusters()).hasSize(5);
+        assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(out.gate().reasons()).containsExactly("PLAN_CASES_MISSING");
+        // 分母可解释：计划 50 / 双侧完成 5 / 缺失 45（全为候选侧缺席）
+        assertThat(out.readiness().expectedCount()).isEqualTo(50);
+        assertThat(out.readiness().completedCount()).isEqualTo(5);
+        assertThat(out.readiness().missingCount()).isEqualTo(45);
+        assertThat(out.readiness().coverageRatio()).isEqualTo(0.1);
+        assertThat(out.readiness().missingCases()).hasSize(45);
+        assertThat(out.readiness().missingCases())
+                .allSatisfy(m -> assertThat(m.reason()).isEqualTo("MISSING_IN_CANDIDATE"));
+        assertThat(out.readiness().missingTruncated()).isFalse();
+
+        service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
+        assertThat(comparisons.inserted.get(0).gateOutcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(comparisons.inserted.get(0).gateReasons())
+                .containsExactly("PLAN_CASES_MISSING");
+    }
+
+    /** FCT-12：两侧一起漏同一计划案例——按计划分母查出（并集检测不到），门不 PASS */
+    @Test
+    void fct12BothSidesMissingSamePlannedCaseIsCaughtByPlanDenominator() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        // 冻结计划含 fam9-s（双侧都未执行）：双侧键并集里根本没有它
+        setupPlan("fam0-s", "fam1-s", "fam2-s", "fam3-s", "fam4-s", "fam9-s");
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(out.summary().pairedCount()).isEqualTo(10);
+        assertThat(out.summary().unpairedCount()).isZero();
+        assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(out.gate().reasons()).containsExactly("PLAN_CASES_MISSING");
+        assertThat(out.readiness().expectedCount()).isEqualTo(12);
+        assertThat(out.readiness().missingCount()).isEqualTo(2);
+        assertThat(out.readiness().missingCases()).containsExactly(
+                new EvalCompareService.MissingCaseItem("fam9-s", 1, "MISSING_IN_BOTH"),
+                new EvalCompareService.MissingCaseItem("fam9-s", 2, "MISSING_IN_BOTH"));
+    }
+
+    /** FCT-13：5 对 digest 未知 → UNVERIFIED 可展示差异，但最终门不 PASS */
+    @Test
+    void fct13UnverifiedDigestsDisplayDiffsButDoNotPass() {
+        setupComparableRuns();
+        // 单轮计划（rounds=1）：排除轮次缺失干扰，只考身份核验分支
+        reader.metaById.put(BASELINE, meta(BASELINE, "SUCCEEDED", 1));
+        reader.metaById.put(CANDIDATE, meta(CANDIDATE, "SUCCEEDED", 1));
+        List<CompareCaseRow> b = new ArrayList<>();
+        List<CompareCaseRow> c = new ArrayList<>();
+        List<String> planKeys = new ArrayList<>();
+        for (int f = 0; f < 5; f++) {
+            planKeys.add("u" + f);
+            // digest 双侧皆 null（身份不可解析）→ 配对成立但 inputDigestMatch=UNVERIFIED
+            b.add(new CompareCaseRow(UUID.randomUUID(), "u" + f, 1, "DECIDABLE", true,
+                    "{\"fault_type\":\"oom\"}", "policy-v1", null, "fam" + f, null, null));
+            c.add(new CompareCaseRow(UUID.randomUUID(), "u" + f, 1, "DECIDABLE", true,
+                    "{\"fault_type\":\"oom\"}", "policy-v1", null, "fam" + f, null, null));
+        }
+        reader.casesByRun.put(BASELINE, b);
+        reader.casesByRun.put(CANDIDATE, c);
+        reader.planKeysByDataset.put("ds-v1", List.copyOf(planKeys));
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        // 可展示差异：配对与逐例行照常
+        assertThat(out.summary().pairedCount()).isEqualTo(5);
+        assertThat(out.cases()).hasSize(5);
+        assertThat(out.cases()).allSatisfy(
+                i -> assertThat(i.inputDigestMatch()).isEqualTo("UNVERIFIED"));
+        // 最终门不 PASS：身份未核验
+        assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(out.gate().reasons()).containsExactly("IDENTITY_UNVERIFIED");
+        assertThat(out.readiness().verifiedCount()).isZero();
+        assertThat(out.readiness().unverifiedCount()).isEqualTo(5);
+    }
+
+    /** FCT-14：已知 digest 冲突 → 保留原不配对保护（EU25），且最终门不 PASS */
+    @Test
+    void fct14DigestConflictStaysUnpairedAndBlocksFinalPass() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        for (int r = 1; r <= 2; r++) {
+            reader.casesByRun.get(BASELINE).add(new CompareCaseRow(UUID.randomUUID(),
+                    "conf-s", r, "DECIDABLE", true, "{\"fault_type\":\"oom\"}",
+                    "policy-v1", "d-old", "fam0", null, null));
+            reader.casesByRun.get(CANDIDATE).add(new CompareCaseRow(UUID.randomUUID(),
+                    "conf-s", r, "DECIDABLE", true, "{\"fault_type\":\"oom\"}",
+                    "policy-v1", "d-new", "fam0", null, null));
+        }
+        setupPlan("fam0-s", "fam1-s", "fam2-s", "fam3-s", "fam4-s", "conf-s");
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        // 原保护回归：冲突对不进配对/统计，双侧各记一条 INPUT_DIGEST_MISMATCH
+        assertThat(out.summary().pairedCount()).isEqualTo(10);
+        assertThat(out.unpaired()).hasSize(4);
+        assertThat(out.unpaired()).allSatisfy(
+                u -> assertThat(u.reason()).isEqualTo("INPUT_DIGEST_MISMATCH"));
+        // v2 增强：计划键未全部有效配对 → 最终门不 PASS
+        assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(out.gate().reasons()).containsExactly("PLAN_CASES_MISSING");
+        assertThat(out.readiness().missingCases()).containsExactly(
+                new EvalCompareService.MissingCaseItem("conf-s", 1, "INPUT_DIGEST_MISMATCH"),
+                new EvalCompareService.MissingCaseItem("conf-s", 2, "INPUT_DIGEST_MISMATCH"));
+    }
+
+    /** FCT-15：完整计划 + 身份全 MATCH + 簇数充足 → 合法 PASS；旧 bootstrap 统计回归 */
+    @Test
+    void fct15CompletePlanVerifiedIdentityAndEnoughClustersPass() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(out.gate().outcome()).isEqualTo("PASS");
+        assertThat(out.gate().reasons()).isEmpty();
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        // 旧 bootstrap 统计回归：簇数/算法版本/溯源块不变
+        assertThat(out.summary().stats().clusterCount()).isEqualTo(5);
+        assertThat(out.summary().stats().algorithmVersion())
+                .isEqualTo(PairedTrialStatsAdapter.ALGORITHM_VERSION);
+        assertThat(out.summary().stats().verdict()).isEqualTo("CONCLUSIVE");
+        assertThat(out.readiness().verifiedCount()).isEqualTo(10);
+        assertThat(out.readiness().missingCount()).isZero();
+        assertThat(out.readiness().coverageRatio()).isEqualTo(1.0);
+    }
+
+    /** FCT-16：簇不足 / 扫描超 10000 → INCONCLUSIVE 不被新就绪度逻辑放宽 */
+    @Test
+    void fct16InsufficientClustersAndScanTruncationStayInconclusive() {
+        // 簇不足（4 簇 < MIN_CLUSTERS=5）：就绪度全绿也不出最终结论
+        setupComparableRuns();
+        List<CompareCaseRow> b = new ArrayList<>();
+        List<CompareCaseRow> c = new ArrayList<>();
+        List<String> planKeys = new ArrayList<>();
+        for (int f = 0; f < 4; f++) {
+            planKeys.add("fam" + f + "-s");
+            for (int r = 1; r <= 2; r++) {
+                b.add(caseRow("fam" + f + "-s", r, "DECIDABLE", true, "fam" + f));
+                c.add(caseRow("fam" + f + "-s", r, "DECIDABLE", true, "fam" + f));
+            }
+        }
+        reader.casesByRun.put(BASELINE, b);
+        reader.casesByRun.put(CANDIDATE, c);
+        reader.planKeysByDataset.put("ds-v1", List.copyOf(planKeys));
+        EvalCompareService.EvalCompareResponse few =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(few.readiness().missingCount()).isZero();
+        assertThat(few.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(few.gate().reasons()).containsExactly("INSUFFICIENT_CLUSTERS");
+
+        // 单侧扫描 > 10000 → DATA_TRUNCATED（先于计划核算分支，不被吞没）
+        List<CompareCaseRow> big = new ArrayList<>();
+        for (int i = 0; i < 10_001; i++) {
+            big.add(caseRow("bulk-s" + i, 1, "DECIDABLE", true, "fam" + i % 7));
+        }
+        reader.casesByRun.put(BASELINE, big);
+        EvalCompareService.EvalCompareResponse truncated =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(truncated.scanTruncated()).isTrue();
+        assertThat(truncated.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(truncated.gate().reasons()).containsExactly("DATA_TRUNCATED");
+    }
+
+    /** FCT-17：v1 历史快照不被 v2 覆盖——结论与规则版本原样保留，重新落档换新 id */
+    @Test
+    void fct17V1HistorySnapshotIsNotOverwrittenByV2() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        // 预置 v1 历史落档（无 readiness 快照，结论 PASS 原样保留 = 历史审计不改写）
+        EvalComparisonRecord v1 = new EvalComparisonRecord(UUID.randomUUID(), BASELINE,
+                CANDIDATE, true, "[]", 10, 0, 0, 0, 10, null, null, "PASS", List.of(),
+                EvalCompare.GATE_RULE_VERSION_V1, "op-0", Instant.now().minusSeconds(3600));
+        comparisons.inserted.add(v1);
+
+        // GET：落档引用原样携带 v1 结论与规则版本（前端据此标"历史规则"）
+        EvalCompareService.EvalCompareResponse live =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(live.gateRecord().outcome()).isEqualTo("PASS");
+        assertThat(live.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v1");
+        // 实时计算面已是 v2 规则
+        assertThat(live.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+
+        // 重新落档 = 新 id 的 v2 行；v1 行原样保留（insert-only 不覆盖）
+        service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
+        assertThat(comparisons.inserted).hasSize(2);
+        EvalComparisonRecord v2 = comparisons.inserted.get(1);
+        assertThat(v2.id()).isNotEqualTo(v1.id());
+        assertThat(v2.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(v2.readinessSnapshotJson()).isNotNull();
+        EvalComparisonRecord history = comparisons.inserted.get(0);
+        assertThat(history.gateRuleVersion()).isEqualTo("eval-compare-gate-v1");
+        assertThat(history.gateOutcome()).isEqualTo("PASS");
+        assertThat(history.readinessSnapshotJson()).isNull();
+    }
+
     // ------------------------------------------------------------------ 假端口
 
     private static final class FakeReader implements EvalQueryReader {
         final Map<UUID, CompareRunMeta> metaById = new LinkedHashMap<>();
         final Map<UUID, List<CompareCaseRow>> casesByRun = new LinkedHashMap<>();
+        /** FUP-02 冻结计划键集注入面（按数据集版本；缺省空 = 计划不可解析降级） */
+        final Map<String, List<String>> planKeysByDataset = new LinkedHashMap<>();
 
         @Override
         public EvalRunPage listRuns(String state, KeysetCursor cursor, int limit) {
@@ -390,6 +704,11 @@ class EvalCompareServiceTest {
         @Override
         public List<CompareCaseRow> listCasesForCompare(UUID runId, int limit) {
             return casesByRun.getOrDefault(runId, List.of());
+        }
+
+        @Override
+        public List<String> listPlanCaseKeys(String datasetVersion) {
+            return planKeysByDataset.getOrDefault(datasetVersion, List.of());
         }
 
         @Override

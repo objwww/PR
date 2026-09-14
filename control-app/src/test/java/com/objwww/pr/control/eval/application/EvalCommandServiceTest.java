@@ -171,6 +171,11 @@ class EvalCommandServiceTest {
         }
 
         @Override
+        public List<String> listPlanCaseKeys(String datasetVersion) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public EvalPhaseEventPage listPhaseEvents(UUID runId, KeysetCursor cursor,
                                                   int limit) {
             throw new UnsupportedOperationException();

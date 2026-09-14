@@ -23,7 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 不假装注入成功）；停止面（注入前取消 CANCELLED；DR-A02 起 INJECTING 相位停止
  * 必先进 RECOVERING 恢复路径再 RECOVERY_FAILED 保留占位）；
  * 注入 UNKNOWN 必先进恢复路径（RECOVERY_FAILED 保留占位）；崩溃孤儿两分支
- * （未触及注入重排队身份稳定 / 已触及 RECOVERY_FAILED worker_lost）。
+ * （未触及注入重排队身份稳定 / 已触及 RECOVERY_FAILED worker_lost）；
+ * FUP-01 领取复验（FCT-02/03/04：launch=false 时 QUEUED/PRECHECK 落
+ * FAILED/LAUNCH_DISABLED 零注入，INJECTING 孤儿保留恢复责任不释放占位）。
  */
 class DrillWorkerTest {
 
@@ -271,8 +273,13 @@ class DrillWorkerTest {
     }
 
     private DrillWorker worker(DrillInjectionPort port, boolean ready) {
+        return worker(port, ready, true);
+    }
+
+    private DrillWorker worker(DrillInjectionPort port, boolean ready,
+                               boolean launchEnabled) {
         return new DrillWorker(jobs, events, catalog(ready), port, clock, ENVS,
-                "drill-worker-1", 5, 900);
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(launchEnabled, ENVS));
     }
 
     private DrillJob enqueue(boolean stopRequested) {
@@ -449,5 +456,89 @@ class DrillWorkerTest {
         DrillJob after = jobs.findById(orphanId).orElseThrow();
         assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
         assertThat(after.terminalReason()).contains("worker_lost");
+    }
+
+    // ------------------------------------------------------------------ FUP-01 领取复验
+
+    @Test
+    @DisplayName("FCT-02：预存 QUEUED + 关闭能力 → tick 注入端口 0 调用，作业落 "
+            + "FAILED/LAUNCH_DISABLED + 拒绝事件（含政策指纹），不永远重排队")
+    void queuedJobRejectedWhenLaunchDisabled() {
+        DrillJob job = enqueue(false);
+        java.util.concurrent.atomic.AtomicInteger portCalls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        DrillInjectionPort counting = j -> {
+            portCalls.incrementAndGet();
+            return DrillInjectionPort.Outcome.performed("{\"sessionId\":\"x\"}");
+        };
+        DrillWorker closed = worker(counting, true, false);
+        boolean worked = closed.tick();
+        assertThat(worked).isTrue(); // 本拍有活干（拒绝处置）
+        DrillJob after = jobs.findById(job.id()).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.FAILED);
+        assertThat(after.terminalReason()).contains("LAUNCH_DISABLED");
+        assertThat(after.state().holdsEnvPlaceholder()).isFalse(); // 零副作用释放占位
+        assertThat(portCalls.get()).isZero(); // 注入端口零调用
+        List<String> transitions = events.stored.stream()
+                .filter(e -> e.eventType() == DrillEvent.EventType.PHASE_TRANSITION)
+                .map(e -> e.fromState() + "→" + e.toState()).toList();
+        assertThat(transitions).containsExactly("QUEUED→PRECHECK", "PRECHECK→FAILED");
+        // 拒绝事件：LAUNCH_DISABLED + 政策版本/指纹（API 与 worker 同源核对锚）
+        assertThat(events.stored).anySatisfy(e -> {
+            assertThat(e.eventType()).isEqualTo(DrillEvent.EventType.WORKER_NOTE);
+            assertThat(e.payloadJson()).contains("LAUNCH_DISABLED")
+                    .contains(DrillExecutionPolicy.POLICY_VERSION)
+                    .contains("policyFingerprint");
+        });
+        // 不永远重排队：作业已终态，下一拍无人可领
+        assertThat(closed.tick()).isFalse();
+    }
+
+    @Test
+    @DisplayName("FCT-03：PRECHECK 孤儿重排队后仍不绕过政策——再领取落 "
+            + "FAILED/LAUNCH_DISABLED，注入端口 0 调用")
+    void orphanPrecheckRequeueStillBlockedByPolicy() {
+        makeOrphan(DrillJob.State.PRECHECK);
+        UUID orphanId = jobs.byId.keySet().iterator().next();
+        java.util.concurrent.atomic.AtomicInteger portCalls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        DrillInjectionPort counting = j -> {
+            portCalls.incrementAndGet();
+            return DrillInjectionPort.Outcome.performed("{\"sessionId\":\"x\"}");
+        };
+        DrillWorker closed = worker(counting, true, false);
+        // 孤儿清扫按既有状态机重排队（未触及注入，零副作用）
+        assertThat(closed.sweepOrphanedClaims()).isEqualTo(1);
+        assertThat(jobs.findById(orphanId).orElseThrow().state())
+                .isEqualTo(DrillJob.State.QUEUED);
+        // 重排队不绕过政策：再领取即复验拒绝
+        closed.tick();
+        DrillJob after = jobs.findById(orphanId).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.FAILED);
+        assertThat(after.terminalReason()).contains("LAUNCH_DISABLED");
+        assertThat(portCalls.get()).isZero();
+        assertThat(closed.tick()).isFalse(); // 不永远重排队
+    }
+
+    @Test
+    @DisplayName("FCT-04：关闭能力下 INJECTING 孤儿不伪判无副作用——仍落 "
+            + "RECOVERY_FAILED 保留占位（恢复责任不释放），注入端口 0 调用")
+    void orphanInjectingKeepsRecoveryObligationWhenLaunchDisabled() {
+        makeOrphan(DrillJob.State.INJECTING);
+        UUID orphanId = jobs.byId.keySet().iterator().next();
+        java.util.concurrent.atomic.AtomicInteger portCalls =
+                new java.util.concurrent.atomic.AtomicInteger();
+        DrillInjectionPort counting = j -> {
+            portCalls.incrementAndGet();
+            return DrillInjectionPort.Outcome.performed("{\"sessionId\":\"x\"}");
+        };
+        int handled = worker(counting, true, false).sweepOrphanedClaims();
+        assertThat(handled).isEqualTo(1);
+        DrillJob after = jobs.findById(orphanId).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
+        assertThat(after.terminalReason()).contains("worker_lost");
+        assertThat(after.terminalReason()).doesNotContain("LAUNCH_DISABLED");
+        assertThat(after.state().holdsEnvPlaceholder()).isTrue(); // 占位不释放
+        assertThat(portCalls.get()).isZero();
     }
 }

@@ -44,6 +44,11 @@ import java.util.UUID;
  *       related_incident_id（currentRcaRunId 存在才带 related_run_id）并落
  *       WORKER_NOTE；匹配不到/窗口已过保持 null（前端「尚未关联」），不按时间
  *       近似瞎关联；重复回填由「related_incident_id IS NULL」CAS 幂等；</li>
+ *   <li><b>FUP-01 领取复验</b>：claim 之后、进入 INJECTING 之前复验同源
+ *       {@link DrillExecutionPolicy}——launch=false 时对确定未触及外部效果的
+ *       领取件落 FAILED + LAUNCH_DISABLED（含拒绝事件与政策指纹，不永远重排队）；
+ *       INJECTING/UNKNOWN 类相位不当无副作用失败释放（孤儿清扫保留恢复责任）。
+ *       政策启动时加载，翻转需重启生效，不宣称即时急停；</li>
  *   <li><b>本批诚实边界</b>：注入接线已交付（DR-A 批：CompositeDrillInjection
  *       复合端口 + DR-05 台账/sweeper + DR-06 关联回填）；NOT_PERFORMED（闸门
  *       拒注/确定零副作用）仍允许 INJECTING→FAILED 如实卡因；OBSERVING 之后的
@@ -76,22 +81,26 @@ public class DrillWorker {
     private final long staleClaimSeconds;
     private final DrillCorrelationPort correlation;
     private final FlagdRestoreSweeper flagdSweeper;
+    private final DrillExecutionPolicy policy;
 
     /** 旧装配面（DR-05/DR-06 接线前）：关联回填 disabled（恒不关联，不假装），
      *  台账级清扫缺席；作业级截止对账（仅走 catalog+params，无新依赖）仍生效 */
     public DrillWorker(DrillJobRepository jobs, DrillEventRepository events,
                        DrillTemplateCatalog catalog, DrillInjectionPort injection,
                        DrillClock clock, List<String> allowedEnvs, String workerId,
-                       long pollSeconds, long staleClaimSeconds) {
+                       long pollSeconds, long staleClaimSeconds,
+                       DrillExecutionPolicy policy) {
         this(jobs, events, catalog, injection, clock, allowedEnvs, workerId,
-                pollSeconds, staleClaimSeconds, DrillCorrelationPort.disabled(), null);
+                pollSeconds, staleClaimSeconds, DrillCorrelationPort.disabled(), null,
+                policy);
     }
 
     public DrillWorker(DrillJobRepository jobs, DrillEventRepository events,
                        DrillTemplateCatalog catalog, DrillInjectionPort injection,
                        DrillClock clock, List<String> allowedEnvs, String workerId,
                        long pollSeconds, long staleClaimSeconds,
-                       DrillCorrelationPort correlation, FlagdRestoreSweeper flagdSweeper) {
+                       DrillCorrelationPort correlation, FlagdRestoreSweeper flagdSweeper,
+                       DrillExecutionPolicy policy) {
         this.jobs = Objects.requireNonNull(jobs);
         this.events = Objects.requireNonNull(events);
         this.catalog = Objects.requireNonNull(catalog);
@@ -103,6 +112,7 @@ public class DrillWorker {
         this.staleClaimSeconds = staleClaimSeconds;
         this.correlation = Objects.requireNonNull(correlation);
         this.flagdSweeper = flagdSweeper; // 可空：台账未接线的装配面
+        this.policy = Objects.requireNonNull(policy);
     }
 
     /** 常驻循环：启动先扫孤儿与超期 flagd 作业，之后 领取→驱动→睡 pollSeconds（中断即退） */
@@ -161,11 +171,31 @@ public class DrillWorker {
         }
         DrillJob current = job;
 
+        // FUP-01：领取后、进入 INJECTING 前复验同源执行政策——能力关闭时，claim 刚把
+        // 作业从 QUEUED 领到 PRECHECK（确定未触及外部效果），按状态机落 FAILED +
+        // LAUNCH_DISABLED 并记拒绝事件（不许永远重排队）；INJECTING/UNKNOWN 类相位
+        // 不属本路径——孤儿清扫对它们保留恢复责任（RECOVERY_FAILED 占位），不伪判
+        // 无副作用释放占用
+        if (!policy.launchEnabled()) {
+            events.insert(DrillEvent.of(current.id(), DrillEvent.EventType.WORKER_NOTE,
+                    workerId,
+                    "{\"rejected\":\"" + DrillExecutionPolicy.REASON_CODE
+                            + "\",\"policyVersion\":\"" + policy.policyVersion()
+                            + "\",\"policyFingerprint\":\"" + policy.policyFingerprint()
+                            + "\"}", clock.now()));
+            finalize(current, DrillJob.State.PRECHECK, DrillJob.State.FAILED,
+                    policy.disabledReason(), null);
+            log.warn("drill {} 领取复验拒绝：{}（确定未触及外部效果，零副作用 FAILED）",
+                    current.id(), DrillExecutionPolicy.REASON_CODE);
+            return;
+        }
+
         // 服务端预检重执行（§7.2 旧预览不保证现在仍可启动；结果落 PRECHECK_RESULT 事件）
         DrillTemplate template = catalog.byScenarioId(current.scenarioId()).orElse(null);
         DrillPrecheck.Result precheck = DrillPrecheck.run(template, current.targetEnv(),
                 allowedEnvs,
-                jobs.findActiveOccupant(current.targetEnv(), current.id()).orElse(null));
+                jobs.findActiveOccupant(current.targetEnv(), current.id()).orElse(null),
+                policy.launchEnabled());
         events.insert(DrillEvent.of(current.id(), DrillEvent.EventType.PRECHECK_RESULT,
                 workerId, precheckJson(precheck), clock.now()));
         if (current.stopRequestedAt() != null) {

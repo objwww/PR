@@ -156,9 +156,11 @@ public class DrillController {
                 yield ResponseEntity.status(409).body(out);
             }
             case LAUNCH_DISABLED -> {
-                // SAFE-04：启动能力位关闭——零作业行落库，只读面不受影响
+                // SAFE-04/FUP-04：启动能力位关闭——零作业行落库，只读面不受影响；
+                // code 机器码供前端文案映射（与预检 LAUNCH_ENABLED FAIL 同码同源）
                 out.put("error", "演练启动面当前已关闭：停止/恢复推进链未交付（SAFE-04），"
                         + "交付后经 app.drill.launch-enabled 显式重开");
+                out.put("code", "LAUNCH_DISABLED");
                 yield ResponseEntity.status(409).body(out);
             }
         };

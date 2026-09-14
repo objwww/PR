@@ -265,10 +265,21 @@ const previewDisabledReason = computed(() => {
 const canLaunchNow = computed(() =>
   previewState.value === 'ok' && preview.value?.canLaunch === true && !!launchKey.value && !launching.value)
 
+// FUP-04 能力拒绝文案映射（服务端原因码 → 页面文案）：预检 LAUNCH_ENABLED FAIL 与
+// create 409 LAUNCH_DISABLED 同码同源；冻结预检计划 + 幂等键逻辑不受影响
+const LAUNCH_DENY_TEXT = {
+  LAUNCH_ENABLED: '演练启动面已关闭（LAUNCH_DISABLED）：服务端能力位 launch-enabled=false，停止/恢复推进链交付前不开放启动；交付后经配置重开并重启生效',
+  LAUNCH_DISABLED: '演练启动面当前已关闭（LAUNCH_DISABLED）：停止/恢复推进链未交付（SAFE-04），交付后经 app.drill.launch-enabled 显式重开',
+}
+const launchDenyText = () => {
+  const deny = (preview.value?.checks ?? []).find(c => c.status === 'FAIL' && LAUNCH_DENY_TEXT[c.name])
+  return deny ? LAUNCH_DENY_TEXT[deny.name] : ''
+}
+
 const launchDisabledReason = computed(() => {
   if (canLaunchNow.value || launching.value) return ''
   if (previewState.value === 'ok' && preview.value && !preview.value.canLaunch) {
-    return '预检存在未通过项（FAIL），不开放启动；UNKNOWN「无法核验」不阻塞但逐条可见'
+    return launchDenyText() || '预检存在未通过项（FAIL），不开放启动；UNKNOWN「无法核验」不阻塞但逐条可见'
   }
   return '预检通过（canLaunch=true）后才允许开始演练'
 })
@@ -336,7 +347,8 @@ async function launch() {
       launchError.value = '启动接口不可用（404）：后端版本可能滞后'
     } else if (e?.response?.status === 409) {
       const d = e.response.data ?? {}
-      launchError.value = d.error || '启动冲突（409）'
+      // FUP-04：能力拒绝（code=LAUNCH_DISABLED）走文案映射；其余 409 透传服务端文案
+      launchError.value = (d.code && LAUNCH_DENY_TEXT[d.code]) || d.error || '启动冲突（409）'
       // 服务端预检重执行 FAIL：以 409 返回的 checks 覆盖旧预览（旧预览不保证现在仍可启动）
       if (Array.isArray(d.checks) && d.checks.length) {
         preview.value = { ...(preview.value ?? {}), checks: d.checks, canLaunch: false }

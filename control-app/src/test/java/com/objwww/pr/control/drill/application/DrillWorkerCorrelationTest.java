@@ -203,7 +203,7 @@ class DrillWorkerCorrelationTest {
     private DrillWorker worker() {
         return new DrillWorker(jobs, events, catalog(),
                 new DrillInjectionPort.NotImplemented(), clock, ENVS, "drill-worker-1",
-                5, 900, correlation, null);
+                5, 900, correlation, null, new DrillExecutionPolicy(true, ENVS));
     }
 
     private static DrillTemplateCatalog catalog() {

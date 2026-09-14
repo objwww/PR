@@ -50,6 +50,7 @@ public class DrillJobService {
     }
 
     public record TemplateListResponse(int registryVersion, String catalogDigest,
+                                       String policyVersion, String policyFingerprint,
                                        List<TemplateCard> templates) {
     }
 
@@ -119,15 +120,17 @@ public class DrillJobService {
     private final ObjectMapper mapper;
     private final List<String> allowedEnvs;
     /**
-     * SAFE-04 启动能力位：OBSERVING 停止消费与 RECOVERING→VERIFYING→CLOSED 推进链
-     * 交付前，服务端关闭新作业发起（复审边界"模板 ready 关闭或能力位由服务强制"的
-     * 能力位形态）——预检/目录/详情只读面保留，e03 类遗留占用语义不变。
+     * SAFE-04/FUP-01 启动能力政策（单一事实源 {@link DrillExecutionPolicy}）：
+     * OBSERVING 停止消费与 RECOVERING→VERIFYING→CLOSED 推进链交付前，服务端关闭
+     * 新作业发起——preview（FUP-04：LAUNCH_ENABLED 入预检合取）/create（LAUNCH_DISABLED
+     * 409）与 worker 领取复验、注入端口最终边界同源；目录/详情只读面保留，
+     * e03 类遗留占用语义不变。
      */
-    private final boolean launchEnabled;
+    private final DrillExecutionPolicy policy;
 
     public DrillJobService(DrillJobRepository jobs, DrillEventRepository events,
                            DrillTemplateCatalog catalog, ObjectMapper mapper,
-                           List<String> allowedEnvs, boolean launchEnabled) {
+                           List<String> allowedEnvs, DrillExecutionPolicy policy) {
         this.jobs = Objects.requireNonNull(jobs);
         this.events = Objects.requireNonNull(events);
         this.catalog = Objects.requireNonNull(catalog);
@@ -136,14 +139,16 @@ public class DrillJobService {
         if (this.allowedEnvs.isEmpty()) {
             throw new IllegalArgumentException("靶场白名单不得为空");
         }
-        this.launchEnabled = launchEnabled;
+        this.policy = Objects.requireNonNull(policy);
     }
 
     // ------------------------------------------------------------------ 模板目录
 
     public TemplateListResponse templates() {
+        // FUP-01：能力响应携带政策版本与配置指纹——API 与 worker 分进程核对同源配置
         return new TemplateListResponse(catalog.registryVersion(),
-                catalog.contentDigest().value(),
+                catalog.contentDigest().value(), policy.policyVersion(),
+                policy.policyFingerprint(),
                 catalog.templates().stream().map(this::card).toList());
     }
 
@@ -162,10 +167,10 @@ public class DrillJobService {
         params.put("linkedEvalVersionAllowed", t.params().linkedEvalVersionAllowed());
         Map<String, Object> execution = new LinkedHashMap<>();
         // SAFE-04：启动面关闭时目录如实呈现不可启动（卡片不可选），理由指向能力位而非模板自身
-        execution.put("ready", t.execution().ready() && launchEnabled);
-        execution.put("reason", launchEnabled ? t.execution().reason()
+        execution.put("ready", t.execution().ready() && policy.launchEnabled());
+        execution.put("reason", policy.launchEnabled() ? t.execution().reason()
                 : "演练启动面已关闭：停止/恢复推进链未交付（SAFE-04），交付后经 "
-                        + "app.drill.launch-enabled 显式重开");
+                        + "app.drill.launch-enabled 显式重开（启动时加载，需重启生效）");
         return new TemplateCard(t.scenarioId(), t.name(), t.scenarioType(), t.faultSource(),
                 t.driver(), t.chaosFamily(), t.target(), t.symptomCodes(),
                 t.symptomDisplay(), t.impact(), timing, params, execution);
@@ -173,11 +178,14 @@ public class DrillJobService {
 
     // ------------------------------------------------------------------ 预检预览
 
-    /** 服务端预检（§7.2：目标资源/预计等待/停止条件/恢复方式/资源占用 的真实计算面） */
+    /** 服务端预检（§7.2：目标资源/预计等待/停止条件/恢复方式/资源占用 的真实计算面；
+     *  FUP-04：canLaunch = 能力开关 ∧ 参数 ∧ 资源预检 的合取——能力关闭时
+     *  LAUNCH_ENABLED FAIL，原因码与 create 的 409 LAUNCH_DISABLED 同码） */
     public PreviewResponse preview(DrillLaunchPlan plan) {
         DrillTemplate template = resolve(plan);
         DrillPrecheck.Result precheck = DrillPrecheck.run(template, plan.targetEnv(),
-                allowedEnvs, jobs.findActiveOccupant(plan.targetEnv(), null).orElse(null));
+                allowedEnvs, jobs.findActiveOccupant(plan.targetEnv(), null).orElse(null),
+                policy.launchEnabled());
         return new PreviewResponse(card(template), computed(template, plan),
                 precheck.checks(), precheck.canLaunch(), Instant.now());
     }
@@ -196,12 +204,13 @@ public class DrillJobService {
                     ? CreateStatus.REPLAYED : CreateStatus.CONFLICT_KEY,
                     winner.id(), null);
         }
-        if (!launchEnabled) {
+        if (!policy.launchEnabled()) {
             // SAFE-04：重放面之后、预检之前拒绝——不产生新作业行，只读预检仍可另调
             return new CreateResult(CreateStatus.LAUNCH_DISABLED, null, null);
         }
         DrillPrecheck.Result precheck = DrillPrecheck.run(template, plan.targetEnv(),
-                allowedEnvs, jobs.findActiveOccupant(plan.targetEnv(), null).orElse(null));
+                allowedEnvs, jobs.findActiveOccupant(plan.targetEnv(), null).orElse(null),
+                true);
         if (!precheck.canLaunch()) {
             return new CreateResult(CreateStatus.PRECHECK_FAILED, null, precheck);
         }

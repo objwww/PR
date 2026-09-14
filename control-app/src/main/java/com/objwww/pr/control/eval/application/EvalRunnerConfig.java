@@ -373,7 +373,8 @@ public class EvalRunnerConfig {
     /**
      * 入口（EV-04）：worker 形态（默认）= 常驻轮询持久化命令；once = M3 一次性跑批
      * 退出（ApplicationContextRunner 场景测试不会触发 ApplicationRunner——两种形态
-     * 都不会在装配测试里执行）。
+     * 都不会在装配测试里执行）。FUP-01：mode 未知值启动失败；once 经同源
+     * EvalLaunchGate 闭面判定（闭面期禁止一次性跑批）。
      */
     @Bean
     public EvalRunnerMain evalRunnerMain(EvalBatchRunner runner,
@@ -382,10 +383,25 @@ public class EvalRunnerConfig {
                                          EvalRunWorker worker,
                                          com.objwww.pr.control.drill.application.DrillWorker
                                                  drillWorker,
+                                         EvalLaunchGate evalLaunchGate,
                                          @Value("${app.alert.eval.worker.mode:worker}")
                                          String workerMode) {
         return new EvalRunnerMain(runner, ledger, context, worker, drillWorker,
-                workerMode);
+                evalLaunchGate, workerMode);
+    }
+
+    /**
+     * FUP-01 演练执行政策（单一事实源）：drillWorker 领取复验与 drillInjectionPort
+     * 最终副作用边界共用本 bean；配置启动时加载（非热更新，翻转需重启生效），
+     * policyFingerprint 供与 API 进程（PersistenceConfig 同源构造）核对一致。
+     */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillExecutionPolicy
+            drillExecutionPolicy(
+            @Value("${app.drill.launch-enabled:false}") boolean launchEnabled,
+            @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
+        return new com.objwww.pr.control.drill.application.DrillExecutionPolicy(
+                launchEnabled, splitTargetEnvs(targetEnvs));
     }
 
     // ---------------- DR 演练 worker（§7.3：由已有评测执行身份所在的 worker 领取；
@@ -467,9 +483,9 @@ public class EvalRunnerConfig {
                 flagdScenarioDriver);
     }
 
-    /** DR-03 复合注入端口（DR-A 批接线交付）：公共闸门（ready/白名单/参数…）+
-     *  按模板 driver 分派；NotImplemented 保留为 fail-closed 兜底与测试对照，
-     *  不再装配 */
+    /** DR-03 复合注入端口（DR-A 批接线交付）：FUP-01 同源执行政策最终边界 +
+     *  公共闸门（ready/白名单/参数…）+ 按模板 driver 分派；NotImplemented 保留为
+     *  fail-closed 兜底与测试对照，不再装配 */
     @Bean
     public com.objwww.pr.control.drill.application.DrillInjectionPort
             drillInjectionPort(
@@ -480,11 +496,13 @@ public class EvalRunnerConfig {
                     arenaChaosDrillInjection,
             com.objwww.pr.control.drill.application.FlagdDrillInjection
                     flagdDrillInjection,
+            com.objwww.pr.control.drill.application.DrillExecutionPolicy
+                    drillExecutionPolicy,
             @Value("${app.drill.target-envs:arena-195}") String targetEnvs) {
         return new com.objwww.pr.control.drill.application.CompositeDrillInjection(
                 drillTemplateCatalog, goldenScenarioRegistry,
                 splitTargetEnvs(targetEnvs), arenaChaosDrillInjection,
-                flagdDrillInjection);
+                flagdDrillInjection, drillExecutionPolicy);
     }
 
     @Bean
@@ -501,6 +519,8 @@ public class EvalRunnerConfig {
                     drillCorrelationPort,
             com.objwww.pr.control.drill.application.FlagdRestoreSweeper
                     flagdRestoreSweeper,
+            com.objwww.pr.control.drill.application.DrillExecutionPolicy
+                    drillExecutionPolicy,
             @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.drill.worker.poll-seconds:5}") long pollSeconds,
@@ -510,7 +530,7 @@ public class EvalRunnerConfig {
                 drillJobRepository, drillEventRepository, drillTemplateCatalog,
                 drillInjectionPort, drillClock(), splitTargetEnvs(targetEnvs),
                 workerId + "-drill", pollSeconds, staleClaimSeconds,
-                drillCorrelationPort, flagdRestoreSweeper);
+                drillCorrelationPort, flagdRestoreSweeper, drillExecutionPolicy);
     }
 
     /** app.drill.target-envs 拆分（worker 领取白名单与复合注入端口靶场白名单

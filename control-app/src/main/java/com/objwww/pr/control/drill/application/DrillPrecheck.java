@@ -14,7 +14,8 @@ import java.util.List;
  * <p>信号面盘点（control_app 身份可达性）：
  * <ul>
  *   <li>SCENARIO_KNOWN / TARGET_ENV_WHITELIST / ENV_OCCUPANCY / EXECUTION_READY：
- *       本作业链自持有（目录/部署白名单/drill_job 占位/模板可执行标记）→ 真值；</li>
+ *       本作业链自持有（目录/部署白名单/drill_job 占位/模板可执行标记）→ 真值；
+ *       LAUNCH_ENABLED（FUP-04 启动能力位）随调用方同源政策值 → 真值；</li>
  *   <li>TARGET_HEALTH（靶场健康）/ RESOURCE_HEADROOM（资源水位）/ RESIDUAL_FAULT
  *       （旧故障残留，chaos_session 在 chaos_admin 域 control_app 零授权）/
  *       MGMT_PLANE（管理面可达）/ RECOVERY_CAPABILITY（恢复能力）：control 读面
@@ -46,13 +47,26 @@ public final class DrillPrecheck {
     }
 
     /**
+     * 旧四参调用面（默认能力位开放）：留测试对照；生产调用面（DrillJobService
+     * preview/create、DrillWorker 领取复验）一律走五参同源政策值（FUP-04）。
+     */
+    public static Result run(DrillTemplate template, String targetEnv,
+                             List<String> allowedEnvs, DrillJob occupant) {
+        return run(template, targetEnv, allowedEnvs, occupant, true);
+    }
+
+    /**
      * @param template  场景模板（null = 未知场景，SCENARIO_KNOWN FAIL 后短路）
      * @param targetEnv 请求靶场
      * @param allowedEnvs 部署靶场白名单
      * @param occupant  同靶场活动作业（无 = null；ENV_OCCUPANCY 真值源）
+     * @param launchEnabled FUP-04 启动能力位（同源 {@link DrillExecutionPolicy}）：
+     *                      false → LAUNCH_ENABLED FAIL，canLaunch=false 且原因码
+     *                      与 create 的 409 LAUNCH_DISABLED 同码
      */
     public static Result run(DrillTemplate template, String targetEnv,
-                             List<String> allowedEnvs, DrillJob occupant) {
+                             List<String> allowedEnvs, DrillJob occupant,
+                             boolean launchEnabled) {
         List<Check> checks = new ArrayList<>();
         if (template == null) {
             checks.add(new Check("SCENARIO_KNOWN", Status.FAIL, "场景未注册于模板目录"));
@@ -74,6 +88,14 @@ public final class DrillPrecheck {
                 template.execution().ready() ? Status.OK : Status.FAIL,
                 template.execution().ready()
                         ? "注入执行面已交付" : template.execution().reason()));
+        // FUP-04：能力位入预检合取——canLaunch = 能力开关 ∧ 参数 ∧ 资源预检；
+        // 关闭即 FAIL，原因码与 create 的 409 LAUNCH_DISABLED 同码（口径一致）
+        checks.add(new Check("LAUNCH_ENABLED",
+                launchEnabled ? Status.OK : Status.FAIL,
+                launchEnabled ? "演练启动能力位开放"
+                        : DrillExecutionPolicy.REASON_CODE
+                          + ": 演练启动面已关闭（app.drill.launch-enabled=false，"
+                          + "重开需改配置并重启生效）"));
         // ---- control 读面无真实信号的项：如实 UNKNOWN，不造假 ----
         checks.add(new Check("TARGET_HEALTH", Status.UNKNOWN,
                 "靶场健康需管理/观测面信号，control 读面无授权通路（待 DR-03 执行域实测）"));

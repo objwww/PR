@@ -21,7 +21,9 @@ import java.util.UUID;
  *   <li>GET /api/eval/compare?baseline={runId}&candidate={runId}[&group=&cursor=&limit=]
  *       ——全读面实时对比投影：可比性维度清单（comparable=false 不出配对结论）/
  *       配对计数三件套/判定变化矩阵/簇统计/故障源分桶/PairedTrialStats 溯源块/
- *       对比质量门（eval-compare-gate-v1）/同对最新落档引用/asOf。逐例列表有界
+ *       对比质量门（eval-compare-gate-v2，FUP-02：证据就绪度前置分支 + readiness
+ *       块——暂态分析/计划缺失/身份未核验如实展示）/同对最新落档引用（含规则版本，
+ *       v1 历史落档前端标"历史规则"）/asOf。逐例列表有界
  *       （group 过滤 + (scenarioId, roundNo) 键集游标，limit 默认 200 上限 500），
  *       每例携带 R12 差值块 delta（Δscore/Δcost/Δlatency + 各指标方向与改善/持平/
  *       退化分组；Δcost 仅双方链路完全 priced）；

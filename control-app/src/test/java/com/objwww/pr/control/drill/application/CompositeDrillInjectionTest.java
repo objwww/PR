@@ -184,7 +184,7 @@ class CompositeDrillInjectionTest {
         flagd = new FlagdDrillInjection(new FlagdScenarioDriver(flagClient,
                 new FakeAlertProbe(), ledger, Clock.fixed(BASE, ZoneOffset.UTC)));
         composite = new CompositeDrillInjection(catalog(), registry(), ENVS,
-                arena, flagd);
+                arena, flagd, new DrillExecutionPolicy(true, ENVS));
     }
 
     private static DrillTemplateCatalog catalog() {
@@ -467,6 +467,25 @@ class CompositeDrillInjectionTest {
     // ------------------------------------------------------------------ 闸门卡因
 
     @Test
+    @DisplayName("FCT-07：最终副作用边界同源政策——launch=false 时绕过 API/worker "
+            + "直调注入端口 → NOT_PERFORMED LAUNCH_DISABLED，arena/flagd 零网络请求")
+    void launchDisabledRejectedAtFinalInjectionBoundary() {
+        CompositeDrillInjection closed = new CompositeDrillInjection(catalog(),
+                registry(), ENVS, arena, flagd, new DrillExecutionPolicy(false, ENVS));
+        DrillInjectionPort.Outcome arenaOutcome = closed.inject(job("S3", "arena-195"));
+        assertThat(arenaOutcome.kind()).isEqualTo(DrillInjectionPort.Kind.NOT_PERFORMED);
+        assertThat(arenaOutcome.reason()).contains("LAUNCH_DISABLED")
+                .contains("确定零副作用");
+        DrillInjectionPort.Outcome flagdOutcome = closed.inject(job("S1", "arena-195"));
+        assertThat(flagdOutcome.kind()).isEqualTo(DrillInjectionPort.Kind.NOT_PERFORMED);
+        assertThat(flagdOutcome.reason()).contains("LAUNCH_DISABLED");
+        assertThat(chaos.onCalls).isZero(); // arena 管理面零调用
+        assertThat(traffic.orders).isEmpty(); // 零流量
+        assertThat(flagClient.writes).isEmpty(); // flagd 管理面零写入
+        assertThat(ledger.byId).isEmpty(); // 零恢复台账
+    }
+
+    @Test
     @DisplayName("目标环境不在部署白名单 → NOT_PERFORMED（DU04 篡改面拒绝），管理面零调用")
     void envNotWhitelistedNotPerformed() {
         DrillInjectionPort.Outcome outcome = composite.inject(job("S3", "arena-999"));
@@ -533,7 +552,7 @@ class CompositeDrillInjectionTest {
                              cleanup_timeout_seconds: 5}
                 """);
         CompositeDrillInjection c = new CompositeDrillInjection(driftCatalog,
-                driftRegistry, ENVS, arena, flagd);
+                driftRegistry, ENVS, arena, flagd, new DrillExecutionPolicy(true, ENVS));
         DrillInjectionPort.Outcome outcome = c.inject(job("D1", "arena-195"));
         assertThat(outcome.kind()).isEqualTo(DrillInjectionPort.Kind.NOT_PERFORMED);
         assertThat(outcome.reason()).contains("漂移");

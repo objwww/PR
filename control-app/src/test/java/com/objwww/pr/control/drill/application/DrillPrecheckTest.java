@@ -110,4 +110,22 @@ class DrillPrecheckTest {
                 .isEqualTo(DrillPrecheck.Status.FAIL);
         assertThat(unknown.canLaunch()).isFalse();
     }
+
+    @Test
+    @DisplayName("FUP-04 能力位入合取：launchEnabled=false → LAUNCH_ENABLED FAIL + "
+            + "canLaunch=false（原因码 LAUNCH_DISABLED 与 create 409 同码）；开放面 OK")
+    void launchEnabledCheck() {
+        DrillPrecheck.Result closed = DrillPrecheck.run(template(true), "arena-195",
+                List.of("arena-195"), null, false);
+        DrillPrecheck.Check gate = closed.checks().stream()
+                .filter(c -> c.name().equals("LAUNCH_ENABLED")).findFirst().orElseThrow();
+        assertThat(gate.status()).isEqualTo(DrillPrecheck.Status.FAIL);
+        assertThat(gate.detail()).contains("LAUNCH_DISABLED");
+        assertThat(closed.canLaunch()).isFalse();
+
+        DrillPrecheck.Result open = DrillPrecheck.run(template(true), "arena-195",
+                List.of("arena-195"), null, true);
+        assertThat(byName(open).get("LAUNCH_ENABLED")).isEqualTo(DrillPrecheck.Status.OK);
+        assertThat(open.canLaunch()).isTrue();
+    }
 }
