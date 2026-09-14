@@ -123,6 +123,17 @@ class LogQueryExecutorTest {
     }
 
     @Test
+    void epochSecondsAcceptedAsWindow() {
+        // 与 LokiAggregateExecutor 同因（2026-09-15）：LLM 时区换算防御，epoch 秒直收
+        LogQueryExecutor executor = executor();
+        LogQueryExecutor.Query query = executor.parseArgs(Map.of(
+                "since", "1788998400", "until", "1788998700", "service", "checkout"));
+        assertThat(query.since()).isEqualTo(java.time.Instant.parse("2026-09-10T00:00:00Z"));
+        assertThat(query.until()).isEqualTo(java.time.Instant.parse("2026-09-10T00:05:00Z"));
+        assertThat(query.service()).isEqualTo("checkout");
+    }
+
+    @Test
     void lokiRowsMapToUnifiedShapeWithSelector() throws Exception {
         body.set(lokiBody(new String[][]{
                 {String.valueOf(NOW.minusSeconds(30).toEpochMilli() * 1_000_000L),

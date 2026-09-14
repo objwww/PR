@@ -156,6 +156,18 @@ class LokiAggregateExecutorTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @DisplayName("epoch 秒直收：纯数字 since/until 按秒解读（LLM 时区换算防御，2026-09-15）")
+    void epochSecondsAcceptedAsWindow() {
+        // 真窗实证：模型把 UTC startsAt 误减 8h 致日志窗全空——epoch 无歧义直收
+        LokiAggregateExecutor.Query query = executor().parseArgs(Map.of(
+                "since", "1788998400", "until", "1788998700", "service", "checkout"),
+                ALLOWLIST);
+        assertThat(query.since()).isEqualTo(java.time.Instant.parse("2026-09-10T00:00:00Z"));
+        assertThat(query.until()).isEqualTo(java.time.Instant.parse("2026-09-10T00:05:00Z"));
+        assertThat(query.severity()).isEqualTo("ALL");
+    }
+
     // ---------------------------------------------- A0 补充方案 §3：severity 口径
 
     private static ToolExecutor.ToolExecution execSeverity(String severity) {

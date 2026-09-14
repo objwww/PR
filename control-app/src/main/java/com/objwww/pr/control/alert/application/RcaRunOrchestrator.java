@@ -29,6 +29,8 @@ import com.objwww.pr.control.alert.domain.statemachine.RcaTaskStateMachine;
 import com.objwww.pr.control.domain.port.ArtifactStore;
 import com.objwww.pr.control.infrastructure.observability.AlertMetrics;
 import com.objwww.pr.control.infrastructure.observability.StructuredLog;
+import com.objwww.pr.control.ops.application.CaseDraft;
+import com.objwww.pr.control.ops.application.OperatorCaseService;
 import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
@@ -37,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -96,6 +99,9 @@ public class RcaRunOrchestrator {
     /** B4 采集适配器（可空=legacy 零漂移）：run 终态样本采集（观测面，不阻断收尾） */
     private final com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector
             canaryCollector;
+    /** 处置单开单面（可空=legacy 零漂移）：报告发布赢家 → operator_case 幂等开单/合并，
+     *  开单失败仅 log-warn，不回滚报告/发布/通知事务 */
+    private final OperatorCaseService caseService;
 
     /**
      * 生产装配面（M6-07 收瘦）：CanaryRouter（RERUN 铸造点路由决策 + 路由四列落行）
@@ -120,6 +126,29 @@ public class RcaRunOrchestrator {
                               CanaryRouter canaryRouter,
                               com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
                               com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector) {
+        this(tasks, runs, attempts, reports, incidents, slots, investigationResults,
+                toolCalls, notifier, artifacts, sla, clock, slotScope, metrics,
+                canaryRouter, winners, canaryCollector, null);
+    }
+
+    public RcaRunOrchestrator(RcaTaskRepository tasks,
+                              RcaRunRepository runs,
+                              RcaAttemptRepository attempts,
+                              RcaReportRepository reports,
+                              IncidentRepository incidents,
+                              SchedulerSlotRepository slots,
+                              InvestigationResultRepository investigationResults,
+                              RcaToolCallRepository toolCalls,
+                              ReportCompletedNotifier notifier,
+                              ArtifactStore artifacts,
+                              SlaPolicy sla,
+                              AlertClock clock,
+                              String slotScope,
+                              AlertMetrics metrics,
+                              CanaryRouter canaryRouter,
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
+                              com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
+                              OperatorCaseService caseService) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -137,6 +166,7 @@ public class RcaRunOrchestrator {
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
         this.winners = Objects.requireNonNull(winners, "winners");
         this.canaryCollector = canaryCollector;
+        this.caseService = caseService;
     }
 
     /**
@@ -399,6 +429,7 @@ public class RcaRunOrchestrator {
                 notifier.onReportValidated(reportId, run.id(), attempt.id(),
                         fields.summary(), fields.component(), fields.faultType(),
                         fields.reasonCode(), fields.impact(), fields.remediation(), now);
+                openCaseForReport(run, task, reportId, fields, now);
             } else {
                 StructuredLog.event(log, "report_publication_loser", Map.ofEntries(
                         Map.entry("report_id", reportId.toString()),
@@ -408,6 +439,56 @@ public class RcaRunOrchestrator {
                 log.info("report {} 输给 generation 发布赢家（incident={}, gen={}），"
                                 + "落档不发布", reportId, run.incidentId(), run.generation());
             }
+        }
+    }
+
+    /**
+     * 报告发布赢家 → 处置单幂等开单/合并（M5-11 openOrMerge 的生产接线点）。
+     *
+     * <p>纪律：①fingerprint=incidentKey——同一 incident 的后续报告合并进同一单
+     * （revision+1 + activity，永不重复开单）；②幂等键 = case:report:{reportId}，
+     * 收尾重放零副作用；③开单失败仅 log-warn——报告/发布/通知已同事务落库，
+     * 处置单缺位不得回滚调查收尾（同 collectCanarySample 不阻断纪律）；
+     * ④影子 run 在上游负向门已截停，本面只见 PRODUCTION 赢家；
+     * ⑤evidenceRefs 至少一条可核验来源（Case 域不变量）——报告行本身即来源
+     * （report:{reportId} ↔ rca_report 落档行）。
+     */
+    private void openCaseForReport(RcaRun run, RcaTask task, UUID reportId,
+                                   PayloadFields fields, Instant now) {
+        if (caseService == null) {
+            return;
+        }
+        try {
+            String incidentKey = incidents.findById(run.incidentId())
+                    .map(Incident::incidentKey)
+                    .orElse("incident:" + run.incidentId());
+            boolean confirmed = !fields.component().isEmpty()
+                    && !fields.reasonCode().isEmpty()
+                    && !"NO_CONFIRMED_ROOT_CAUSE".equals(fields.reasonCode());
+            String priority = confirmed ? "P1" : "P2";
+            String reasonCode = fields.reasonCode().isEmpty()
+                    ? "NO_CONFIRMED_ROOT_CAUSE" : fields.reasonCode();
+            String subject = fields.summary().isEmpty()
+                    ? incidentKey
+                    : fields.summary().substring(0, Math.min(80, fields.summary().length()));
+            String incidentType = fields.faultType().isEmpty() ? "unresolved" : fields.faultType();
+            Duration ackSla = confirmed ? Duration.ofHours(2) : Duration.ofHours(8);
+            Duration resolveSla = confirmed ? Duration.ofHours(24) : Duration.ofHours(72);
+            var outcome = caseService.openOrMerge(new CaseDraft("default", incidentKey,
+                    subject, priority, reasonCode, run.id(), task.id().toString(),
+                    incidentType, Digest.sha256Of(reportId.toString()), run.generation(),
+                    List.of("report:" + reportId), now.plus(ackSla), now.plus(resolveSla),
+                    "case:report:" + reportId));
+            StructuredLog.event(log, "operator_case_opened", Map.ofEntries(
+                    Map.entry("run_id", run.id().toString()),
+                    Map.entry("report_id", reportId.toString()),
+                    Map.entry("case_id", outcome.caseId().toString()),
+                    Map.entry("created", String.valueOf(outcome.created())),
+                    Map.entry("priority", priority),
+                    Map.entry("reason_code", reasonCode)));
+        } catch (RuntimeException e) {
+            log.warn("处置单开单失败（不阻断收尾）: run={} report={} 原因={}",
+                    run.id(), reportId, e.getMessage());
         }
     }
 

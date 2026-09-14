@@ -172,13 +172,19 @@ public class LokiAggregateExecutor implements ToolExecutor {
     private static Instant parseInstant(Object value, String field) {
         if (value == null) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant）");
+                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant 或 epoch 秒）");
+        }
+        String text = String.valueOf(value).trim();
+        // epoch 秒直收（演示工程 2026-09-15：LLM 把 UTC startsAt 误当时区换算对象，
+        // 两次真窗 -7h/-8h 偏移致日志窗全空——epoch 无歧义；ISO-8601 路径原样保留）
+        if (text.matches("\\d{9,11}")) {
+            return Instant.ofEpochSecond(Long.parseLong(text));
         }
         try {
-            return Instant.parse(String.valueOf(value));
+            return Instant.parse(text);
         } catch (java.time.format.DateTimeParseException e) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必须为 ISO-8601 Instant");
+                    "INVALID_ARGS: " + field + " 必须为 ISO-8601 Instant 或 epoch 秒");
         }
     }
 

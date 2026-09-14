@@ -89,13 +89,28 @@ public final class NativeReportAdapter {
             ClaimVerdict claim = root.get();
             rc.put("component", claim.scope());
             rc.put("fault_type", claim.claimKey());
-            rc.put("reason_code", claim.reason());
+            rc.put("reason_code", boundedReasonCode(claim.reason()));
         } else {
             rc.put("component", UNKNOWN_COMPONENT);
             rc.put("fault_type", UNRESOLVED_FAULT_TYPE);
             rc.put("reason_code", NO_ROOT_CAUSE_REASON);
         }
         return rc;
+    }
+
+    /** reason_code 上限见 TypedRootCause（128）：确认 claim 的陈述句可能超长（真窗实证
+     *  169 字 → ADAPTER_PACKAGE_REJECTED）——确定性截断+标记，全文仍在 rca_claim.reason，
+     *  不臆造机器码顶替。blank 防御回落诚实缺省码（confirmed 路径不应发生） */
+    private static String boundedReasonCode(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return NO_ROOT_CAUSE_REASON;
+        }
+        int max = com.objwww.pr.control.alert.domain.model.TypedRootCause.MAX_REASON_CODE_CHARS;
+        if (reason.length() <= max) {
+            return reason;
+        }
+        String marker = "...[TRUNCATED]";
+        return reason.substring(0, max - marker.length()) + marker;
     }
 
     /** 三节全量 claims（裁决状态机分节照抄，规格 = EvidencePackageV2.ReportClaim 形状） */

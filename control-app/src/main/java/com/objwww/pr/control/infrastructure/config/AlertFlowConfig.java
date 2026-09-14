@@ -207,12 +207,13 @@ public class AlertFlowConfig {
                                                  com.objwww.pr.control.alert.domain.repository
                                                          .ReportWinnerRepository winners,
                                                  com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
+                                                 com.objwww.pr.control.ops.application.OperatorCaseService operatorCaseService,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         // M6-07：fallback 与 holmesShadowSampler 参数已随退场摘除（铸造点拆面）
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
                 sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter, winners,
-                canaryCollector);
+                canaryCollector, operatorCaseService);
     }
 
     /** B4：canary 采集适配器（NATIVE run 收尾链唯一写入方；LIVE 生产溯源门） */

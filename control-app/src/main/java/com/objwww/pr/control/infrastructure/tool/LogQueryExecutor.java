@@ -151,13 +151,18 @@ public class LogQueryExecutor implements ToolExecutor {
     record Query(Instant since, Instant until, String service) {
     }
 
-    /** ISO-8601 良构面归 executor 域内判（B-32：裸 DateTimeParseException 不外漏） */
+    /** ISO-8601/epoch 秒良构面归 executor 域内判（B-32：裸 DateTimeParseException 不外漏） */
     private static Instant parseInstant(Object value, String field) {
+        String text = String.valueOf(value).trim();
+        // epoch 秒直收（与 LokiAggregateExecutor 同因：LLM 时区换算不可靠，epoch 无歧义）
+        if (text.matches("\\d{9,11}")) {
+            return Instant.ofEpochSecond(Long.parseLong(text));
+        }
         try {
-            return Instant.parse(String.valueOf(value));
+            return Instant.parse(text);
         } catch (java.time.format.DateTimeParseException e) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必须为 ISO-8601 Instant");
+                    "INVALID_ARGS: " + field + " 必须为 ISO-8601 Instant 或 epoch 秒");
         }
     }
 

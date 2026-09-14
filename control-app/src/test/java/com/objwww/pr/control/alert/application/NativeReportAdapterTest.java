@@ -102,6 +102,30 @@ class NativeReportAdapterTest {
 
     // ------------------------------------------------------------------ 夹具
 
+    @Test
+    @DisplayName("CONFIRMED 长陈述：reason_code 确定性截断至契约上限，包过验证链")
+    void confirmedLongReasonIsBounded() {
+        // 真窗实证（2026-09-14 run eb143aeb）：169 字陈述直接进 reason_code →
+        // REJECTED_SCHEMA_MISMATCH → ADAPTER_PACKAGE_REJECTED 全 run FAILED
+        String longReason = "checkout 调 PaymentService/Charge 全部失败：gRPC UNKNOWN，"
+                + "payment 侧报 Invalid token。".repeat(6);
+        assertThat(longReason.length()).isGreaterThan(128);
+        ReportAssembler.AssembledReport report = new ReportAssembler.AssembledReport(
+                ReportAssembler.Outcome.CONFIRMED, SNAPSHOT,
+                List.of(verdict("c1", ClaimStatus.TRUE,
+                        EvidenceBasis.MULTI_SOURCE_CONSISTENT, "checkout", longReason)),
+                List.of(), List.of(), 0);
+
+        NativeReportAdapter.Adapted adapted = NativeReportAdapter.adapt(report);
+        EvidencePackageValidator.Result result = validator.validate(adapted.outerJson());
+
+        assertThat(result.status()).isEqualTo(com.objwww.pr.control.alert.domain.model.ValidationStatus.STRUCTURE_VALIDATED);
+        JsonNode pkg = readInner(result.packageJson());
+        String reasonCode = pkg.get("root_cause").get("reason_code").asText();
+        assertThat(reasonCode).hasSize(128).endsWith("...[TRUNCATED]");
+        assertThat(reasonCode).startsWith("checkout 调 PaymentService/Charge 全部失败");
+    }
+
     private static ClaimVerdict verdict(String key, ClaimStatus status, EvidenceBasis basis,
             String scope, String reason) {
         return new ClaimVerdict(key, scope, "07:50/08:00", 7L, SNAPSHOT, status, basis,

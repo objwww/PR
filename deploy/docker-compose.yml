@@ -165,10 +165,20 @@ services:
       # 推理模型（deepseek 系 reasoning_tokens 计入输出预算）真窗实证
       # OUTPUT_BUDGET_EXHAUSTED——推理模型姿态 .env 置 2000+
       APP_ALERT_R7_PRIMARY_STEP_MAX_TOKENS: ${APP_ALERT_R7_PRIMARY_STEP_MAX_TOKENS:-1000}
+      # 主模式步数上限透传（演示工程 2026-09-14 增补）：缺省 8=现行为；deepseek 系
+      # 真窗实证 8 步内在 catalog 回路徘徊未收敛（STEPS_EXHAUSTED）——演示姿态置 12
+      APP_ALERT_R7_PRIMARY_MAX_STEPS: ${APP_ALERT_R7_PRIMARY_MAX_STEPS:-8}
       # Prometheus 工具服务范围面透传（执行者 2026-09-12 增补）：catalog/metric_value
       # 必填 service 的 allowlist（R10 范围纪律）；旧 SPRING_APPLICATION_JSON 退场后
       # 显式钉死，缺省回落 control-app 单服务
       APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_PROMETHEUS_SERVICE_ALLOWLIST:-control-app}
+      # Loki 工具服务范围面透传（演示工程 2026-09-15 增补）：logs.query/logs.aggregate
+      # 的 service allowlist（LokiAggregateExecutor/LogQueryExecutor 共用）；热窗 RCA
+      # 实证 payment 把支付失败打在 WARN 级日志，下游取证必须覆盖 payment
+      APP_ALERT_AM4_LOGS_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_LOGS_SERVICE_ALLOWLIST:-control-app,checkout,frontend,recommendation}
+      # 评测发射开关透传（演示工程 2026-09-15 增补）：缺省 false=闭面；演示期临时置
+      # true 跑 L 模式评测，跑完收回（EvalRunnerMain 闭面纪律不变）
+      APP_EVAL_LAUNCH_ENABLED: ${APP_EVAL_LAUNCH_ENABLED:-false}
       # 单工具 Agent 的 TOOL_CALL 预算透传（执行者 2026-09-12 增补）：缺省 4 与 8 步
       # 主预算错配（真窗实证 NO_DATA 重试 3 次即耗尽——上调至 12 留反馈环重试余量）
       APP_ALERT_AM4_BUDGET_TOOL_CALLS: ${APP_ALERT_AM4_BUDGET_TOOL_CALLS:-4}
