@@ -418,6 +418,11 @@ class EvalQueryControllerTest {
         }
 
         @Override
+        public List<String> listPlanCaseKeys(String datasetVersion) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public List<UsageCallRow> listUsageCalls(UUID evalRunId) {
             throw new UnsupportedOperationException();
         }
