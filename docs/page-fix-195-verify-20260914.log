@@ -1,0 +1,34 @@
+=== 1. PAGE-03 能力读面 ===
+code=200 body={"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}
+=== 2. PAGE-03 能力闸门拒绝（每例后账本计数不变 = 零落库） ===
+modeE code=400 body={"error":"模式 E 在当前环境未实现隔离执行，已拒绝（支持：L）","code":"MODE_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+modeB code=400 body={"error":"模式 B 在当前环境未实现隔离执行，已拒绝（支持：L）","code":"MODE_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+budget code=400 body={"error":"预算（budgetMaxTokens）执行面强制未接线，本期不接受非空值（不落假约束）","code":"BUDGET_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+deadline code=400 body={"error":"截止时间（deadlineSeconds）执行面强制未接线，本期不接受非空值（不落假约束）","code":"DEADLINE_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+concurrency code=400 body={"error":"并发 2 超出当前环境支持上限 1（多 worker 并发未开放）","code":"CONCURRENCY_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+dataset code=400 body={"error":"数据集版本 eval-ds-99 不是当前部署版本（支持：eval-ds-1）；动态版本解析未开放，请选择已部署版本","code":"DATASET_VERSION_NOT_SUPPORTED","supported":{"modes":["L"],"datasetVersions":["eval-ds-1"],"maxConcurrency":1,"maxRoundsPerScenario":10,"modelOverride":false,"promptOverride":false,"budgetMaxTokens":false,"deadlineSeconds":false}}
+command rows before=0 after=0
+=== 3. PAGE-10 受理投影（种子命令行 -> 验证 -> 即删，零遗留零执行） ===
+accepted code=200 body={"acceptedOnly":true,"runId":"00000000-0000-4000-8000-5eed00000001","commandId":"00000000-0000-4000-8000-5eed00000002","commandState":"PENDING","acceptedAt":"2026-09-14T07:04:43.580658Z","displayName":"PAGE验收等待实验","mode":"L","datasetVersion":"eval-ds-1"}
+random id code=404 body={"error":"eval run 不存在"}
+种子行已清理 left=0
+=== 4. drill 读面链（PAGE-01 服务端语义；既有 drill 只读） ===
+list code=200
+detail code=200
+events code=200
+detail-404 code=404
+templates code=200
+  template ready:       5 "ready":true
+=== 4b. drill 服务端预检（真实检查面，不注入） ===
+preview code=200 canLaunch=false
+  check:       1 "status":"FAIL"
+  check:       3 "status":"OK"
+  check:       5 "status":"UNKNOWN"
+=== 5. 前端资产（PAGE-01/02/03 落地面） ===
+index chunk: assets/index-DgCotxKt.js
+drill chunk: assets/DrillDetailView-8qbU9idS.js / eval chunk: assets/EvalNewView-CMI9XSP7.js
+前端资产核验通过：api/api=0、404 分态文案在、能力读面与禁用文案已接线
+=== 6. PAGE-08 磁盘白名单口径（node_exporter 已在场；有数据才断言序列名） ===
+disk code=200
+==============================
+PAGE-195-VERIFY: ALL PASS
