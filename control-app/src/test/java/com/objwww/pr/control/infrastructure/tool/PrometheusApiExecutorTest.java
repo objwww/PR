@@ -211,6 +211,47 @@ class PrometheusApiExecutorTest {
                 .hasMessageContaining("allowlist");
     }
 
+    @Test
+    @DisplayName("BA-141 变种回归：metadata 全量 dump 超 resultLimit 不再误杀 catalog——"
+            + "流式按名过滤，名单内条目取数组首元素（真实 Prometheus 形状）")
+    void catalogSurvivesHugeMetadataDump() throws Exception {
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/series"))
+                .willReturn(aResponse().withStatus(200).withBody("""
+                        {"status":"success",
+                         "data":[{"__name__":"http_server_requests_seconds_count",
+                                   "service":"checkout"},
+                                  {"__name__":"up","service":"checkout"}]}
+                        """)));
+        // metadata 全量 dump：无关指标填充 >64KB（触发旧路径 RESULT_OVERSIZE 的体量），
+        // 名单内条目用真实数组形状
+        StringBuilder meta = new StringBuilder("{\"status\":\"success\",\"data\":{");
+        meta.append("\"http_server_requests_seconds_count\":");
+        meta.append("[{\"type\":\"counter\",\"help\":\"req\",\"unit\":\"requests\"}],");
+        meta.append("\"up\":[{\"type\":\"gauge\",\"help\":\"up\",\"unit\":\"\"}]");
+        String filler = ",\"filler_" + "x".repeat(200) + "\":[{\"type\":\"gauge\",\"help\":\""
+                + "y".repeat(500) + "\",\"unit\":\"\"}]";
+        while (meta.length() < 200_000) {
+            meta.append(filler);
+        }
+        meta.append("}}");
+        WIREMOCK.stubFor(get(urlPathEqualTo("/api/v1/metadata"))
+                .willReturn(aResponse().withStatus(200).withBody(meta.toString())));
+
+        byte[] body = api().catalogSearch(exec(Map.of("service", "checkout")));
+
+        Map<?, ?> payload = JSON.readValue(body, Map.class);
+        assertThat(payload.get("status")).isEqualTo("success");
+        List<?> rows = (List<?>) ((Map<?, ?>) payload.get("data")).get("result");
+        assertThat(rows).hasSize(2);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> http = (Map<String, Object>) rows.stream()
+                .filter(r -> ((Map<String, Object>) r).get("name")
+                        .equals("http_server_requests_seconds_count"))
+                .findFirst().orElseThrow();
+        assertThat(http.get("type")).isEqualTo("counter");
+        assertThat(http.get("unit")).isEqualTo("requests");
+    }
+
     // ------------------------------------------------------------- label_values
 
     @Test

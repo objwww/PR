@@ -1,0 +1,76 @@
+# otel-demo 演示告警规则（2026-09-14 演示环境全量激活工程）
+# 依据 recon5/recon6 实测序列面编写，只引用已证实存在的指标与标签：
+#   - http_server_request_duration_seconds_count{service="frontend",http_response_status_code=~"5.."}
+#     （2026-09-14 16:44Z 实测 5xx 率 0.88，烧损流量经 frontend 透出）
+#   - rpc_client_call_duration_seconds_count{service="checkout",rpc_method,error_type}
+#     （error_type 仅错误序列携带；正常序列无此标签）
+#   - nodejs_eventloop_delay_p99_seconds{service="frontend"}（无 bucket，直接是 p99 汇总序列，
+#     实测健康值约 0.011s；不能用 histogram_quantile）
+# rpc_server_duration_seconds_count 已证实全空（服务端指标未透出），不得引用。
+groups:
+  - name: otel-demo-symptoms
+    rules:
+      # 前端 5xx 率（page）：>5% 持续 2m。烧损激活期必然触发，演示告警→RCA 全链主入口之一
+      - alert: FrontendHttp5xxRateHigh
+        expr: >-
+          sum(increase(http_server_request_duration_seconds_count{service="frontend",http_response_status_code=~"5.."}[5m]))
+          /
+          sum(increase(http_server_request_duration_seconds_count{service="frontend"}[5m]))
+          > 0.05
+        for: 2m
+        labels:
+          severity: page
+          service: frontend
+          owner: am0
+          category: availability
+        annotations:
+          summary: "frontend HTTP 5xx 率超 5%（page）"
+          description: "frontend 近 5m 5xx 占比 {{ $value | humanizePercentage }}，持续 2m。下游 checkout/payment 故障会在此透出。"
+
+      # 前端 5xx 率（ticket）：>1% 持续 5m，早期预警档
+      - alert: FrontendHttp5xxRateElevated
+        expr: >-
+          sum(increase(http_server_request_duration_seconds_count{service="frontend",http_response_status_code=~"5.."}[5m]))
+          /
+          sum(increase(http_server_request_duration_seconds_count{service="frontend"}[5m]))
+          > 0.01
+        for: 5m
+        labels:
+          severity: ticket
+          service: frontend
+          owner: am0
+          category: availability
+        annotations:
+          summary: "frontend HTTP 5xx 率超 1%（ticket）"
+          description: "frontend 近 5m 5xx 占比 {{ $value | humanizePercentage }}，持续 5m。早期预警，关注下游依赖。"
+
+      # checkout 下游 rpc 错误率（ticket，按方法维度）：任一方法错误占比 >10% 持续 3m
+      - alert: CheckoutRpcClientErrorRateHigh
+        expr: >-
+          sum by (rpc_method) (increase(rpc_client_call_duration_seconds_count{service="checkout",error_type!=""}[5m]))
+          /
+          sum by (rpc_method) (increase(rpc_client_call_duration_seconds_count{service="checkout"}[5m]))
+          > 0.10
+        for: 3m
+        labels:
+          severity: ticket
+          service: checkout
+          owner: am0
+          category: availability
+        annotations:
+          summary: "checkout 下游调用 {{ $labels.rpc_method }} 错误率超 10%（ticket）"
+          description: "checkout 调用 {{ $labels.rpc_method }} 近 5m 错误占比 {{ $value | humanizePercentage }}，持续 3m。error_type 标签含具体错误类型。"
+
+      # frontend eventloop p99 延迟（ticket）：>150ms 持续 5m。
+      # 当前健康值约 11ms，正常不触发；供 CPU 压力类故障剧本使用
+      - alert: FrontendEventLoopP99High
+        expr: nodejs_eventloop_delay_p99_seconds{service="frontend"} > 0.15
+        for: 5m
+        labels:
+          severity: ticket
+          service: frontend
+          owner: am0
+          category: latency
+        annotations:
+          summary: "frontend Node eventloop p99 延迟超 150ms（ticket）"
+          description: "frontend eventloop p99={{ $value }}s，持续 5m。健康基线约 0.011s，提示事件循环阻塞（CPU 压力或同步长任务）。"

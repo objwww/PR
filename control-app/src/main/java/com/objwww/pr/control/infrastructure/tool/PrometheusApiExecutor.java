@@ -133,7 +133,9 @@ public class PrometheusApiExecutor {
      * 模型零语法面）。2026-09-12 真窗二次修：prometheus v3.13 的 label values 端点
      * 忽略 match[]（实证全量 dump 被截断，服务相关名不可见）——改走 series 端点
      * （match[] 真过滤，实证 631KB 全为该服务系列），流式抽 __name__ 去重排序，
-     * 内存只持名字集合（上限 {@link #CATALOG_MAX_NAMES}），body 大小≠结果大小。 */
+     * 内存只持名字集合（上限 {@link #CATALOG_MAX_NAMES}），body 大小≠结果大小。
+     * 2026-09-14 三次修（BA-141 RESULT_OVERSIZE 变种）：metadata 全量端点同样按
+     * 流式按名过滤（{@link #metadataFor}），原始体不再过结果字节闸。 */
     public byte[] catalogSearch(ToolExecution execution) throws Exception {
         Map<String, Object> args = execution.validatedArgs();
         String service = textArg(args.get("service"), "service");
@@ -148,9 +150,11 @@ public class PrometheusApiExecutor {
             throw new ToolModelVisibleException(ToolModelVisibleReason.NO_DATA,
                     "NO_DATA: 目录无匹配指标（空结果如实呈现，不伪造名称）");
         }
-        JsonNode metadata = parse(getForBody("/api/v1/metadata", execution));
-        Map<String, JsonNode> meta = new TreeMap<>();
-        metadata.path("data").fields().forEachRemaining(e -> meta.put(e.getKey(), e.getValue()));
+        // BA-141 RESULT_OVERSIZE 变种修复（2026-09-14，run ee565790 真窗定谳）：
+        // metadata 全量端点原始体在真栈恒超 64KB resultLimit（全 job 全指标 dump），
+        // getForBody 有界读把"原始体"当"结果"误杀——catalog 首跳即终止族炸死主任务。
+        // 与 seriesMetricNames 同律改流式按名过滤：内存只持名单内条目，body 大小≠结果大小
+        Map<String, JsonNode> meta = metadataFor(Set.copyOf(sorted), execution);
 
         ByteArrayOutputStream out = new ByteArrayOutputStream(
                 (int) Math.min(execution.resultLimitBytes() + 1, 1 << 20));
@@ -178,6 +182,46 @@ public class PrometheusApiExecutor {
             gen.writeEndObject();
         }
         return out.toByteArray();
+    }
+
+    /**
+     * /api/v1/metadata 全量 dump 流式过闸：只抽名单内指标的 type/unit（单请求零拷贝
+     * 过滤，原始体再大也不进内存）。data 值兼容真实 Prometheus 的数组形状（取首元素）
+     * 与单对象形状。流不可解析 → 模型可见 REMOTE_UNAVAILABLE（与 seriesMetricNames 同律）。
+     */
+    private Map<String, JsonNode> metadataFor(Set<String> names, ToolExecution execution)
+            throws Exception {
+        HttpResponse<InputStream> response = exchange("/api/v1/metadata", execution);
+        Map<String, JsonNode> meta = new TreeMap<>();
+        try (InputStream body = response.body();
+                var parser = JSON.getFactory().createParser(body)) {
+            while (parser.nextToken() != null) {
+                if (parser.currentToken() != com.fasterxml.jackson.core.JsonToken.FIELD_NAME
+                        || !"data".equals(parser.currentName())) {
+                    continue;
+                }
+                if (parser.nextToken() != com.fasterxml.jackson.core.JsonToken.START_OBJECT) {
+                    continue;
+                }
+                while (parser.nextToken() == com.fasterxml.jackson.core.JsonToken.FIELD_NAME) {
+                    String metric = parser.currentName();
+                    parser.nextToken();
+                    if (names.contains(metric)) {
+                        JsonNode node = JSON.readTree(parser);
+                        if (node != null && node.isArray() && !node.isEmpty()) {
+                            node = node.get(0);
+                        }
+                        meta.put(metric, node);
+                    } else {
+                        parser.skipChildren();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new ToolModelVisibleException(ToolModelVisibleReason.REMOTE_UNAVAILABLE,
+                    "工具响应不可解析（临时故障，可重试）");
+        }
+        return meta;
     }
 
     /** series 端点流式抽指标名：TreeSet 去重排序 + 数量上限（防御性），内存与 body 大小解耦 */
