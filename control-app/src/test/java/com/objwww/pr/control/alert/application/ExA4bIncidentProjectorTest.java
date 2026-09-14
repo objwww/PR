@@ -115,7 +115,8 @@ class ExA4bIncidentProjectorTest {
         p.project(UUID.randomUUID(), List.of(firing("D", "rb-1")));
         IncidentWaitingRedrive redrive = new IncidentWaitingRedrive(stores.incidents,
                 stores.runs, stores.tasks, router(true), new DeferredPolicy(100),
-                SlaPolicy.defaults(), () -> now.plusSeconds(120), Duration.ofSeconds(30));
+                SlaPolicy.defaults(), () -> now.plusSeconds(120), Duration.ofSeconds(30),
+                org.springframework.transaction.support.TransactionOperations.withoutTransaction());
         assertThat(redrive.redriveOnce()).isEqualTo(1);
         Incident d = stores.incidents.findByKeyForUpdate("alertname=D|service=svc").orElseThrow();
         assertThat(d.waitingReason()).isNull();

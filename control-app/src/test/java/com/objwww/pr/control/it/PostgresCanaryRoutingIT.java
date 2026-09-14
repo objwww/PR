@@ -278,6 +278,84 @@ class PostgresCanaryRoutingIT extends PostgresITBase {
                 .isEqualTo(1L);
     }
 
+    // --------------------- BA-146：等待重驱铸 run 的原子对（生产路径全真件回归钉）
+
+    @Test
+    void waitingRedriveMintsRunAndDecisionAtomically() {
+        // BA-146：IncidentWaitingRedrive 修复前无事务边界——WHITELISTED 出路决策行
+        // 带 run_id 语句级提交，V31 deferred FK 在语句提交点即 23503，每 30s 一轮
+        // 全炸（195 白名单放行实证）。本测试用生产同形态全真件（真 repos + 真
+        // controlTx + whitelisted bundle）钉死：决策行与 run 行同事务原子提交。
+        String key = "alertname=redrive|service=checkout";
+        Digest digest = publish(Map.of("canary", Map.of(
+                        "percent", 0,
+                        "whitelist", java.util.List.of(key),
+                        "max_native_runs", 500)),
+                Instant.now());
+        grantPassQualification(digest);
+        assertThat(bundles.activateQualified(digest, 0L, "it", Instant.now())).isTrue();
+
+        // 等待态事故（FIRING + WAITING_CAPABILITY、无活跃 run——重驱扫描集成员）
+        UUID incidentId = UUID.randomUUID();
+        Instant now = Instant.now();
+        incidents.insert(new Incident(incidentId, key, IncidentStatus.FIRING, 0,
+                now.minus(Duration.ofMinutes(5)), now.minus(Duration.ofMinutes(5)),
+                null, null, null, 0, 0, 0, null,
+                now.minus(Duration.ofMinutes(5)), now.minus(Duration.ofMinutes(5)),
+                now, now, "WAITING_CAPABILITY"));
+
+        JdbcClient jdbc = JdbcClient.create(controlDataSource());
+        com.objwww.pr.control.alert.domain.repository.RcaTaskRepository tasks =
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresRcaTaskRepository(jdbc);
+        CanaryRouter router = new CanaryRouter(bundles, decisions, true, Instant::now);
+        com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive =
+                new com.objwww.pr.control.alert.application.IncidentWaitingRedrive(
+                        incidents, runs, tasks, router,
+                        new com.objwww.pr.control.alert.domain.service.DeferredPolicy(100),
+                        com.objwww.pr.control.alert.domain.service.SlaPolicy.defaults(),
+                        com.objwww.pr.control.alert.application.AlertClock.system(),
+                        Duration.ofSeconds(30), controlTx);
+
+        assertThat(redrive.redriveOnce()).isEqualTo(1);
+
+        // 原子对两端：run 行与带 run_id 的 WHITELISTED 决策行同 id 共存
+        assertThat(count("rca_run")).isEqualTo(1);
+        assertThat(count("rca_task")).isEqualTo(1);
+        UUID runId = adminJdbc.sql("SELECT id FROM rca_run")
+                .query(UUID.class).single();
+        Map<String, Object> decision = adminJdbc.sql("""
+                SELECT run_id, decision, bundle_digest FROM canary_route_decision
+                """).query((rs, i) -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("run_id", rs.getObject("run_id", UUID.class));
+                    row.put("decision", rs.getString("decision"));
+                    row.put("bundle_digest", rs.getString("bundle_digest"));
+                    return row;
+                })
+                .single();
+        assertThat(decision.get("run_id")).isEqualTo(runId);
+        assertThat(decision.get("decision")).isEqualTo(CanaryDecision.WHITELISTED.name());
+        assertThat(decision.get("bundle_digest")).isEqualTo(digest.hex());
+
+        // 等待面收敛：waiting_reason 清空、current_rca_run_id 指向新 run
+        Map<String, Object> incidentRow = adminJdbc.sql("""
+                SELECT waiting_reason, current_rca_run_id FROM incident WHERE id = :id
+                """).param("id", incidentId)
+                .query((rs, i) -> {
+                    Map<String, Object> row = new java.util.HashMap<>();
+                    row.put("waiting_reason", rs.getString("waiting_reason"));
+                    row.put("current_rca_run_id", rs.getObject("current_rca_run_id", UUID.class));
+                    return row;
+                })
+                .single();
+        assertThat(incidentRow.get("waiting_reason")).isNull();
+        assertThat(incidentRow.get("current_rca_run_id")).isEqualTo(runId);
+
+        // 幂等：已有活跃 run，重驱不再铸
+        assertThat(redrive.redriveOnce()).isZero();
+    }
+
     /** 活跃态迁移行（同 withRunState 语义：updatedAt=now，出活跃集补 completedAt） */
     private static RcaRun inState(RcaRun r, RcaRunState state) {
         Instant now = Instant.now();

@@ -17,6 +17,7 @@ import com.objwww.pr.control.release.application.CanaryRouter;
 import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -45,6 +46,7 @@ public class IncidentWaitingRedrive {
     private final SlaPolicy sla;
     private final AlertClock clock;
     private final Duration pollInterval;
+    private final TransactionOperations tx;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread worker;
 
@@ -55,7 +57,8 @@ public class IncidentWaitingRedrive {
                                   DeferredPolicy deferredPolicy,
                                   SlaPolicy sla,
                                   AlertClock clock,
-                                  Duration pollInterval) {
+                                  Duration pollInterval,
+                                  TransactionOperations tx) {
         this.incidents = Objects.requireNonNull(incidents);
         this.runs = Objects.requireNonNull(runs);
         this.tasks = Objects.requireNonNull(tasks);
@@ -64,6 +67,11 @@ public class IncidentWaitingRedrive {
         this.sla = Objects.requireNonNull(sla);
         this.clock = Objects.requireNonNull(clock);
         this.pollInterval = Objects.requireNonNull(pollInterval);
+        // BA-146：route() 决策行（WHITELISTED 出路带 run_id）与 insertRouted() run 行是
+        // V31 deferred FK 的原子对——无事务包裹则决策行语句级提交即 23503（195 白名单
+        // 放行实证）；本类被内部 worker 线程直接调 redriveOnce()，@Transactional 代理
+        // 不可达，必须显式 TransactionOperations（AlertInboxProcessor 同律）
+        this.tx = Objects.requireNonNull(tx);
     }
 
     /** 单轮重驱：返回本轮补铸的 run 数 */
@@ -77,44 +85,54 @@ public class IncidentWaitingRedrive {
                     == DeferredPolicy.Decision.DEFERRED) {
                 continue;
             }
-            UUID runId = UUID.randomUUID();
-            var routing = canaryRouter.route(
-                    runId, incident.incidentKey(), incident.incidentKey());
-            if (routing.engine() == RcaEngine.HOLMES) {
-                continue;
+            // BA-146：决策行+run/task/incident 更新=单事务原子组（V31 deferred FK
+            // 提交点检查）；任一失败整组回滚，事故留在等待集下轮重试
+            Boolean minted = tx.execute(status -> mintRunAndTask(incident));
+            if (Boolean.TRUE.equals(minted)) {
+                cast++;
             }
-            Instant now = clock.now();
-            Digest basis = incident.pendingInvestigationHash() != null
-                    ? incident.pendingInvestigationHash()
-                    : incident.lastInvestigationHash() != null
-                    ? incident.lastInvestigationHash()
-                    : Digest.sha256Of("redrive|" + incident.incidentKey());
-            RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
-                    RunTrigger.INITIAL, RcaRunState.QUEUED, basis, now, now, null, null, null,
-                    // SR §3.1：重驱铸 run 也是生产准入（铸造点三处同闸）
-                    com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
-                    "incident-waiting-redrive", null);
-            runs.insertRouted(run, routing, InvestigationInputs.freezeAt(incident, now));
-            int priority = sla.priority(null);
-            // SR §4.1：铸点冻结对账硬期限
-            runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
-            tasks.insert(new RcaTask(UUID.randomUUID(), run.id(),
-                    RcaTask.taskKeyFor(routing.engine()), RcaTaskState.READY, priority,
-                    now, now, sla.deadline(now, priority), null, null, 0, 0, 3, now, now));
-            incidents.update(new Incident(incident.id(), incident.incidentKey(),
-                    incident.status(), incident.generation(),
-                    incident.episodeStartedAt(), incident.lastFiringStartsAt(),
-                    incident.resolvedAt(),
-                    incident.lastInvestigationHash(), basis,
-                    incident.receivedCount(), incident.distinctEventCount(),
-                    incident.notificationCount(),
-                    run.id(),
-                    incident.firstSeenAt(), incident.lastEventAt(), incident.createdAt(), now));
-            cast++;
-            log.info("incident {} 等待重驱完成：原因={} 路由决策={} run={}",
-                    incident.id(), incident.waitingReason(), routing.decision(), run.id());
         }
         return cast;
+    }
+
+    /** 单事故补铸（事务内）：路由意愿仍不在则不铸，返回 false */
+    private boolean mintRunAndTask(Incident incident) {
+        UUID runId = UUID.randomUUID();
+        var routing = canaryRouter.route(
+                runId, incident.incidentKey(), incident.incidentKey());
+        if (routing.engine() == RcaEngine.HOLMES) {
+            return false;
+        }
+        Instant now = clock.now();
+        Digest basis = incident.pendingInvestigationHash() != null
+                ? incident.pendingInvestigationHash()
+                : incident.lastInvestigationHash() != null
+                ? incident.lastInvestigationHash()
+                : Digest.sha256Of("redrive|" + incident.incidentKey());
+        RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
+                RunTrigger.INITIAL, RcaRunState.QUEUED, basis, now, now, null, null, null,
+                // SR §3.1：重驱铸 run 也是生产准入（铸造点三处同闸）
+                com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                "incident-waiting-redrive", null);
+        runs.insertRouted(run, routing, InvestigationInputs.freezeAt(incident, now));
+        int priority = sla.priority(null);
+        // SR §4.1：铸点冻结对账硬期限
+        runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
+        tasks.insert(new RcaTask(UUID.randomUUID(), run.id(),
+                RcaTask.taskKeyFor(routing.engine()), RcaTaskState.READY, priority,
+                now, now, sla.deadline(now, priority), null, null, 0, 0, 3, now, now));
+        incidents.update(new Incident(incident.id(), incident.incidentKey(),
+                incident.status(), incident.generation(),
+                incident.episodeStartedAt(), incident.lastFiringStartsAt(),
+                incident.resolvedAt(),
+                incident.lastInvestigationHash(), basis,
+                incident.receivedCount(), incident.distinctEventCount(),
+                incident.notificationCount(),
+                run.id(),
+                incident.firstSeenAt(), incident.lastEventAt(), incident.createdAt(), now));
+        log.info("incident {} 等待重驱完成：原因={} 路由决策={} run={}",
+                incident.id(), incident.waitingReason(), routing.decision(), run.id());
+        return true;
     }
 
     /** 启动常驻循环（幂等：已启动则忽略） */

@@ -569,10 +569,12 @@ public class AlertFlowConfig {
             CanaryRouter canaryRouter,
             DeferredPolicy deferredPolicy,
             SlaPolicy sla,
+            TransactionOperations tx,
             @Value("${app.alert.redrive.poll-interval:PT30S}") Duration pollInterval) {
+        // BA-146：tx 必传——决策行/run 行原子对（V31 deferred FK）只能在事务内成立
         return new com.objwww.pr.control.alert.application.IncidentWaitingRedrive(
                 incidents, runs, tasks, canaryRouter, deferredPolicy, sla,
-                AlertClock.system(), pollInterval);
+                AlertClock.system(), pollInterval, tx);
     }
 
     /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗）随容器启停
