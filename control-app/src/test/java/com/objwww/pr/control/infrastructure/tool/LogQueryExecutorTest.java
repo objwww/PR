@@ -99,6 +99,28 @@ class LogQueryExecutorTest {
     }
 
     @Test
+    void downstreamFailureAtInfoLevelRemainsVisibleWithoutSeverityFilter() throws Exception {
+        body.set("""
+                {"status":"success","data":{"resultType":"streams","result":[{
+                  "stream":{"service_name":"payment","detected_level":"info"},
+                  "values":[["1788998399000000000","Payment request failed. Invalid token."]]
+                }]}}
+                """);
+        LogQueryExecutor downstream = new LogQueryExecutor(
+                "http://127.0.0.1:" + loki.getAddress().getPort(),
+                Set.of("checkout", "payment"));
+
+        byte[] result = downstream.execute(args(Map.of(
+                "service", "payment", "since", NOW.minusSeconds(60).toString(),
+                "until", NOW.toString())));
+
+        assertThat(lastQuery.get()).contains("query={service_name=\"payment\"}")
+                .doesNotContain("detected_level", "severity", "checkout");
+        assertThat(new String(result, StandardCharsets.UTF_8))
+                .contains("\"service\":\"payment\"", "Payment request failed. Invalid token.");
+    }
+
+    @Test
     void argsDefaultsAllowlistAndViolations() {
         LogQueryExecutor executor = new LogQueryExecutor("http://loki:3100",
                 Set.of("control-app", "checkout"));
