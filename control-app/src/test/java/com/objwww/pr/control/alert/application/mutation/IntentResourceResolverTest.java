@@ -58,8 +58,8 @@ class IntentResourceResolverTest {
         boolean casSabotage;
 
         void seed(UUID intentId, UUID runId) {
-            rows.put(intentId, new IntentView(intentId, runId, "a".repeat(64),
-                    "scale.service", null, null));
+            rows.put(intentId, new IntentView(intentId, runId, null, "a".repeat(64),
+                    "scale.service", null, null, "{}"));
         }
 
         @Override
@@ -74,9 +74,14 @@ class IntentResourceResolverTest {
             if (view == null || view.resolvedResourceUid() != null || casSabotage) {
                 return false;
             }
-            rows.put(intentId, new IntentView(intentId, view.runId(), view.actionDigest(),
-                    view.toolName(), uid, hash));
+            rows.put(intentId, new IntentView(intentId, view.runId(), view.taskId(),
+                    view.actionDigest(), view.toolName(), uid, hash, view.argsJson()));
             return true;
+        }
+
+        @Override
+        public boolean markPlanned(UUID intentId, UUID operationId, Instant at) {
+            return false;
         }
     }
 

@@ -28,18 +28,21 @@ public class PostgresActionIntentStore implements ActionIntentStore {
     @Override
     public Optional<IntentView> findById(UUID intentId) {
         return tx.execute(status -> jdbc.sql("""
-                select intent_id, run_id, action_digest, tool_name,
-                       resolved_resource_uid, scope_snapshot_hash
+                select intent_id, run_id, task_id, action_digest, tool_name,
+                       resolved_resource_uid, scope_snapshot_hash,
+                       args_json::text as args_json
                   from action_intent where intent_id = :id
                 """)
                 .param("id", intentId)
                 .query((rs, n) -> new IntentView(
                         UUID.fromString(rs.getString("intent_id")),
                         rs.getObject("run_id", UUID.class),
+                        rs.getObject("task_id", UUID.class),
                         rs.getString("action_digest"),
                         rs.getString("tool_name"),
                         rs.getString("resolved_resource_uid"),
-                        rs.getString("scope_snapshot_hash")))
+                        rs.getString("scope_snapshot_hash"),
+                        rs.getString("args_json")))
                 .optional());
     }
 
@@ -59,6 +62,20 @@ public class PostgresActionIntentStore implements ActionIntentStore {
                 .param("snapshot", snapshotJson)
                 .param("hash", snapshotHash)
                 .param("at", Timestamp.from(at))
+                .param("id", intentId)
+                .update());
+        return updated != null && updated == 1;
+    }
+
+    @Override
+    public boolean markPlanned(UUID intentId, UUID operationId, Instant at) {
+        Integer updated = tx.execute(status -> jdbc.sql("""
+                update action_intent
+                   set status = 'PLANNED', operation_id = :opId, updated_at = now()
+                 where intent_id = :id and status = 'OPEN'
+                   and resolved_resource_uid is not null
+                """)
+                .param("opId", operationId)
                 .param("id", intentId)
                 .update());
         return updated != null && updated == 1;

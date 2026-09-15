@@ -205,6 +205,9 @@ services:
       ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://otelcol-control:9411/api/v2/spans}
       # PA-A5：决策溯源 build 锚（CI/部署期注入镜像 sha；缺省 unknown 显式可见）
       APP_PROVENANCE_BUILD_SHA: ${APP_PROVENANCE_BUILD_SHA:-unknown}
+      # PB-B4：dry-run 消费模板/派发链（默认全关；演示窗置 true 打开，Runner 恒 dry-run）
+      APP_ALERT_MUTATION_DRY_RUN_PLAN_ENABLED: ${APP_ALERT_MUTATION_DRY_RUN_PLAN_ENABLED:-false}
+      APP_ALERT_MUTATION_RUNNER_BEHAVIOR: ${APP_ALERT_MUTATION_RUNNER_BEHAVIOR:-SUCCEED}
       APP_CAS_DIR: /var/cas
     ports:
       # 默认仅绑 loopback（安全底线）；Alertmanager 在 docker 内网投递，公网零暴露

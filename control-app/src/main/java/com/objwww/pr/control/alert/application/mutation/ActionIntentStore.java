@@ -11,8 +11,9 @@ import java.util.UUID;
  */
 public interface ActionIntentStore {
 
-    record IntentView(UUID intentId, UUID runId, String actionDigest, String toolName,
-            String resolvedResourceUid, String scopeSnapshotHash) {
+    record IntentView(UUID intentId, UUID runId, UUID taskId, String actionDigest,
+            String toolName, String resolvedResourceUid, String scopeSnapshotHash,
+            String argsJson) {
     }
 
     Optional<IntentView> findById(UUID intentId);
@@ -20,4 +21,10 @@ public interface ActionIntentStore {
     /** 解析推进（CAS：resolved_resource_uid IS NULL 才生效）；返回 false = 已解析过 */
     boolean markResolved(UUID intentId, String resourceUid, String snapshotJson,
             String snapshotHash, Instant at);
+
+    /**
+     * 计划推进（PB-B4 消费模板内）：OPEN 且已解析 → PLANNED + operation_id 回填
+     * （CAS：status='OPEN'）；返回 false = 并发赢家是别人。
+     */
+    boolean markPlanned(UUID intentId, UUID operationId, Instant at);
 }

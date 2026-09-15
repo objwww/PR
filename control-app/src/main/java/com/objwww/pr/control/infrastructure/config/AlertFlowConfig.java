@@ -242,6 +242,64 @@ public class AlertFlowConfig {
                 store, lockTtl, java.time.Clock.systemUTC());
     }
 
+    // ---------------- PB-B4：消费模板 + Outbox 派发 + dry-run Runner（V117） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.OperationLedgerStore
+    operationLedgerStore(org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresOperationLedgerStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.OperationOutboxStore
+    operationOutboxStore(org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresOperationOutboxStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.OperationPlanner operationPlanner(
+            com.objwww.pr.control.alert.application.mutation.ActionIntentStore intents,
+            com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations,
+            com.objwww.pr.control.alert.application.mutation.OperationOutboxStore outbox,
+            com.objwww.pr.control.alert.application.mutation.ResourceLockStore locks,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.mutation.lock-ttl:PT10M}") java.time.Duration lockTtl,
+            @Value("${app.alert.mutation.dry-run-plan.enabled:false}") boolean planEnabled) {
+        return new com.objwww.pr.control.alert.application.mutation.OperationPlanner(
+                intents, operations, outbox, locks, events, tx, lockTtl, planEnabled,
+                java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.DryRunActionRunner
+    dryRunActionRunner(@Value("${app.alert.mutation.runner.behavior:SUCCEED}")
+            String behavior) {
+        return new com.objwww.pr.control.alert.application.mutation.DryRunActionRunner(
+                com.objwww.pr.control.alert.application.mutation.DryRunActionRunner.Behavior
+                        .valueOf(behavior.trim().toUpperCase()));
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
+    operationOutboxDispatcher(
+            com.objwww.pr.control.alert.application.mutation.OperationOutboxStore outbox,
+            com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations,
+            com.objwww.pr.control.alert.application.mutation.ResourceLockStore locks,
+            com.objwww.pr.control.alert.application.mutation.DryRunActionRunner runner,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            @Value("${app.alert.inbox.owner:control-1}") String owner,
+            @Value("${app.alert.mutation.dispatch-lease:PT1M}") java.time.Duration lease,
+            @Value("${app.alert.mutation.dispatch-interval:PT5S}") java.time.Duration interval) {
+        return new com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher(
+                outbox, operations, locks, runner, events, owner + "-dispatcher", lease,
+                interval, java.time.Clock.systemUTC());
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
@@ -669,14 +727,18 @@ public class AlertFlowConfig {
                 events, verifyInterval);
     }
 
-    /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗 + 每日验链）随容器启停
-     *  （T10 部署启动真执行链；M6-05 holmes shadow 调度循环已随退场摘除） */
+    /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗 + 每日验链 + 派发循环）
+     *  随容器启停（T10 部署启动真执行链；M6-05 holmes shadow 调度循环已随退场摘除）。
+     *  PB-B4：OperationOutboxDispatcher 默认关闭（dry-run-plan-enabled=false 时无行可派），
+     *  interval=null 即自关，装配始终在册以便演示窗打开。 */
     @Bean
     public SmartLifecycle alertFlowLifecycle(
             AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
             com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive,
             com.objwww.pr.control.alert.application.RunReconciler runReconciler,
-            com.objwww.pr.control.alert.application.EventChainVerifyLoop eventChainVerifyLoop) {
+            com.objwww.pr.control.alert.application.EventChainVerifyLoop eventChainVerifyLoop,
+            com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
+                    operationOutboxDispatcher) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -687,12 +749,14 @@ public class AlertFlowConfig {
                 redrive.start();
                 runReconciler.start();
                 eventChainVerifyLoop.start();
+                operationOutboxDispatcher.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                operationOutboxDispatcher.stop();
                 eventChainVerifyLoop.stop();
                 runReconciler.stop();
                 redrive.stop();
