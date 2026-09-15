@@ -52,20 +52,36 @@ public class OperationPlanner {
     private final OperationLedgerStore operations;
     private final OperationOutboxStore outbox;
     private final ResourceLockStore locks;
+    private final com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate
+            approvalGate; // 可空=哨兵模式（Phase C 真锚前装配不变）
     private final RcaEventAppender events;
     private final TransactionOperations tx;
     private final Duration lockTtl;
     private final boolean dryRunPlanEnabled;
+    private final boolean approvalEnabled;
+    private final String policyVersion;
     private final Clock clock;
 
     public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
             OperationOutboxStore outbox, ResourceLockStore locks, RcaEventAppender events,
             TransactionOperations tx, Duration lockTtl, boolean dryRunPlanEnabled,
             Clock clock) {
+        this(intents, operations, outbox, locks, null, events, tx, lockTtl,
+                dryRunPlanEnabled, false, null, clock);
+    }
+
+    /** PC-C2 全参形态：approvalEnabled=true 时步骤 1/2 走真锚（grant→配额→single-use） */
+    public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
+            OperationOutboxStore outbox, ResourceLockStore locks,
+            com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate approvalGate,
+            RcaEventAppender events, TransactionOperations tx, Duration lockTtl,
+            boolean dryRunPlanEnabled, boolean approvalEnabled, String policyVersion,
+            Clock clock) {
         this.intents = Objects.requireNonNull(intents);
         this.operations = Objects.requireNonNull(operations);
         this.outbox = Objects.requireNonNull(outbox);
         this.locks = Objects.requireNonNull(locks);
+        this.approvalGate = approvalGate;
         this.events = Objects.requireNonNull(events);
         this.tx = Objects.requireNonNull(tx);
         if (lockTtl.isNegative() || lockTtl.isZero()) {
@@ -73,6 +89,8 @@ public class OperationPlanner {
         }
         this.lockTtl = lockTtl;
         this.dryRunPlanEnabled = dryRunPlanEnabled;
+        this.approvalEnabled = approvalEnabled;
+        this.policyVersion = policyVersion;
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -93,6 +111,22 @@ public class OperationPlanner {
         if (intent.resolvedResourceUid() == null || intent.scopeSnapshotHash() == null) {
             throw new Rollback(rejected("NOT_RESOLVED")); // fail-closed：无快照锚不计划
         }
+        // 步骤 1/2（PC-C2 真锚模式）：查活 grant（四元匹配=换代/撤销/过期/policy 漂移
+        // 结构性作废）→ 配额 CAS → 签发 single-use 授权；任一失利整体回滚
+        java.util.UUID grantId = null;
+        java.util.UUID authzId = null;
+        if (approvalEnabled) {
+            var grant = approvalGate.findActiveGrant(intent.runId(), intent.actionDigest(),
+                    intent.scopeSnapshotHash(), policyVersion);
+            if (grant.isEmpty()) {
+                throw new Rollback(rejected("NO_GRANT"));
+            }
+            grantId = grant.get().grantId();
+            if (!approvalGate.tryReserveGrantQuota(grantId, clock.instant())) {
+                throw new Rollback(rejected("GRANT_NOT_RESERVABLE"));
+            }
+            authzId = approvalGate.insertAuthorization(grantId, clock.instant());
+        }
         UUID operationId = UUID.randomUUID();
         RcaOperation operation = RcaOperation.prepare(operationId, intentId, intent.runId(),
                 intent.taskId(), intent.toolName(), intent.actionDigest(),
@@ -105,6 +139,10 @@ public class OperationPlanner {
         }
         operations.updateResourceEpoch(operationId, acquire.resourceEpoch());
         outbox.insert(UUID.randomUUID(), operationId, clock.instant()); // 步骤 4b
+        if (approvalEnabled
+                && !approvalGate.consumeAuthorization(authzId, operationId, clock.instant())) {
+            throw new Rollback(rejected("AUTHZ_CAS_LOST")); // 步骤 2 收口：single-use 恰一次
+        }
         if (!intents.markPlanned(intentId, operationId, clock.instant())) { // 步骤 5a
             throw new Rollback(rejected("INTENT_CAS_LOST"));
         }
@@ -117,7 +155,12 @@ public class OperationPlanner {
         payload.put("resource_epoch", acquire.resourceEpoch());
         payload.put("snapshot_hash", intent.scopeSnapshotHash());
         payload.put("dry_run", true);
-        payload.put("grant", "DRY_RUN_SENTINEL"); // Phase C 换真实 grant 锚
+        if (approvalEnabled) {
+            payload.put("grant", authzId.toString()); // single-use 授权锚（已 CONSUMED）
+            payload.put("grant_id", grantId.toString());
+        } else {
+            payload.put("grant", "DRY_RUN_SENTINEL"); // 审批面未启用的哨兵形态
+        }
         events.append(intent.runId(), new RcaEventAppender.EventDraft(UUID.randomUUID(),
                 "OPERATION_PREPARED", CanonicalEventJson.canonicalize(payload))); // 步骤 5b
         return new Outcome(Outcome.Status.PLANNED, operationId, acquire.resourceEpoch(), null);

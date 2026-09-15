@@ -19,7 +19,8 @@ import java.util.UUID;
  * V119 审批四账本的 Postgres 实现（PC-C1）。同人重复决策以 UNIQUE 冲突转 false
  * （结构拒绝，非竞态让步）；grant 配额预留以条件 UPDATE CAS（ACTIVE 且未满）。
  */
-public class PostgresApprovalStore implements ApprovalStore {
+public class PostgresApprovalStore implements ApprovalStore,
+        com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate {
 
     private final JdbcClient jdbc;
     private final TransactionOperations tx;

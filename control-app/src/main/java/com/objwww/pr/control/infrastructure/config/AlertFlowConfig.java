@@ -266,13 +266,16 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations,
             com.objwww.pr.control.alert.application.mutation.OperationOutboxStore outbox,
             com.objwww.pr.control.alert.application.mutation.ResourceLockStore locks,
+            com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate approvalGate,
             com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
             org.springframework.transaction.support.TransactionOperations tx,
             @Value("${app.alert.mutation.lock-ttl:PT10M}") java.time.Duration lockTtl,
-            @Value("${app.alert.mutation.dry-run-plan.enabled:false}") boolean planEnabled) {
+            @Value("${app.alert.mutation.dry-run-plan.enabled:false}") boolean planEnabled,
+            @Value("${app.alert.mutation.approval.enabled:false}") boolean approvalEnabled,
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
         return new com.objwww.pr.control.alert.application.mutation.OperationPlanner(
-                intents, operations, outbox, locks, events, tx, lockTtl, planEnabled,
-                java.time.Clock.systemUTC());
+                intents, operations, outbox, locks, approvalGate, events, tx, lockTtl,
+                planEnabled, approvalEnabled, policyVersion, java.time.Clock.systemUTC());
     }
 
     @Bean

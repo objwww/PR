@@ -133,7 +133,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/rca-runs/**", "/api/cases/**", "/api/duty/**",
                                 "/api/v1/**", "/api/eval/**", "/api/agent-ops/**",
                                 "/api/metrics/**", "/api/drills/**",
-                                "/api/mcp-servers/**", "/api/release-assets/**")
+                                "/api/mcp-servers/**", "/api/release-assets/**",
+                                // PC-C2：mutation shadow 操作面（真锚消费模板驱动；
+                                // Runner 恒 dry-run，真实执行随 Phase D 另设门）
+                                "/api/mutation/**")
                         .hasRole("OPERATOR")
                         .anyRequest().denyAll())
                 .formLogin(form -> form
