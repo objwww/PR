@@ -223,6 +223,25 @@ public class AlertFlowConfig {
                 resolver, ledger, events, tx, policyVersion, java.time.Clock.systemUTC());
     }
 
+    // ---------------- PB-B3：Resource Coordinator（V116，§2.9） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ResourceLockStore
+    resourceLockStore(org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresResourceLockStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ResourceCoordinator
+    resourceCoordinator(
+            com.objwww.pr.control.alert.application.mutation.ResourceLockStore store,
+            @Value("${app.alert.mutation.lock-ttl:PT10M}") java.time.Duration lockTtl) {
+        return new com.objwww.pr.control.alert.application.mutation.ResourceCoordinator(
+                store, lockTtl, java.time.Clock.systemUTC());
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
