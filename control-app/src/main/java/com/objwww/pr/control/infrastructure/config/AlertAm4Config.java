@@ -422,14 +422,18 @@ public class AlertAm4Config {
                     am4InFlightToolCancels,
             @Value("${app.alert.provenance.build-sha:unknown}") String provenanceBuildSha,
             @Value("${app.alert.provenance.policy-version:pa-prod-v1}")
-                    String provenancePolicyVersion) {
+                    String provenancePolicyVersion,
+            com.objwww.pr.control.alert.application.mutation.ActionIntentLedger
+                    actionIntentLedger) {
         long calls = maxCallsPerWindow > 0 ? maxCallsPerWindow : SHADOW_MAX_CALLS_DEFAULT;
         long window = windowMillis > 0 ? windowMillis : SHADOW_WINDOW_MILLIS_DEFAULT;
         // PA-A5：决策溯源锚（build_sha + policy_version）随每次 R2+ 意图事件落账
         var provenance = com.objwww.pr.control.alert.domain.event.DecisionProvenance
                 .empty(provenancePolicyVersion).withAgentBuildSha(provenanceBuildSha);
+        // PB-B1：意图台账同短事务入账（意图行 + 意图事件，V114）
         return new ReadOnlyToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
-                calls, window, Clock.systemUTC(), false, am4InFlightToolCancels, provenance);
+                calls, window, Clock.systemUTC(), false, am4InFlightToolCancels, provenance,
+                actionIntentLedger);
     }
 
     /** 影子对照路由器（M4-34）：同 digest 盖章/独立预算/失败隔离，无发布出口 */

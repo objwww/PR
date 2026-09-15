@@ -482,6 +482,22 @@ public class PersistenceConfig {
                 jdbc, tx);
     }
 
+    /** PB-B1：R2/R3 意图台账（意图行 + 意图事件同 REQUIRES_NEW 短事务，V114） */
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ActionIntentLedger
+    actionIntentLedger(
+            JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx,
+            org.springframework.transaction.PlatformTransactionManager txManager,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events) {
+        org.springframework.transaction.support.TransactionTemplate independent =
+                new org.springframework.transaction.support.TransactionTemplate(txManager);
+        independent.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresActionIntentLedger(
+                jdbc, independent, events);
+    }
+
     // ---------------- AM4 证据与快照（V16，M4-19/20 装配；消费方 = M4-27+ 执行器族） ----------------
 
     @Bean

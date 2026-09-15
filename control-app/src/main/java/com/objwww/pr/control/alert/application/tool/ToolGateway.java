@@ -43,6 +43,9 @@ public final class ToolGateway implements ToolInvoker {
     private final InFlightToolCancels cancels; // 可空：WC-3 在途取消通知（丢了只慢不错）
     /** PA-A5：决策溯源标签（可空=未装配，意图事件不含 provenance 块） */
     private final com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags;
+    /** PB-B1：意图台账（可空=未装配，意图仅事件面不落行——渐进采纳旧装配零漂移） */
+    private final com.objwww.pr.control.alert.application.mutation.ActionIntentLedger
+            intentLedger;
 
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events) {
@@ -58,6 +61,14 @@ public final class ToolGateway implements ToolInvoker {
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events, InFlightToolCancels cancels,
             com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags) {
+        this(registry, policy, callPool, clock, events, cancels, provenanceTags, null);
+    }
+
+    /** PB-B1 全参形态：intentLedger（意图行 + 意图事件同短事务，V114） */
+    public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
+            Clock clock, RcaEventAppender events, InFlightToolCancels cancels,
+            com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags,
+            com.objwww.pr.control.alert.application.mutation.ActionIntentLedger intentLedger) {
         this.registry = Objects.requireNonNull(registry);
         this.policy = Objects.requireNonNull(policy);
         this.callPool = Objects.requireNonNull(callPool);
@@ -65,6 +76,7 @@ public final class ToolGateway implements ToolInvoker {
         this.events = events; // 可空（意图事件落档可选项）
         this.cancels = cancels; // 可空（默认不参与在途取消通知）
         this.provenanceTags = provenanceTags;
+        this.intentLedger = intentLedger;
     }
 
     /** 下发给 LLM 的工具清单：被拒工具从清单删除（双闸之一） */
@@ -240,13 +252,15 @@ public final class ToolGateway implements ToolInvoker {
                 "工具远端暂不可用（临时故障，可重试）");
     }
 
-    /** R2/R3 意图记录（VALIDATE_ONLY，零执行；AM4 不引入审批态） */
+    /** R2/R3 意图记录（VALIDATE_ONLY，零执行；AM4 不引入审批态；PB-B1 起意图行同短事务入账） */
     private void recordIntent(ToolInvocation invocation, String digest, ToolRisk risk) {
-        if (events == null) {
+        if (events == null && intentLedger == null) {
             return;
         }
+        var intentId = java.util.UUID.randomUUID();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("kind", "TOOL_INTENT_VALIDATED");
+        payload.put("intent_id", intentId.toString());
         payload.put("tool", invocation.toolName());
         payload.put("version", invocation.toolVersion());
         payload.put("risk", risk.name());
@@ -258,9 +272,18 @@ public final class ToolGateway implements ToolInvoker {
                             registrationSchemaHash(invocation))
                     .toCanonicalJson());
         }
+        String payloadJson = InternalCanonicalJsonV1.canonicalize(payload);
+        if (intentLedger != null) {
+            var intent = com.objwww.pr.control.alert.domain.mutation.ActionIntent.open(
+                    intentId, invocation.runId(), invocation.taskId(), invocation.attemptId(),
+                    invocation.callSeq(), invocation.toolName(), invocation.toolVersion(),
+                    digest, risk, null, payloadJson);
+            intentLedger.record(intent, new RcaEventAppender.EventDraft(
+                    intentId, "TOOL_INTENT_VALIDATED", payloadJson));
+            return;
+        }
         events.appendIndependent(invocation.runId(), new RcaEventAppender.EventDraft(
-                UUID.randomUUID(), "TOOL_INTENT_VALIDATED",
-                InternalCanonicalJsonV1.canonicalize(payload)));
+                intentId, "TOOL_INTENT_VALIDATED", payloadJson));
     }
 
     private String registrationSchemaHash(ToolInvocation invocation) {
