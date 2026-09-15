@@ -121,6 +121,10 @@ services:
       # AM1 告警链路（§6.4/§6.5）：webhook bearer 与 Holmes 独立凭证
       # 键名与 application.yml / AlertSelfCheck 三方统一（BA-09①，G0-02）
       ALERTMANAGER_WEBHOOK_BEARER_TOKEN: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:?}
+      # PA-A7：webhook HMAC 双因子（可选第二凭证面；"keyId:secret,..." 逗号分隔，
+      # 缺省空=bearer 单因子不变。带 X-PA-Signature 头的投递强制验签，缺失头走 bearer；
+      # 密钥不落库不落日志，轮换= .env 改值 + compose up -d）
+      APP_ALERT_WEBHOOK_HMAC_KEYS: ${APP_ALERT_WEBHOOK_HMAC_KEYS:-}
       # AM5 M5-16：控制面防自噬路由独立 bearer（RCA_SYSTEM/monitoring_scope 声明组
       # 经三面门直达值班通道，不建 Incident/Run——INV-AM5-4；:? 必填防静默空值恒拒）
       CONTROL_WEBHOOK_BEARER_TOKEN: ${CONTROL_WEBHOOK_BEARER_TOKEN:?}
@@ -196,6 +200,11 @@ services:
       # exporter 依赖不上类路径时此变量仅作声明面；trace 采样概率同面）
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otelcol-control:4317}
       APP_TRACE_SAMPLING: ${APP_TRACE_SAMPLING:-0.1}
+      # PA-A6：Brave→Zipkin 导出端点（栈内 otelcol-control zipkin receiver :9411；
+      # 置空字符串可显式关闭导出，仅内存态 span）
+      ZIPKIN_ENDPOINT: ${ZIPKIN_ENDPOINT:-http://otelcol-control:9411/api/v2/spans}
+      # PA-A5：决策溯源 build 锚（CI/部署期注入镜像 sha；缺省 unknown 显式可见）
+      APP_PROVENANCE_BUILD_SHA: ${APP_PROVENANCE_BUILD_SHA:-unknown}
       APP_CAS_DIR: /var/cas
     ports:
       # 默认仅绑 loopback（安全底线）；Alertmanager 在 docker 内网投递，公网零暴露

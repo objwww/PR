@@ -74,8 +74,13 @@ public class AlertFlowConfig {
     }
 
     @Bean
-    public AlertIntakeService alertIntakeService(AlertInboxRepository inbox, AlertIntakeLimits limits) {
-        return new AlertIntakeService(inbox, limits, AlertClock.system());
+    public AlertIntakeService alertIntakeService(AlertInboxRepository inbox, AlertIntakeLimits limits,
+            @Value("${app.alert.intake.injection-scan.enabled:true}") boolean injectionScanEnabled) {
+        // PA-A3（L0-4/L0-5）：注入扫描 fail-safe 默认开启——命中初始态直插 QUARANTINED
+        // 隔离区（claim 面不可达），人工复核后放行；关闭须显式配置（登记偏离）
+        return new AlertIntakeService(inbox, limits, AlertClock.system(),
+                injectionScanEnabled ? new com.objwww.pr.control.alert.application
+                        .AlertInjectionScanner() : null);
     }
 
     /**
@@ -150,9 +155,12 @@ public class AlertFlowConfig {
                                                    @Value("${app.alert.inbox.lease:PT2M}") Duration lease,
                                                    @Value("${app.alert.defer.backoff:PT30S}") Duration deferBackoff,
                                                    @Value("${app.alert.inbox.error-backoff:PT10S}") Duration errorBackoff,
-                                                   @Value("${app.alert.inbox.poll-interval:PT2S}") Duration pollInterval) {
+                                                   @Value("${app.alert.inbox.poll-interval:PT2S}") Duration pollInterval,
+                                                   org.springframework.beans.factory.ObjectProvider<
+                                                           io.micrometer.tracing.Tracer> tracer) {
+        // PA-A6：tracing 面随装配（tracer 缺席 = null 不建 span，诚实降级）
         return new AlertInboxProcessor(inbox, projector, tx, AlertClock.system(), owner,
-                lease, deferBackoff, errorBackoff, pollInterval);
+                lease, deferBackoff, errorBackoff, pollInterval, tracer.getIfAvailable());
     }
 
     @Bean
@@ -535,22 +543,27 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.domain.repository.RcaReportRepository reports,
             InvestigationResultRepository investigationResults,
             IncidentRepository incidents,
+            com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts,
             com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
             TransactionOperations tx,
             SlaPolicy sla,
             com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics,
             @Value("${app.alert.reconcile.mode:}") String modeText,
             @Value("${app.alert.reconcile.poll-interval:PT30S}") Duration pollInterval,
-            @Value("${app.alert.reconcile.batch-limit:50}") int batchLimit) {
+            @Value("${app.alert.reconcile.batch-limit:50}") int batchLimit,
+            @Value("${app.alert.reconcile.stuck-threshold:PT5M}") Duration stuckThreshold) {
         com.objwww.pr.control.alert.application.RunReconciler.Mode mode =
                 modeText == null || modeText.isBlank()
                         ? com.objwww.pr.control.alert.application.RunReconciler.Mode.ALERT_ONLY
                         : com.objwww.pr.control.alert.application.RunReconciler.Mode.valueOf(
                                 modeText.trim().toUpperCase());
-        // WC-5：观测面随装配接线（扫描时长/失败/决策计数/覆盖与积压 gauge 族）
+        // WC-5：观测面随装配接线（扫描时长/失败/决策计数/覆盖与积压 gauge 族）；
+        // PA-A1：attempt 进度读面 + LIVE_BUT_STUCK 阈值随装配接线（灰度同 mode——
+        // ALERT_ONLY 只分类告警，SAFE_RECOVER 及以上才终止）
         return new com.objwww.pr.control.alert.application.RunReconciler(
-                runs, tasks, reports, investigationResults, incidents, events, tx, sla,
-                AlertClock.system(), mode, pollInterval, batchLimit, alertMetrics);
+                runs, tasks, reports, investigationResults, incidents, events, tx,
+                sla, AlertClock.system(), mode, pollInterval, batchLimit, alertMetrics,
+                attempts, stuckThreshold);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */
@@ -578,13 +591,24 @@ public class AlertFlowConfig {
                 AlertClock.system(), pollInterval, tx);
     }
 
-    /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗）随容器启停
+    /** PA-A2（V112）：每日验链作业——全 run 哈希链重算比对（R9 口径：assumed DB
+     *  write boundary 下的篡改可证）。interval 非正 = 关闭。 */
+    @Bean
+    public com.objwww.pr.control.alert.application.EventChainVerifyLoop eventChainVerifyLoop(
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            @Value("${app.alert.event-chain.verify-interval:PT24H}") Duration verifyInterval) {
+        return new com.objwww.pr.control.alert.application.EventChainVerifyLoop(
+                events, verifyInterval);
+    }
+
+    /** 消费循环（inbox 投影 + RCA worker + 等待重驱 + Run 对账看门狗 + 每日验链）随容器启停
      *  （T10 部署启动真执行链；M6-05 holmes shadow 调度循环已随退场摘除） */
     @Bean
     public SmartLifecycle alertFlowLifecycle(
             AlertInboxProcessor inboxProcessor, RcaWorker rcaWorker,
             com.objwww.pr.control.alert.application.IncidentWaitingRedrive redrive,
-            com.objwww.pr.control.alert.application.RunReconciler runReconciler) {
+            com.objwww.pr.control.alert.application.RunReconciler runReconciler,
+            com.objwww.pr.control.alert.application.EventChainVerifyLoop eventChainVerifyLoop) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -594,12 +618,14 @@ public class AlertFlowConfig {
                 rcaWorker.start();
                 redrive.start();
                 runReconciler.start();
+                eventChainVerifyLoop.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                eventChainVerifyLoop.stop();
                 runReconciler.stop();
                 redrive.stop();
                 rcaWorker.stop();

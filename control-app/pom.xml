@@ -107,6 +107,15 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-brave</artifactId>
         </dependency>
+        <!-- PA-A6（L8-6）：Zipkin 格式 span 导出（→ otelcol-control zipkin receiver，
+             tail_sampling 后转 OTLP 上游）；endpoint 走 docker profile env（置空可显式
+             关闭导出）。Boot BOM 经 zipkin-reporter-bom 管版本（3.4.3，零显式版本钉）。
+             分层纪律：incident_id/run_id/attempt_id 作 attribute，trace_id/span_id 由
+             Tracer 生成，不拿业务 ID 伪造。 -->
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
 
         <!-- EX-C3a：认证最小闭环——Spring Security 6 服务端会话（浏览器）+ 机器静态 bearer
              过滤器；禁自建 token 表+HMAC（卡面机制裁定见执行日志） -->

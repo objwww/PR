@@ -36,11 +36,13 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 INSERT INTO rca_attempt (
                     id, task_id, attempt_no, lease_epoch, worker_id,
                     status, error_class, error_code, error_detail, started_at,
-                    sampling_fingerprint
+                    sampling_fingerprint,
+                    last_activity_at, last_meaningful_progress_at
                 ) VALUES (
                     :id, :taskId, :attemptNo, :leaseEpoch, :workerId,
                     :status, :errorClass, :errorCode, CAST(:errorDetail AS jsonb), :startedAt,
-                    CAST(:samplingFingerprint AS jsonb)
+                    CAST(:samplingFingerprint AS jsonb),
+                    :startedAt, :startedAt
                 )
                 """)
                 .param("id", attempt.id())
@@ -83,6 +85,56 @@ public class PostgresRcaAttemptRepository implements RcaAttemptRepository {
                 .param("taskId", taskId)
                 .query(this::mapRow)
                 .list();
+    }
+
+    @Override
+    public boolean markActivityByTask(UUID taskId, java.time.Instant at) {
+        return jdbc.sql("""
+                UPDATE rca_attempt SET last_activity_at = :at
+                 WHERE task_id = :taskId AND status = 'STARTED'
+                """)
+                .param("at", ts(at))
+                .param("taskId", taskId)
+                .update() > 0;
+    }
+
+    @Override
+    public boolean markMeaningfulProgressByTask(UUID taskId, java.time.Instant at) {
+        return jdbc.sql("""
+                UPDATE rca_attempt
+                   SET last_activity_at = :at, last_meaningful_progress_at = :at
+                 WHERE task_id = :taskId AND status = 'STARTED'
+                """)
+                .param("at", ts(at))
+                .param("taskId", taskId)
+                .update() > 0;
+    }
+
+    @Override
+    public java.util.Optional<AttemptProgress> findStartedProgressByTaskId(UUID taskId) {
+        return jdbc.sql("""
+                SELECT id, task_id, attempt_no, lease_epoch, started_at,
+                       last_activity_at, last_meaningful_progress_at
+                  FROM rca_attempt
+                 WHERE task_id = :taskId AND status = 'STARTED'
+                 ORDER BY started_at DESC
+                 LIMIT 1
+                """)
+                .param("taskId", taskId)
+                .query((rs, rowNum) -> {
+                    Timestamp startedAt = rs.getTimestamp("started_at");
+                    Timestamp lastActivity = rs.getTimestamp("last_activity_at");
+                    Timestamp lastProgress = rs.getTimestamp("last_meaningful_progress_at");
+                    return new AttemptProgress(
+                            rs.getObject("id", UUID.class),
+                            rs.getObject("task_id", UUID.class),
+                            rs.getInt("attempt_no"),
+                            rs.getLong("lease_epoch"),
+                            startedAt.toInstant(),
+                            lastActivity == null ? null : lastActivity.toInstant(),
+                            lastProgress == null ? null : lastProgress.toInstant());
+                })
+                .optional();
     }
 
     private static String fingerprintJson(Map<String, Object> fingerprint) {

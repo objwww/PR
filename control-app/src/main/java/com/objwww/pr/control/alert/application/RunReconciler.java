@@ -97,7 +97,13 @@ public class RunReconciler {
         /** WC-4 §6.2：finalizer DONE 但 Run 仍活跃——finishTask 原子面之外的结构性
          *  不一致（任务 DONE 与 Run 收口同事务，正常路径不可能分离）：核材料事实、
          *  告警人工确定性收尾，不冒认成功不自动补写 */
-        FINALIZER_DONE_RUN_OPEN
+        FINALIZER_DONE_RUN_OPEN,
+        /** PA-A1：LIVE_BUT_STUCK——driver 租约活（心跳在续）但 STARTED attempt 的
+         *  有效进展（last_meaningful_progress_at）滞后超过阈值。与 WAIT_ACTIVE_LEASE
+         *  的分界：慢不是 stuck，无有效进展才是（LLM 持续吐 token 只算 activity）。
+         *  只读域取消零副作用；AM8 解锁 mutation 后本档必须先过 operation 状态闸
+         *  （有 DISPATCHED/UNKNOWN 先 reconcile，设计 §3.3/R13） */
+        LIVE_BUT_STUCK
     }
 
     private final RcaRunRepository runs;
@@ -114,6 +120,10 @@ public class RunReconciler {
     private final int batchLimit;
     /** WC-5 观测面（NOOP = 无观测语义环境，旧装配不变） */
     private final AlertMetrics metrics;
+    /** PA-A1：attempt 进度读面（null = LIVE_BUT_STUCK 检测关闭——旧装配零行为差） */
+    private final com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts;
+    /** PA-A1：有效进展滞后阈值（null = 检测关闭；有效值必须为正） */
+    private final Duration stuckThreshold;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
     /** WC-4 §6.1 进程内 keyset 游标（活跃批/清理批各一）：null = 从头；读到尾部归零重启 */
@@ -152,6 +162,26 @@ public class RunReconciler {
                          Duration pollInterval,
                          int batchLimit,
                          AlertMetrics metrics) {
+        this(runs, tasks, reports, investigationResults, incidents, events, tx, sla, clock,
+                mode, pollInterval, batchLimit, metrics, null, null);
+    }
+
+    /** PA-A1 全参形态：接 attempt 进度读面 + LIVE_BUT_STUCK 阈值（null = 检测关闭） */
+    public RunReconciler(RcaRunRepository runs,
+                         RcaTaskRepository tasks,
+                         RcaReportRepository reports,
+                         InvestigationResultRepository investigationResults,
+                         IncidentRepository incidents,
+                         RcaEventAppender events,
+                         TransactionOperations tx,
+                         SlaPolicy sla,
+                         AlertClock clock,
+                         Mode mode,
+                         Duration pollInterval,
+                         int batchLimit,
+                         AlertMetrics metrics,
+                         com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts,
+                         Duration stuckThreshold) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.reports = Objects.requireNonNull(reports, "reports");
@@ -172,6 +202,11 @@ public class RunReconciler {
         }
         this.batchLimit = batchLimit;
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        if (stuckThreshold != null && (stuckThreshold.isNegative() || stuckThreshold.isZero())) {
+            throw new IllegalArgumentException("stuckThreshold 必须为正（null=检测关闭）");
+        }
+        this.attempts = attempts;
+        this.stuckThreshold = stuckThreshold;
     }
 
     public Mode mode() {
@@ -316,7 +351,11 @@ public class RunReconciler {
         } else if (pastDeadline) {
             decision = Decision.HARD_DEADLINE_EXPIRED;
         } else if (hasLiveLease(runTasks, now)) {
-            decision = Decision.WAIT_ACTIVE_LEASE;
+            // PA-A1：租约活≠有进展——心跳在续但有效进展滞后超阈值 = LIVE_BUT_STUCK。
+            // 慢调用（progress 新鲜）仍是 WAIT_ACTIVE_LEASE；REPORT_FINALIZE 不参与
+            // （收尾任务不产检查点进展，其 bounded 性由自身 deadline_at 把关）
+            decision = isLiveButStuck(candidate, runTasks, now)
+                    ? Decision.LIVE_BUT_STUCK : Decision.WAIT_ACTIVE_LEASE;
         } else {
             // WC-4 §6.2：finalizer 看状态不是看存在——在飞/租约失效/终态分类，
             // 无 finalizer 才继续走材料/退避/孤立链
@@ -405,6 +444,16 @@ public class RunReconciler {
             }
             case ORPHAN_MATERIALS_INCOMPLETE, ORPHAN_NO_DRIVER ->
                     emit(candidate, decision, "结构不一致：告警人工接管，不猜结果不自动恢复");
+            case LIVE_BUT_STUCK -> {
+                // 灰度纪律与 HARD_DEADLINE_EXPIRED 同线：终止只在 AUTO_EXPIRE 生效——
+                // SAFE_RECOVER（195 现行）只分类告警，观测误报后再开终止
+                if (mode != Mode.AUTO_EXPIRE) {
+                    emit(candidate, decision, "AUTO_EXPIRE 将按 LIVE_BUT_STUCK 终止"
+                            + "（心跳活但有效进展滞后 > " + stuckThreshold + "）");
+                } else {
+                    cancelStuckRun(candidate, now);
+                }
+            }
             case RECOVERY_EXHAUSTED ->
                     // §6.2：恢复预算已耗尽——不退避不重铸（不换 key 绕 maxAttempts）
                     emit(candidate, decision, "finalizer 已终态（预算耗尽）：不再退避不再重铸，人工接管");
@@ -434,6 +483,7 @@ public class RunReconciler {
                 || decision == Decision.ORPHAN_MATERIALS_INCOMPLETE
                 || decision == Decision.ORPHAN_NO_DRIVER
                 || decision == Decision.RECOVERY_EXHAUSTED
+                || decision == Decision.LIVE_BUT_STUCK
                 || decision == Decision.FINALIZER_DONE_RUN_OPEN) {
             log.warn("run {} 对账决策 {}（mode={} deadline={}）：{}",
                     candidate.id(), decision, mode, candidate.reconcileDeadlineAt(), proposed);
@@ -556,6 +606,96 @@ public class RunReconciler {
                     candidate.state());
         } else {
             log.info("run {} 过期竞争败者（正常收尾/取消已先落地），零副作用", candidate.id());
+        }
+    }
+
+    // ------------------------------------------------------------------ 进度档动作（PA-A1）
+
+    /**
+     * LIVE_BUT_STUCK 判定（分类面）：仅 PRODUCTION + RUNNING/REPORTING；存在 driver
+     * 任务（非 REPORT_FINALIZE）租约活且其 STARTED attempt 的有效进展基线
+     * （last_meaningful_progress_at，NULL 回退 startedAt——V111 存量行语义）滞后超过
+     * stuckThreshold。attempts/阈值未装配 = 永不判定（检测关闭）。
+     */
+    private boolean isLiveButStuck(RcaRunRepository.ReconcileCandidate candidate,
+            List<RcaTask> runTasks, Instant now) {
+        if (attempts == null || stuckThreshold == null
+                || candidate.purpose() != RunPurpose.PRODUCTION
+                || (candidate.state() != RcaRunState.RUNNING
+                        && candidate.state() != RcaRunState.REPORTING)) {
+            return false;
+        }
+        Instant staleBefore = now.minus(stuckThreshold);
+        return runTasks.stream()
+                .filter(t -> t.state() == RcaTaskState.LEASED)
+                .filter(t -> t.leaseUntil() != null && t.leaseUntil().isAfter(now))
+                .filter(t -> !RcaTask.REPORT_FINALIZE.equals(t.taskKey()))
+                .anyMatch(t -> attempts.findStartedProgressByTaskId(t.id())
+                        .map(p -> p.effectiveProgressAt().isBefore(staleBefore))
+                        .orElse(false));
+    }
+
+    /**
+     * LIVE_BUT_STUCK 终止（PA-A1，expireRun 同锁序/同栅栏纪律）：锁内复验「purpose
+     * + 活跃态 + 仍存在进展滞后的活租约 driver」——候选快照不可信（心跳可能刚推进/
+     * 检查点可能刚提交），复验败者零副作用。单事务直落终态（无 CANCEL_REQUESTED
+     * 中间窗）：RUNNING/REPORTING→EXPIRED + completionKind=LIVE_BUT_STUCK，非终态
+     * 任务→CANCELLED（迟到结果由 finishTask STALE 栅栏只审计），指针条件清零。
+     * 只读域（R2/R3 VALIDATE_ONLY）零外部副作用，取消即安全；AM8 解锁 mutation 后
+     * 本事务前必须加 operation 状态闸（DISPATCHED/UNKNOWN → 先 reconcile，R13）。
+     */
+    private void cancelStuckRun(RcaRunRepository.ReconcileCandidate candidate, Instant now) {
+        Boolean cancelled = tx.execute(status -> {
+            List<RcaTask> lockedTasks = tasks.lockNonTerminalByRunIdForUpdate(candidate.id());
+            RcaRun locked = runs.findByIdForUpdate(candidate.id()).orElse(null);
+            if (locked == null || !locked.state().isActive()
+                    || locked.purpose() != RunPurpose.PRODUCTION
+                    || (locked.state() != RcaRunState.RUNNING
+                            && locked.state() != RcaRunState.REPORTING)) {
+                return false;
+            }
+            boolean stillStuck = lockedTasks.stream()
+                    .filter(t -> t.state() == RcaTaskState.LEASED)
+                    .filter(t -> t.leaseUntil() != null && t.leaseUntil().isAfter(now))
+                    .filter(t -> !RcaTask.REPORT_FINALIZE.equals(t.taskKey()))
+                    .anyMatch(t -> attempts.findStartedProgressByTaskId(t.id())
+                            .map(p -> p.effectiveProgressAt().isBefore(now.minus(stuckThreshold)))
+                            .orElse(false));
+            if (!stillStuck) {
+                return false;
+            }
+            RcaRunStateMachine.requireTransition(locked.state(), RcaRunState.EXPIRED);
+            runs.update(new RcaRun(locked.id(), locked.incidentId(), locked.generation(),
+                    locked.trigger(), RcaRunState.EXPIRED, locked.investigationHash(),
+                    locked.createdAt(), now, locked.startedAt(), now,
+                    "RECONCILE_LIVE_BUT_STUCK", locked.purpose(), locked.purposeSource(),
+                    RcaRun.COMPLETION_LIVE_BUT_STUCK));
+            events.append(candidate.id(), new RcaEventAppender.EventDraft(
+                    UUID.randomUUID(), "RUN_LIVE_BUT_STUCK",
+                    "{\"by\":\"run-reconciler\",\"thresholdMs\":" + stuckThreshold.toMillis()
+                            + ",\"completionKind\":\"" + RcaRun.COMPLETION_LIVE_BUT_STUCK
+                            + "\"}"));
+            for (RcaTask task : lockedTasks) {
+                if (!isTerminal(task.state())) {
+                    RcaTaskStateMachine.requireTransition(task.state(),
+                            RcaTaskState.CANCELLED);
+                    tasks.update(task.withState(RcaTaskState.CANCELLED, now));
+                }
+            }
+            incidents.findByIdForUpdate(candidate.incidentId()).ifPresent(incident -> {
+                if (candidate.id().equals(incident.currentRcaRunId())) {
+                    incidents.update(incident.withCurrentRunPointerCleared(now));
+                }
+            });
+            runs.incrementRecoveryAttempts(candidate.id());
+            return true;
+        });
+        if (Boolean.TRUE.equals(cancelled)) {
+            log.warn("run {} LIVE_BUT_STUCK 终止（心跳活但有效进展滞后 > {}）",
+                    candidate.id(), stuckThreshold);
+        } else {
+            log.info("run {} LIVE_BUT_STUCK 复验败者（检查点刚推进/租约刚更新已先落地），零副作用",
+                    candidate.id());
         }
     }
 

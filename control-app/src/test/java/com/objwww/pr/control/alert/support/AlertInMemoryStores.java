@@ -804,6 +804,9 @@ public final class AlertInMemoryStores {
 
     public static final class Attempts implements RcaAttemptRepository {
         private final Map<UUID, RcaAttempt> rows = new LinkedHashMap<>();
+        /** PA-A1 进度双列（V111；RcaAttempt 记录不承载，独立存） */
+        private final Map<UUID, java.time.Instant> lastActivity = new LinkedHashMap<>();
+        private final Map<UUID, java.time.Instant> lastMeaningful = new LinkedHashMap<>();
 
         @Override
         public synchronized void insert(RcaAttempt attempt) {
@@ -813,6 +816,9 @@ public final class AlertInMemoryStores {
                 throw new DuplicateKeyException("uq_rca_attempt 模拟");
             }
             rows.put(attempt.id(), attempt);
+            // PA-A1：insert 即双列 = started_at（与 Postgres 实现同语义）
+            lastActivity.put(attempt.id(), attempt.startedAt());
+            lastMeaningful.put(attempt.id(), attempt.startedAt());
         }
 
         @Override
@@ -827,6 +833,62 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized List<RcaAttempt> findByTaskId(UUID taskId) {
             return rows.values().stream().filter(a -> a.taskId().equals(taskId)).toList();
+        }
+
+        @Override
+        public synchronized boolean markActivityByTask(UUID taskId, java.time.Instant at) {
+            boolean any = false;
+            for (RcaAttempt a : rows.values()) {
+                if (a.taskId().equals(taskId)
+                        && a.status() == com.objwww.pr.control.alert.domain.model.RcaAttemptStatus.STARTED) {
+                    lastActivity.put(a.id(), at);
+                    any = true;
+                }
+            }
+            return any;
+        }
+
+        @Override
+        public synchronized boolean markMeaningfulProgressByTask(UUID taskId, java.time.Instant at) {
+            boolean any = false;
+            for (RcaAttempt a : rows.values()) {
+                if (a.taskId().equals(taskId)
+                        && a.status() == com.objwww.pr.control.alert.domain.model.RcaAttemptStatus.STARTED) {
+                    lastActivity.put(a.id(), at);
+                    lastMeaningful.put(a.id(), at);
+                    any = true;
+                }
+            }
+            return any;
+        }
+
+        @Override
+        public synchronized java.util.Optional<AttemptProgress> findStartedProgressByTaskId(
+                UUID taskId) {
+            return rows.values().stream()
+                    .filter(a -> a.taskId().equals(taskId)
+                            && a.status() == com.objwww.pr.control.alert.domain.model
+                                    .RcaAttemptStatus.STARTED)
+                    .max(java.util.Comparator.comparing(RcaAttempt::startedAt)
+                            .thenComparing(RcaAttempt::attemptNo))
+                    .map(a -> new AttemptProgress(a.id(), a.taskId(), a.attemptNo(),
+                            a.leaseEpoch(), a.startedAt(), lastActivity.get(a.id()),
+                            lastMeaningful.get(a.id())));
+        }
+
+        /** 测试直写面：模拟存量行/滞后回写（NULL = 移除写点，判定回退 startedAt） */
+        public synchronized void setProgress(UUID attemptId, java.time.Instant activityAt,
+                java.time.Instant meaningfulAt) {
+            if (activityAt == null) {
+                lastActivity.remove(attemptId);
+            } else {
+                lastActivity.put(attemptId, activityAt);
+            }
+            if (meaningfulAt == null) {
+                lastMeaningful.remove(attemptId);
+            } else {
+                lastMeaningful.put(attemptId, meaningfulAt);
+            }
         }
 
         public synchronized List<RcaAttempt> all() {
@@ -1194,12 +1256,27 @@ public final class AlertInMemoryStores {
     public record AppendedEvent(UUID runId, String eventType, String payloadJson) {
     }
 
-    /** seq 简化为追加序（命令面 UT 只关心"是否追加/追加了什么"） */
+    /** seq 简化为追加序（命令面 UT 只关心"是否追加/追加了什么"）；PA-A2 起 per-run
+     * 哈希链与 PG 实现同构（append 即链写，verifyChain 重算比对；tamper 面供测试） */
     public static final class RcaEventLog implements RcaEventAppender {
         private final List<AppendedEvent> events = new ArrayList<>();
+        private final Map<UUID, Long> lastSeqByRun = new LinkedHashMap<>();
+        private final Map<UUID, String> lastHashByRun = new LinkedHashMap<>();
+        private record ChainRow(long seq, String prevHash, String eventHash, String type,
+                String digest) {
+        }
+        private final Map<UUID, List<ChainRow>> chains = new LinkedHashMap<>();
 
         @Override
         public synchronized long append(UUID runId, EventDraft draft) {
+            long seq = lastSeqByRun.merge(runId, 1L, Long::sum);
+            String digest = com.objwww.pr.shared.Digest.sha256Of(draft.payloadJson()).value();
+            String prev = lastHashByRun.getOrDefault(runId, "GENESIS");
+            String hash = com.objwww.pr.shared.Digest.sha256Of(prev + ":" + seq + ":"
+                    + draft.eventType() + ":" + digest).value();
+            lastHashByRun.put(runId, hash);
+            chains.computeIfAbsent(runId, k -> new ArrayList<>()).add(
+                    new ChainRow(seq, prev, hash, draft.eventType(), digest));
             events.add(new AppendedEvent(runId, draft.eventType(), draft.payloadJson()));
             return events.size();
         }
@@ -1207,6 +1284,40 @@ public final class AlertInMemoryStores {
         @Override
         public synchronized long appendIndependent(UUID runId, EventDraft draft) {
             return append(runId, draft);
+        }
+
+        @Override
+        public synchronized ChainReport verifyChain(UUID runId) {
+            List<ChainRow> rows = chains.getOrDefault(runId, List.of());
+            String expectedPrev = "GENESIS";
+            long verified = 0;
+            for (ChainRow row : rows) {
+                String recomputed = com.objwww.pr.shared.Digest.sha256Of(expectedPrev + ":"
+                        + row.seq() + ":" + row.type() + ":" + row.digest()).value();
+                if (!row.prevHash().equals(expectedPrev)
+                        || !row.eventHash().equals(recomputed)) {
+                    return new ChainReport(runId, rows.size(), verified, row.seq());
+                }
+                expectedPrev = row.eventHash();
+                verified++;
+            }
+            return new ChainReport(runId, rows.size(), verified, -1);
+        }
+
+        @Override
+        public synchronized java.util.List<UUID> runIdsWithEvents() {
+            return List.copyOf(chains.keySet());
+        }
+
+        /** 测试面：篡改最后一条事件的存储哈希（模拟库内改写，验链器应报 broken） */
+        public synchronized void tamperLastHash(UUID runId) {
+            List<ChainRow> rows = chains.get(runId);
+            if (rows != null && !rows.isEmpty()) {
+                int last = rows.size() - 1;
+                ChainRow row = rows.get(last);
+                rows.set(last, new ChainRow(row.seq(), row.prevHash(),
+                        "tampered-" + row.eventHash(), row.type(), row.digest()));
+            }
         }
 
         public synchronized List<AppendedEvent> all() {

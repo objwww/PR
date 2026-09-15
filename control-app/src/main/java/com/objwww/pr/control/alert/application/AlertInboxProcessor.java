@@ -58,18 +58,35 @@ public class AlertInboxProcessor {
     private final Duration deferBackoff;
     private final Duration errorBackoff;
     private final Duration pollInterval;
+    /** PA-A6：tracing 面（可空=null 不建 span——诚实降级，不造 no-op span） */
+    private final io.micrometer.tracing.Tracer tracer;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread worker;
 
     public AlertInboxProcessor(AlertInboxRepository inbox,
-                               IncidentProjector projector,
-                               TransactionOperations tx,
-                               AlertClock clock,
-                               String owner,
-                               Duration inboxLease,
-                               Duration deferBackoff,
-                               Duration errorBackoff,
-                               Duration pollInterval) {
+            IncidentProjector projector,
+            TransactionOperations tx,
+            AlertClock clock,
+            String owner,
+            Duration inboxLease,
+            Duration deferBackoff,
+            Duration errorBackoff,
+            Duration pollInterval) {
+        this(inbox, projector, tx, clock, owner, inboxLease, deferBackoff, errorBackoff,
+                pollInterval, null);
+    }
+
+    /** PA-A6 全参形态：接 tracing 面（tick span + 跨线程恢复） */
+    public AlertInboxProcessor(AlertInboxRepository inbox,
+            IncidentProjector projector,
+            TransactionOperations tx,
+            AlertClock clock,
+            String owner,
+            Duration inboxLease,
+            Duration deferBackoff,
+            Duration errorBackoff,
+            Duration pollInterval,
+            io.micrometer.tracing.Tracer tracer) {
         this.inbox = Objects.requireNonNull(inbox);
         this.projector = Objects.requireNonNull(projector);
         this.tx = Objects.requireNonNull(tx);
@@ -79,6 +96,7 @@ public class AlertInboxProcessor {
         this.deferBackoff = Objects.requireNonNull(deferBackoff);
         this.errorBackoff = Objects.requireNonNull(errorBackoff);
         this.pollInterval = Objects.requireNonNull(pollInterval);
+        this.tracer = tracer;
     }
 
     /** 消费一行；无可领行返回 SKIPPED（空转由循环层节流） */
@@ -148,10 +166,11 @@ public class AlertInboxProcessor {
         inbox.scheduleRetry(row.id(), row.leaseEpoch(), decision, error, now.plus(backoff), now);
     }
 
-    /** 启动常驻循环（幂等：已启动则忽略） */
+    /** 启动常驻循环（幂等：已启动则忽略）；PA-A6：线程体恢复提交点 span（跨线程关联） */
     public synchronized void start() {
         if (running.compareAndSet(false, true)) {
-            worker = Thread.ofVirtual().name("alert-inbox-" + owner).start(this::loop);
+            worker = Thread.ofVirtual().name("alert-inbox-" + owner)
+                    .start(wrapSpan(this::loop));
             log.info("AlertInboxProcessor 启动 owner={}", owner);
         }
     }
@@ -167,10 +186,22 @@ public class AlertInboxProcessor {
     private void loop() {
         while (running.get()) {
             try {
-                inbox.reclaimExpired(clock.now());
-                Outcome outcome = processOnce();
-                if (outcome == Outcome.SKIPPED) {
-                    Thread.sleep(pollInterval.toMillis());
+                io.micrometer.tracing.Span tick = tickSpan("alert.inbox.tick");
+                try {
+                    inbox.reclaimExpired(clock.now());
+                    Outcome outcome = processOnce();
+                    if (outcome == Outcome.SKIPPED) {
+                        Thread.sleep(pollInterval.toMillis());
+                    }
+                } catch (RuntimeException e) {
+                    if (tick != null) {
+                        tick.error(e);
+                    }
+                    throw e;
+                } finally {
+                    if (tick != null) {
+                        tick.end();
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -185,5 +216,24 @@ public class AlertInboxProcessor {
                 }
             }
         }
+    }
+
+    /** PA-A6：tick span（tracer 未装配 = null 直通） */
+    private io.micrometer.tracing.Span tickSpan(String name) {
+        return tracer == null ? null : tracer.nextSpan().name(name).start();
+    }
+
+    /** 跨线程 span 恢复（TracedTasks 同构内联——应用层不依赖 infra 观测类） */
+    private Runnable wrapSpan(Runnable task) {
+        if (tracer == null) {
+            return task;
+        }
+        var span = tracer.currentSpan();
+        return () -> {
+            try (io.micrometer.tracing.Tracer.SpanInScope scope =
+                    span == null ? null : tracer.withSpan(span)) {
+                task.run();
+            }
+        };
     }
 }

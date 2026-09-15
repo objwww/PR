@@ -410,6 +410,9 @@ public class RcaWorker {
                     }
                 }
                 slots.heartbeat(slotScope, work.slotNo(), owner, work.slotEpoch(), hb, taskLease);
+                // PA-A1：activity 回写——心跳=系统在干活（活≠进展；有效进展只由检查点
+                // APPLIED 提交同事务回写 last_meaningful_progress_at，lease 续租不回写）
+                attempts.markActivityByTask(work.task().id(), hb);
                 // WC-3（§5.2）：Run 终态探针——取消/过期一旦落地，执行身份立即停止
                 //（本探针随心跳下发给一切直调点；模型等待/工具入口经
                 // ExecutionControl.controlSignal 共用同一事实，迟到结果只审计）

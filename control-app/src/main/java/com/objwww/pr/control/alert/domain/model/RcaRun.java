@@ -42,6 +42,10 @@ public record RcaRun(
     /** SR §4.2：RUNNING/REPORTING 到达可信硬期限后按状态机 EXPIRED 收尾 */
     public static final String COMPLETION_DEADLINE_EXPIRED = "DEADLINE_EXPIRED";
 
+    /** PA-A1：LIVE_BUT_STUCK（心跳活但无有效进展，RunReconciler 进度档终止）。
+     *  只读域取消零副作用；AM8 解锁 mutation 后本路径必须先过 operation 状态闸（设计 §3.3） */
+    public static final String COMPLETION_LIVE_BUT_STUCK = "LIVE_BUT_STUCK";
+
     public RcaRun {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(incidentId, "incidentId");

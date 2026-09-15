@@ -313,13 +313,24 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .update();
     }
 
+    /**
+     * deadline 绑定：Instant.MAX（critical 永不到期，SlaPolicy PRIORITY_CRITICAL）
+     * 必须绑 PG 原生 'infinity' 字面量（CAST timestamptz）——与
+     * PostgresRcaTaskRepository#deadlineParam 同律。直接绑定 Instant.MAX 会
+     * micros 溢出环绕成负值 → PG "timestamp out of range"（195 真跑实测：
+     * critical 告警铸 run 五次重试全败 → DEAD_LETTER，2026-09-15 修复）。
+     */
+    private static Object deadlineParam(Instant deadline) {
+        return Instant.MAX.equals(deadline) ? "infinity" : Timestamp.from(deadline);
+    }
+
     @Override
     public void fixReconcileDeadlineIfAbsent(UUID id, Instant deadline) {
         jdbc.sql("""
-                UPDATE rca_run SET reconcile_deadline_at = :deadline
+                UPDATE rca_run SET reconcile_deadline_at = CAST(:deadline AS timestamptz)
                  WHERE id = :id AND reconcile_deadline_at IS NULL
                 """)
-                .param("deadline", Timestamp.from(deadline))
+                .param("deadline", deadlineParam(deadline))
                 .param("id", id)
                 .update();
     }
@@ -401,7 +412,13 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
     }
 
     private static java.time.Instant instantOf(Timestamp timestamp) {
-        return timestamp == null ? null : timestamp.toInstant();
+        if (timestamp == null) {
+            return null;
+        }
+        // PG 'infinity' 读回（pgjdbc = Long.MAX_VALUE 毫秒哨兵）→ 域语义 Instant.MAX，
+        // 与 PostgresRcaTaskRepository#deadline 读回映射同律
+        return timestamp.getTime() == Long.MAX_VALUE
+                ? Instant.MAX : timestamp.toInstant();
     }
 
     private RcaRun mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {

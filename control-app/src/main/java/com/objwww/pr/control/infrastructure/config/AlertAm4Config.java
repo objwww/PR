@@ -150,7 +150,21 @@ public class AlertAm4Config {
     /** EX-A1 熔断阈值（签名级连续无进展；≤0 回退 5） */
     private static final String DOOM_MAX_NO_PROGRESS_KEY =
             "${app.alert.am4.doom-loop.max-consecutive-no-progress:5}";
-    private static final String DOOM_POLICY_VERSION = "am4-doom-v1";
+    /** PA-A4（B v2 L5-3 五模式表）：exact repeat 预警档（缺省 2） */
+    private static final String DOOM_WARN_NO_PROGRESS_KEY =
+            "${app.alert.am4.doom-loop.warn-consecutive-no-progress:2}";
+    /** PA-A4 ping-pong（同任务两签名交替）：预警 4 / 硬停 6 */
+    private static final String DOOM_PINGPONG_WARN_KEY =
+            "${app.alert.am4.doom-loop.pingpong-warn:4}";
+    private static final String DOOM_PINGPONG_STOP_KEY =
+            "${app.alert.am4.doom-loop.pingpong-stop:6}";
+    private static final String DOOM_POLICY_VERSION = "am4-doom-v2";
+    /** PA-A4 monologue（连续独白轮数）：预警 2 / 硬停 3（B v2 表） */
+    private static final String MONOLOGUE_WARN_KEY =
+            "${app.alert.r7.primary.monologue-warn:2}";
+    private static final String MONOLOGUE_STOP_KEY =
+            "${app.alert.r7.primary.monologue-stop:3}";
+    private static final String MONOLOGUE_POLICY_VERSION = "r7-monologue-v1";
     private static final String REDUCER_ALLOWLIST_KEY =
             "${app.alert.am4.reducer.readonly-allowlist:holmes,prometheus}";
     private static final String REDUCER_POLICY_VERSION_KEY =
@@ -181,14 +195,30 @@ public class AlertAm4Config {
         return new com.objwww.pr.control.alert.application.RunBudgetGate(runBudgetLedger);
     }
 
-    /** EX-A1 熔断门：签名级连续无进展熔断（粘滞，人工/新代际解除；轮询豁免集空） */
+    /** EX-A1 熔断门：签名级连续无进展熔断（粘滞，人工/新代际解除；轮询豁免集空）。
+     *  PA-A4：双阈值（exact repeat warn/stop）+ ping-pong 交替（warn/stop），v2 策略 */
     @Bean
     public com.objwww.pr.control.alert.domain.budget.DoomLoopGuard am4DoomLoopGuard(
-            @Value(DOOM_MAX_NO_PROGRESS_KEY) long maxConsecutiveNoProgress) {
+            @Value(DOOM_MAX_NO_PROGRESS_KEY) long maxConsecutiveNoProgress,
+            @Value(DOOM_WARN_NO_PROGRESS_KEY) long warnConsecutiveNoProgress,
+            @Value(DOOM_PINGPONG_WARN_KEY) long pingPongWarn,
+            @Value(DOOM_PINGPONG_STOP_KEY) long pingPongStop) {
         long threshold = maxConsecutiveNoProgress > 0 ? maxConsecutiveNoProgress : 5L;
+        long warn = warnConsecutiveNoProgress > 0 ? warnConsecutiveNoProgress : 2L;
         return new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard(
                 new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.Policy(
-                        threshold, DOOM_POLICY_VERSION, java.util.Set.of()));
+                        warn, threshold, pingPongWarn, pingPongStop,
+                        DOOM_POLICY_VERSION, java.util.Set.of()));
+    }
+
+    /** PA-A4 回环守卫（monologue 维）：连续无工具调用轮数 warn/stop，随 runner 接线 */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.RoleLoopGuard am4RoleLoopGuard(
+            @Value(MONOLOGUE_WARN_KEY) int monologueWarn,
+            @Value(MONOLOGUE_STOP_KEY) int monologueStop) {
+        return new com.objwww.pr.control.alert.application.agent.RoleLoopGuard(
+                new com.objwww.pr.control.alert.application.agent.RoleLoopGuard.Policy(
+                        monologueWarn, monologueStop, MONOLOGUE_POLICY_VERSION));
     }
 
     /** EX-A1 run 开局限额四维（既有 budget.* 键；openRun 逐维幂等 upsert） */
@@ -389,11 +419,17 @@ public class AlertAm4Config {
             @Value(SHADOW_MAX_CALLS_KEY) long maxCallsPerWindow,
             @Value(SHADOW_WINDOW_MILLIS_KEY) long windowMillis,
             com.objwww.pr.control.alert.application.tool.InFlightToolCancels
-                    am4InFlightToolCancels) {
+                    am4InFlightToolCancels,
+            @Value("${app.alert.provenance.build-sha:unknown}") String provenanceBuildSha,
+            @Value("${app.alert.provenance.policy-version:pa-prod-v1}")
+                    String provenancePolicyVersion) {
         long calls = maxCallsPerWindow > 0 ? maxCallsPerWindow : SHADOW_MAX_CALLS_DEFAULT;
         long window = windowMillis > 0 ? windowMillis : SHADOW_WINDOW_MILLIS_DEFAULT;
+        // PA-A5：决策溯源锚（build_sha + policy_version）随每次 R2+ 意图事件落账
+        var provenance = com.objwww.pr.control.alert.domain.event.DecisionProvenance
+                .empty(provenancePolicyVersion).withAgentBuildSha(provenanceBuildSha);
         return new ReadOnlyToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
-                calls, window, Clock.systemUTC(), false, am4InFlightToolCancels);
+                calls, window, Clock.systemUTC(), false, am4InFlightToolCancels, provenance);
     }
 
     /** 影子对照路由器（M4-34）：同 digest 盖章/独立预算/失败隔离，无发布出口 */
@@ -627,14 +663,17 @@ public class AlertAm4Config {
                     runConfigEpochRepository,
             com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
                     workingMemoryPort,
+            com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository
+                    rcaAttemptRepository,
             TransactionOperations tx,
             com.objwww.pr.control.infrastructure.observability.AlertMetrics alertMetrics) {
-        // WC-5：迟到提交拒绝计数（STALE 族/RUN_TERMINAL）随围栏接线
+        // WC-5：迟到提交拒绝计数（STALE 族/RUN_TERMINAL）随围栏接线；
+        // PA-A1：attempt 进度回写面随围栏接线（推进型 APPLIED 同事务回写）
         return new com.objwww.pr.control.alert.application.agent
                 .PrimaryCheckpointCommitService(rcaRunRepository, rcaTaskRepository,
                 primaryCheckpointRepository, runConfigEpochRepository,
                 com.objwww.pr.control.alert.application.AlertClock.system(), tx,
-                workingMemoryPort, alertMetrics);
+                workingMemoryPort, alertMetrics, rcaAttemptRepository);
     }
 
     /**
@@ -904,6 +943,7 @@ public class AlertAm4Config {
             org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.application.agent
                             .PrimaryCheckpointCommitService> checkpointCommitFenceProvider,
+            com.objwww.pr.control.alert.application.agent.RoleLoopGuard am4RoleLoopGuard,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -970,7 +1010,7 @@ public class AlertAm4Config {
                 java.util.Objects.requireNonNull(
                         checkpointCommitFenceProvider.getIfAvailable(),
                         "检查点提交围栏缺件（CL-01 运行路径必要件）"),
-                stepMaxTokens);
+                stepMaxTokens, am4RoleLoopGuard);
     }
 
     /**

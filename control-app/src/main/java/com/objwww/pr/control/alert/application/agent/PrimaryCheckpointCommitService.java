@@ -102,6 +102,15 @@ public class PrimaryCheckpointCommitService {
             workingMemory;
     /** WC-5：迟到提交拒绝计数（STALE 族/RUN_TERMINAL；可空面 = NOOP） */
     private final com.objwww.pr.control.infrastructure.observability.AlertMetrics metrics;
+    /** PA-A1：有效进展回写面（可空=未装配，进度观测关闭）。APPLIED 的推进型提交
+     *  在同一事务内回写 rca_attempt.last_meaningful_progress_at——进展与状态推进
+     *  原子成立，杜绝"检查点已推进而 progress 滞后"的假 stuck */
+    private final com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts;
+
+    /** 推进型提交（ERROR_RECORDED/SUMMARY_CONSUMED 是零推进留痕/指针移位，不算进展） */
+    private static final java.util.Set<CommitMutation> ADVANCE_MUTATIONS = java.util.Set.of(
+            CommitMutation.STEP_COMPLETED, CommitMutation.DECISION_ADVANCED,
+            CommitMutation.DELEGATION_COMMITTED, CommitMutation.FINAL_PROPOSED);
 
     public PrimaryCheckpointCommitService(RcaRunRepository runs, RcaTaskRepository tasks,
             PrimaryCheckpointRepository checkpoints, RunConfigEpochRepository epochs,
@@ -122,6 +131,16 @@ public class PrimaryCheckpointCommitService {
             AlertClock clock, TransactionOperations tx,
             com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort workingMemory,
             com.objwww.pr.control.infrastructure.observability.AlertMetrics metrics) {
+        this(runs, tasks, checkpoints, epochs, clock, tx, workingMemory, metrics, null);
+    }
+
+    /** PA-A1 全参形态：接 attempt 进度回写面（推进型 APPLIED 同事务回写） */
+    public PrimaryCheckpointCommitService(RcaRunRepository runs, RcaTaskRepository tasks,
+            PrimaryCheckpointRepository checkpoints, RunConfigEpochRepository epochs,
+            AlertClock clock, TransactionOperations tx,
+            com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort workingMemory,
+            com.objwww.pr.control.infrastructure.observability.AlertMetrics metrics,
+            com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -130,6 +149,7 @@ public class PrimaryCheckpointCommitService {
         this.tx = Objects.requireNonNull(tx, "tx");
         this.workingMemory = workingMemory;
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.attempts = attempts;
     }
 
     /**
@@ -263,6 +283,11 @@ public class PrimaryCheckpointCommitService {
         if (updated != 1) {
             reject(fence, actionKey, CommitStatus.STALE_REVISION,
                     "条件写影响行数 " + updated);
+        }
+        // PA-A1：推进型提交在同一事务内回写有效进展（进度与状态推进原子成立）。
+        // 回写失败（attempt 已终态等）不阻断提交——返回 false 是迟到竞争的诚实面
+        if (attempts != null && ADVANCE_MUTATIONS.contains(mutation)) {
+            attempts.markMeaningfulProgressByTask(fence.taskId(), clock.now());
         }
         return new CheckpointCommitResult(CommitStatus.APPLIED,
                 next.withRevision(current.revision() + 1));

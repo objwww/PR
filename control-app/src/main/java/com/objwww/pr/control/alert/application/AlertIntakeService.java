@@ -36,12 +36,20 @@ public class AlertIntakeService {
     private final AlertInboxRepository inbox;
     private final AlertIntakeLimits limits;
     private final AlertClock clock;
+    /** PA-A3：注入扫描器（null=关闭——旧构造/兼容装配；生产装配 fail-safe 默认开启） */
+    private final AlertInjectionScanner injectionScanner;
     private final ObjectMapper mapper;
 
     public AlertIntakeService(AlertInboxRepository inbox, AlertIntakeLimits limits, AlertClock clock) {
+        this(inbox, limits, clock, null);
+    }
+
+    public AlertIntakeService(AlertInboxRepository inbox, AlertIntakeLimits limits, AlertClock clock,
+            AlertInjectionScanner injectionScanner) {
         this.inbox = inbox;
         this.limits = limits;
         this.clock = clock;
+        this.injectionScanner = injectionScanner;
         JsonFactory factory = new JsonFactory();
         factory.setStreamReadConstraints(StreamReadConstraints.builder()
                 .maxNestingDepth(limits.maxDepth())
@@ -84,6 +92,13 @@ public class AlertIntakeService {
             validateAlert(alert);
         }
 
+        // PA-A3（L0-4/L0-5）：schema 通过后、落库前注入扫描——命中初始态直插
+        // QUARANTINED 隔离区（claim 面结构上不可达），原因/特征落 last_error；
+        // 202 应答不变（持久化即受理，不放 AM 重试，人工审核后放行）
+        AlertInjectionScanner.Result scan = injectionScanner == null
+                ? null : injectionScanner.scan(root);
+        boolean quarantined = scan != null && scan.infected();
+
         Instant now = clock.now();
         AlertGroupEnvelope envelope = new AlertGroupEnvelope(
                 version, receiver, groupKey,
@@ -97,12 +112,27 @@ public class AlertIntakeService {
                 body,
                 new Digest(Digests.sha256Hex(body)));
 
-        InboxState initial = alertsNode.isEmpty() ? InboxState.IGNORED : InboxState.RECEIVED;
+        InboxState initial = alertsNode.isEmpty() ? InboxState.IGNORED
+                : quarantined ? InboxState.QUARANTINED : InboxState.RECEIVED;
+        String lastError = quarantined
+                ? quarantineErrorJson(scan)
+                : null;
         UUID id = UUID.randomUUID();
         inbox.insert(new AlertInbox(id, envelope, initial, null,
-                null, null, 0, 0, 5, null, null, now, now,
+                null, null, 0, 0, 5, null, lastError, now, now,
                 initial == InboxState.IGNORED ? now : null));
         return id;
+    }
+
+    /** 隔离原因 jsonb：{"reason":"PROMPT_INJECTION","patterns":[...]}（特征为固定清单，无注入面） */
+    private String quarantineErrorJson(AlertInjectionScanner.Result scan) {
+        try {
+            return mapper.writeValueAsString(java.util.Map.of(
+                    "reason", "PROMPT_INJECTION",
+                    "patterns", scan.hitPatterns()));
+        } catch (Exception e) {
+            return "{\"reason\":\"PROMPT_INJECTION\"}";
+        }
     }
 
     // ------------------------------------------------------------------ 校验链

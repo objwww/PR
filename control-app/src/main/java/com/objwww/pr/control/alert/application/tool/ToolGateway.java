@@ -41,6 +41,8 @@ public final class ToolGateway implements ToolInvoker {
     private final Clock clock;
     private final RcaEventAppender events; // 可空：意图/进度事件账本（V14）
     private final InFlightToolCancels cancels; // 可空：WC-3 在途取消通知（丢了只慢不错）
+    /** PA-A5：决策溯源标签（可空=未装配，意图事件不含 provenance 块） */
+    private final com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags;
 
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events) {
@@ -49,12 +51,20 @@ public final class ToolGateway implements ToolInvoker {
 
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events, InFlightToolCancels cancels) {
+        this(registry, policy, callPool, clock, events, cancels, null);
+    }
+
+    /** PA-A5 全参形态：provenanceTags（agent_build_sha + policy_version 锚） */
+    public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
+            Clock clock, RcaEventAppender events, InFlightToolCancels cancels,
+            com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags) {
         this.registry = Objects.requireNonNull(registry);
         this.policy = Objects.requireNonNull(policy);
         this.callPool = Objects.requireNonNull(callPool);
         this.clock = Objects.requireNonNull(clock);
         this.events = events; // 可空（意图事件落档可选项）
         this.cancels = cancels; // 可空（默认不参与在途取消通知）
+        this.provenanceTags = provenanceTags;
     }
 
     /** 下发给 LLM 的工具清单：被拒工具从清单删除（双闸之一） */
@@ -241,8 +251,21 @@ public final class ToolGateway implements ToolInvoker {
         payload.put("version", invocation.toolVersion());
         payload.put("risk", risk.name());
         payload.put("action_digest", digest);
+        // PA-A5：决策溯源统一块（build sha + policy version + 工具 schema 锚）
+        if (provenanceTags != null) {
+            payload.put("provenance", provenanceTags
+                    .withTool(invocation.toolName(), invocation.toolVersion(),
+                            registrationSchemaHash(invocation))
+                    .toCanonicalJson());
+        }
         events.appendIndependent(invocation.runId(), new RcaEventAppender.EventDraft(
                 UUID.randomUUID(), "TOOL_INTENT_VALIDATED",
                 InternalCanonicalJsonV1.canonicalize(payload)));
+    }
+
+    private String registrationSchemaHash(ToolInvocation invocation) {
+        return registry.find(invocation.toolName(), invocation.toolVersion())
+                .map(reg -> reg.definition().schemaHash())
+                .orElse(null);
     }
 }

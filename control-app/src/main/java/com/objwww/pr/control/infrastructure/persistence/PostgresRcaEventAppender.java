@@ -5,6 +5,7 @@ import com.objwww.pr.shared.Digest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -92,15 +93,67 @@ public class PostgresRcaEventAppender implements RcaEventAppender {
                 .param("run", runId)
                 .query(Long.class).optional()
                 .orElseThrow(() -> new IllegalStateException("run 不存在，事件无法落账: " + runId));
+        // PA-A2：链写与 seq 分配同事务——run 行锁已串行化同 run 追加，前驱 event_hash
+        // 此处所见即终态；legacy 尾（NULL）后首行以 'GENESIS' 起新验链段
+        String prevHash = jdbc.sql("""
+                select coalesce(event_hash, 'GENESIS') from rca_event
+                 where run_id = :run and seq = :seq
+                """)
+                .param("run", runId).param("seq", seq - 1)
+                .query((rs, n) -> rs.getString(1))
+                .optional().orElse("GENESIS");
+        String eventHash = Digest.sha256Of(prevHash + ":" + seq + ":"
+                + draft.eventType() + ":" + digest).value();
         jdbc.sql("""
                 insert into rca_event(id, run_id, seq, event_id, event_type, payload,
-                    payload_digest)
-                values (:id, :run, :seq, :eventId, :type, CAST(:payload AS jsonb), :digest)
+                    payload_digest, prev_hash, event_hash)
+                values (:id, :run, :seq, :eventId, :type, CAST(:payload AS jsonb), :digest,
+                    :prevHash, :eventHash)
                 """)
                 .param("id", UUID.randomUUID()).param("run", runId).param("seq", seq)
                 .param("eventId", draft.eventId()).param("type", draft.eventType())
                 .param("payload", draft.payloadJson()).param("digest", digest)
+                .param("prevHash", prevHash).param("eventHash", eventHash)
                 .update();
         return seq;
+    }
+
+    @Override
+    public List<UUID> runIdsWithEvents() {
+        return jdbc.sql("select distinct run_id from rca_event")
+                .query((rs, n) -> rs.getObject("run_id", UUID.class))
+                .list();
+    }
+
+    @Override
+    public ChainReport verifyChain(UUID runId) {
+        record Row(long seq, String prevHash, String eventHash, String type, String digest) {
+        }
+        List<Row> rows = jdbc.sql("""
+                select seq, prev_hash, event_hash, event_type, payload_digest
+                  from rca_event where run_id = :run order by seq
+                """)
+                .param("run", runId)
+                .query((rs, n) -> new Row(rs.getLong("seq"), rs.getString("prev_hash"),
+                        rs.getString("event_hash"), rs.getString("event_type"),
+                        rs.getString("payload_digest")))
+                .list();
+        String expectedPrev = "GENESIS";
+        long verified = 0;
+        for (Row row : rows) {
+            if (row.prevHash() == null || row.eventHash() == null) {
+                // legacy 行（V112 前落账）：链段边界，跳过校验并重置段起点
+                expectedPrev = "GENESIS";
+                continue;
+            }
+            String recomputed = Digest.sha256Of(expectedPrev + ":" + row.seq() + ":"
+                    + row.type() + ":" + row.digest()).value();
+            if (!row.prevHash().equals(expectedPrev) || !row.eventHash().equals(recomputed)) {
+                return new ChainReport(runId, rows.size(), verified, row.seq());
+            }
+            expectedPrev = row.eventHash();
+            verified++;
+        }
+        return new ChainReport(runId, rows.size(), verified, -1);
     }
 }

@@ -27,6 +27,28 @@ public interface RcaEventAppender {
     /** 进度事件：独立短事务（REQUIRES_NEW），调用方回滚不影响 */
     long appendIndependent(UUID runId, EventDraft draft);
 
+    /**
+     * PA-A2 哈希链验链（V112）：同 run 全链重算比对。NULL 哈希行（V112 前的 legacy
+     * 事件）视为链段边界跳过校验——新段从 NULL 尾后首行起算 GENESIS。
+     * 声明口径：tamper-evident <b>under the assumed DB write boundary</b>
+     * （评审 R9：同库管理员可整链重算；外部 WORM 锚另立增量）。
+     */
+    default ChainReport verifyChain(UUID runId) {
+        throw new UnsupportedOperationException("verifyChain 仅支持哈希链写的实现");
+    }
+
+    /** 验链报告：brokenAtSeq=-1 = 全链通过；verified = 实际参与哈希校验的行数 */
+    record ChainReport(UUID runId, long events, long verified, long brokenAtSeq) {
+        public boolean ok() {
+            return brokenAtSeq < 0;
+        }
+    }
+
+    /** 有事件的 run 全集（验链作业驱动面；实现方可分页，作业侧逐 run 独立推进） */
+    default java.util.List<UUID> runIdsWithEvents() {
+        throw new UnsupportedOperationException("runIdsWithEvents 仅支持哈希链写的实现");
+    }
+
     /** 事件草稿：payload 为调用方 canonical 序列化后的 JSON 串（digest 由实现方计算） */
     record EventDraft(UUID eventId, String eventType, String payloadJson) {
         public EventDraft {

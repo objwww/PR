@@ -20,6 +20,11 @@ receivers:
         endpoint: "0.0.0.0:4317"
       http:
         endpoint: "0.0.0.0:4318"
+  # PA-A6：Brave 系 Zipkin JSON v2 入口——control-app 走
+  # micrometer-tracing-reporter-brave（endpoint=collector:9411），与 OTLP 双源
+  # 汇入同一 traces 管道（tail_sampling 对转换后的内部 span 表示照常裁决）
+  zipkin:
+    endpoint: "0.0.0.0:9411"
   # EX-B2/B-35：容器 stdout 发现面不可行——otelcol-contrib 根本没有 docker_logs
   # receiver（0.104.0/0.103.0/0.100.0 三版 components 实测均无，filelog 容器解析器
   # 只能从 k8s pod 路径提名字）；日志源走 control-app 自带 OTLP（resource.service.name
@@ -84,7 +89,8 @@ service:
       level: warn
   pipelines:
     traces:
-      receivers: [otlp]
+      # PA-A6：zipkin 入口并入（应用 Brave 桥 → collector tail_sampling → 上游）
+      receivers: [otlp, zipkin]
       processors: [memory_limiter, tail_sampling, batch]
       exporters: [otlp/upstream]
     metrics:

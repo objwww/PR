@@ -82,7 +82,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            MachineBearerAuthnFilter machineBearerAuthnFilter) throws Exception {
+            MachineBearerAuthnFilter machineBearerAuthnFilter,
+            com.objwww.pr.control.infrastructure.auth.AlertWebhookHmacFilter hmacWebhookFilter)
+            throws Exception {
         CookieCsrfTokenRepository csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         http
                 .csrf(csrf -> csrf
@@ -99,6 +101,7 @@ public class SecurityConfig {
                         .ignoringRequestMatchers(
                                 new AntPathRequestMatcher("/api/duty/notifications", "POST")))
                 .addFilterBefore(machineBearerAuthnFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(hmacWebhookFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/logout", "/api/auth/csrf")
                         .permitAll()
@@ -161,6 +164,27 @@ public class SecurityConfig {
     }
 
     // ------------------------------------------------------------------ 机器半边
+
+    /**
+     * PA-A7（L0-1/D1 严格处置）：webhook HMAC-SHA256 双凭证过滤器——只介入携带
+     * X-PA-Signature 的请求（验签失败 401 不回落 bearer，故障期安全等级不降）；
+     * 无签名头走原 bearer 链（Alertmanager webhook 无法计算 HMAC，机器兼容硬约束）。
+     * 密钥面 {@code app.alert.webhook.hmac-keys = "keyId:secret,..."}（未配置=直通）。
+     */
+    @Bean
+    public com.objwww.pr.control.infrastructure.auth.AlertWebhookHmacFilter hmacWebhookFilter(
+            @Value("${app.alert.webhook.hmac-keys:}") String hmacKeys) {
+        java.util.Map<String, String> keys = new java.util.LinkedHashMap<>();
+        if (hmacKeys != null && !hmacKeys.isBlank()) {
+            for (String entry : hmacKeys.split(",")) {
+                int sep = entry.indexOf(':');
+                if (sep > 0) {
+                    keys.put(entry.substring(0, sep).trim(), entry.substring(sep + 1).trim());
+                }
+            }
+        }
+        return new com.objwww.pr.control.infrastructure.auth.AlertWebhookHmacFilter(keys);
+    }
 
     @Bean
     public MachineBearerAuthnFilter machineBearerAuthnFilter(

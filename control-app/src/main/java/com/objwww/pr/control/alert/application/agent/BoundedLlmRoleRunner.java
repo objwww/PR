@@ -111,6 +111,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     private final PrimaryCheckpointCommitService commits;
     /** 单步输出预算上限（默认 {@link #MAX_TOKENS_PER_STEP}；推理模型经配置放大） */
     private final int stepMaxTokens;
+    /** PA-A4：轮次回环守卫（monologue 维；可空=permissive——既有装配零行为漂移） */
+    private final RoleLoopGuard roleLoopGuard;
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
@@ -134,9 +136,21 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
             Clock clock, ContextCompactionService compaction,
             PrimaryCheckpointCommitService commits, int stepMaxTokens) {
+        this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
+                clock, compaction, commits, stepMaxTokens, RoleLoopGuard.permissive());
+    }
+
+    /** PA-A4 全参形态：接轮次回环守卫（monologue 双阈值 warn/stop） */
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock, ContextCompactionService compaction,
+            PrimaryCheckpointCommitService commits, int stepMaxTokens,
+            RoleLoopGuard roleLoopGuard) {
         if (stepMaxTokens <= 0) {
             throw new IllegalArgumentException("stepMaxTokens 必须为正: " + stepMaxTokens);
         }
+        this.roleLoopGuard = Objects.requireNonNull(roleLoopGuard, "roleLoopGuard");
         this.guard = Objects.requireNonNull(guard, "guard");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -213,6 +227,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                     mapper.readValue(jsonOf(outcome.content()),
                             new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
         } catch (Exception e) {
+            // PA-A4：不可解析轮 = 未发起工具调用的轮次，计入 monologue
+            roleLoopGuard.recordRound(request.task().id(), false);
             advanceStep(request, checkpoint, assembly.snapshotDigest(), assembly.memory(),
                     "DECISION_UNPARSEABLE: 上一步输出不是合法决策 JSON。严格按协议输出"
                             + "恰一个纯 JSON 对象（tool_call/delegate/final 三形状选一），"
@@ -220,6 +236,18 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             log.warn("主决策不可解析（{}），计步重驱 task={}",
                     e.getClass().getSimpleName(), request.task().id());
             return RoleRunner.RoleDriveResult.failed("DECISION_UNPARSEABLE");
+        }
+        // PA-A4：轮次回环结算（monologue 维）——TOOL_CALL 分支=发起工具（含失败即重置）；
+        // STOP 升级确定性兜底（零模型调用，PAUSE/ESCALATE 同族），WARN 为观测面
+        RoleLoopGuard.Level loopLevel = roleLoopGuard.recordRound(request.task().id(),
+                decision.branch() == PrimaryDecision.Branch.TOOL_CALL);
+        if (loopLevel == RoleLoopGuard.Level.STOP) {
+            log.warn("主任务连续独白达硬停阈值（{}）→ 确定性未决 FINAL task={}",
+                    roleLoopGuard.policy().monologueStop(), request.task().id());
+            return deterministicFinal(request, checkpoint, "monologue",
+                    "LOOP_MONOLOGUE_STOP",
+                    "LOOP_MONOLOGUE_STOP: 连续 " + roleLoopGuard.monologueRounds(request.task().id())
+                            + " 轮未发起任何工具调用，按回环守卫硬停以已有事实与缺口未决结束");
         }
         return switch (decision.branch()) {
             case TOOL_CALL -> driveToolCall(request, checkpoint, decision,
@@ -371,20 +399,25 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     /** 步数耗尽的确定性兜底：空提案 + 缺口说明（已有事实由报告相位从工件面补集） */
     private RoleRunner.RoleDriveResult deterministicFinal(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint) {
+        return deterministicFinal(request, checkpoint, "exhausted", "STEPS_EXHAUSTED",
+                "STEPS_EXHAUSTED: max_steps=" + request.profile().maxSteps()
+                        + " 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束");
+    }
+
+    /** PA-A4：确定性兜底通用形（步数耗尽 / 回环硬停同族——零模型调用，PAUSE/ESCALATE 同族） */
+    private RoleRunner.RoleDriveResult deterministicFinal(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, String codeSuffix, String resultCode, String detail) {
         PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
                 List.of(), validRefsOf(request));
         commitCheckpoint(request, checkpoint,
                 "primary:" + checkpoint.taskId() + ":final:" + checkpoint.decisionSeq()
-                        + ":exhausted",
+                        + ":" + codeSuffix,
                 PrimaryCheckpointCommitService.CommitMutation.FINAL_PROPOSED,
-                cp -> cp.withFinal(List.of(),
-                        List.of("STEPS_EXHAUSTED: max_steps=" + request.profile().maxSteps()
-                                + " 已耗尽，按 §四 终止兜底以已有事实与缺口未决结束"),
-                        clock.instant()));
-        log.warn("主任务步数耗尽 → 确定性未决 FINAL（零模型调用）task={} steps={}",
-                request.task().id(), checkpoint.stepsUsed());
+                cp -> cp.withFinal(List.of(), List.of(detail), clock.instant()));
+        log.warn("主任务确定性未决 FINAL（零模型调用）task={} code={}",
+                request.task().id(), resultCode);
         return new RoleRunner.RoleDriveResult(RoleRunner.RoleDriveOutcome.FINAL_READY,
-                List.of(), "STEPS_EXHAUSTED");
+                List.of(), resultCode);
     }
 
     /**

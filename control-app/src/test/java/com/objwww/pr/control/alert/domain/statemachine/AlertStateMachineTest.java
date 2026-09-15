@@ -163,7 +163,7 @@ class AlertStateMachineTest {
                         com.objwww.pr.control.alert.domain.model.RcaTaskState.STALE);
     }
 
-    // ---------------- UT-A04 Inbox 六态 + 决策枚举三分 ----------------
+    // ---------------- UT-A04 Inbox 七态（PA-A3 隔离区）+ 决策枚举三分 ----------------
 
     @Test
     void utA04InboxMachineExhaustiveAndDecisionEnumClosed() {
@@ -173,12 +173,14 @@ class AlertStateMachineTest {
         var P = com.objwww.pr.control.alert.domain.model.InboxState.PROCESSED;
         var I = com.objwww.pr.control.alert.domain.model.InboxState.IGNORED;
         var DL = com.objwww.pr.control.alert.domain.model.InboxState.DEAD_LETTER;
+        var Q = com.objwww.pr.control.alert.domain.model.InboxState.QUARANTINED;
 
         Map<com.objwww.pr.control.alert.domain.model.InboxState,
                 Set<com.objwww.pr.control.alert.domain.model.InboxState>> expected = Map.of(
-                RC, Set.of(PG, I),                    // RECEIVED→IGNORED：空组直落（EX-A10）
+                RC, Set.of(PG, I, Q),                 // RECEIVED→QUARANTINED：PA-A3 人工标记/放行面
                 PG, Set.of(P, RW, I, DL, RC),         // PROCESSING→RECEIVED：仅崩溃回收路径
-                RW, Set.of(PG, DL));
+                RW, Set.of(PG, DL),
+                Q, Set.of(RC));                       // QUARANTINED→RECEIVED：仅人工复核放行（AM8 入口）
 
         assertExhaustive(com.objwww.pr.control.alert.domain.model.InboxState.class,
                 expected, InboxStateMachine::allowed);

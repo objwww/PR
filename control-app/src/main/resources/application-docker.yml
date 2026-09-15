@@ -33,6 +33,21 @@ server:
 app:
   artifact:
     cas-dir: ${APP_CAS_DIR:./var/cas}
+  # PA-A6：trace 导出通路——Brave 桥（micrometer-tracing-reporter-brave）→
+  # collector zipkin receiver（deploy/otelcol-control/otelcol-config.yml :9411）→
+  # tail_sampling → 上游。采样第一道面仍由 application.yml APP_TRACE_SAMPLING 控制；
+  # collector 不可达只丢遥测面（异步 reporter 丢弃 + WARN，INV-AM5-8 业务零影响）
+  alert:
+    provenance:
+      # PA-A5：决策溯源锚——镜像构建 sha 部署期注入（compose ARG→ENV），缺省 unknown
+      build-sha: ${APP_PROVENANCE_BUILD_SHA:unknown}
+      policy-version: ${APP_PROVENANCE_POLICY_VERSION:pa-prod-v1}
+
+# PA-A6：Zipkin 导出端点（栈内 collector 服务名解析；env 可覆盖/置空自定）
+management:
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://otelcol-control:9411/api/v2/spans}
   # M3 模型治理（AM4 复用）：旋钮默认值见 application.yml；这里只留部署期需按需覆盖的面。
   # 路由模型/端点/密钥直接走环境变量（AGENT_MODEL(_FALLBACK) / OPENAI_COMPAT_BASE_URL(_FALLBACK) /
   # AGENT_MODEL_API_KEY(_FALLBACK)），不落 yml。

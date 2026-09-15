@@ -64,6 +64,16 @@ public final class ReadOnlyToolFace implements ToolInvoker {
             ExecutorService shadowPool, long maxCallsPerWindow, long windowMillis,
             Clock clock, boolean redteamOnly,
             com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels) {
+        this(productionRegistry, shadowPolicy, shadowPool, maxCallsPerWindow, windowMillis,
+                clock, redteamOnly, cancels, null);
+    }
+
+    /** PA-A5 全参形态：provenance 可空（未装配 = 意图事件不含 provenance 块） */
+    public ReadOnlyToolFace(ToolRegistry productionRegistry, ToolPolicy shadowPolicy,
+            ExecutorService shadowPool, long maxCallsPerWindow, long windowMillis,
+            Clock clock, boolean redteamOnly,
+            com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels,
+            com.objwww.pr.control.alert.domain.event.DecisionProvenance provenance) {
         Objects.requireNonNull(productionRegistry, "productionRegistry");
         Objects.requireNonNull(shadowPolicy, "shadowPolicy");
         Objects.requireNonNull(shadowPool, "shadowPool");
@@ -91,7 +101,7 @@ public final class ReadOnlyToolFace implements ToolInvoker {
         }
         this.readOnlyRegistry = new ToolRegistry(readOnly);
         this.delegate = new ToolGateway(this.readOnlyRegistry, shadowPolicy,
-                shadowPool, clock, null, cancels);
+                shadowPool, clock, null, cancels, provenance);
         this.limiter = new WindowRateLimiter(maxCallsPerWindow, windowMillis, clock);
     }
 
