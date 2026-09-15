@@ -20,7 +20,8 @@ import java.util.UUID;
  * （结构拒绝，非竞态让步）；grant 配额预留以条件 UPDATE CAS（ACTIVE 且未满）。
  */
 public class PostgresApprovalStore implements ApprovalStore,
-        com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate {
+        com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate,
+        com.objwww.pr.control.alert.application.approval.ApprovalShadowReader {
 
     private final JdbcClient jdbc;
     private final TransactionOperations tx;
@@ -322,5 +323,37 @@ public class PostgresApprovalStore implements ApprovalStore,
                 rs.getInt("issued_operations"),
                 rs.getString("state"),
                 rs.getTimestamp("expires_at").toInstant());
+    }
+
+    @Override
+    public java.util.Map<String, Object> summary() {
+        return tx.execute(status -> jdbc.sql("""
+                        select (select count(*) from approval_request) as requests,
+                               (select count(*) from approval_request
+                                 where state = 'APPROVED') as approved,
+                               (select count(*) from approval_request
+                                 where state = 'DENIED') as denied,
+                               (select count(*) from approval_request
+                                 where state = 'EXPIRED') as expired,
+                               (select count(*) from approval_grant) as grants,
+                               (select count(*) from operation_authorization
+                                 where state = 'CONSUMED') as consumed_authzs,
+                               (select coalesce(avg(extract(epoch from
+                                   (decided_at - requested_at))), 0)
+                                  from approval_request where decided_at is not null)
+                                   as avg_decision_seconds
+                        """)
+                .query((rs, n) -> {
+                    java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("requests", rs.getLong("requests"));
+                    m.put("approved", rs.getLong("approved"));
+                    m.put("denied", rs.getLong("denied"));
+                    m.put("expired", rs.getLong("expired"));
+                    m.put("grants", rs.getLong("grants"));
+                    m.put("consumed_authorizations", rs.getLong("consumed_authzs"));
+                    m.put("avg_decision_seconds", rs.getDouble("avg_decision_seconds"));
+                    return m;
+                })
+                .single());
     }
 }

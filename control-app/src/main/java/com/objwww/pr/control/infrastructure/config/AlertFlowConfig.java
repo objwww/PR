@@ -377,6 +377,26 @@ public class AlertFlowConfig {
                 store, events, sweepInterval, java.time.Clock.systemUTC());
     }
 
+    // ---------------- PC-C3：durable suspension + 双时钟（V120） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.SuspensionStore suspensionStore(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresSuspensionStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.ApprovalSuspensionService
+    approvalSuspensionService(
+            com.objwww.pr.control.alert.application.approval.SuspensionStore store,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.alert.application.approval.ApprovalSuspensionService(
+                store, events, tx, java.time.Clock.systemUTC());
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
@@ -754,7 +774,10 @@ public class AlertFlowConfig {
             @Value("${app.alert.reconcile.mode:}") String modeText,
             @Value("${app.alert.reconcile.poll-interval:PT30S}") Duration pollInterval,
             @Value("${app.alert.reconcile.batch-limit:50}") int batchLimit,
-            @Value("${app.alert.reconcile.stuck-threshold:PT5M}") Duration stuckThreshold) {
+            @Value("${app.alert.reconcile.stuck-threshold:PT5M}") Duration stuckThreshold,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.ApprovalSuspensionService>
+                    suspensionService) {
         com.objwww.pr.control.alert.application.RunReconciler.Mode mode =
                 modeText == null || modeText.isBlank()
                         ? com.objwww.pr.control.alert.application.RunReconciler.Mode.ALERT_ONLY
@@ -762,11 +785,14 @@ public class AlertFlowConfig {
                                 modeText.trim().toUpperCase());
         // WC-5：观测面随装配接线（扫描时长/失败/决策计数/覆盖与积压 gauge 族）；
         // PA-A1：attempt 进度读面 + LIVE_BUT_STUCK 阈值随装配接线（灰度同 mode——
-        // ALERT_ONLY 只分类告警，SAFE_RECOVER 及以上才终止）
+        // ALERT_ONLY 只分类告警，SAFE_RECOVER 及以上才终止）；
+        // PC-C3：审批挂起豁免面（service 缺席 = null 豁免关闭，旧装配零漂移）
+        var suspensionSvc = suspensionService.getIfAvailable();
         return new com.objwww.pr.control.alert.application.RunReconciler(
                 runs, tasks, reports, investigationResults, incidents, events, tx,
                 sla, AlertClock.system(), mode, pollInterval, batchLimit, alertMetrics,
-                attempts, stuckThreshold);
+                attempts, stuckThreshold,
+                suspensionSvc == null ? null : suspensionSvc::hasActiveSuspension);
     }
 
     /** M4-05/06：DAG 建边环检测 + READY/BLOCKED 推进器（生产调用方 = M4-25/26 接入） */

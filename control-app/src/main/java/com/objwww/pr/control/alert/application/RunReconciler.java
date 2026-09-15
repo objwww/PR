@@ -124,6 +124,8 @@ public class RunReconciler {
     private final com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts;
     /** PA-A1：有效进展滞后阈值（null = 检测关闭；有效值必须为正） */
     private final Duration stuckThreshold;
+    /** PC-C3：审批挂起豁免面（null = 关闭——旧装配零漂移） */
+    private final java.util.function.Predicate<UUID> suspensionGate;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread workerThread;
     /** WC-4 §6.1 进程内 keyset 游标（活跃批/清理批各一）：null = 从头；读到尾部归零重启 */
@@ -182,6 +184,28 @@ public class RunReconciler {
                          AlertMetrics metrics,
                          com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts,
                          Duration stuckThreshold) {
+        this(runs, tasks, reports, investigationResults, incidents, events, tx, sla, clock,
+                mode, pollInterval, batchLimit, metrics, attempts, stuckThreshold, null);
+    }
+
+    /** PC-C3 全参形态：审批挂起豁免面（suspensionGate 非 null 时，挂起 run 豁免
+     *  AUTO_EXPIRE/LIVE_BUT_STUCK 终止——§2.10 durable suspension 不被对账误杀） */
+    public RunReconciler(RcaRunRepository runs,
+                         RcaTaskRepository tasks,
+                         RcaReportRepository reports,
+                         InvestigationResultRepository investigationResults,
+                         IncidentRepository incidents,
+                         RcaEventAppender events,
+                         TransactionOperations tx,
+                         SlaPolicy sla,
+                         AlertClock clock,
+                         Mode mode,
+                         Duration pollInterval,
+                         int batchLimit,
+                         AlertMetrics metrics,
+                         com.objwww.pr.control.alert.domain.repository.RcaAttemptRepository attempts,
+                         Duration stuckThreshold,
+                         java.util.function.Predicate<UUID> suspensionGate) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.reports = Objects.requireNonNull(reports, "reports");
@@ -207,6 +231,7 @@ public class RunReconciler {
         }
         this.attempts = attempts;
         this.stuckThreshold = stuckThreshold;
+        this.suspensionGate = suspensionGate;
     }
 
     public Mode mode() {
@@ -422,6 +447,16 @@ public class RunReconciler {
     private void act(RcaRunRepository.ReconcileCandidate candidate, Decision decision,
                      Instant now) {
         metrics.reconcileDecision(decision.name());
+        // PC-C3（§2.10）：审批挂起的 run 豁免两条自动终止路径——wall clock 继续走
+        // （诚实时钟），对账不误杀；恢复后由 suspension 面落 human_wait
+        if (suspensionGate != null
+                && (decision == Decision.HARD_DEADLINE_EXPIRED
+                || decision == Decision.LIVE_BUT_STUCK)
+                && suspensionGate.test(candidate.id())) {
+            emit(candidate, decision,
+                    "APPROVAL_SUSPENDED 豁免终止（durable suspension：挂起等审批，wall clock 不冻结）");
+            return;
+        }
         switch (decision) {
             case FINALIZE_CANDIDATE -> {
                 if (mode == Mode.ALERT_ONLY) {

@@ -22,13 +22,31 @@ import java.util.UUID;
 public class MutationOpsController {
 
     private final org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner;
+    private final com.objwww.pr.control.alert.application.approval.ApprovalSuspensionService
+            suspensions;
+    private final com.objwww.pr.control.alert.application.approval.ApprovalShadowReader
+            shadowReader;
 
     public MutationOpsController(
-            org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner) {
+            org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.ApprovalSuspensionService>
+                    suspensions,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.ApprovalShadowReader>
+                    shadowReader) {
         this.planner = Objects.requireNonNull(planner);
+        this.suspensions = suspensions == null ? null : suspensions.getIfAvailable();
+        this.shadowReader = shadowReader == null ? null : shadowReader.getIfAvailable();
     }
 
     public record PlanRequest(UUID intentId) {
+    }
+
+    public record SuspendRequest(UUID runId, UUID requestId) {
+    }
+
+    public record ResumeRequest(UUID runId) {
     }
 
     @PostMapping("/plan")
@@ -48,6 +66,49 @@ public class MutationOpsController {
         }
         if (outcome.rejectReason() != null) {
             body.put("reason", outcome.rejectReason());
+        }
+        return body;
+    }
+
+    /** durable suspension（PC-C3 §2.10）：挂起等待审批（wall clock 不冻结，对账豁免） */
+    @PostMapping("/suspend")
+    public Map<String, Object> suspend(@RequestBody SuspendRequest request) {
+        Objects.requireNonNull(request.runId(), "runId 必填");
+        Objects.requireNonNull(request.requestId(), "requestId 必填");
+        if (suspensions == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "SUSPENSION_FACE_NOT_ASSEMBLED");
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("suspension_id", suspensions
+                .suspend(request.runId(), request.requestId()).toString());
+        body.put("status", "SUSPENDED");
+        return body;
+    }
+
+    /** 恢复（落 human_wait 秒——双时钟的人等待单列） */
+    @PostMapping("/resume")
+    public Map<String, Object> resume(@RequestBody ResumeRequest request) {
+        Objects.requireNonNull(request.runId(), "runId 必填");
+        if (suspensions == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "SUSPENSION_FACE_NOT_ASSEMBLED");
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("resumed", suspensions.resume(request.runId()));
+        return body;
+    }
+
+    /** shadow 观测面（§5 Phase C 观测清单计数投影 + human_wait 合计） */
+    @org.springframework.web.bind.annotation.GetMapping("/shadow-summary")
+    public Map<String, Object> shadowSummary() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (shadowReader != null) {
+            body.putAll(shadowReader.summary());
+        }
+        if (suspensions != null) {
+            var stats = suspensions.stats();
+            body.put("suspensions_total", stats.total());
+            body.put("suspensions_active", stats.active());
+            body.put("human_wait_seconds_total", stats.humanWaitSeconds());
         }
         return body;
     }
