@@ -335,7 +335,9 @@ public class AlertFlowConfig {
     // ---------------- PC-C1：审批四账本服务面（V119） ----------------
 
     @Bean
-    public com.objwww.pr.control.alert.application.approval.ApprovalStore approvalStore(
+    /** 返回具体类型：Spring 按工厂方法签名做注入类型预测，窄接口 ApprovalPlannerGate
+     *  的注入依赖该声明（PC-C2 195 启动失败教训——抽象返回类型会藏住实现接口） */
+    public com.objwww.pr.control.infrastructure.persistence.PostgresApprovalStore approvalStore(
             org.springframework.jdbc.core.simple.JdbcClient jdbc,
             org.springframework.transaction.support.TransactionOperations tx) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresApprovalStore(
