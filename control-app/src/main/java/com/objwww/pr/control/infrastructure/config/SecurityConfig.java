@@ -97,7 +97,11 @@ public class SecurityConfig {
                         // 唯一授权主体是 DUTY_ADAPTER bearer（会话/其余线皆 403），
                         // cookie 凭证打不进该面，路径级豁免不产生跨站伪造窗口
                         .ignoringRequestMatchers("/webhooks/**",
-                                "/api/config-bundles/**", "/api/canary/**")
+                                "/api/config-bundles/**", "/api/canary/**",
+                                // PC-C2：mutation shadow 操作面 = operator bearer 机器线
+                                // 驱动（cookie 凭证不参与；浏览器无此入口），路径级豁免
+                                // 不产生跨站伪造窗口（config-bundles 同律）
+                                "/api/mutation/**")
                         .ignoringRequestMatchers(
                                 new AntPathRequestMatcher("/api/duty/notifications", "POST")))
                 .addFilterBefore(machineBearerAuthnFilter, UsernamePasswordAuthenticationFilter.class)
