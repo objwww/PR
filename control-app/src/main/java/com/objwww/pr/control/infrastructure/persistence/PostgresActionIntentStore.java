@@ -28,7 +28,7 @@ public class PostgresActionIntentStore implements ActionIntentStore {
     @Override
     public Optional<IntentView> findById(UUID intentId) {
         return tx.execute(status -> jdbc.sql("""
-                select intent_id, run_id, task_id, action_digest, tool_name,
+                select intent_id, run_id, task_id, action_digest, tool_name, risk,
                        resolved_resource_uid, scope_snapshot_hash,
                        args_json::text as args_json
                   from action_intent where intent_id = :id
@@ -40,6 +40,7 @@ public class PostgresActionIntentStore implements ActionIntentStore {
                         rs.getObject("task_id", UUID.class),
                         rs.getString("action_digest"),
                         rs.getString("tool_name"),
+                        rs.getString("risk"),
                         rs.getString("resolved_resource_uid"),
                         rs.getString("scope_snapshot_hash"),
                         rs.getString("args_json")))

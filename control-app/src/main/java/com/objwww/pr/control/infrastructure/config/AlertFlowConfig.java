@@ -329,6 +329,49 @@ public class AlertFlowConfig {
                 operations);
     }
 
+    // ---------------- PC-C1：审批四账本服务面（V119） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.ApprovalStore approvalStore(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresApprovalStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.ApprovalRequestService
+    approvalRequestService(
+            com.objwww.pr.control.alert.application.mutation.ActionIntentStore intents,
+            com.objwww.pr.control.alert.application.approval.ApprovalStore store,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
+        return new com.objwww.pr.control.alert.application.approval.ApprovalRequestService(
+                intents, store, events, tx, policyVersion, java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.ApprovalDecisionService
+    approvalDecisionService(
+            com.objwww.pr.control.alert.application.approval.ApprovalStore store,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.approval.grant-ttl:PT10M}") java.time.Duration grantTtl) {
+        return new com.objwww.pr.control.alert.application.approval.ApprovalDecisionService(
+                store, events, tx, grantTtl, java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.ApprovalSweepLoop
+    approvalSweepLoop(
+            com.objwww.pr.control.alert.application.approval.ApprovalStore store,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            @Value("${app.alert.approval.sweep-interval:PT30S}") Duration sweepInterval) {
+        return new com.objwww.pr.control.alert.application.approval.ApprovalSweepLoop(
+                store, events, sweepInterval, java.time.Clock.systemUTC());
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
@@ -769,7 +812,9 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
                     operationOutboxDispatcher,
             com.objwww.pr.control.alert.application.mutation.OperationReconciler
-                    operationReconciler) {
+                    operationReconciler,
+            com.objwww.pr.control.alert.application.approval.ApprovalSweepLoop
+                    approvalSweepLoop) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -782,12 +827,14 @@ public class AlertFlowConfig {
                 eventChainVerifyLoop.start();
                 operationOutboxDispatcher.start();
                 operationReconciler.start();
+                approvalSweepLoop.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                approvalSweepLoop.stop();
                 operationReconciler.stop();
                 operationOutboxDispatcher.stop();
                 eventChainVerifyLoop.stop();

@@ -12,8 +12,8 @@ import java.util.UUID;
 public interface ActionIntentStore {
 
     record IntentView(UUID intentId, UUID runId, UUID taskId, String actionDigest,
-            String toolName, String resolvedResourceUid, String scopeSnapshotHash,
-            String argsJson) {
+            String toolName, String risk, String resolvedResourceUid,
+            String scopeSnapshotHash, String argsJson) {
     }
 
     Optional<IntentView> findById(UUID intentId);

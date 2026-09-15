@@ -59,7 +59,7 @@ class IntentResourceResolverTest {
 
         void seed(UUID intentId, UUID runId) {
             rows.put(intentId, new IntentView(intentId, runId, null, "a".repeat(64),
-                    "scale.service", null, null, "{}"));
+                    "scale.service", "R2", null, null, "{}"));
         }
 
         @Override
@@ -75,7 +75,7 @@ class IntentResourceResolverTest {
                 return false;
             }
             rows.put(intentId, new IntentView(intentId, view.runId(), view.taskId(),
-                    view.actionDigest(), view.toolName(), uid, hash, view.argsJson()));
+                    view.actionDigest(), view.toolName(), view.risk(), uid, hash, view.argsJson()));
             return true;
         }
 

@@ -79,7 +79,7 @@ class Pb4OutboxChainTest {
                 return false;
             }
             rows.put(intentId, new IntentView(intentId, view.runId(), view.taskId(),
-                    view.actionDigest(), view.toolName(), view.resolvedResourceUid(),
+                    view.actionDigest(), view.toolName(), view.risk(), view.resolvedResourceUid(),
                     view.scopeSnapshotHash(), view.argsJson()));
             return true;
         }
@@ -255,7 +255,7 @@ class Pb4OutboxChainTest {
     private static FakeIntents seededIntents(boolean resolved) {
         FakeIntents intents = new FakeIntents();
         intents.rows.put(INTENT, new ActionIntentStore.IntentView(INTENT, RUN, null,
-                "a".repeat(64), "scale.service", resolved ? "res://demo/checkout" : null,
+                "a".repeat(64), "scale.service", "R2", resolved ? "res://demo/checkout" : null,
                 resolved ? "h".repeat(64) : null, "{}"));
         return intents;
     }

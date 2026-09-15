@@ -127,12 +127,12 @@ public class OperationPlanner {
         return new Outcome(Outcome.Status.REJECTED, null, -1, reason);
     }
 
-    /** 事件载荷 canonical 化（固定键序；数值/布尔裸值） */
-    static final class CanonicalEventJson {
+    /** 事件载荷 canonical 化（固定键序；数值/布尔裸值；PC-C1 起审批面事件共用） */
+    public static final class CanonicalEventJson {
         private CanonicalEventJson() {
         }
 
-        static String canonicalize(Map<String, Object> payload) {
+        public static String canonicalize(Map<String, Object> payload) {
             StringBuilder json = new StringBuilder("{");
             boolean first = true;
             for (Map.Entry<String, Object> entry : payload.entrySet()) {
