@@ -174,6 +174,55 @@ public class AlertFlowConfig {
         return new EvidencePackageValidator(maxResponseBytes, maxEvidenceItems, maxFieldChars);
     }
 
+    // ---------------- PB-B2：权威解析 + Scope 快照 + 授权扩张（V115） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ResourceResolver
+    resourceResolver(org.springframework.jdbc.core.simple.JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresResourceResolver(
+                jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ActionIntentStore
+    actionIntentStore(org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresActionIntentStore(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ScopeExpansionLedger
+    scopeExpansionLedger(org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresScopeExpansionLedger(
+                jdbc, tx);
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.IntentResourceResolver
+    intentResourceResolver(
+            com.objwww.pr.control.alert.application.mutation.ResourceResolver resolver,
+            com.objwww.pr.control.alert.application.mutation.ActionIntentStore store,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
+        return new com.objwww.pr.control.alert.application.mutation.IntentResourceResolver(
+                resolver, store, events, tx, policyVersion, java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.ScopeExpansionService
+    scopeExpansionService(
+            com.objwww.pr.control.alert.application.mutation.ResourceResolver resolver,
+            com.objwww.pr.control.alert.application.mutation.ScopeExpansionLedger ledger,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
+        return new com.objwww.pr.control.alert.application.mutation.ScopeExpansionService(
+                resolver, ledger, events, tx, policyVersion, java.time.Clock.systemUTC());
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
