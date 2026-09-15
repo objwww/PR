@@ -272,10 +272,14 @@ public class AlertFlowConfig {
             @Value("${app.alert.mutation.lock-ttl:PT10M}") java.time.Duration lockTtl,
             @Value("${app.alert.mutation.dry-run-plan.enabled:false}") boolean planEnabled,
             @Value("${app.alert.mutation.approval.enabled:false}") boolean approvalEnabled,
-            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.mutation.UnlockScopeStore>
+                    unlockScopes) {
         return new com.objwww.pr.control.alert.application.mutation.OperationPlanner(
                 intents, operations, outbox, locks, approvalGate, events, tx, lockTtl,
-                planEnabled, approvalEnabled, policyVersion, java.time.Clock.systemUTC());
+                planEnabled, approvalEnabled, policyVersion, unlockScopes.getIfAvailable(),
+                java.time.Clock.systemUTC());
     }
 
     @Bean
@@ -287,6 +291,8 @@ public class AlertFlowConfig {
                         .valueOf(behavior.trim().toUpperCase()));
     }
 
+    /** PD-D1：真执行 Runner 不设独立 @Bean（endpoint 缺席 = null，@Bean 禁 null）——
+     *  在 dispatcher 装配处内联构造；真派发面缺席时 UNKNOWN→ESCALATED 兜底 */
     @Bean
     public com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
     operationOutboxDispatcher(
@@ -297,10 +303,15 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
             @Value("${app.alert.inbox.owner:control-1}") String owner,
             @Value("${app.alert.mutation.dispatch-lease:PT1M}") java.time.Duration lease,
-            @Value("${app.alert.mutation.dispatch-interval:PT5S}") java.time.Duration interval) {
+            @Value("${app.alert.mutation.dispatch-interval:PT5S}") java.time.Duration interval,
+            @Value("${app.alert.mutation.executor.endpoint:}") String realEndpoint) {
+        com.objwww.pr.control.alert.application.mutation.ActionRunner realRunner =
+                realEndpoint == null || realEndpoint.isBlank() ? null
+                        : com.objwww.pr.control.infrastructure.runner.HttpActionRunner.create(
+                        realEndpoint.trim(), 5000, 15000);
         return new com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher(
-                outbox, operations, locks, runner, events, owner + "-dispatcher", lease,
-                interval, java.time.Clock.systemUTC());
+                outbox, operations, locks, runner, realRunner, events, owner + "-dispatcher",
+                lease, interval, java.time.Clock.systemUTC());
     }
 
     // ---------------- PB-B5：mutation 对账循环 + reschedule 闸 ----------------
@@ -378,6 +389,14 @@ public class AlertFlowConfig {
     }
 
     // ---------------- PC-C3：durable suspension + 双时钟（V120） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.UnlockScopeStore unlockScopeStore(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            org.springframework.transaction.support.TransactionOperations tx) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresUnlockScopeStore(
+                jdbc, tx);
+    }
 
     @Bean
     public com.objwww.pr.control.alert.application.approval.SuspensionStore suspensionStore(

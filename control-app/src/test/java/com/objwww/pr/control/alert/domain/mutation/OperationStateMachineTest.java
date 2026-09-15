@@ -124,12 +124,18 @@ class OperationStateMachineTest {
     }
 
     @Test
-    void opM05_PhaseB铁律_非dryRun构造即拒() {
-        assertThatThrownBy(() -> new RcaOperation(UUID.randomUUID(), UUID.randomUUID(),
-                UUID.randomUUID(), UUID.randomUUID(), "t", "a".repeat(64), null, 0,
-                OperationStatus.PREPARED, false, "{}", Instant.now(), Instant.now(),
-                null, null, null, null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("dry_run 必须 true");
+    void opM05_A10域闸退役_真执行铸造仅在prepareReal_PD_D1() {
+        // Phase D 解锁日（V121）：dry_run=false 构造不再抛（A10 域闸退役）——
+        // 范围纪律移交 mutation_unlock_registry 三元匹配 + 人工审批前置
+        RcaOperation real = RcaOperation.prepareReal(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), "chaos.resolve", "a".repeat(64),
+                "res://demo/checkout", 1, "{}", Instant.now());
+        assertThat(real.dryRun()).isFalse();
+        assertThat(real.status()).isEqualTo(OperationStatus.PREPARED);
+        // dry-run 铸造面保持不变
+        RcaOperation dry = RcaOperation.prepare(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), "scale.service", "b".repeat(64),
+                "res://demo/checkout", 1, "{}", Instant.now());
+        assertThat(dry.dryRun()).isTrue();
     }
 }

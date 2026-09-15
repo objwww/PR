@@ -46,10 +46,8 @@ public record RcaOperation(
             throw new IllegalArgumentException("resourceEpoch 不得为负");
         }
         Objects.requireNonNull(status, "status");
-        if (!dryRun) {
-            throw new IllegalArgumentException(
-                    "Phase B 铁律：真实执行面物理不存在（dry_run 必须 true，A10）");
-        }
+        // PD-D1：A10 域闸退役——dry_run=false 不再构造即拒；范围纪律移交
+        // mutation_unlock_registry 三元匹配 + 人工审批前置（消费模板裁决）
         Objects.requireNonNull(paramsJson, "paramsJson");
         // 时间面一致性：非 PREPARED 必有 prepared_at；派发后各时点单调（弱校验在状态机）
         if (status != OperationStatus.PREPARED && preparedAt == null) {
@@ -63,6 +61,15 @@ public record RcaOperation(
             String paramsJson, Instant now) {
         return new RcaOperation(operationId, intentId, runId, taskId, actionId, actionDigest,
                 resourceUid, resourceEpoch, OperationStatus.PREPARED, true, paramsJson,
+                now, now, null, null, null, null);
+    }
+
+    /** PD-D1：注册表三元解锁 + 人工审批消费后的真执行铸造（scoped mutation） */
+    public static RcaOperation prepareReal(UUID operationId, UUID intentId, UUID runId,
+            UUID taskId, String actionId, String actionDigest, String resourceUid,
+            long resourceEpoch, String paramsJson, Instant now) {
+        return new RcaOperation(operationId, intentId, runId, taskId, actionId, actionDigest,
+                resourceUid, resourceEpoch, OperationStatus.PREPARED, false, paramsJson,
                 now, now, null, null, null, null);
     }
 

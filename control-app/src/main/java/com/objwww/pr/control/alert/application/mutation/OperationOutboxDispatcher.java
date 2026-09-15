@@ -36,6 +36,7 @@ public class OperationOutboxDispatcher {
     private final OperationLedgerStore operations;
     private final ResourceLockStore locks;
     private final ActionRunner runner;
+    private final ActionRunner realRunner; // PD-D1：dry_run=false 的真执行面（可空）
     private final RcaEventAppender events;
     private final String owner;
     private final Duration lease;
@@ -48,10 +49,19 @@ public class OperationOutboxDispatcher {
             OperationLedgerStore operations, ResourceLockStore locks, ActionRunner runner,
             RcaEventAppender events, String owner, Duration lease, Duration interval,
             Clock clock) {
+        this(outbox, operations, locks, runner, null, events, owner, lease, interval, clock);
+    }
+
+    /** PD-D1 全参形态：realRunner 承接 dry_run=false 的真派发 */
+    public OperationOutboxDispatcher(OperationOutboxStore outbox,
+            OperationLedgerStore operations, ResourceLockStore locks, ActionRunner runner,
+            ActionRunner realRunner, RcaEventAppender events, String owner, Duration lease,
+            Duration interval, Clock clock) {
         this.outbox = Objects.requireNonNull(outbox);
         this.operations = Objects.requireNonNull(operations);
         this.locks = Objects.requireNonNull(locks);
         this.runner = Objects.requireNonNull(runner);
+        this.realRunner = realRunner;
         this.events = Objects.requireNonNull(events);
         this.owner = Objects.requireNonNull(owner);
         this.lease = Objects.requireNonNull(lease);
@@ -129,7 +139,24 @@ public class OperationOutboxDispatcher {
         }
         emit(operation, "OPERATION_DISPATCHED", Map.of("resource_uid", operation.resourceUid()
                 == null ? "" : operation.resourceUid()));
-        ActionRunner.Outcome outcome = runner.run(operation);
+        // PD-D1：dry_run 分流——真执行面缺席时 UNKNOWN（reconcile → ESCALATED，
+        // 不静默丢）；present 则真派发
+        ActionRunner chosen = operation.dryRun() ? runner : realRunner;
+        ActionRunner.Outcome outcome;
+        if (chosen == null) {
+            operations.transition(operation.operationId(), OperationStatus.DISPATCHED,
+                    OperationStatus.UNKNOWN, clock.instant());
+            emit(operation, "OPERATION_UNKNOWN",
+                    Map.of("note", "REAL_EXECUTOR_ABSENT; 锁保持; reconcile 裁决"));
+            return;
+        }
+        try {
+            outcome = chosen.run(operation);
+        } catch (RuntimeException e) {
+            log.error("Runner 执行异常（按 timeout≠failed 处理）: op={}",
+                    operation.operationId(), e);
+            outcome = ActionRunner.Outcome.TIMEOUT_UNKNOWN;
+        }
         walk(operation.operationId(), operation.resourceUid(), outcome);
     }
 

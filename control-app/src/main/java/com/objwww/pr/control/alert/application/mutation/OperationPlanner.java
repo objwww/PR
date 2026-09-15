@@ -60,6 +60,7 @@ public class OperationPlanner {
     private final boolean dryRunPlanEnabled;
     private final boolean approvalEnabled;
     private final String policyVersion;
+    private final UnlockScopeStore unlockScopes; // 可空=解锁面关闭（永远 dry-run）
     private final Clock clock;
 
     public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
@@ -77,6 +78,17 @@ public class OperationPlanner {
             RcaEventAppender events, TransactionOperations tx, Duration lockTtl,
             boolean dryRunPlanEnabled, boolean approvalEnabled, String policyVersion,
             Clock clock) {
+        this(intents, operations, outbox, locks, approvalGate, events, tx, lockTtl,
+                dryRunPlanEnabled, approvalEnabled, policyVersion, null, clock);
+    }
+
+    /** PD-D1 全参形态：unlockScopes 非 null 时注册表三元匹配 → dry_run=false 真执行铸造 */
+    public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
+            OperationOutboxStore outbox, ResourceLockStore locks,
+            com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate approvalGate,
+            RcaEventAppender events, TransactionOperations tx, Duration lockTtl,
+            boolean dryRunPlanEnabled, boolean approvalEnabled, String policyVersion,
+            UnlockScopeStore unlockScopes, Clock clock) {
         this.intents = Objects.requireNonNull(intents);
         this.operations = Objects.requireNonNull(operations);
         this.outbox = Objects.requireNonNull(outbox);
@@ -91,6 +103,7 @@ public class OperationPlanner {
         this.dryRunPlanEnabled = dryRunPlanEnabled;
         this.approvalEnabled = approvalEnabled;
         this.policyVersion = policyVersion;
+        this.unlockScopes = unlockScopes;
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -127,8 +140,25 @@ public class OperationPlanner {
             }
             authzId = approvalGate.insertAuthorization(grantId, clock.instant());
         }
+        // PD-D1：scoped unlock——注册表三元（tool × resource_uid × canonical_env）
+        // 全匹配且 enabled 才真执行铸造；任一不满足 = dry-run（默认封死）
+        boolean unlocked = false;
+        if (unlockScopes != null) {
+            var scope = unlockScopes.findByTool(intent.toolName())
+                    .filter(s -> s.enabled()
+                            && s.resourceUid().equals(intent.resolvedResourceUid()));
+            if (scope.isPresent()) {
+                unlocked = unlockScopes.envOfResource(intent.resolvedResourceUid())
+                        .map(env -> env.equals(scope.get().canonicalEnv()))
+                        .orElse(false);
+            }
+        }
         UUID operationId = UUID.randomUUID();
-        RcaOperation operation = RcaOperation.prepare(operationId, intentId, intent.runId(),
+        RcaOperation operation = unlocked
+                ? RcaOperation.prepareReal(operationId, intentId, intent.runId(),
+                intent.taskId(), intent.toolName(), intent.actionDigest(),
+                intent.resolvedResourceUid(), 0, intent.argsJson(), clock.instant())
+                : RcaOperation.prepare(operationId, intentId, intent.runId(),
                 intent.taskId(), intent.toolName(), intent.actionDigest(),
                 intent.resolvedResourceUid(), 0, intent.argsJson(), clock.instant());
         operations.insert(operation); // 步骤 3
@@ -154,7 +184,8 @@ public class OperationPlanner {
         payload.put("resource_uid", intent.resolvedResourceUid());
         payload.put("resource_epoch", acquire.resourceEpoch());
         payload.put("snapshot_hash", intent.scopeSnapshotHash());
-        payload.put("dry_run", true);
+        payload.put("dry_run", !unlocked);
+        payload.put("unlocked", unlocked);
         if (approvalEnabled) {
             payload.put("grant", authzId.toString()); // single-use 授权锚（已 CONSUMED）
             payload.put("grant_id", grantId.toString());
