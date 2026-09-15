@@ -9,7 +9,9 @@ import java.util.Set;
  * Operation 状态机合法迁移表（设计基线 §2.11，PB-B1 域钉）：
  *
  * <pre>
- * PREPARED    → DISPATCHED | CANCELLED_BEFORE_DISPATCH
+ * PREPARED    → DISPATCHED | CANCELLED_BEFORE_DISPATCH | ESCALATED
+ *               （ESCALATED = §2.8 PREPARED 悬挂：outbox 长期未派发，reconcile
+ *                 发现后升级人工——不静默丢、不自动重执）
  * DISPATCHED  → ACKNOWLEDGED | UNKNOWN
  * ACKNOWLEDGED→ VERIFIED | UNKNOWN
  * UNKNOWN     → RECONCILING            （中间态必须被显式穿越，不跳越——§3.3 同律）
@@ -27,7 +29,8 @@ public final class OperationStateMachine {
     private static final Map<OperationStatus, Set<OperationStatus>> EDGES = Map.ofEntries(
             Map.entry(OperationStatus.PREPARED,
                     Set.of(OperationStatus.DISPATCHED,
-                            OperationStatus.CANCELLED_BEFORE_DISPATCH)),
+                            OperationStatus.CANCELLED_BEFORE_DISPATCH,
+                            OperationStatus.ESCALATED)),
             Map.entry(OperationStatus.DISPATCHED,
                     Set.of(OperationStatus.ACKNOWLEDGED, OperationStatus.UNKNOWN)),
             Map.entry(OperationStatus.ACKNOWLEDGED,

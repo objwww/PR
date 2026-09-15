@@ -300,6 +300,35 @@ public class AlertFlowConfig {
                 interval, java.time.Clock.systemUTC());
     }
 
+    // ---------------- PB-B5：mutation 对账循环 + reschedule 闸 ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.OperationReconciler
+    operationReconciler(
+            com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations,
+            com.objwww.pr.control.alert.application.mutation.OperationOutboxStore outbox,
+            com.objwww.pr.control.alert.application.mutation.ResourceLockStore locks,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            @Value("${app.alert.mutation.reconcile-verdict:VERIFIED}") String verdict,
+            @Value("${app.alert.mutation.hanging-threshold:PT10M}")
+                    java.time.Duration hangingThreshold,
+            @Value("${app.alert.mutation.reconcile-interval:PT1M}")
+                    java.time.Duration interval) {
+        return new com.objwww.pr.control.alert.application.mutation.OperationReconciler(
+                operations, outbox, locks, events,
+                com.objwww.pr.control.alert.application.mutation.OperationReconciler.Verdict
+                        .valueOf(verdict.trim().toUpperCase()),
+                hangingThreshold, interval, java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.MutationActiveGate
+    mutationActiveGate(
+            com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations) {
+        return new com.objwww.pr.control.alert.application.mutation.MutationActiveGate(
+                operations);
+    }
+
     // M6-07 Holmes 退场：holmesClient / holmesInvestigationExecutor 两 bean 已摘除
     // （holmesgpt 容器 + infra/holmes 包同批下线；RcaEngine.HOLMES 枚举保留为历史
     // 读面，C-62）。EvidencePackageValidator 键族更名 app.alert.evidence.*（上节）。
@@ -738,7 +767,9 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.application.RunReconciler runReconciler,
             com.objwww.pr.control.alert.application.EventChainVerifyLoop eventChainVerifyLoop,
             com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
-                    operationOutboxDispatcher) {
+                    operationOutboxDispatcher,
+            com.objwww.pr.control.alert.application.mutation.OperationReconciler
+                    operationReconciler) {
         return new SmartLifecycle() {
             private volatile boolean running;
 
@@ -750,12 +781,14 @@ public class AlertFlowConfig {
                 runReconciler.start();
                 eventChainVerifyLoop.start();
                 operationOutboxDispatcher.start();
+                operationReconciler.start();
                 running = true;
             }
 
             @Override
             public void stop() {
                 running = false;
+                operationReconciler.stop();
                 operationOutboxDispatcher.stop();
                 eventChainVerifyLoop.stop();
                 runReconciler.stop();

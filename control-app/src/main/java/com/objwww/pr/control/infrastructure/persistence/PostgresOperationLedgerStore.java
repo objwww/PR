@@ -115,6 +115,29 @@ public class PostgresOperationLedgerStore implements OperationLedgerStore {
         }));
     }
 
+    @Override
+    public java.util.List<UUID> idsInStatus(OperationStatus status) {
+        return tx.execute(status2 -> jdbc.sql(
+                        "select operation_id from rca_operation where status = :status"
+                                + " order by prepared_at")
+                .param("status", status.name())
+                .query((rs, n) -> rs.getObject("operation_id", UUID.class))
+                .list());
+    }
+
+    @Override
+    public boolean hasActiveForRun(UUID runId) {
+        return Boolean.TRUE.equals(tx.execute(status -> jdbc.sql("""
+                select count(*) > 0 from rca_operation
+                 where run_id = :run
+                   and status in ('PREPARED','DISPATCHED','ACKNOWLEDGED',
+                                  'UNKNOWN','RECONCILING','RETRYABLE')
+                """)
+                .param("run", runId)
+                .query(Boolean.class)
+                .single()));
+    }
+
     private static Instant ts(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
         Timestamp value = rs.getTimestamp(column);
         return value == null ? null : value.toInstant();

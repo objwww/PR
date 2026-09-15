@@ -27,4 +27,10 @@ public interface OperationLedgerStore {
      */
     boolean transition(UUID operationId, OperationStatus expected, OperationStatus next,
             Instant at);
+
+    /** 指定状态全集（B5 reconcile 扫描面：UNKNOWN / PREPARED 悬挂） */
+    java.util.List<UUID> idsInStatus(OperationStatus status);
+
+    /** run 级活跃 mutation 查询（闸口面：BUSY 态全集，含终态 ESCALATED 之外的中间态） */
+    boolean hasActiveForRun(UUID runId);
 }

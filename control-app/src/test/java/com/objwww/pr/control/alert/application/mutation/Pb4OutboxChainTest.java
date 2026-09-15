@@ -119,6 +119,19 @@ class Pb4OutboxChainTest {
             rows.put(operationId, op.withStatus(next, at));
             return true;
         }
+
+        @Override
+        public List<UUID> idsInStatus(OperationStatus status) {
+            return rows.values().stream().filter(op -> op.status() == status)
+                    .map(RcaOperation::operationId).toList();
+        }
+
+        @Override
+        public boolean hasActiveForRun(UUID runId) {
+            return rows.values().stream().anyMatch(op -> op.runId().equals(runId)
+                    && op.status() != OperationStatus.ESCALATED
+                    && op.status().holdsResourceLock());
+        }
     }
 
     static final class FakeOutbox implements OperationOutboxStore {
