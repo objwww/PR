@@ -24,57 +24,74 @@ public class PostgresProbeStore {
     }
 
     private final JdbcClient jdbc;
+    private final int lookbackSeconds;
 
     public PostgresProbeStore(JdbcClient jdbc) {
+        this(jdbc, 1800);
+    }
+
+    /**
+     * @param lookbackSeconds 违规事实查询的回看窗（秒）——靶场表随流量单调增长（百万行级），
+     *                        无界扫描使探测一轮退化到分钟级（T8 真机事故）；告警语义只关心
+     *                        当前症状，历史损伤由 episode 台账承载，故按近期窗口圈定
+     */
+    public PostgresProbeStore(JdbcClient jdbc, int lookbackSeconds) {
         this.jdbc = jdbc;
+        this.lookbackSeconds = lookbackSeconds;
     }
 
     // ---------- 事实违规查询（truth queries） ----------
 
-    /** 卡单（F3 症状）：CREATED 停留超阈值 */
+    /** 卡单（F3 症状）：CREATED 停留超阈值（近期窗口内） */
     public List<Violation> stuckOrders(int olderThanSeconds) {
         return jdbc.sql("""
                 SELECT id::text AS entity
                 FROM arena.oa_trade_order
                 WHERE booking_status = 'CREATED'
                   AND created_at < now() - make_interval(secs => :sec)
+                  AND created_at >= now() - make_interval(secs => :lb)
                 """).param("sec", olderThanSeconds)
+                .param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), "stuck"))
                 .list();
     }
 
-    /** 重复单（F1 症状）：同 intent 多个未废订单（canonical=最小 id 之外都计） */
+    /** 重复单（F1 症状）：同 intent 多个未废订单（canonical=最小 id 之外都计；近期窗口内） */
     public List<Violation> duplicateOrders() {
         return jdbc.sql("""
                 WITH dup AS (
                     SELECT intent_id FROM arena.oa_trade_order
                     WHERE booking_status <> 'DISCARDED'
+                      AND created_at >= now() - make_interval(secs => :lb)
                     GROUP BY intent_id HAVING count(*) > 1
                 )
                 SELECT t.id::text AS entity
                 FROM arena.oa_trade_order t JOIN dup ON dup.intent_id = t.intent_id
                 WHERE t.booking_status <> 'DISCARDED'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                   AND t.id::text <> (SELECT min(t2.id::text) FROM arena.oa_trade_order t2
                                WHERE t2.intent_id = t.intent_id
                                  AND t2.booking_status <> 'DISCARDED')
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), "dup"))
                 .list();
     }
 
-    /** 状态违规（F2 症状）：回跳签名 + PAID 无支付事实 */
+    /** 状态违规（F2 症状）：回跳签名 + PAID 无支付事实（近期窗口内） */
     public List<Violation> stateViolations() {
         return jdbc.sql("""
                 SELECT id::text AS entity, 'backjump' AS variant
                 FROM arena.oa_trade_order
                 WHERE booking_status = 'CREATED' AND enabled_at IS NOT NULL
+                  AND created_at >= now() - make_interval(secs => :lb)
                 UNION ALL
                 SELECT t.id::text AS entity, 'paid-without-fact' AS variant
                 FROM arena.oa_trade_order t
                 WHERE t.pay_status = 'PAID'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                   AND NOT EXISTS (SELECT 1 FROM arena.oa_payment_record p
                                   WHERE p.order_id = t.id AND p.result = 'SUCCEEDED')
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
@@ -93,12 +110,13 @@ public class PostgresProbeStore {
                   JOIN arena.oa_trade_order t ON t.id = p.order_id
                 WHERE p.kind = 'CAPTURE' AND p.result = 'SUCCEEDED'
                   AND t.booking_status = 'ENABLED' AND t.pay_status = 'NOT_PAY'
-                """)
+                  AND t.created_at >= now() - make_interval(secs => :lb)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 
-    /** 支付悬挂（F10 症状）：AUTH 发起后沉默停 INITIATED（无结果落定，区别于 F3 UNKNOWN） */
+    /** 支付悬挂（F10 症状）：AUTH 发起后沉默停 INITIATED（无结果落定，区别于 F3 UNKNOWN；近期窗口内） */
     public List<Violation> pendingPaymentOrders(int olderThanSeconds) {
         return jdbc.sql("""
                 SELECT p.order_id::text AS entity, 'auth-initiated-stuck' AS variant
@@ -107,19 +125,22 @@ public class PostgresProbeStore {
                 WHERE p.kind = 'AUTH' AND p.result = 'INITIATED'
                   AND p.initiated_at < now() - make_interval(secs => :sec)
                   AND t.booking_status = 'CREATED'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                 """).param("sec", olderThanSeconds)
+                .param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 
-    /** 重复扣款（F11 症状）：同订单多笔 CAPTURE 成功（支付层幂等失效） */
+    /** 重复扣款（F11 症状）：同订单多笔 CAPTURE 成功（近期窗口内） */
     public List<Violation> duplicatePayments() {
         return jdbc.sql("""
                 SELECT order_id::text AS entity, 'multi-capture' AS variant
                 FROM arena.oa_payment_record
                 WHERE kind = 'CAPTURE' AND result = 'SUCCEEDED'
+                  AND initiated_at >= now() - make_interval(secs => :lb)
                 GROUP BY order_id HAVING count(*) > 1
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
@@ -136,10 +157,11 @@ public class PostgresProbeStore {
                             WHERE l.order_id = t.id AND l.direction = 'DEDUCT') AS variant
                 FROM arena.oa_trade_order t
                 WHERE t.booking_status = 'ENABLED'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                   AND (SELECT count(DISTINCT l.resource_type)
                        FROM arena.oa_resource_ledger l
                        WHERE l.order_id = t.id AND l.direction = 'DEDUCT') < 4
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
@@ -155,27 +177,29 @@ public class PostgresProbeStore {
                       JOIN arena.oa_trade_order t ON t.id = l.order_id
                     WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
                       AND t.booking_status = 'ENABLED'
+                      AND t.created_at >= now() - make_interval(secs => :lb)
                     GROUP BY l.order_id HAVING count(*) > 1
                 )
                 SELECT l.order_id::text AS entity, 'multi-inventory-deduct' AS variant
                 FROM arena.oa_resource_ledger l JOIN multi m ON m.order_id = l.order_id
                 WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 
     // ---------- M-a 履约/消息对账事实查询（S21/S22/S25，v2 设计 §3.1） ----------
 
-    /** 履约缺口（F14 症状）：ENABLED 订单无履约记录（消息无痕丢失） */
+    /** 履约缺口（F14 症状）：ENABLED 订单无履约记录（消息无痕丢失；近期窗口内） */
     public List<Violation> fulfillmentGapOrders() {
         return jdbc.sql("""
                 SELECT t.id::text AS entity, 'no-fulfillment' AS variant
                 FROM arena.oa_trade_order t
                 WHERE t.booking_status = 'ENABLED'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                   AND NOT EXISTS (SELECT 1 FROM arena.oa_fulfillment_order f
                                   WHERE f.trade_order_id = t.id)
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
@@ -186,13 +210,14 @@ public class PostgresProbeStore {
                 SELECT f.id::text AS entity, 'multi-attempt' AS variant
                 FROM arena.oa_fulfillment_order f
                   JOIN arena.oa_fulfillment_attempt a ON a.fulfillment_id = f.id
+                WHERE f.created_at >= now() - make_interval(secs => :lb)
                 GROUP BY f.id HAVING count(a.id) > 1
-                """)
+                """).param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 
-    /** 履约超时（F17 症状）：ENABLED 订单的履约停 CONFIRMING 超龄（SLA 积压） */
+    /** 履约超时（F17 症状）：ENABLED 订单的履约停 CONFIRMING 超龄（SLA 积压；近期窗口内） */
     public List<Violation> fulfillmentOverdue(int olderThanSeconds) {
         return jdbc.sql("""
                 SELECT f.id::text AS entity, 'confirming-overdue' AS variant
@@ -200,20 +225,23 @@ public class PostgresProbeStore {
                   JOIN arena.oa_trade_order t ON t.id = f.trade_order_id
                 WHERE t.booking_status = 'ENABLED' AND f.state = 'CONFIRMING'
                   AND f.created_at < now() - make_interval(secs => :sec)
+                  AND f.created_at >= now() - make_interval(secs => :lb)
                 """).param("sec", olderThanSeconds)
+                .param("lb", lookbackSeconds)
                 .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 
-    /** 对账差异数（C2c oa_recon_diff_current 值源）：ENABLED 订单中 DEDUCT 类型不全的行数 */
+    /** 对账差异数（C2c oa_recon_diff_current 值源）：ENABLED 订单中 DEDUCT 类型不全的行数（近期窗口内） */
     public long reconDiffCount() {
         return jdbc.sql("""
                 SELECT count(*) FROM arena.oa_trade_order t
                 WHERE t.booking_status = 'ENABLED'
+                  AND t.created_at >= now() - make_interval(secs => :lb)
                   AND (SELECT count(DISTINCT l.resource_type)
                        FROM arena.oa_resource_ledger l
                        WHERE l.order_id = t.id AND l.direction = 'DEDUCT') < 4
-                """).query((rs, i) -> rs.getLong(1)).single();
+                """).param("lb", lookbackSeconds).query((rs, i) -> rs.getLong(1)).single();
     }
 
     /** 对账差异明细（/recon/diffs 端点：差异订单 + 已扣资源类型 + 缺失资源类型） */
@@ -225,11 +253,13 @@ public class PostgresProbeStore {
                   LEFT JOIN arena.oa_resource_ledger l
                     ON l.order_id = t.id AND l.direction = 'DEDUCT'
                  WHERE t.booking_status = 'ENABLED'
+                   AND t.created_at >= now() - make_interval(secs => :lb)
                  GROUP BY t.id, t.sku, t.quantity
                 HAVING count(DISTINCT l.resource_type) < 4
                  ORDER BY t.id
                  LIMIT 200
                 """)
+                .param("lb", lookbackSeconds)
                 .query((rs, i) -> {
                     Map<String, Object> m = new HashMap<>();
                     m.put("orderId", rs.getString("order_id"));

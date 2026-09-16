@@ -104,8 +104,11 @@ public class ArenaConfig {
 
     @Bean
     public PostgresProbeStore probeStore(
-            org.springframework.jdbc.core.simple.JdbcClient jdbc) {
-        return new PostgresProbeStore(jdbc);
+            org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            @Value("${app.arena.probe.lookback-seconds:1800}") int lookbackSeconds) {
+        // 违规事实查询回看窗：靶场表百万行级，无界扫描使探测退化到分钟级（T8 真机事故）；
+        // 告警语义只关心当前症状，历史损伤由 episode 台账承载
+        return new PostgresProbeStore(jdbc, lookbackSeconds);
     }
 
     // ---------- 应用服务 ----------

@@ -66,10 +66,13 @@ public class PostgresPaymentRecordRepository implements PaymentRecordRepository 
 
     @Override
     public int nextAttemptNo(UUID orderId, PaymentKind kind) {
+        // attempt_no 按订单全局取号（uq_payment_attempt(order_id, attempt_no) 无 kind 维）：
+        // 按 kind 过滤取号时 AUTH=1、CAPTURE=1 必撞唯一键——pay() 的 capture 插入从未成功过
+        // （T8 真机演练首日捕获：库内 100 万 AUTH、0 条 CAPTURE），此处必须跨 kind 连续编号
         Integer max = jdbc.sql("""
                         SELECT COALESCE(max(attempt_no), 0) FROM arena.oa_payment_record
-                        WHERE order_id=:id AND kind=:kind
-                        """).param("id", orderId).param("kind", kind.name())
+                        WHERE order_id=:id
+                        """).param("id", orderId)
                 .query(Integer.class).single();
         return max + 1;
     }
