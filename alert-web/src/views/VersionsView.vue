@@ -16,6 +16,16 @@
         <span class="zone-note">发布/回滚只提交服务端命令（需 RELEASE 角色，前端不裁定资格）；生效与否以「当前激活」指针为准，受理不等于已生效</span>
       </div>
       <template v-if="bundlesState === 'ok'">
+        <!-- 金丝雀观测（业界对齐 Argo Rollouts metric analysis，保守版：只建议不自动回滚） -->
+        <div v-if="watch.active" class="pointer-line canary-line" :class="{ warn: watch.suggestRollback }">
+          <el-tag :type="watch.suggestRollback ? 'danger' : 'success'" effect="plain">
+            {{ watch.suggestRollback ? '建议回滚' : '金丝雀观测中' }}
+          </el-tag>
+          <span class="pointer-meta">
+            激活后调查 {{ watch.window?.terminal ?? 0 }} 次终态（失败 {{ watch.window?.failed ?? 0 }}，在途 {{ watch.window?.inflight ?? 0 }}）｜ 阈值：≥{{ watch.threshold?.minTerminal }} 次且失败率 ≥{{ watch.threshold?.failRate }}
+          </span>
+          <span v-if="watch.suggestRollback" class="canary-suggest">{{ watch.suggestReason }}</span>
+        </div>
         <div class="pointer-line">
           <template v-if="bundles.active">
             <el-tag type="success" effect="plain">当前激活</el-tag>
@@ -464,7 +474,13 @@ async function openDiff(row) {
   }
 }
 
-onMounted(reload)
+// 金丝雀观测真源：激活后调查群失败率实时计算（只建议，执行走 RELEASE 资格门）
+const watch = ref({ active: false })
+async function loadWatch() {
+  try { watch.value = await api('/v1/config-bundles/canary-watch') } catch { watch.value = { active: false } }
+}
+
+onMounted(() => { reload(); loadWatch() })
 </script>
 
 <style scoped>
@@ -483,6 +499,8 @@ onMounted(reload)
 .zone-note { font-size: var(--fs-aux); color: var(--ink-2); }
 .kind-select { width: 180px; }
 .pointer-line { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.canary-line.warn { border: 1px solid var(--sev-p0, #F53F3F); border-radius: var(--radius); padding: 8px 12px; }
+.canary-suggest { font-size: var(--fs-body); color: var(--sev-p0, #F53F3F); font-weight: 600; }
 .pointer-digest { font-size: 13px; }
 .pointer-meta { font-size: var(--fs-aux); color: var(--ink-2); }
 .epoch-query { display: flex; gap: 8px; margin-bottom: 12px; }
