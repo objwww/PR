@@ -54,15 +54,28 @@
       </div>
 
       <div class="side-col">
-        <!-- 交接摘要：无真数据源，如实空态 -->
+        <!-- 交接摘要：无真数据源，如实空态（交接功能立项后接入） -->
         <div class="card panel">
           <div class="panel-title">交接摘要</div>
-          <EmptyState description="暂无交接记录" :image-size="80" />
+          <EmptyState description="暂无交接记录（交接功能未立项，无数据源）" :image-size="80" />
         </div>
-        <!-- 系统健康：无真数据源，如实空态 -->
+        <!-- 系统健康：真源 /v1/system/health（DB/事件链/在途调查/通知投递/隔离区，30s 实测） -->
         <div class="card panel">
-          <div class="panel-title">系统健康</div>
-          <EmptyState description="健康数据未接入" :image-size="80" />
+          <div class="panel-head">
+            <span class="panel-title">系统健康</span>
+            <span class="health-asof">{{ healthAsOf }}</span>
+          </div>
+          <template v-if="healthState === 'ok'">
+            <ul class="health-list">
+              <li v-for="h in healthItems" :key="h.name" class="health-row">
+                <span class="health-dot" :class="h.state.toLowerCase()" />
+                <span class="health-name">{{ h.name }}</span>
+                <span class="health-detail">{{ h.detail }}</span>
+              </li>
+            </ul>
+          </template>
+          <EmptyState v-else-if="healthState === 'error'" kind="error" @retry="loadHealth" />
+          <div v-else v-loading="true" class="health-loading" />
         </div>
       </div>
     </div>
@@ -182,9 +195,26 @@ function openIncident(row) { router.push(`/alerts/${row.incidentId}`) }
 
 function refresh() { loadSummary() }
 
+// 系统健康真源（UI-DATA-1）：/v1/system/health 实时 SQL 实测，随 summary 同节奏 30s 轮询
+const healthItems = ref([])
+const healthState = ref('loading')
+const healthAsOf = ref('')
+async function loadHealth() {
+  healthState.value = 'loading'
+  try {
+    const res = await api('/v1/system/health')
+    healthItems.value = res?.items ?? []
+    healthAsOf.value = res?.checkedAt ? fmtTime(res.checkedAt) : ''
+    healthState.value = 'ok'
+  } catch {
+    healthState.value = 'error'
+  }
+}
+
 onMounted(() => {
   refresh()
-  timer = setInterval(refresh, 30000) // 轮询 30s，不接 SSE
+  loadHealth()
+  timer = setInterval(() => { refresh(); loadHealth() }, 30000) // 轮询 30s，不接 SSE
 })
 onBeforeUnmount(() => clearInterval(timer))
 </script>
@@ -222,6 +252,18 @@ onBeforeUnmount(() => clearInterval(timer))
 .grid-2col { display: flex; align-items: flex-start; gap: var(--section-gap); }
 .grid-2col > .panel { flex: 2; min-width: 0; }
 .side-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--section-gap); }
+
+/* 系统健康实时行 */
+.health-asof { font-size: var(--fs-aux); color: var(--ink-2); }
+.health-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.health-row { display: flex; align-items: baseline; gap: 8px; }
+.health-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
+.health-dot.ok { background: #23C343; }
+.health-dot.warn { background: #F7BA1E; }
+.health-dot.crit { background: var(--sev-p0, #F53F3F); }
+.health-name { font-size: var(--fs-body); color: var(--head); font-weight: 600; flex: none; }
+.health-detail { font-size: var(--fs-aux); color: var(--ink-2); }
+.health-loading { height: 96px; }
 
 @media (max-width: 1100px) {
   .grid-2col { flex-direction: column; }
