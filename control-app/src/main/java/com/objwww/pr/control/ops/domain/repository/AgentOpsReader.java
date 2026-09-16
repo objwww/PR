@@ -78,11 +78,13 @@ public interface AgentOpsReader {
     }
 
     /**
-     * 分层延迟（前端产品化波次1，腾讯云 Agent 可观测口径）：run = 创建→完成，
+     * 分层延迟（前端产品化波次1，腾讯云 Agent 可观测口径；本批 §3.10 补任务层成四层）：
+     * run = 创建→完成，task = rca_task 终态就绪→落定（coalesce(ready_since, created_at)→updated_at），
      * llm = rca_model_call.latency_ms，tool = rca_tool_invocation 起点→结算；
      * 近 24h 窗、只统计有完结值的行，p50/p95 = percentile_cont。
      */
     record LatencyLayers(long runs, Long runP50Ms, Long runP95Ms,
+                         long taskCalls, Long taskP50Ms, Long taskP95Ms,
                          long llmCalls, Long llmP50Ms, Long llmP95Ms,
                          long toolCalls, Long toolP50Ms, Long toolP95Ms) {
     }
@@ -91,5 +93,31 @@ public interface AgentOpsReader {
     default LatencyLayers latencyLayers(Instant since) {
         throw new UnsupportedOperationException(
                 "latencyLayers 仅 Postgres 读面实现（前端产品化波次1）");
+    }
+
+    /** 成本归因单模型行（§3.10 Wave4：rca_model_call 按 requested_model 聚合，定价回算真值） */
+    record ModelCost(String model, long calls, Long totalTokens, Long costMicros) {
+    }
+
+    /**
+     * 成本归因聚合（近 24h）：models 按成本降序；totalCostMicros 只计有价行，
+     * unpricedCalls = 无定价行数（如实透出，不把无价当 0 元混入总额）。
+     */
+    record CostBreakdown(List<ModelCost> models, Long totalCostMicros, String currency,
+                         long unpricedCalls) {
+    }
+
+    /** 成本归因（since 窗口起点）。default 抛出 = 假件未镜像，PG 实现覆盖。 */
+    default CostBreakdown costs(Instant since) {
+        throw new UnsupportedOperationException("costs 仅 Postgres 读面实现（§3.10 Wave4）");
+    }
+
+    /** 风险审计事件行（kind ∈ GUARDIAN/APPROVAL_REJECTED/QUARANTINE/DEAD_LETTER，runId 可空） */
+    record RiskEvent(String kind, Instant at, String runId, String title) {
+    }
+
+    /** 风险审计流（since 窗口，时间降序）：Guardian 复核/审批拒绝/隔离与死信命中，锚 run 轨迹。 */
+    default List<RiskEvent> riskEvents(Instant since) {
+        throw new UnsupportedOperationException("riskEvents 仅 Postgres 读面实现（§3.10 Wave4）");
     }
 }

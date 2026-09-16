@@ -159,6 +159,94 @@
       </div>
     </div>
 
+    <!-- 第四行双列：分层延迟 + 成本归因（§3.10 Wave4，Datadog LLMObs/Langfuse 同律） -->
+    <div class="cols">
+      <div class="card panel">
+        <div class="panel-head">
+          <span class="panel-title">分层延迟（近 24h）</span>
+          <span class="panel-meta">
+            单位：毫秒 ｜ P50/P95 = percentile_cont 直出 ｜ 任务层 = 终态就绪→落定
+            <el-tag v-if="latency.error" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
+          </span>
+        </div>
+        <template v-if="latency.state === 'ok'">
+          <el-table :data="latencyRows" size="small">
+            <el-table-column prop="layer" label="层" min-width="170" />
+            <el-table-column prop="calls" label="完结数" width="90" align="right" />
+            <el-table-column label="P50" width="110" align="right">
+              <template #default="{ row }">{{ fmtMs(row.p50) }}</template>
+            </el-table-column>
+            <el-table-column label="P95" width="110" align="right">
+              <template #default="{ row }">{{ fmtMs(row.p95) }}</template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <EmptyState v-else-if="latency.state === 'forbidden'" kind="forbidden" />
+        <EmptyState v-else-if="latency.state === 'error'" kind="error" description="分层延迟加载失败，请重试" @retry="loadLatency" />
+        <div v-else v-loading="true" class="loading-box-sm" />
+      </div>
+      <div class="card panel">
+        <div class="panel-head">
+          <span class="panel-title">成本归因（近 24h）</span>
+          <span class="panel-meta">
+            定价回算真值（model_pricing 定价表）
+            <el-tag v-if="costs.error" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
+          </span>
+        </div>
+        <template v-if="costs.state === 'ok'">
+          <div v-if="costModels.length" class="llm-nums">
+            <div class="llm-item">
+              <span class="llm-num">{{ fmtCost(costs.data?.totalCostMicros) }}</span>
+              <span class="llm-label">模型总成本{{ costs.data?.currency ? `（${costs.data.currency}）` : '' }}</span>
+            </div>
+            <div v-if="costs.data?.unpricedCalls > 0" class="llm-item">
+              <span class="llm-num">{{ costs.data.unpricedCalls }}</span>
+              <span class="llm-label">无定价调用（不计入总额）</span>
+            </div>
+          </div>
+          <VChart v-if="costModels.length" :option="costOption" autoresize class="tools-chart" />
+          <EmptyState v-else kind="empty" description="近 24 小时无可计价模型调用" />
+        </template>
+        <EmptyState v-else-if="costs.state === 'forbidden'" kind="forbidden" />
+        <EmptyState v-else-if="costs.state === 'error'" kind="error" description="成本归因加载失败，请重试" @retry="loadCosts" />
+        <div v-else v-loading="true" class="loading-box-sm" />
+      </div>
+    </div>
+
+    <!-- 第五行通栏：风险审计流（§3.10 Wave4，Datadog 护栏审计/Rootly 动作审计同律） -->
+    <div class="card panel">
+      <div class="panel-head">
+        <span class="panel-title">风险审计（近 7 天）</span>
+        <span class="panel-meta">
+          Guardian 复核 / 审批拒绝 / 隔离与死信命中 ｜ 有 run 锚可跳调查轨迹
+          <el-tag v-if="risk.error" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
+        </span>
+      </div>
+      <template v-if="risk.state === 'ok'">
+        <el-table v-if="riskList.length" :data="riskList" size="small">
+          <el-table-column label="时间" width="170">
+            <template #default="{ row }">{{ fmtTime(row.at) }}</template>
+          </el-table-column>
+          <el-table-column label="类型" width="130">
+            <template #default="{ row }">
+              <el-tag size="small" :type="riskTagType(row.kind)">{{ RISK_KIND_ZH[row.kind] ?? row.kind }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="title" label="事件" min-width="320" show-overflow-tooltip />
+          <el-table-column label="轨迹" width="100">
+            <template #default="{ row }">
+              <el-link v-if="row.runId" type="primary" @click="go('/runs/' + row.runId)">查看 run</el-link>
+              <span v-else class="risk-norun">—</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <EmptyState v-else kind="empty" description="近 7 天无风险审计事件（Guardian 复核/审批拒绝/隔离与死信均未命中）" />
+      </template>
+      <EmptyState v-else-if="risk.state === 'forbidden'" kind="forbidden" />
+      <EmptyState v-else-if="risk.state === 'error'" kind="error" description="风险审计加载失败，请重试" @retry="loadRisk" />
+      <div v-else v-loading="true" class="loading-box-sm" />
+    </div>
+
     <!-- 未接入维度：外部探针/来源异常等指标未采集，显式说明，不造假面板；
          主机区已接入白名单代理——当前栈 Prometheus 未抓 node_exporter，按「未采集」显示 -->
     <el-alert type="info" :closable="false" show-icon
@@ -174,11 +262,12 @@
 // 白名单代理（§5.11/§6 B6，键固定枚举，禁任意 PromQL），「执行器」区走
 // /agent-ops/workers（按租约活动推导，非心跳注册表）
 // 轮询 30s，页面隐藏（visibilitychange）时停止；generatedAt 超过 90s 未更新标记「数据陈旧」
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
+import { RISK_KIND_ZH } from '../dict/zh'
 import { fmtTime } from '../utils/format'
 // RV11：图表组件局部化（echarts 按需注册随页面懒加载，首包不再携带大依赖）
 import { useChart } from '../composables/echarts'
@@ -218,6 +307,56 @@ const workersList = computed(() => workers.value?.workers ?? [])
 
 const topTools = computed(() => summary.value?.topTools24h ?? [])
 const lastBucketStart = computed(() => trend.value.length ? trend.value[trend.value.length - 1].bucketStart : null)
+
+// §3.10 Wave4：分层延迟四层行（层名全中文；null → '—' 由 fmtMs 兜底）
+const latencyRows = computed(() => {
+  const d = latency.data
+  if (!d) return []
+  return [
+    { layer: '端到端（调查 run）', calls: d.runs, p50: d.runP50Ms, p95: d.runP95Ms },
+    { layer: '任务（终态就绪→落定）', calls: d.taskCalls, p50: d.taskP50Ms, p95: d.taskP95Ms },
+    { layer: '模型调用', calls: d.llmCalls, p50: d.llmP50Ms, p95: d.llmP95Ms },
+    { layer: '工具调用', calls: d.toolCalls, p50: d.toolP50Ms, p95: d.toolP95Ms },
+  ]
+})
+const costModels = computed(() => costs.data?.models ?? [])
+const riskList = computed(() => risk.data ?? [])
+
+// 成本占比横条：cost_micros → 主币种值（同 V129 回算口径 /1e6）
+const costOption = computed(() => ({
+  grid: { left: 8, right: 90, top: 8, bottom: 8, containLabel: true },
+  tooltip: {
+    trigger: 'axis', axisPointer: { type: 'shadow' },
+    valueFormatter: v => `${v} ${costs.data?.currency ?? ''}`,
+  },
+  xAxis: { type: 'value' },
+  yAxis: { type: 'category', data: costModels.value.map(m => m.model).reverse() },
+  series: [{
+    type: 'bar', barMaxWidth: 16,
+    itemStyle: { color: '#409EFF', borderRadius: [0, 3, 3, 0] },
+    label: {
+      show: true, position: 'right', color: '#5b6572',
+      formatter: p => `${p.value} ${costs.data?.currency ?? ''}`,
+    },
+    data: costModels.value.map(m => +(m.costMicros / 1e6).toFixed(4)).reverse(),
+  }],
+}))
+
+// 毫秒人性化：null → '—'；≥1s 折秒
+function fmtMs(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  const n = Number(v)
+  return n >= 1000 ? `${(n / 1000).toFixed(1)} 秒` : `${Math.round(n)} ms`
+}
+
+// 微单位成本 → 主币种 4 位小数（V129 回算口径）；null → '—'
+function fmtCost(micros) {
+  if (micros == null || Number.isNaN(Number(micros))) return '—'
+  return (Number(micros) / 1e6).toFixed(4)
+}
+
+const RISK_TAG_TYPES = { GUARDIAN: 'primary', APPROVAL_REJECTED: 'danger', QUARANTINE: 'warning', DEAD_LETTER: 'info' }
+function riskTagType(k) { return RISK_TAG_TYPES[k] ?? 'info' }
 
 // 数据新鲜度：generatedAt 距今超过 90s（≈3 个轮询周期）视为陈旧
 const dataStale = computed(() => {
@@ -299,9 +438,38 @@ async function loadWorkers() {
   }
 }
 
+// §3.10 Wave4 三区块（分层延迟/成本归因/风险审计）：分态同 PAGE-08 律——
+// 首屏失败进错误态；有旧数据保留展示 + panel-meta 显式「刷新失败」标（失败≠陈旧）
+function panel() {
+  const p = reactive({ data: null, state: 'loading', error: '' })
+  p.load = async loader => {
+    try {
+      p.data = await loader()
+      p.state = 'ok'
+      p.error = ''
+    } catch (e) {
+      if (p.data != null) {
+        p.error = e?.response?.data?.error || '请求失败'
+      } else {
+        p.state = e?.response?.status === 403 ? 'forbidden' : 'error'
+      }
+    }
+  }
+  return p
+}
+const latency = panel()
+const costs = panel()
+const risk = panel()
+const loadLatency = () => latency.load(() => api('/agent-ops/latency-layers'))
+const loadCosts = () => costs.load(() => api('/agent-ops/costs'))
+const loadRisk = () => risk.load(() => api('/agent-ops/risk-events'))
+
 async function loadAll() {
   refreshing.value = true
-  try { await Promise.all([loadSummary(), loadTrend(), loadHost(), loadWorkers()]) } finally {
+  try {
+    await Promise.all([loadSummary(), loadTrend(), loadHost(), loadWorkers(),
+      loadLatency(), loadCosts(), loadRisk()])
+  } finally {
     refreshing.value = false
     now.value = Date.now()
   }
@@ -474,4 +642,7 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) { .host-grid { grid-template-columns: 1fr; } }
 .host-chart { height: 180px; }
 .loading-box-sm { height: 120px; }
+
+/* 风险审计无 run 锚行的占位 */
+.risk-norun { color: var(--ink-2); }
 </style>

@@ -53,10 +53,23 @@ public class AgentOpsController {
         return service.actionAssessment();
     }
 
-    /** 分层延迟（前端产品化波次1）：run/模型调用/工具调用三层 p50/p95，近 24h。 */
+    /** 分层延迟（前端产品化波次1；本批 §3.10 补任务层成四层）：p50/p95，近 24h。 */
     @GetMapping("/latency-layers")
     public com.objwww.pr.control.ops.domain.repository.AgentOpsReader.LatencyLayers
             latencyLayers() {
         return service.latencyLayers();
+    }
+
+    /** 成本归因（§3.10 Wave4，Langfuse/LLMObs 同律）：近 24h 按模型定价回算占比。 */
+    @GetMapping("/costs")
+    public com.objwww.pr.control.ops.domain.repository.AgentOpsReader.CostBreakdown costs() {
+        return service.costs();
+    }
+
+    /** 风险审计流（§3.10 Wave4，Datadog 护栏审计/Rootly 动作审计同律）：近 7 天时间降序。 */
+    @GetMapping("/risk-events")
+    public java.util.List<com.objwww.pr.control.ops.domain.repository.AgentOpsReader.RiskEvent>
+            riskEvents() {
+        return service.riskEvents();
     }
 }

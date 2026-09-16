@@ -86,9 +86,19 @@ public class AgentOpsSummaryService {
     }
 
     /**
-     * 分层延迟（前端产品化波次1）：run/模型调用/工具调用三层 p50/p95，近 24h。
+     * 分层延迟（前端产品化波次1）：run/任务/模型调用/工具调用四层 p50/p95，近 24h。
      */
     public AgentOpsReader.LatencyLayers latencyLayers() {
         return reader.latencyLayers(now.get().minus(Duration.ofHours(24)));
+    }
+
+    /** 成本归因（§3.10 Wave4）：近 24h 按模型聚合定价回算真值，无价行数如实透出。 */
+    public AgentOpsReader.CostBreakdown costs() {
+        return reader.costs(now.get().minus(Duration.ofHours(24)));
+    }
+
+    /** 风险审计流（§3.10 Wave4）：Guardian 复核/审批拒绝/隔离与死信，近 7 天时间降序。 */
+    public List<AgentOpsReader.RiskEvent> riskEvents() {
+        return reader.riskEvents(now.get().minus(Duration.ofDays(7)));
     }
 }

@@ -196,7 +196,8 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
     @Override
     public LatencyLayers latencyLayers(Instant since) {
         Timestamp from = Timestamp.from(since);
-        record Row(long runs, Long runP50, Long runP95, long llmCalls,
+        record Row(long runs, Long runP50, Long runP95, long taskCalls,
+                   Long taskP50, Long taskP95, long llmCalls,
                    Long llmP50, Long llmP95, long toolCalls, Long toolP50, Long toolP95) {
         }
         Row row = jdbc.sql("""
@@ -211,6 +212,19 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                        order by extract(epoch from (finished_at - created_at)) * 1000)
                      from rca_run
                      where finished_at is not null and created_at >= :since) as run_p95,
+                  (select count(*) from rca_task
+                     where state in ('DONE','DEAD','CANCELLED') and ready_since is not null
+                       and updated_at >= :since) as task_calls,
+                  (select percentile_cont(0.5) within group (
+                       order by extract(epoch from (updated_at - ready_since)) * 1000)
+                     from rca_task
+                     where state in ('DONE','DEAD','CANCELLED') and ready_since is not null
+                       and updated_at >= :since) as task_p50,
+                  (select percentile_cont(0.95) within group (
+                       order by extract(epoch from (updated_at - ready_since)) * 1000)
+                     from rca_task
+                     where state in ('DONE','DEAD','CANCELLED') and ready_since is not null
+                       and updated_at >= :since) as task_p95,
                   (select count(*) from rca_model_call
                      where created_at >= :since and latency_ms is not null) as llm_calls,
                   (select percentile_cont(0.5) within group (order by latency_ms)
@@ -235,6 +249,8 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                     // percentile_cont 返回 numeric——getObject(Long) 直拒（本类 javadoc 同律），走 BigDecimal
                     java.math.BigDecimal runP50 = rs.getBigDecimal("run_p50");
                     java.math.BigDecimal runP95 = rs.getBigDecimal("run_p95");
+                    java.math.BigDecimal taskP50 = rs.getBigDecimal("task_p50");
+                    java.math.BigDecimal taskP95 = rs.getBigDecimal("task_p95");
                     java.math.BigDecimal llmP50 = rs.getBigDecimal("llm_p50");
                     java.math.BigDecimal llmP95 = rs.getBigDecimal("llm_p95");
                     java.math.BigDecimal toolP50 = rs.getBigDecimal("tool_p50");
@@ -242,6 +258,9 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                     return new Row(rs.getLong("runs"),
                             runP50 == null ? null : runP50.longValue(),
                             runP95 == null ? null : runP95.longValue(),
+                            rs.getLong("task_calls"),
+                            taskP50 == null ? null : taskP50.longValue(),
+                            taskP95 == null ? null : taskP95.longValue(),
                             rs.getLong("llm_calls"),
                             llmP50 == null ? null : llmP50.longValue(),
                             llmP95 == null ? null : llmP95.longValue(),
@@ -251,7 +270,87 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                 })
                 .single();
         return new LatencyLayers(row.runs(), row.runP50(), row.runP95(),
+                row.taskCalls(), row.taskP50(), row.taskP95(),
                 row.llmCalls(), row.llmP50(), row.llmP95(),
                 row.toolCalls(), row.toolP50(), row.toolP95());
+    }
+
+    @Override
+    public CostBreakdown costs(Instant since) {
+        Timestamp from = Timestamp.from(since);
+        List<ModelCost> models = jdbc.sql("""
+                select requested_model as model, count(*) as calls,
+                       sum(case when usage->>'total_tokens' ~ '^[0-9]+$'
+                                then (usage->>'total_tokens')::bigint else 0 end) as total_tokens,
+                       sum(cost_micros) as cost_micros,
+                       max(currency) as currency
+                  from rca_model_call
+                 where created_at >= :since and cost_micros is not null
+                 group by requested_model
+                 order by sum(cost_micros) desc
+                """)
+                .param("since", from)
+                .query((rs, i) -> new ModelCost(rs.getString("model"), rs.getLong("calls"),
+                        rs.getObject("total_tokens") == null ? null : rs.getLong("total_tokens"),
+                        rs.getLong("cost_micros")))
+                .list();
+        // currency 取首行（同窗全表单币种——V128 定价单币种口径）；无有价行如实 null
+        List<String> currencies = jdbc.sql("""
+                select max(currency) from rca_model_call
+                 where created_at >= :since and cost_micros is not null
+                """)
+                .param("since", from)
+                .query((rs, i) -> rs.getString(1)).list();
+        Long totalCost = models.stream().mapToLong(ModelCost::costMicros).sum();
+        if (models.isEmpty()) {
+            totalCost = null;
+        }
+        long unpriced = jdbc.sql("""
+                select count(*) from rca_model_call
+                 where created_at >= :since and cost_micros is null
+                """)
+                .param("since", from)
+                .query((rs, i) -> rs.getLong(1)).single();
+        return new CostBreakdown(models, totalCost,
+                currencies.isEmpty() ? null : currencies.get(0), unpriced);
+    }
+
+    @Override
+    public List<RiskEvent> riskEvents(Instant since) {
+        Timestamp from = Timestamp.from(since);
+        // 三源审计流：Guardian 复核（rca_event）/ 审批拒绝（approval_decisions×request）/
+        // 隔离与死信命中（alert_inbox）——kind 统一、run 锚可空，时间降序。
+        return jdbc.sql("""
+                select kind, at, run_id, title from (
+                  select 'GUARDIAN' as kind, e.created_at as at, e.run_id::text as run_id,
+                         'Guardian 复核：' || coalesce(e.payload->>'verdict', '—')
+                         || '（' || coalesce(e.payload->>'reason', '—') || '）' as title
+                    from rca_event e
+                   where e.event_type = 'GUARDIAN_REVIEWED' and e.created_at >= :since
+                  union all
+                  select 'APPROVAL_REJECTED', d.decided_at, q.run_id::text,
+                         '审批拒绝：' || coalesce(q.action_id, '—')
+                         || '（风险级 ' || coalesce(q.risk, '—') || '）'
+                    from approval_decisions d
+                     join approval_request q on q.request_id = d.request_id
+                   where d.decision = 'REJECTED' and d.decided_at >= :since
+                  union all
+                  select case b.state when 'QUARANTINED' then 'QUARANTINE' else 'DEAD_LETTER' end,
+                         b.received_at, null,
+                         case b.state when 'QUARANTINED'
+                              then '隔离命中：注入特征告警未入调查流'
+                              else '死信：投递终败待人工介入' end
+                         || '（接收 ' || b.alert_count || ' 条）'
+                    from alert_inbox b
+                   where b.state in ('QUARANTINED', 'DEAD_LETTER') and b.received_at >= :since
+                ) t
+                 order by at desc
+                 limit 50
+                """)
+                .param("since", from)
+                .query((rs, i) -> new RiskEvent(rs.getString("kind"),
+                        rs.getTimestamp("at").toInstant(),
+                        rs.getString("run_id"), rs.getString("title")))
+                .list();
     }
 }

@@ -162,3 +162,11 @@ export const TIER_ZH = {
   EXPLORE: '探索',
   REDTEAM: '红队',
 }
+
+/** 风险审计事件类型（/agent-ops/risk-events，3.10 Wave4） */
+export const RISK_KIND_ZH = {
+  GUARDIAN: 'Guardian 复核',
+  APPROVAL_REJECTED: '审批拒绝',
+  QUARANTINE: '隔离命中',
+  DEAD_LETTER: '死信',
+}
