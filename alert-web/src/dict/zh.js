@@ -146,3 +146,19 @@ export const CATEGORY_SOURCE = {
   RULE: '规则判定',
   OVERRIDE: '人工修正',
 }
+
+/** 评测实验治理标签（eval_run.governance_tag，3.11 废批治理） */
+export const GOV_TAG_ZH = {
+  VALID: '有效',
+  SCRAP_TIMEOUT: '废批·超时',
+  SCRAP_OTHER: '废批·其他',
+  ARCHIVED: '归档',
+}
+
+/** 评测数据集分层（eval_dataset_tier.tier，对标分层评测纪律） */
+export const TIER_ZH = {
+  SMOKE: '冒烟',
+  REGRESSION: '回归',
+  EXPLORE: '探索',
+  REDTEAM: '红队',
+}

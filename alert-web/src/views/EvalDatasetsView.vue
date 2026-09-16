@@ -4,6 +4,16 @@
       <template v-if="listState === 'ok'">
         <el-table :data="items" v-loading="loading">
           <el-table-column prop="version" label="版本" min-width="150" show-overflow-tooltip />
+          <el-table-column label="分层（冒烟/回归/探索/红队）" width="200">
+            <template #default="{ row }">
+              <el-select
+                :model-value="tierOf(row)" size="small" clearable placeholder="未分层"
+                @update:model-value="v => setTier(row, v)"
+              >
+                <el-option v-for="(label, key) in TIER_ZH" :key="key" :label="label" :value="key" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column prop="source" label="来源" min-width="140" show-overflow-tooltip>
             <template #default="{ row }">{{ row.source ?? '—' }}</template>
           </el-table-column>
@@ -41,14 +51,45 @@
 
 <script setup>
 // UI-6 数据集页（/eval/datasets）：GET /eval/datasets 版本表
+// 3.11 评测增强：数据集分层打标（冒烟/回归/探索/红队）——eval_dataset_tier 治理表（V133）
 import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { api } from '../api/client'
+import { useSessionStore } from '../stores/session.js'
+import { TIER_ZH } from '../dict/zh.js'
 import EmptyState from '../components/common/EmptyState.vue'
 import { fmtTime } from '../utils/format'
 
+const session = useSessionStore()
 const items = ref([])
+const tiers = ref({}) // name|version -> tier
 const listState = ref('loading') // loading | ok | error | forbidden
 const loading = ref(false)
+
+function tierOf(row) { return tiers.value[row.name + '|' + row.version] ?? null }
+async function setTier(row, tier) {
+  if (!tier) return
+  try {
+    const res = await api('/eval/governance/dataset-tiers', {
+      method: 'POST',
+      body: { name: row.name, version: row.version, tier, createdBy: `human:${session.user || 'oncall'}` },
+    })
+    if (res?.status === 'OK') {
+      tiers.value[row.name + '|' + row.version] = tier
+      tiers.value = { ...tiers.value }
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('打标失败，请重试') }
+}
+async function loadTiers() {
+  try {
+    const res = await api('/eval/governance/dataset-tiers')
+    const map = {}
+    for (const it of res?.items ?? []) map[it.name + '|' + it.version] = it.tier
+    tiers.value = map
+  } catch { /* 治理面缺席如实留空 */ }
+}
 
 async function loadList() {
   listState.value = 'loading'
@@ -64,7 +105,7 @@ async function loadList() {
   }
 }
 
-onMounted(loadList)
+onMounted(() => { loadList(); loadTiers() })
 </script>
 
 <style scoped>

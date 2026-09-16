@@ -85,11 +85,30 @@
               <div class="cell-sub">耗时：{{ fmtDuration(row.startedAt, row.finishedAt) }}</div>
             </template>
           </el-table-column>
+          <el-table-column label="治理标签（废批）" width="170">
+            <template #default="{ row }">
+              <el-tag
+                v-if="govTags[row.runId]" size="small"
+                :type="govTags[row.runId].tag === 'VALID' ? 'success' : 'warning'" disable-transitions
+              >{{ GOV_TAG_ZH[govTags[row.runId].tag] ?? govTags[row.runId].tag }}</el-tag>
+              <el-select
+                size="small" placeholder="打标" style="width: 110px" clearable
+                :model-value="govTags[row.runId]?.tag ?? null"
+                @update:model-value="v => saveTag(row, v)"
+              >
+                <el-option v-for="(label, key) in GOV_TAG_ZH" :key="key" :label="label" :value="key" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column label="创建时间 / 操作" width="195">
             <template #default="{ row }">
               <div class="cell-main" :title="'后端仅上报开始时间，创建时间依赖 EV-03'">{{ fmtTime(row.startedAt) }}</div>
               <div class="cell-sub">
                 <el-button size="small" text type="primary" @click.stop="openDetail(row)">详情</el-button>
+                <el-button
+                  size="small" text type="primary" :disabled="row.state === 'RUNNING'"
+                  @click.stop="rerun(row)"
+                >一键重跑</el-button>
               </div>
             </template>
           </el-table-column>
@@ -134,14 +153,60 @@
 // usage_missing/unpriced 显“用量未知/未定价”，绝不显 0（R4 契约）。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
+import { GOV_TAG_ZH } from '../dict/zh.js'
 import { fmtCount, fmtDuration, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
+
+// ===== 3.11 治理打标 + 一键重跑 =====
+const govTags = ref({}) // runId -> {tag, by, at}
+async function loadGovTags() {
+  try {
+    const res = await api('/eval/governance/run-tags')
+    if (res?.status === 'OK') govTags.value = res.tags ?? {}
+  } catch { /* 治理面缺席如实留空 */ }
+}
+async function saveTag(row, tag) {
+  if (!tag) return
+  try {
+    const res = await api(`/eval/governance/runs/${row.runId}/governance-tag`, {
+      method: 'POST', body: { tag },
+    })
+    if (res?.status === 'OK') {
+      govTags.value[row.runId] = { tag, by: 'operator', at: new Date().toISOString() }
+      govTags.value = { ...govTags.value }
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('打标失败，请重试') }
+}
+async function rerun(row) {
+  try {
+    const res = await api('/eval/runs', {
+      method: 'POST',
+      body: {
+        idempotencyKey: `rerun-${row.runId}-${Date.now()}`,
+        displayName: `${row.displayName ?? shortId(row.runId)}·重跑`,
+        mode: row.mode, datasetVersion: row.datasetVersion,
+        model: row.model, promptVersion: row.promptVersion,
+      },
+    })
+    if (res?.runId) {
+      ElMessage.success(`重跑已受理：${String(res.runId).slice(0, 8)}`)
+      loadList(); loadGovTags()
+    } else {
+      ElMessage.warning(`未受理：${res?.error ?? '未知原因'}`)
+    }
+  } catch (e) {
+    ElMessage.warning(`未受理：${e?.response?.data?.error ?? '网络异常'}`)
+  }
+}
 
 const str = v => (typeof v === 'string' ? v : '')
 const state = ref(str(route.query.state))
@@ -288,7 +353,7 @@ watch(() => route.query.state, v => {
   loadList()
 })
 
-onMounted(loadList)
+onMounted(() => { loadList(); loadGovTags() })
 </script>
 
 <style scoped>
