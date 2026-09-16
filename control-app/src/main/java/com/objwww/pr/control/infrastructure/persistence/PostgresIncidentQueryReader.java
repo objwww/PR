@@ -170,11 +170,25 @@ public class PostgresIncidentQueryReader implements IncidentQueryReader {
                             eventLabels, jsonMap(rs, "annotations"));
                 }).list();
 
+        // 最近调查兜底：current_rca_run_id 只指"在途调查"（收尾即清指针，收尾算法
+        // §6.7/RunReconciler 同律），但详情页消费的是"最近一次调查"——指针为空时
+        // 回落到该事件最近 run（含终态）。报告已留存 ≠ 关联可见，不得谎报"未发起"。
+        UUID effectiveRunId = row.currentRcaRunId();
+        if (effectiveRunId == null) {
+            List<UUID> latestRun = jdbc.sql("""
+                    select id from rca_run where incident_id = :id
+                    order by created_at desc limit 1
+                    """)
+                    .param("id", incidentId)
+                    .query((rs, i) -> rs.getObject("id", UUID.class))
+                    .list();
+            effectiveRunId = latestRun.isEmpty() ? null : latestRun.get(0);
+        }
         RunBadge run = null;
-        if (row.currentRcaRunId() != null) {
+        if (effectiveRunId != null) {
             List<RunBadge> badges = jdbc.sql(
                             "select id, state, started_at, finished_at from rca_run where id = :id")
-                    .param("id", row.currentRcaRunId())
+                    .param("id", effectiveRunId)
                     .query((rs, i) -> new RunBadge(rs.getObject("id", UUID.class),
                             rs.getString("state"), ts(rs, "started_at"), ts(rs, "finished_at")))
                     .list();
