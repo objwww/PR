@@ -198,6 +198,13 @@
               <el-button v-for="q in diagQuestions" :key="q.key" size="small" plain
                 :loading="diag.loadingKey === q.key" @click="askDiag(q)">{{ q.text }}</el-button>
             </div>
+            <div style="display: flex; gap: 6px; margin-top: 8px">
+              <el-input v-model="diag.free" size="small" maxlength="500"
+                placeholder="自由提问（挂最近一次调查作账本锚，≤500 字）"
+                @keyup.enter="askFree" />
+              <el-button size="small" type="primary" :disabled="!diag.free?.trim() || diag.freeLoading"
+                :loading="diag.freeLoading" @click="askFree">提问</el-button>
+            </div>
             <div v-if="diag.items.length" class="diag-list">
               <div v-for="(d, i) in diag.items" :key="i" class="diag-row">
                 <div class="cell-sub">{{ d.created_by }} · {{ fmtTime(d.created_at) }}</div>
@@ -515,7 +522,7 @@ async function load() {
 }
 
 // 诊断会话（业界路线v2第2项 v1）：五词表引用式问答，答案真源组装零幻觉，落库回放
-const diag = reactive({ questions: [], items: [], loadingKey: '' })
+const diag = reactive({ questions: [], items: [], loadingKey: '', free: '', freeLoading: false })
 const diagQuestions = computed(() => diag.questions)
 async function loadDiag() {
   try {
@@ -537,6 +544,21 @@ async function askDiag(q) {
       ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
     }
   } catch { ElMessage.error('问答失败，请重试') } finally { diag.loadingKey = '' }
+}
+async function askFree() {
+  if (!diag.free?.trim()) return
+  diag.freeLoading = true
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/diag/free`, {
+      method: 'POST', body: { question: diag.free.trim(), createdBy: `human:${session.user || 'oncall'}` },
+    })
+    if (res?.status === 'OK') {
+      diag.free = ''
+      await loadDiag()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('提问失败，请重试') } finally { diag.freeLoading = false }
 }
 
 onMounted(() => {
