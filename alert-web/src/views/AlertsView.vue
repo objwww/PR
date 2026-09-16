@@ -2,6 +2,16 @@
   <div class="alerts-page">
     <PageHeader title="告警中心" subtitle="筛选并找到应调查或处理的事故" />
 
+    <!-- 告警关联视图（业界路线v2第3项，Moogsoft/Watchdog 聚类模式）：同服务30分钟窗多告警并发的疑似同因组 -->
+    <div v-if="corrGroups.length" class="card corr-zone">
+      <div class="corr-head">关联告警组（同服务 30 分钟窗口并发，疑似同因）</div>
+      <div v-for="g in corrGroups" :key="g.service" class="corr-row">
+        <el-tag type="warning" effect="plain" size="small">{{ g.firingCount }} 条并发</el-tag>
+        <b class="corr-service">{{ g.service }}</b>
+        <span class="cell-sub">{{ g.alerts }}</span>
+      </div>
+    </div>
+
     <!-- §三.2 状态计数行：六张统计卡收成一行；告警中/P0/P1/P2 可点=应用对应过滤
          （沿用 toggleFilter），未分派/24h/MTTR 契约无对应过滤参数，仅展示；未知显「—」 -->
     <div class="count-bar card">
@@ -183,6 +193,11 @@ const filters = reactive({
 const range = ref(filters.from && filters.to ? [new Date(filters.from), new Date(filters.to)] : null)
 
 const summary = ref(null)
+// 关联告警组（真源 /v1/correlation）：同服务30分钟窗并发，疑似同因，人工判断合并排查
+const corrGroups = ref([])
+async function loadCorr() {
+  try { corrGroups.value = (await api('/v1/correlation'))?.groups ?? [] } catch { corrGroups.value = [] }
+}
 const facets = ref(null)
 const items = ref([])
 const total = ref(0)
@@ -353,10 +368,14 @@ watch(() => route.query, q => {
   loadAll()
 })
 
-onMounted(loadAll)
+onMounted(() => { loadAll(); loadCorr() })
 </script>
 
 <style scoped>
+.corr-zone { padding: 10px var(--card-pad); }
+.corr-head { font-size: 13px; font-weight: 600; color: var(--head); margin-bottom: 8px; }
+.corr-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; flex-wrap: wrap; }
+.corr-service { font-size: var(--fs-body); color: var(--head); }
 .alerts-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 
 /* §三.2 状态计数行：单行内联分段（button 键盘可达），可点段选中高亮 */
