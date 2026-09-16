@@ -83,6 +83,9 @@ import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import CaseDetailPanel from '../components/CaseDetailPanel.vue'
 import { mapSeverity } from '../utils/severity'
+import { useSessionStore } from '../stores/session.js'
+
+const session = useSessionStore()
 
 const summary = ref(null)
 const cases = ref([])
@@ -95,7 +98,8 @@ const fPriority = ref('')
 const fReason = ref('')
 const conflictMsg = ref('')
 
-const ME = 'operator'
+// 当前用户取登录会话真值（不再硬编码 operator）
+const ME = computed(() => session.user || '')
 
 const tabs = computed(() => {
   const t = summary.value?.tabs || {}
@@ -111,7 +115,7 @@ const reasonOptions = computed(() => [...new Set(cases.value.map(c => c.reasonCo
 
 const filteredCases = computed(() => {
   let list = cases.value
-  if (tab.value === 'mine') list = list.filter(c => c.owner === ME && c.status !== 'RESOLVED')
+  if (tab.value === 'mine') list = list.filter(c => c.owner === ME.value && c.status !== 'RESOLVED')
   else if (tab.value === 'all') list = list.filter(c => c.status !== 'RESOLVED')
   else if (tab.value === 'unassigned') list = list.filter(c => !c.owner && c.status !== 'RESOLVED')
   else if (tab.value === 'overdue') list = list.filter(c => c.overdue && c.status !== 'RESOLVED')
