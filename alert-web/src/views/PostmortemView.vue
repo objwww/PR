@@ -28,6 +28,13 @@
           <p class="cell-sub">{{ d.investigation.summary }} ｜ 模型费用 {{ d.investigation.cost || '—' }}</p>
           <h3>根因与改进项（人工补写）</h3>
           <p class="cell-sub">本区为人工区：复盘结论请记录在处置工单/文档中，系统不代拟根因。</p>
+          <h3>ITSM 工单草稿</h3>
+          <el-button size="small" type="primary" plain :loading="ticket.loading" @click="createTicket">生成工单草稿</el-button>
+          <div v-if="ticket.items.length" style="margin-top: 8px">
+            <div v-for="t in ticket.items" :key="t.id" class="cell-sub">
+              [{{ t.priority }}] {{ t.title }} —— {{ t.state }}（{{ fmtTime(t.createdAt) }}）
+            </div>
+          </div>
         </template>
         <EmptyState v-else kind="empty" description="选择左侧事故查看复盘材料" />
       </div>
@@ -37,7 +44,7 @@
 
 <script setup>
 // 复盘草稿（业界路线v2第5项）：已解决事故材料自动汇编，根因人工补写，系统不代拟
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { api } from '../api/client'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
@@ -58,7 +65,26 @@ async function open(r) {
   cur.value = r.incidentId
   try { d.value = await api(`/v1/postmortems/${r.incidentId}`) } catch { d.value = null }
 }
-onMounted(load)
+
+// ITSM 工单草稿（业界路线v2第6项第一阶段）：真源汇编落库 DRAFT，导出粘贴进工单系统；真推送待外部配置
+const ticket = reactive({ items: [], loading: false })
+async function createTicket() {
+  if (!cur.value) return
+  ticket.loading = true
+  try {
+    const res = await api(`/v1/itsm/incidents/${cur.value}/draft`, { method: 'POST' })
+    if (res?.status === 'OK') {
+      ElMessage.success('工单草稿已生成（DRAFT，可导出）')
+      await loadTickets()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('生成失败，请重试') } finally { ticket.loading = false }
+}
+async function loadTickets() {
+  try { ticket.items = (await api('/v1/itsm/tickets'))?.items ?? [] } catch { ticket.items = [] }
+}
+onMounted(() => { load(); loadTickets() })
 </script>
 
 <style scoped>
