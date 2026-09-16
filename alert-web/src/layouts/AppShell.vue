@@ -80,7 +80,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
   ChatDotSquare, ChatDotRound, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished, TrendCharts,
-  DocumentChecked, Files, Memo, UserFilled,
+  DocumentChecked, Files, Memo, UserFilled, EditPen,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
 import { useSseStore } from '../stores/sseStatus.js'
@@ -125,7 +125,10 @@ const navGroups = [
   },
   {
     title: '质量',
-    items: [{ label: '评测', to: '/eval', match: ['/eval'], icon: Aim }],
+    items: [
+      { label: '评测', to: '/eval', match: ['/eval'], icon: Aim },
+      { label: 'Prompt 工作台', to: '/prompt', match: ['/prompt'], icon: EditPen },
+    ],
   },
   {
     title: '系统',

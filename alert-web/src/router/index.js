@@ -35,6 +35,7 @@ const CatalogView = () => import('../views/CatalogView.vue')
 const UsersView = () => import('../views/UsersView.vue')
 const PostmortemView = () => import('../views/PostmortemView.vue')
 const DiagChatView = () => import('../views/DiagChatView.vue')
+const PromptWorkbenchView = () => import('../views/PromptWorkbenchView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -45,6 +46,7 @@ const routes = [
   { path: '/diag', name: 'diag-chat', component: DiagChatView, meta: { title: 'AI 诊断' } },
   { path: '/history', name: 'history', component: HistoryView, meta: { title: '历史档案' } },
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
+  { path: '/prompt', name: 'prompt-workbench', component: PromptWorkbenchView, meta: { title: 'Prompt 工作台' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },
   { path: '/cases', name: 'cases', component: CasesView, meta: { title: '处置中心' } },
   { path: '/approvals', name: 'approvals', component: ApprovalOpsView, meta: { title: '审批处置' } },
