@@ -34,6 +34,36 @@
               title="原因待确认"
               description="尚未形成已确认的根因结论；调查进展见「调查」页签。"
             />
+            <!-- 前端产品化波次2：AI 结论人工复核（确认/驳回 → conclusion_feedback 标注闭环） -->
+            <div class="fb-block">
+              <div class="fb-actions">
+                <span class="cat-label">人工复核：</span>
+                <el-button size="small" type="primary" :disabled="fb.submitting"
+                  @click="submitFeedback('CONFIRMED')">确认结论</el-button>
+                <el-button size="small" type="danger" plain :disabled="fb.submitting"
+                  @click="fb.rejectOpen = true">驳回结论</el-button>
+                <span v-if="runState === 'COMPLETED'" class="cat-label">（对当前调查结论的裁决将计入采纳率）</span>
+              </div>
+              <div v-if="fb.items.length" class="fb-list">
+                <div v-for="(f, i) in fb.items" :key="i" class="fb-row">
+                  <el-tag :type="f.verdict === 'CONFIRMED' ? 'success' : 'danger'" size="small" disable-transitions>
+                    {{ f.verdict === 'CONFIRMED' ? '已确认' : '已驳回' }}
+                  </el-tag>
+                  <span class="fb-actor">{{ f.actor }}</span>
+                  <span class="cell-sub">{{ fmtTime(f.created_at) }}</span>
+                  <span v-if="f.reason && f.reason !== '—'" class="cell-sub">理由：{{ f.reason }}</span>
+                </div>
+              </div>
+            </div>
+            <el-dialog v-model="fb.rejectOpen" title="驳回 AI 结论" width="420px">
+              <el-input v-model="fb.reason" type="textarea" :rows="3"
+                placeholder="请填写驳回理由（必填，将进入采纳率统计与反馈环）" />
+              <template #footer>
+                <el-button @click="fb.rejectOpen = false">取消</el-button>
+                <el-button type="danger" :disabled="!fb.reason?.trim() || fb.submitting"
+                  @click="submitFeedback('REJECTED')">提交驳回</el-button>
+              </template>
+            </el-dialog>
           </div>
 
           <!-- UX-01 分类区块：生效分类徽章 + 命中依据 + override 快照（缺席不显示）+ 人工修正入口。
@@ -212,6 +242,9 @@ import KvTable from '../components/common/KvTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtDuration, fmtTime } from '../utils/format'
 import { CATEGORY_OVERRIDE_OPTIONS } from '../utils/category'
+import { useSessionStore } from '../stores/session'
+
+const session = useSessionStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -283,6 +316,36 @@ function evSummary(ev) {
   return ev?.annotations?.summary ?? ev?.annotations?.description ?? ''
 }
 
+// 前端产品化波次2：AI 结论人工复核（标注闭环）
+const fb = reactive({ items: [], submitting: false, rejectOpen: false, reason: '' })
+async function loadFeedback() {
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/conclusion-feedback`)
+    fb.items = res?.items ?? []
+  } catch { fb.items = [] }
+}
+async function submitFeedback(verdict) {
+  fb.submitting = true
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/conclusion-feedback`, {
+      method: 'POST',
+      body: { verdict, actor: `human:${session.user || 'oncall'}`, reason: verdict === 'REJECTED' ? fb.reason?.trim() : null, runId: runId.value },
+    })
+    if (res?.status === 'OK') {
+      ElMessage.success(res.verdict)
+      fb.rejectOpen = false
+      fb.reason = ''
+      await loadFeedback()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch (e) {
+    ElMessage.error('提交失败，请重试')
+  } finally {
+    fb.submitting = false
+  }
+}
+
 function goRun() { if (runId.value) router.push(`/runs/${runId.value}`) }
 
 async function load() {
@@ -298,7 +361,10 @@ async function load() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadFeedback()
+})
 watch(incidentId, load)
 </script>
 
