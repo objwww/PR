@@ -1,4 +1,4 @@
-package com.objwww.pr.control.alert.interfaces;
+﻿package com.objwww.pr.control.alert.interfaces;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -19,23 +19,20 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 诊断会话 v1（业界对齐 Bits AI"问 AI"的引用式形态）：预设问题词表，答案由
- * 真源实时组装（断言/时间线/历史调查/费用/事实计数），零模型调用零幻觉；
- * 问答落库 diag_session（V131）可回放。v2 自由问答接 RcaModelGateway 另行评审。
- */
+ * 璇婃柇浼氳瘽 v1锛堜笟鐣屽榻?Bits AI"闂?AI"鐨勫紩鐢ㄥ紡褰㈡€侊級锛氶璁鹃棶棰樿瘝琛紝绛旀鐢? * 鐪熸簮瀹炴椂缁勮锛堟柇瑷€/鏃堕棿绾?鍘嗗彶璋冩煡/璐圭敤/浜嬪疄璁℃暟锛夛紝闆舵ā鍨嬭皟鐢ㄩ浂骞昏锛? * 闂瓟钀藉簱 diag_session锛圴131锛夊彲鍥炴斁銆倂2 鑷敱闂瓟鎺?RcaModelGateway 鍙﹁璇勫銆? */
 @RestController
 @RequestMapping("/api/v1/incidents/{incidentId}/diag")
 public class DiagSessionController {
 
-    /** 问题词表：key → 摘要问题文案（前端渲染为可点问题气泡） */
+    /** 闂璇嶈〃锛歬ey 鈫?鎽樿闂鏂囨锛堝墠绔覆鏌撲负鍙偣闂姘旀场锛?*/
     private static final Map<String, String> QUESTIONS = new LinkedHashMap<>();
 
     static {
-        QUESTIONS.put("impact", "这个告警影响什么？");
-        QUESTIONS.put("hypothesis", "当前的调查假设是什么？");
-        QUESTIONS.put("timeline", "事件时间线怎么走的？");
-        QUESTIONS.put("history", "历史上调查过几次？结论如何？");
-        QUESTIONS.put("cost", "这个事件的调查花了多少钱？");
+        QUESTIONS.put("impact", "杩欎釜鍛婅褰卞搷浠€涔堬紵");
+        QUESTIONS.put("hypothesis", "褰撳墠鐨勮皟鏌ュ亣璁炬槸浠€涔堬紵");
+        QUESTIONS.put("timeline", "浜嬩欢鏃堕棿绾挎€庝箞璧扮殑锛?);
+        QUESTIONS.put("history", "鍘嗗彶涓婅皟鏌ヨ繃鍑犳锛熺粨璁哄浣曪紵");
+        QUESTIONS.put("cost", "杩欎釜浜嬩欢鐨勮皟鏌ヨ姳浜嗗灏戦挶锛?);
     }
 
     private final JdbcClient jdbc;
@@ -54,10 +51,10 @@ public class DiagSessionController {
     public record AskRequest(String key, String createdBy) {
     }
 
-    /** 问答：按词表 key 从真源组装答案（无自由文本入参=不可注入不可幻觉） */
+    /** 闂瓟锛氭寜璇嶈〃 key 浠庣湡婧愮粍瑁呯瓟妗堬紙鏃犺嚜鐢辨枃鏈叆鍙?涓嶅彲娉ㄥ叆涓嶅彲骞昏锛?*/
     @PostMapping
     public Map<String, Object> ask(@PathVariable UUID incidentId, @RequestBody AskRequest request) {
-        Objects.requireNonNull(request.key(), "key 必填");
+        Objects.requireNonNull(request.key(), "key 蹇呭～");
         if (!QUESTIONS.containsKey(request.key())) {
             return Map.of("status", "REJECTED", "reason", "UNKNOWN_QUESTION_KEY");
         }
@@ -66,36 +63,36 @@ public class DiagSessionController {
         }
         String answer = switch (request.key()) {
             case "impact" -> text(jdbc.sql("""
-                    select '服务=' || coalesce(service, '—') || '；状态=' || status
-                           || '；首次发生=' || coalesce(episode_started_at::text, '—')
-                           || '；累计接收 ' || received_count || ' 次'
+                    select '鏈嶅姟=' || coalesce(service, '鈥?) || '锛涚姸鎬?' || status
+                           || '锛涢娆″彂鐢?' || coalesce(episode_started_at::text, '鈥?)
+                           || '锛涚疮璁℃帴鏀?' || received_count || ' 娆?
                       from incident where id = :id
-                    """).param("id", incidentId));
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
             case "hypothesis" -> text(jdbc.sql("""
-                    select coalesce(string_agg(c.reason, ' ｜ '), '尚无结构化断言（确定性引擎无假设清单）')
+                    select coalesce(string_agg(c.reason, ' 锝?'), '灏氭棤缁撴瀯鍖栨柇瑷€锛堢‘瀹氭€у紩鎿庢棤鍋囪娓呭崟锛?)
                       from rca_claim c
                       join rca_run r on r.id = c.run_id
                      where r.incident_id = :id
-                    """).param("id", incidentId));
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
             case "timeline" -> text(jdbc.sql("""
-                    select coalesce(string_agg(e.status || '@' || to_char(e.starts_at, 'MM-DD HH24:MI'), ' → '),
-                           '暂无事件')
+                    select coalesce(string_agg(e.status || '@' || to_char(e.starts_at, 'MM-DD HH24:MI'), ' 鈫?'),
+                           '鏆傛棤浜嬩欢')
                       from (select status, starts_at from alert_event
                              where incident_id = :id order by starts_at desc limit 8) e
-                    """).param("id", incidentId));
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
             case "history" -> text(jdbc.sql("""
-                    select '累计 ' || count(*) || ' 次调查：成功 ' || count(*) filter (where state = 'SUCCEEDED')
-                           || '，失败 ' || count(*) filter (where state in ('FAILED','EXPIRED'))
-                           || '，在途 ' || count(*) filter (where state in ('QUEUED','RUNNING','REPORTING'))
+                    select '绱 ' || count(*) || ' 娆¤皟鏌ワ細鎴愬姛 ' || count(*) filter (where state = 'SUCCEEDED')
+                           || '锛屽け璐?' || count(*) filter (where state in ('FAILED','EXPIRED'))
+                           || '锛屽湪閫?' || count(*) filter (where state in ('QUEUED','RUNNING','REPORTING'))
                       from rca_run where incident_id = :id
-                    """).param("id", incidentId));
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
             case "cost" -> text(jdbc.sql("""
-                    select coalesce('累计模型费用 ' || round(sum(m.cost_micros) / 1000000.0, 4) || ' '
-                           || coalesce(max(m.currency), ''), '暂无可计价调用（模型名缺失或 usage 缺失，如实未知）')
+                    select coalesce('绱妯″瀷璐圭敤 ' || round(sum(m.cost_micros) / 1000000.0, 4) || ' '
+                           || coalesce(max(m.currency), ''), '鏆傛棤鍙浠疯皟鐢紙妯″瀷鍚嶇己澶辨垨 usage 缂哄け锛屽瀹炴湭鐭ワ級')
                       from rca_model_call m join rca_run r on r.id = m.run_id
                       where r.incident_id = :id
-                    """).param("id", incidentId));
-            default -> "不支持的问题";
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
+            default -> "涓嶆敮鎸佺殑闂";
         };
         UUID sessionId = UUID.randomUUID();
         jdbc.sql("""
@@ -122,7 +119,7 @@ public class DiagSessionController {
         return body;
     }
 
-    /** 本事件的会话回放（最近 20 条） */
+    /** 鏈簨浠剁殑浼氳瘽鍥炴斁锛堟渶杩?20 鏉★級 */
     @GetMapping
     public Map<String, Object> history(@PathVariable UUID incidentId) {
         List<Map<String, Object>> items = jdbc == null ? List.of() : jdbc.sql("""
@@ -144,6 +141,6 @@ public class DiagSessionController {
     }
 
     private static String text(List<String> rows) {
-        return rows.isEmpty() || rows.get(0) == null ? "未找到相关记录" : String.join("；", rows);
+        return rows.isEmpty() || rows.get(0) == null ? "鏈壘鍒扮浉鍏宠褰? : String.join("锛?, rows);
     }
 }
