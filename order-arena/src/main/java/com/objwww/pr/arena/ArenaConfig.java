@@ -202,9 +202,13 @@ public class ArenaConfig {
             OrderCreationSteps steps,
             RefundChainService refundChain,
             F3ReconcileService f3Reconcile,
-            @Value("${app.arena.chaos.f2-batch:16}") int f2Batch) {
+            @Value("${app.arena.chaos.f2-batch:16}") int f2Batch,
+            @Value("${app.arena.probe.stuck-threshold-seconds:60}")
+            int stuckThresholdSeconds) {
+        // stuck 阈值与 DomainProbe 同源：F10 置 UNKNOWN / F17 履约收口的"超龄"判定
+        // 必须与探测面一致，保证修复跑完即探测归零
         return new ChaosRecoveryService(switchboard, injectionStore, tradeOrders, payments,
-                steps, refundChain, f3Reconcile, f2Batch);
+                steps, refundChain, f3Reconcile, f2Batch, stuckThresholdSeconds);
     }
 
     @Bean

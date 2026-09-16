@@ -147,6 +147,141 @@ public class PostgresChaosInjectionStore {
                 .list();
     }
 
+    // ---------- M-a 业务族恢复（C-4 同生共死：注入工件清除/跳过步骤重放） ----------
+    //
+    // 恢复语义与探测面（PostgresProbeStore）逐条对偶——修复判定 = 症状判定（同一事实谓词
+    // 收窄到 chaos- 圈定面），保证"修复跑完 ⇒ 探测归零"。注入工件（F11 多余 capture、
+    // F13 超额扣减行、F15 重复尝试行）按"canonical=最早保留"清除，历史由 episode 台账与
+    // 注入审计承载；被跳过的业务步骤（F9 pay 同步、F12 扣减行、F17 履约收口）按原步骤
+    // 语义重放。全部幂等：重复扫描零额外动作。
+
+    /** F9 恢复：重放被跳过的 pay 同步（CAPTURE SUCCEEDED × ENABLED/NOT_PAY → PAID） */
+    public int repairF9PaidSync(String target) {
+        return jdbc.sql("""
+                UPDATE arena.oa_trade_order t
+                SET pay_status = 'PAID', updated_at = now()
+                FROM arena.oa_payment_record p
+                WHERE p.order_id = t.id AND p.kind = 'CAPTURE' AND p.result = 'SUCCEEDED'
+                  AND t.booking_status = 'ENABLED' AND t.pay_status = 'NOT_PAY'
+                  AND t.correlation_id LIKE 'chaos-%'
+                  AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                """).param("target", target).update();
+    }
+
+    /** F10 恢复：沉默 AUTH 置 UNKNOWN 交给既有 F3 对账面收敛（探测谓词即解锁） */
+    public int flipF10StuckAuth(String target, int olderThanSeconds) {
+        return jdbc.sql("""
+                UPDATE arena.oa_payment_record p
+                SET result = 'UNKNOWN'
+                FROM arena.oa_trade_order t
+                WHERE t.id = p.order_id AND p.kind = 'AUTH' AND p.result = 'INITIATED'
+                  AND p.initiated_at < now() - make_interval(secs => :sec)
+                  AND t.booking_status = 'CREATED'
+                  AND t.correlation_id LIKE 'chaos-%'
+                  AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                """).param("target", target)
+                .param("sec", olderThanSeconds).update();
+    }
+
+    /** F11 恢复：多余 CAPTURE 成功行清除（canonical = 最早一笔保留；探测=同单多笔） */
+    public int deleteF11ExtraCaptures(String target) {
+        return jdbc.sql("""
+                WITH ranked AS (
+                    SELECT p.id,
+                           row_number() OVER (PARTITION BY p.order_id
+                                              ORDER BY p.id) AS rn
+                    FROM arena.oa_payment_record p
+                      JOIN arena.oa_trade_order t ON t.id = p.order_id
+                    WHERE p.kind = 'CAPTURE' AND p.result = 'SUCCEEDED'
+                      AND t.correlation_id LIKE 'chaos-%'
+                      AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                )
+                DELETE FROM arena.oa_payment_record x
+                USING ranked r
+                WHERE x.id = r.id AND r.rn > 1
+                """).param("target", target).update();
+    }
+
+    /** F12 恢复：补插缺失的四类 DEDUCT 行（数量/序号沿用订单事实；唯一键兜底幂等） */
+    public int insertF12MissingDeductions(String target) {
+        return jdbc.sql("""
+                INSERT INTO arena.oa_resource_ledger(id, order_id, resource_type, direction,
+                    deduction_seq, quantity, created_at)
+                SELECT gen_random_uuid(), t.id, m.rtype, 'DEDUCT',
+                       COALESCE((SELECT max(l.deduction_seq) FROM arena.oa_resource_ledger l
+                                 WHERE l.order_id = t.id), 0) + 1,
+                       t.quantity, now()
+                FROM arena.oa_trade_order t
+                JOIN (VALUES ('INVENTORY'), ('DISCOUNT'), ('PURCHASE_LIMIT'), ('ASSET'))
+                     AS m(rtype) ON true
+                WHERE t.booking_status = 'ENABLED'
+                  AND t.correlation_id LIKE 'chaos-%'
+                  AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM arena.oa_resource_ledger l2
+                      WHERE l2.order_id = t.id AND l2.resource_type = m.rtype
+                        AND l2.direction = 'DEDUCT')
+                ON CONFLICT (order_id, resource_type, deduction_seq, direction) DO NOTHING
+                """).param("target", target).update();
+    }
+
+    /** F13 恢复：超额 INVENTORY 扣减行清除（canonical = 最小 deduction_seq 保留） */
+    public int deleteF13ExtraInventory(String target) {
+        return jdbc.sql("""
+                WITH victims AS (
+                    SELECT l.id
+                    FROM arena.oa_resource_ledger l
+                      JOIN arena.oa_trade_order t ON t.id = l.order_id
+                    WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
+                      AND t.booking_status = 'ENABLED'
+                      AND t.correlation_id LIKE 'chaos-%'
+                      AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                      AND l.deduction_seq > (SELECT min(l2.deduction_seq)
+                                             FROM arena.oa_resource_ledger l2
+                                             WHERE l2.order_id = l.order_id
+                                               AND l2.resource_type = 'INVENTORY'
+                                               AND l2.direction = 'DEDUCT')
+                )
+                DELETE FROM arena.oa_resource_ledger x
+                USING victims v
+                WHERE x.id = v.id
+                """).param("target", target).update();
+    }
+
+    /** F15 恢复：重复消费尝试行清除（canonical = 每履约单最早一笔保留） */
+    public int deleteF15ExtraAttempts(String target) {
+        return jdbc.sql("""
+                WITH ranked AS (
+                    SELECT a.id,
+                           row_number() OVER (PARTITION BY a.fulfillment_id
+                                              ORDER BY a.id) AS rn
+                    FROM arena.oa_fulfillment_attempt a
+                      JOIN arena.oa_fulfillment_order f ON f.id = a.fulfillment_id
+                      JOIN arena.oa_trade_order t ON t.id = f.trade_order_id
+                    WHERE t.correlation_id LIKE 'chaos-%'
+                      AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                )
+                DELETE FROM arena.oa_fulfillment_attempt x
+                USING ranked r
+                WHERE x.id = r.id AND r.rn > 1
+                """).param("target", target).update();
+    }
+
+    /** F17 恢复：重放被跳过的履约收口（ENABLED 订单停 CONFIRMING 超龄 → CONFIRMED） */
+    public int confirmF17OverdueFulfillments(String target, int olderThanSeconds) {
+        return jdbc.sql("""
+                UPDATE arena.oa_fulfillment_order f
+                SET state = 'CONFIRMED', updated_at = now()
+                FROM arena.oa_trade_order t
+                WHERE t.id = f.trade_order_id AND f.state = 'CONFIRMING'
+                  AND t.booking_status = 'ENABLED'
+                  AND f.created_at < now() - make_interval(secs => :sec)
+                  AND t.correlation_id LIKE 'chaos-%'
+                  AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                """).param("target", target)
+                .param("sec", olderThanSeconds).update();
+    }
+
     // ---------- 审计（会话级收口，幂等） ----------
 
     public void auditSessionRecovered(UUID sessionId, String faultType, String detail) {

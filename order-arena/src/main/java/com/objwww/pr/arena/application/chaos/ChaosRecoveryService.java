@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.function.ToIntFunction;
 
 /**
  * 恢复驱动（M2-18/19，arena 侧扫描循环每轮调用 {@link #scanOnce}）：
@@ -26,6 +27,10 @@ import java.util.List;
  *   <li>RECOVERING F2 → 事实驱动恢复（C-4：事实未变才回写）；</li>
  *   <li>RECOVERING F3 → 对账欠账清零后落会话级 RECOVERED 审计
  *       （对账本体在 F3ReconcileService，此处只收口）。</li>
+ *   <li>RECOVERING F9~F17（M-a 业务族）→ 注入工件清除/被跳过步骤重放
+ *       （修复谓词=探测谓词收窄到 chaos- 圈定面，修复跑完即探测归零）；
+ *       F10 置 UNKNOWN 后交既有 F3 对账面收敛；F14/F16 症状为计数窗口型，
+ *       注入关闭后自然回落，无恢复动作；F18 为 HOLDOUT 预留。</li>
  * </ul>
  * 会话状态推进（RECOVERING→CLOSED）不在本类：C-3 角色拆分，arena 无权写
  * oa_chaos_session，由 arena-chaos-admin 依注入审计只读判定后推进。
@@ -42,6 +47,7 @@ public class ChaosRecoveryService {
     private final RefundChainService refundChain;
     private final F3ReconcileService f3Reconcile;
     private final int f2Batch;
+    private final int stuckThresholdSeconds;
 
     public ChaosRecoveryService(ChaosSwitchboard switchboard,
                                 PostgresChaosInjectionStore injectionStore,
@@ -50,7 +56,8 @@ public class ChaosRecoveryService {
                                 OrderCreationSteps steps,
                                 RefundChainService refundChain,
                                 F3ReconcileService f3Reconcile,
-                                int f2Batch) {
+                                int f2Batch,
+                                int stuckThresholdSeconds) {
         this.switchboard = switchboard;
         this.injectionStore = injectionStore;
         this.tradeOrders = tradeOrders;
@@ -59,6 +66,7 @@ public class ChaosRecoveryService {
         this.refundChain = refundChain;
         this.f3Reconcile = f3Reconcile;
         this.f2Batch = f2Batch;
+        this.stuckThresholdSeconds = stuckThresholdSeconds;
     }
 
     /** @return 本轮注入/恢复动作数（取证/节奏观察用） */
@@ -70,9 +78,23 @@ public class ChaosRecoveryService {
                     case F1 -> handleF1(session);
                     case F2 -> handleF2(session);
                     case F3 -> handleF3(session);
-                    // M-a 业务族（F9~F18）：注入关闭即恢复（症状由探测面自然归零），
-                    // 无注入侧恢复动作；场景专用取证随演练细化后在此补 handleFn
-                    case F9, F10, F11, F12, F13, F14, F15, F16, F17, F18 -> 0;
+                    case F9 -> handleBusiness(session, "F9",
+                            t -> injectionStore.repairF9PaidSync(t));
+                    case F10 -> handleF10(session);
+                    case F11 -> handleBusiness(session, "F11",
+                            t -> injectionStore.deleteF11ExtraCaptures(t));
+                    case F12 -> handleBusiness(session, "F12",
+                            t -> injectionStore.insertF12MissingDeductions(t));
+                    case F13 -> handleBusiness(session, "F13",
+                            t -> injectionStore.deleteF13ExtraInventory(t));
+                    case F14 -> 0;   // 计数窗口型症状：注入关闭后 increase 差值随窗稀释
+                    case F15 -> handleBusiness(session, "F15",
+                            t -> injectionStore.deleteF15ExtraAttempts(t));
+                    case F16 -> 0;   // 入口关闭即恢复：创建速率自然回升
+                    case F17 -> handleBusiness(session, "F17",
+                            t -> injectionStore.confirmF17OverdueFulfillments(
+                                    t, stuckThresholdSeconds));
+                    case F18 -> 0;   // H7 HOLDOUT 预留（M-a 不挂接演练）
                 };
             } catch (RuntimeException e) {
                 log.warn("chaos 会话处理失败（下轮重试）: scenario={} {}",
@@ -80,6 +102,44 @@ public class ChaosRecoveryService {
             }
         }
         return actions;
+    }
+
+    /**
+     * M-a 业务族通用恢复：RECOVERING 后跑一次修复 SQL（幂等，单语句清空本类损伤），
+     * 随即落会话级 RECOVERED 审计——空靶面（激活后未产生损伤即关闭）同样可闭（C-4
+     * 收口完备性，与 F1 同款语义）。
+     */
+    private int handleBusiness(ChaosSwitchboard.SessionView session, String faultType,
+                               ToIntFunction<String> repair) {
+        if (!"RECOVERING".equals(session.state())) {
+            return 0; // ACTIVE 业务族无注入侧动作（注入点在业务路径内，业务调用时已生效）
+        }
+        if (injectionStore.hasSessionRecovered(sessionIdOf(session))) {
+            return 0; // 收口幂等
+        }
+        int repaired = repair.applyAsInt(session.target());
+        injectionStore.auditSessionRecovered(sessionIdOf(session), faultType,
+                "repaired=" + repaired);
+        log.info("{} 恢复收口: scenario={} 修复={}", faultType, session.scenarioId(), repaired);
+        return repaired;
+    }
+
+    /** F10：沉默 AUTH 置 UNKNOWN（探测谓词即解锁），收敛由既有 F3 对账面完成 */
+    private int handleF10(ChaosSwitchboard.SessionView session) {
+        if (!"RECOVERING".equals(session.state())) {
+            return 0;
+        }
+        if (injectionStore.hasSessionRecovered(sessionIdOf(session))) {
+            return 0;
+        }
+        int flipped = injectionStore.flipF10StuckAuth(session.target(),
+                stuckThresholdSeconds);
+        int drained = flipped > 0 ? f3Reconcile.reconcileOnce() : 0;
+        injectionStore.auditSessionRecovered(sessionIdOf(session), "F10",
+                "flipped_to_unknown=" + flipped + ", reconciled=" + drained);
+        log.info("F10 恢复收口: scenario={} 置UNKNOWN={} 本轮对账={}",
+                session.scenarioId(), flipped, drained);
+        return flipped;
     }
 
     private int handleF1(ChaosSwitchboard.SessionView session) {

@@ -68,7 +68,7 @@
 | T5 | R1a 规则 | arena-business.yml 10 条规则 + promtool 单测文件；本地 promtool test rules 全绿 | promtool 全绿 | ✅ 2026-09-17（195 promtool v3.13.1 实跑 SUCCESS——11 条规则行/10 alertname，S17 双档 for 窗与 sum 聚合标签经测试修正） |
 | T6 | E1a 注册 | eval-scenarios.yml 追加 S16~S25（七要素）；GoldenScenarioRegistry 解析通过（本地启动验证或既有注册表单测跑绿） | 注册解析零拒绝 | ✅ 2026-09-18（registry_version 2→3：15 场景全解析[七要素+partition/complexity/checkpoints 扩展键]；词库同轮扩容 lexicon_version 1→2——business.* fault_type 10 值 + reason_code 10 值，注册表 lexicon_binding 同步；jshell 真实文件装载零拒绝 + GoldenScenarioRegistryTest 4/4 + SynonymLexiconTest 5/5 全绿；H7/H8 未注册✓；S23 标注部分验证✓） |
 | T7 | 构建+部署 195 | order-arena / arena-chaos-admin 镜像构建部署（compose alert 项目）；health 200；/metrics 新指标在场 | health 200 + 指标在场 | ✅ 2026-09-18（overlay tar+md5 同步→195 mvn package 双模块→compose build/up：双容器 healthy、V8 迁移 oa_fulfillment_attempt 落库、14 条 Arena 规则装载。**真机校准战果**：Micrometer/OpenMetrics 保留后缀变换致 4 条规则引用不存在的指标名（counter oa_orders_created_total 渲染成 oa_orders_total；gauge oa_inventory_negative_total 渲染成 oa_inventory_negative）——注册面/规则面/promtool 测试面/注册表注记四处统一到渲染真名，promtool 复跑 SUCCESS，Prometheus API 实查序列在场） |
-| T8 | 真栈演练 A | S16→S17→S18→S19 逐个：激活→firing→恢复→resolved→SQL 对账，记录时间线 | 4 场景全链闭环 | ⬜ |
+| T8 | 真栈演练 A | S16→S17→S18→S19 逐个：激活→firing→恢复→resolved→SQL 对账，记录时间线 | 4 场景全链闭环 | ⬜ **前置已完成 2026-09-18**：业务族恢复面补全（T1 的"注入关闭即恢复"空分支不成立——探测面为状态扫描，损伤数据不修则告警永不 resolved）。F9 重放 pay 同步（PAID CAS）/F10 沉默 AUTH 置 UNKNOWN 交既有 F3 对账收敛/F11 删多余 capture 保留最早/F12 补插缺失 DEDUCT 行/F13 删超额 INVENTORY 行/F15 删重复 attempt 行/F17 重放履约收口 CONFIRMED——全部以"修复谓词=探测谓词收窄到 chaos- 圈定面"对偶设计，修复跑完即探测归零；本地 30 测试全绿，195 部署 healthz UP |
 | T9 | 真栈演练 B | S20→S21→S22→S24→S25 同上；S23 规则在场标注"部分验证（待 M-b 复合激活）" | 5 场景闭环 + S23 标注 | ⬜ |
 | T10 | 收官 | 演练记录落 docs/测试证据/业务扩编M-a-20260918/；双台账（差距分析文档 M-a 状态 + PROGRESS）；总提交 | 双门禁齐 | ⬜ |
 

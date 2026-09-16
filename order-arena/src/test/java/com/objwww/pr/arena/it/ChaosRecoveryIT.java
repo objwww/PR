@@ -50,7 +50,7 @@ class ChaosRecoveryIT extends ArenaPostgresITBase {
                 Duration.ofSeconds(60), Duration.ofSeconds(30), 8);
         return new ChaosRecoveryService(
                 new ChaosSwitchboard(arenaJdbc, Duration.ZERO), injection, tradeOrders,
-                payments, steps, refundChain, f3, 16);
+                payments, steps, refundChain, f3, 16, 60);
     }
 
     private String bookingStatus(UUID orderId) {
@@ -167,7 +167,7 @@ class ChaosRecoveryIT extends ArenaPostgresITBase {
                                 new PostgresResourceLedgerRepository(arenaJdbc), payments,
                                 new PostgresCompensationOutboxRepository(arenaJdbc)),
                         "it-f3", Duration.ofSeconds(60), Duration.ofSeconds(30), 8),
-                1);
+                1, 60);
 
         // ACTIVE：注入回跳（批量=1：逐轮一单，注入在 ACTIVE 期间持续生效）
         assertThat(bounded.scanOnce()).isEqualTo(1);
