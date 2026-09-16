@@ -261,6 +261,18 @@
                 <span v-else class="muted">未统计</span>
               </template>
             </el-table-column>
+            <el-table-column label="三维评分（P3）" min-width="200">
+              <template #default="{ row }">
+                <div class="cell-main">
+                  定因 {{ fmtDim(row.causeComponentHit, row.causeFaultHit, row.causeReasonHit) }}
+                </div>
+                <div class="cell-sub">
+                  路径 {{ row.checkpointsTotal == null ? '未评' : `${row.checkpointsCovered}/${row.checkpointsTotal}` }}
+                  · 结论 {{ fmtGrounded(row.conclusionGrounded) }}
+                  <template v-if="row.toolCallsTotal != null"> · 工具 {{ row.toolCallsTotal }}（重 {{ row.toolCallsTotal - row.toolCallsUnique }}）</template>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="期望根因" min-width="140" show-overflow-tooltip>
               <template #default="{ row }">{{ row.expectedRootCause ?? '未统计' }}</template>
             </el-table-column>
@@ -539,6 +551,22 @@ const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: '
 
 // 分面未接线/缺席（UNKNOWN/null）→ 弱化显示
 const isUnknownFacet = v => v == null || v === 'UNKNOWN'
+
+// P3 定因逐维：三布尔 → "x/y"（null=未评不填 0）
+function fmtDim(componentHit, faultHit, reasonHit) {
+  if (componentHit == null || faultHit == null || reasonHit == null) return '未评'
+  const hit = [componentHit, faultHit, reasonHit].filter(Boolean).length
+  return `${hit}/3`
+}
+
+// P3 结论有据性词表 → 中文
+function fmtGrounded(v) {
+  if (v == null) return '未评'
+  if (v === 'GROUNDED') return '有据'
+  if (v === 'UNGROUNDED') return '无据'
+  if (v === 'NOT_APPLICABLE') return '无结论'
+  return v
+}
 
 // EV-06 用量分面词表 → 中文（OK 透传；USAGE_MISSING 显“用量未知”，不显 0）
 function fmtUsageFacet(v) {

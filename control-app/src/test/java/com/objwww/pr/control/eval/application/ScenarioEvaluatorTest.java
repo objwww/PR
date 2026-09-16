@@ -131,4 +131,74 @@ class ScenarioEvaluatorTest {
         assertThat(EVAL.evaluate(golden(List.of("checkout")),
                 pkg(EXPECTED, List.of()), false).silencePenalty()).isFalse();
     }
+
+    // ------------------------------------------------------------------ P3 三维评分
+
+    @Test
+    @DisplayName("P3 定因部分分：component 中/fault 中/reason 外 → 前两 true 第三 false")
+    void partialCauseHits() {
+        ScenarioEvaluator.Evaluation ev = EVAL.evaluate(golden(List.of("checkout")),
+                pkg(new TypedRootCause("Payment-Svc", "业务错误率升高", "完全无关码"),
+                        List.of(claim(List.of("checkout")))), true);
+        assertThat(ev.componentHit()).isTrue();
+        assertThat(ev.faultHit()).isTrue();
+        assertThat(ev.reasonHit()).isFalse();
+        assertThat(ev.rootCauseHit()).isFalse();
+    }
+
+    @Test
+    @DisplayName("P3 定因逐维：全中=三 true；UNRESOLVED=三 null（未评不填 false）")
+    void fullHitAndGetAllThreeTrueAndUnresolvedLeavesNulls() {
+        ScenarioEvaluator.Evaluation hit = EVAL.evaluate(golden(List.of("checkout")),
+                pkg(EXPECTED, List.of(claim(List.of("checkout")))), true);
+        assertThat(hit.componentHit()).isTrue();
+        assertThat(hit.faultHit()).isTrue();
+        assertThat(hit.reasonHit()).isTrue();
+
+        ScenarioEvaluator.Evaluation unresolved = EVAL.evaluate(golden(List.of("checkout")),
+                pkg(new TypedRootCause("UNRESOLVED", "BUSINESS_ERROR_RATE",
+                        "PAYMENT_CHARGE_FAILURE"), List.of(claim(List.of("checkout")))), true);
+        assertThat(unresolved.componentHit()).isNull();
+        assertThat(unresolved.faultHit()).isNull();
+        assertThat(unresolved.reasonHit()).isNull();
+    }
+
+    @Test
+    @DisplayName("P3 路径维：检查点按 casefold 子串命中报告语料；无检查点=空表")
+    void checkpointMatchesAgainstPackageCorpus() {
+        EvidencePackageV2 rich = new EvidencePackageV2(2,
+                "order-arena 卡单 oa_stuck_orders_current 持续走高", EXPECTED,
+                List.of(claim(List.of("checkout"))),
+                List.of("evidence logs.query 命中 payment timeout"), "impact", "remediation",
+                List.of());
+        GoldenCase withCheckpoints = new GoldenCase("S1", "n", "FlagdScenarioDriver", null,
+                "payment", EXPECTED, List.of("checkout"),
+                java.util.Map.of(), null,
+                new GoldenCase.Timing(1, 1, 1, 1, 1),
+                GoldenCase.KIND_INJECT,
+                List.of("OA_STUCK_ORDERS", "logs.query", "不存在点"));
+        List<ScenarioEvaluator.CheckpointMatch> matches =
+                EVAL.checkpointMatches(withCheckpoints, rich);
+        assertThat(matches).hasSize(3);
+        assertThat(matches.get(0).matched()).isTrue();
+        assertThat(matches.get(1).matched()).isTrue();
+        assertThat(matches.get(2).matched()).isFalse();
+
+        assertThat(EVAL.checkpointMatches(golden(List.of("checkout")), rich)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("P3 结论复核：TRUE 根因 claim 带引用=GROUNDED，无引用=UNGROUNDED，拒答=NA")
+    void conclusionGroundedClassification() {
+        assertThat(EVAL.conclusionGrounded(pkg(EXPECTED,
+                List.of(claim(List.of("checkout")))))).isEqualTo("GROUNDED");
+
+        assertThat(EVAL.conclusionGrounded(pkg(EXPECTED, List.of(new ReportClaim(
+                        "root_cause", ClaimStatus.TRUE, "payment", "BUSINESS_ERROR_RATE",
+                        List.of("checkout"), List.of())))))
+                .isEqualTo("UNGROUNDED");
+
+        assertThat(EVAL.conclusionGrounded(pkg(new TypedRootCause("unresolved", "f", "r"),
+                List.of(claim(List.of("checkout")))))).isEqualTo("NOT_APPLICABLE");
+    }
 }

@@ -77,7 +77,10 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 expected_root_cause, actual_root_cause,
                 expected_symptom_codes, actual_symptom_codes,
                 tp_count, fp_count, fn_count,
-                latency_ms, silence_penalty, failure_sample
+                latency_ms, silence_penalty, failure_sample,
+                cause_component_hit, cause_fault_hit, cause_reason_hit,
+                checkpoints_total, checkpoints_covered, checkpoint_matches,
+                conclusion_grounded, tool_calls_total, tool_calls_unique
             ) VALUES (
                 :id, :evalRunId, :scenarioId, :roundNo,
                 :selectionPolicyVersion, :rcaRunId, :scoredAttemptId, :scoredReportId,
@@ -85,7 +88,10 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 CAST(:expectedRootCause AS jsonb), CAST(:actualRootCause AS jsonb),
                 CAST(:expectedSymptomCodes AS jsonb), CAST(:actualSymptomCodes AS jsonb),
                 :tpCount, :fpCount, :fnCount,
-                :latencyMs, :silencePenalty, CAST(:failureSample AS jsonb)
+                :latencyMs, :silencePenalty, CAST(:failureSample AS jsonb),
+                :causeComponentHit, :causeFaultHit, :causeReasonHit,
+                :checkpointsTotal, :checkpointsCovered, CAST(:checkpointMatches AS jsonb),
+                :conclusionGrounded, :toolCallsTotal, :toolCallsUnique
             )
             """;
 
@@ -212,6 +218,15 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                     .param("latencyMs", result.latencyMs())
                     .param("silencePenalty", result.silencePenalty())
                     .param("failureSample", result.failureSampleJson())
+                    .param("causeComponentHit", result.causeComponentHit())
+                    .param("causeFaultHit", result.causeFaultHit())
+                    .param("causeReasonHit", result.causeReasonHit())
+                    .param("checkpointsTotal", result.checkpointsTotal())
+                    .param("checkpointsCovered", result.checkpointsCovered())
+                    .param("checkpointMatches", result.checkpointMatchesJson())
+                    .param("conclusionGrounded", result.conclusionGrounded())
+                    .param("toolCallsTotal", result.toolCallsTotal())
+                    .param("toolCallsUnique", result.toolCallsUnique())
                     .update();
             return true;
         } catch (DuplicateKeyException e) {
@@ -289,6 +304,10 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
         String actualSymptoms = rs.getString("actual_symptom_codes");
         Long latency = rs.getLong("latency_ms");
         boolean latencyNull = rs.wasNull();
+        Integer checkpointsTotal = (Integer) rs.getObject("checkpoints_total");
+        Integer checkpointsCovered = (Integer) rs.getObject("checkpoints_covered");
+        Integer toolCallsTotal = (Integer) rs.getObject("tool_calls_total");
+        Integer toolCallsUnique = (Integer) rs.getObject("tool_calls_unique");
         return new EvalCaseResult(
                 rs.getObject("id", UUID.class),
                 rs.getObject("eval_run_id", UUID.class),
@@ -309,7 +328,16 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 rs.getInt("fn_count"),
                 latencyNull ? null : latency,
                 rs.getBoolean("silence_penalty"),
-                rs.getString("failure_sample"));
+                rs.getString("failure_sample"),
+                (Boolean) rs.getObject("cause_component_hit"),
+                (Boolean) rs.getObject("cause_fault_hit"),
+                (Boolean) rs.getObject("cause_reason_hit"),
+                checkpointsTotal,
+                checkpointsCovered,
+                rs.getString("checkpoint_matches"),
+                rs.getString("conclusion_grounded"),
+                toolCallsTotal,
+                toolCallsUnique);
     }
 
     // ------------------------------------------------------------------ jsonb 编解码

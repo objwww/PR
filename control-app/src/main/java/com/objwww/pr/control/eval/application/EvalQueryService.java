@@ -207,10 +207,16 @@ public class EvalQueryService {
                                         String terminalReason, JsonNode launchPlan) {
     }
 
+    /** 案例列表项（P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0） */
     public record EvalCaseItem(UUID caseExecutionId, String scenarioId, int roundNo,
                                String verdict, Boolean rootCauseHit, String expectedRootCause,
                                String actualRootCause, Long latencyMs, String failureSample,
-                               UUID rcaRunId, UUID scoredReportId) {
+                               UUID rcaRunId, UUID scoredReportId,
+                               Boolean causeComponentHit, Boolean causeFaultHit,
+                               Boolean causeReasonHit, Integer checkpointsTotal,
+                               Integer checkpointsCovered, String checkpointMatches,
+                               String conclusionGrounded, Integer toolCallsTotal,
+                               Integer toolCallsUnique) {
     }
 
     public record EvalCaseListResponse(List<EvalCaseItem> items, String nextCursor) {
@@ -431,7 +437,10 @@ public class EvalQueryService {
             items.add(new EvalCaseItem(row.caseExecutionId(), row.scenarioId(), row.roundNo(),
                     row.verdict(), row.rootCauseHit(), summarizeRootCause(mapper, row.expectedRootCauseJson()),
                     summarizeRootCause(mapper, row.actualRootCauseJson()), row.latencyMs(),
-                    failureSample(row.failureSampleJson()), row.rcaRunId(), row.scoredReportId()));
+                    failureSample(row.failureSampleJson()), row.rcaRunId(), row.scoredReportId(),
+                    row.causeComponentHit(), row.causeFaultHit(), row.causeReasonHit(),
+                    row.checkpointsTotal(), row.checkpointsCovered(), row.checkpointMatchesJson(),
+                    row.conclusionGrounded(), row.toolCallsTotal(), row.toolCallsUnique()));
         }
         if (page.hasMore() && !page.items().isEmpty()) {
             EvalCaseRow last = page.items().get(page.items().size() - 1);

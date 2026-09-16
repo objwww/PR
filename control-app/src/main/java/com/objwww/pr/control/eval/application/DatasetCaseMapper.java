@@ -5,6 +5,7 @@ import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.model.EvalCaseV1;
 import com.objwww.pr.control.eval.domain.repository.ReplayCaseReader;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -55,9 +56,26 @@ public final class DatasetCaseMapper {
             throw new IllegalArgumentException("案例 " + row.caseKey()
                     + " 缺重放锚 expected_symptom_codes[0]（alertname，重投/匹配键）");
         }
+        List<String> checkpoints = evidenceCheckpoints(content.rawArtifact());
         return new GoldenCase(row.caseKey(), "回放·" + row.datasetName() + ":" + row.datasetVersion(),
                 ReplayScenarioDriver.DRIVER_NAME, null, content.scenarioFamilyId(),
                 content.expectedRootCause(), content.expectedSymptomCodes(),
-                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY);
+                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY, checkpoints);
+    }
+
+    /**
+     * GT 证据检查点（P3 路径维；materialize 时人工显式提供，存 rawArtifact 保留键
+     * gt_evidence_checkpoints——EvalCaseV1 契约不动，扩展走 artifact 面）。非字符串
+     * 条目/缺键 = 空表（路径维 NOT_APPLICABLE，不猜）。
+     */
+    static List<String> evidenceCheckpoints(Map<String, Object> rawArtifact) {
+        Object raw = rawArtifact.get("gt_evidence_checkpoints");
+        if (!(raw instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(item -> item instanceof String s && !s.isBlank())
+                .map(Object::toString)
+                .toList();
     }
 }

@@ -32,7 +32,8 @@ public record GoldenCase(
         Map<String, String> expectedAlertLabels,
         Injection injection,
         Timing timing,
-        String executionKind) {
+        String executionKind,
+        List<String> expectedEvidenceCheckpoints) {
 
     public static final String KIND_INJECT = "INJECT";
     public static final String KIND_REPLAY = "REPLAY";
@@ -53,6 +54,8 @@ public record GoldenCase(
         if (!KIND_INJECT.equals(executionKind) && !KIND_REPLAY.equals(executionKind)) {
             throw new IllegalArgumentException("非法执行形态: " + executionKind);
         }
+        expectedEvidenceCheckpoints = expectedEvidenceCheckpoints == null
+                ? List.of() : List.copyOf(expectedEvidenceCheckpoints);
     }
 
     /** 兼容 M3-10 旧形态的便捷构造（无期望告警标签、无注入参数） */
@@ -60,7 +63,7 @@ public record GoldenCase(
                       String target, TypedRootCause expectedRootCause,
                       List<String> expectedSymptomCodes, Timing timing) {
         this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
-                expectedSymptomCodes, Map.of(), null, timing, KIND_INJECT);
+                expectedSymptomCodes, Map.of(), null, timing, KIND_INJECT, null);
     }
 
     /** M3-17 形态（带期望告警标签与注入参数；执行形态 = INJECT） */
@@ -69,7 +72,18 @@ public record GoldenCase(
                       List<String> expectedSymptomCodes, Map<String, String> expectedAlertLabels,
                       Injection injection, Timing timing) {
         this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
-                expectedSymptomCodes, expectedAlertLabels, injection, timing, KIND_INJECT);
+                expectedSymptomCodes, expectedAlertLabels, injection, timing, KIND_INJECT,
+                null);
+    }
+
+    /** P2 形态（带执行形态；无 GT 证据检查点） */
+    public GoldenCase(String scenarioId, String name, String driver, String chaosFamily,
+                      String target, TypedRootCause expectedRootCause,
+                      List<String> expectedSymptomCodes, Map<String, String> expectedAlertLabels,
+                      Injection injection, Timing timing, String executionKind) {
+        this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
+                expectedSymptomCodes, expectedAlertLabels, injection, timing, executionKind,
+                null);
     }
 
     /** 回放形态判定（runner 分支与驱动器分派共用同一判据） */

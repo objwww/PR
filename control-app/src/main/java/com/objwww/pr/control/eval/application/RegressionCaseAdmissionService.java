@@ -156,10 +156,12 @@ public class RegressionCaseAdmissionService {
         return candidates.reviewsOf(candidateId);
     }
 
-    /** materialize 入集请求：GT 由人工显式提供（反馈/审核结论不作 GT） */
+    /** materialize 入集请求：GT 由人工显式提供（反馈/审核结论不作 GT）；
+     *  expectedEvidenceCheckpoints = P3 路径维 GT（可空——无则路径维 NOT_APPLICABLE） */
     public record MaterializeCommand(String datasetName, String datasetVersion,
             PartitionClass partition,
             TypedRootCause expectedRootCause, List<String> expectedSymptomCodes,
+            List<String> expectedEvidenceCheckpoints,
             String actor) {
     }
 
@@ -185,6 +187,11 @@ public class RegressionCaseAdmissionService {
                     candidate.sourceFeedbackId().toString());
         }
         rawArtifact.put("note", "调查可见输入=来源引用；症状与答案隔离由数据集分区承载");
+        // P3 路径维 GT：人工显式检查点走保留键（EvalCaseV1 契约不动，扩展走 artifact 面）
+        if (cmd.expectedEvidenceCheckpoints() != null
+                && !cmd.expectedEvidenceCheckpoints().isEmpty()) {
+            rawArtifact.put("gt_evidence_checkpoints", cmd.expectedEvidenceCheckpoints());
+        }
         EvalCaseV1 caseContent = new EvalCaseV1(candidate.caseKey(),
                 candidate.scenarioFamilyId(), cmd.expectedRootCause(),
                 cmd.expectedSymptomCodes(), rawArtifact);

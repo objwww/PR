@@ -85,7 +85,7 @@ class RegressionCaseAdmissionServiceTest {
         return new RegressionCaseAdmissionService.MaterializeCommand(
                 "rca-regression", datasetVersion, PartitionClass.TUNING,
                 new TypedRootCause("db.pool", "exhaustion", "POOL_EXHAUSTED"),
-                List.of("LATENCY_HIGH"), "curator");
+                List.of("LATENCY_HIGH"), List.of("连接池耗尽", "pool exhausted"), "curator");
     }
 
     // ------------------------------------------------------------------ FO01/FO03 来源契约
@@ -309,7 +309,7 @@ class RegressionCaseAdmissionServiceTest {
                 new RegressionCaseAdmissionService.MaterializeCommand(
                         "rca-regression", "v2", PartitionClass.TUNING,
                         new TypedRootCause("db.pool", "timeout", "CONN_TIMEOUT"),
-                        List.of(), "curator");
+                        List.of(), List.of(), "curator");
         RegressionCaseAdmissionService.MaterializeResult fix = service.materialize(
                 candidateId, corrected);
 

@@ -158,6 +158,7 @@ public class RegressionCaseController {
                             datasetName, datasetVersion,
                             PartitionClass.valueOf(partition.trim().toUpperCase()),
                             rootCause, textList(body.get("expectedSymptomCodes")),
+                            textList(body.get("evidenceCheckpoints")),
                             truncate(AuthenticatedActor.name())));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));

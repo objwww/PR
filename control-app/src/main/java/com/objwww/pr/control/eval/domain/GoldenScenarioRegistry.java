@@ -74,6 +74,10 @@ public final class GoldenScenarioRegistry {
         List<String> symptoms = s.get("expected_symptom_codes") == null ? List.of()
                 : ((List<Object>) s.get("expected_symptom_codes")).stream()
                         .map(Object::toString).toList();
+        // P3 路径维：GT 证据检查点（可选键；缺省 = 无检查点，路径维 NOT_APPLICABLE）
+        List<String> checkpoints = s.get("evidence_checkpoints") == null ? List.of()
+                : ((List<Object>) s.get("evidence_checkpoints")).stream()
+                        .map(Object::toString).toList();
         Map<String, Object> t = (Map<String, Object>) s.get("timing");
         if (t == null) {
             throw new IllegalArgumentException("场景 " + scenarioId + " 缺 timing");
@@ -85,7 +89,8 @@ public final class GoldenScenarioRegistry {
                 intField(t, "cleanup_timeout_seconds"));
         return new GoldenCase(scenarioId, strOrNull(s, "name"), strOrNull(s, "driver"),
                 strOrNull(s, "chaos_family"), strOrNull(s, "target"),
-                rootCause, symptoms, alertLabels(s, scenarioId), injection(s), timing);
+                rootCause, symptoms, alertLabels(s, scenarioId), injection(s), timing,
+                GoldenCase.KIND_INJECT, checkpoints);
     }
 
     /** injection 块（S1/S2 flag 面；缺块/靶场场景 = null） */

@@ -6,6 +6,7 @@ import com.objwww.pr.control.alert.domain.model.EvidencePackageV2;
 import com.objwww.pr.control.alert.domain.model.InvestigationResult;
 import com.objwww.pr.control.alert.domain.model.RcaReport;
 import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaToolCall;
 import com.objwww.pr.control.alert.domain.model.ValidationStatus;
 import com.objwww.pr.control.alert.domain.repository.InvestigationResultRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
@@ -101,6 +102,24 @@ public class SingleCaseScorer {
 
         boolean toolCallsPresent = hasToolCalls(report.attemptId());
         ScenarioEvaluator.Evaluation ev = evaluator.evaluate(golden, pkg, toolCallsPresent);
+        // P3 过程计数：评分 attempt 的 tool_call 账本（total/unique——重复调用观测；
+        // 与 silence_penalty 同源，一次取数）
+        List<RcaToolCall> attemptCalls = toolCallsOf(report.attemptId());
+        long totalCalls = attemptCalls.size();
+        long uniqueCalls = attemptCalls.stream()
+                .map(c -> c.toolName() + "|" + (c.paramsDigest() == null
+                        ? "" : c.paramsDigest().value()))
+                .distinct()
+                .count();
+        // P3 路径维 + 结论复核维（确定性纯函数；无检查点 → total=null 如实未评）
+        List<ScenarioEvaluator.CheckpointMatch> checkpoints =
+                evaluator.checkpointMatches(golden, pkg);
+        Integer checkpointsTotal = checkpoints.isEmpty() ? null : checkpoints.size();
+        Integer checkpointsCovered = checkpoints.isEmpty() ? null
+                : (int) checkpoints.stream().filter(ScenarioEvaluator.CheckpointMatch::matched)
+                        .count();
+        String checkpointJson = checkpoints.isEmpty() ? null
+                : checkpointMatchesJson(checkpoints);
         long latencyMs = Duration.between(run.get().createdAt(), report.createdAt())
                 .toMillis();
         boolean hitMissed = ev.verdict() == ScoringVerdict.DECIDABLE && !ev.rootCauseHit();
@@ -114,7 +133,11 @@ public class SingleCaseScorer {
                 latencyMs, ev.silencePenalty(),
                 failureSample(hitMissed
                                 || ev.verdict() == ScoringVerdict.UNRESOLVED,
-                        ev.actualSymptomCodes(), pkg.rootCause())));
+                        ev.actualSymptomCodes(), pkg.rootCause()),
+                ev.componentHit(), ev.faultHit(), ev.reasonHit(),
+                checkpointsTotal, checkpointsCovered, checkpointJson,
+                evaluator.conclusionGrounded(pkg),
+                (int) totalCalls, (int) uniqueCalls));
     }
 
     // ------------------------------------------------------------------ 内部
@@ -140,9 +163,26 @@ public class SingleCaseScorer {
 
     /** silence_penalty 数据源（§6.4）：评分 attempt 的 tool_calls 是否非空（attempt 粒度） */
     private boolean hasToolCalls(UUID attemptId) {
+        return !toolCallsOf(attemptId).isEmpty();
+    }
+
+    /** 评分 attempt 的 tool_call 账本（P3 过程计数与 silence 判定共用一次取数） */
+    private List<RcaToolCall> toolCallsOf(UUID attemptId) {
         Optional<InvestigationResult> result = investigations.findByAttemptId(attemptId);
-        return result.isPresent()
-                && !toolCalls.findByResultId(result.get().id()).isEmpty();
+        return result.map(investigationResult -> toolCalls.findByResultId(
+                investigationResult.id())).orElse(List.of());
+    }
+
+    /** P3 路径维逐点命中 jsonb（[{"checkpoint","matched"}]） */
+    private String checkpointMatchesJson(List<ScenarioEvaluator.CheckpointMatch> matches) {
+        try {
+            return JSON.writeValueAsString(matches.stream()
+                    .map(m -> java.util.Map.of("checkpoint", m.checkpoint(),
+                            "matched", m.matched()))
+                    .toList());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String failureSample(boolean anyRejected, List<InvestigationResult> results) {

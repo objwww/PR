@@ -146,7 +146,11 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                                expected_root_cause::text as expected_json,
                                actual_root_cause::text as actual_json,
                                latency_ms, failure_sample::text as failure_json,
-                               rca_run_id, scored_report_id
+                               rca_run_id, scored_report_id,
+                               cause_component_hit, cause_fault_hit, cause_reason_hit,
+                               checkpoints_total, checkpoints_covered,
+                               checkpoint_matches::text as checkpoint_matches_json,
+                               conclusion_grounded, tool_calls_total, tool_calls_unique
                         from eval_case_result
                         """ + where + " order by scenario_id asc, round_no asc limit :lim")
                 .params(params)
@@ -157,7 +161,16 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("expected_json"), rs.getString("actual_json"),
                         rs.getObject("latency_ms", Long.class), rs.getString("failure_json"),
                         rs.getObject("rca_run_id", UUID.class),
-                        rs.getObject("scored_report_id", UUID.class)))
+                        rs.getObject("scored_report_id", UUID.class),
+                        (Boolean) rs.getObject("cause_component_hit"),
+                        (Boolean) rs.getObject("cause_fault_hit"),
+                        (Boolean) rs.getObject("cause_reason_hit"),
+                        (Integer) rs.getObject("checkpoints_total"),
+                        (Integer) rs.getObject("checkpoints_covered"),
+                        rs.getString("checkpoint_matches_json"),
+                        rs.getString("conclusion_grounded"),
+                        (Integer) rs.getObject("tool_calls_total"),
+                        (Integer) rs.getObject("tool_calls_unique")))
                 .list());
         boolean hasMore = rows.size() > limit;
         if (hasMore) {
