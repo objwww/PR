@@ -36,6 +36,13 @@ public class DomainProbe {
     public static final String DUPLICATE = "DUPLICATE_ORDER";
     public static final String STATE_VIOLATION = "STATE_VIOLATION";
 
+    // —— M-a 业务对账探测类型（v2 设计 §3.1）——
+    public static final String PAYMENT_ORDER_MISMATCH = "PAYMENT_ORDER_MISMATCH";
+    public static final String PENDING_PAYMENT = "PENDING_PAYMENT";
+    public static final String DUPLICATE_PAYMENT = "DUPLICATE_PAYMENT";
+    public static final String RECON_SKEW = "RECON_SKEW";
+    public static final String INVENTORY_OVERSELL = "INVENTORY_OVERSELL";
+
     /** @param ok false = 本轮失败（保留末值语义生效） */
     public record ScanResult(boolean ok, int stuck, int duplicates, int stateViolations) {
     }
@@ -49,11 +56,26 @@ public class DomainProbe {
     private volatile boolean probeUp = true;
     private volatile double lastSuccessEpoch = 0;
 
+    /** M-a 业务量 counter（探测面增量产出，注入点禁自报——INV-AM2-5） */
+    private final Counter ordersCreated;
+    private final Counter ordersSuccess;
+    private final Counter paymentsSuccess;
+    private final Counter fulfillmentsStarted;
+    private volatile Instant lastCounterScan = Instant.now();
+
     public DomainProbe(PostgresProbeStore store, int stuckThresholdSeconds,
                        MeterRegistry registry) {
         this.store = store;
         this.stuckThresholdSeconds = stuckThresholdSeconds;
         this.registry = registry;
+        this.ordersCreated = Counter.builder("oa_orders_created_total")
+                .description("订单创建尝试数（探测增量累计，S24/S23 分母）").register(registry);
+        this.ordersSuccess = Counter.builder("oa_orders_success_total")
+                .description("订单成功数（ENABLED，探测增量累计，S23 分子）").register(registry);
+        this.paymentsSuccess = Counter.builder("oa_payments_success_total")
+                .description("支付成功数（CAPTURE SUCCEEDED，探测增量累计，S16 差值左项）").register(registry);
+        this.fulfillmentsStarted = Counter.builder("oa_fulfillments_started_total")
+                .description("履约发起数（探测增量累计，S21 差值右项）").register(registry);
         registerGauges();
     }
 
@@ -69,6 +91,17 @@ public class DomainProbe {
         Gauge.builder("oa_domain_probe_last_success_timestamp", () -> lastSuccessEpoch)
                 .description("最近一次成功扫描的 epoch 秒（陈旧度 = 探测失明时长）")
                 .register(registry);
+        // —— M-a 业务对账 gauge（设计冻结名）——
+        Gauge.builder("oa_payment_order_mismatch_current", () -> openCount(PAYMENT_ORDER_MISMATCH))
+                .description("掉单 episode 数（F9 症状：支付成功订单未推进）").register(registry);
+        Gauge.builder("oa_pending_payment_orders_current", () -> openCount(PENDING_PAYMENT))
+                .description("待支付积压 episode 数（F10 症状：AUTH 沉默停 INITIATED）").register(registry);
+        Gauge.builder("oa_duplicate_payments_current", () -> openCount(DUPLICATE_PAYMENT))
+                .description("重复扣款 episode 数（F11 症状：同单多笔 CAPTURE 成功）").register(registry);
+        Gauge.builder("oa_recon_diff_current", () -> openCount(RECON_SKEW))
+                .description("三方对账差异数（F12 症状：DEDUCT 类型不全的 ENABLED 订单）").register(registry);
+        Gauge.builder("oa_inventory_negative_total", () -> openCount(INVENTORY_OVERSELL))
+                .description("库存超卖 episode 数（F13 症状：INVENTORY 超额扣减）").register(registry);
     }
 
     private double openCount(String type) {
@@ -89,6 +122,18 @@ public class DomainProbe {
                     "oa_duplicate_orders_detected");
             int states = sync(STATE_VIOLATION, store.stateViolations(),
                     "oa_state_violations_detected");
+            // —— M-a 业务对账探测（S16~S20）——
+            sync(PAYMENT_ORDER_MISMATCH, store.paymentOrderMismatches(),
+                    "oa_payment_order_mismatch_detected");
+            sync(PENDING_PAYMENT, store.pendingPaymentOrders(stuckThresholdSeconds),
+                    "oa_pending_payment_detected");
+            sync(DUPLICATE_PAYMENT, store.duplicatePayments(),
+                    "oa_duplicate_payments_detected");
+            sync(RECON_SKEW, store.reconSkewOrders(),
+                    "oa_recon_skew_detected");
+            sync(INVENTORY_OVERSELL, store.inventoryOversell(),
+                    "oa_inventory_oversell_detected");
+            syncBusinessCounters();
             probeUp = true;
             lastSuccessEpoch = Instant.now().getEpochSecond();
             return new ScanResult(true, stuck, dups, states);
@@ -100,6 +145,20 @@ public class DomainProbe {
                     (int) openCount(STUCK), (int) openCount(DUPLICATE),
                     (int) openCount(STATE_VIOLATION));
         }
+    }
+
+    /**
+     * M-a 业务量 counter 增量（探测面从 DB 事实统计，INV-AM2-5）：
+     * 窗口 = 上次成功增量扫描 → 本轮；本轮失败则窗口不推进（失败不丢数）。
+     */
+    private void syncBusinessCounters() {
+        Instant now = Instant.now();
+        Instant since = lastCounterScan;
+        ordersCreated.increment(store.countOrdersCreatedSince(since));
+        ordersSuccess.increment(store.countOrdersSuccessSince(since));
+        paymentsSuccess.increment(store.countPaymentsSuccessSince(since));
+        fulfillmentsStarted.increment(store.countFulfillmentsStartedSince(since));
+        lastCounterScan = now;
     }
 
     /** 同步一类 episode；@return 同步后的打开数（= 当前违规事实数） */

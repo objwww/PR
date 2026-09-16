@@ -37,7 +37,7 @@ class OrderControllerTest {
         service = new FakeOrderService();
         trades = new FakeTradeOrders();
         mvc = MockMvcBuilders.standaloneSetup(
-                        new OrderController(service, trades, 2))
+                        new OrderController(service, trades, 2, null))
                 .build();
     }
 

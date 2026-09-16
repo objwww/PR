@@ -1,9 +1,11 @@
 package com.objwww.pr.arena.interfaces;
 
 import com.objwww.pr.arena.application.TwoStepOrderService;
+import com.objwww.pr.arena.application.DomainProbe;
 import com.objwww.pr.arena.domain.model.RefundParty;
 import com.objwww.pr.arena.domain.model.TradeOrder;
 import com.objwww.pr.arena.domain.repository.TradeOrderRepository;
+import com.objwww.pr.arena.infrastructure.persistence.PostgresProbeStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
@@ -33,12 +35,25 @@ public class OrderController {
     private final TwoStepOrderService orders;
     private final TradeOrderRepository tradeOrders;
     private final long retryAfterSeconds;
+    private final PostgresProbeStore probeStore;
 
     public OrderController(TwoStepOrderService orders, TradeOrderRepository tradeOrders,
-                           @Value("${app.arena.api.retry-after-seconds:2}") long retryAfterSeconds) {
+                           @Value("${app.arena.api.retry-after-seconds:2}") long retryAfterSeconds,
+                           PostgresProbeStore probeStore) {
         this.orders = orders;
         this.tradeOrders = tradeOrders;
         this.retryAfterSeconds = retryAfterSeconds;
+        this.probeStore = probeStore;
+    }
+
+    /** C2c 对账差异明细（S19/H7 数据源：DEDUCT 类型不全的 ENABLED 订单清单） */
+    @GetMapping(path = "/recon/diffs", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, Object> reconDiffs() {
+        var items = probeStore.reconDiffDetails();
+        return Map.of(
+                "status", "OK",
+                "diffCount", probeStore.reconDiffCount(),
+                "items", items);
     }
 
     public record CreateRequest(String intentId, String correlationId, String buyerId,

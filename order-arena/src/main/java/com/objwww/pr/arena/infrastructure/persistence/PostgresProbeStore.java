@@ -79,6 +79,158 @@ public class PostgresProbeStore {
                 .list();
     }
 
+    // ---------- M-a 业务对账事实查询（S16~S20，v2 设计 §3.1） ----------
+
+    /**
+     * 掉单（F9 症状）：CAPTURE 支付成功、订单仍 ENABLED/NOT_PAY——支付事实已落、
+     * 订单状态未推进（回调被吞的账面痕迹）。废单（DISCARDED）不计——其 CAPTURE
+     * 成功走退款链属正常。
+     */
+    public List<Violation> paymentOrderMismatches() {
+        return jdbc.sql("""
+                SELECT DISTINCT t.id::text AS entity, 'capture-no-paidsync' AS variant
+                FROM arena.oa_payment_record p
+                  JOIN arena.oa_trade_order t ON t.id = p.order_id
+                WHERE p.kind = 'CAPTURE' AND p.result = 'SUCCEEDED'
+                  AND t.booking_status = 'ENABLED' AND t.pay_status = 'NOT_PAY'
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /** 支付悬挂（F10 症状）：AUTH 发起后沉默停 INITIATED（无结果落定，区别于 F3 UNKNOWN） */
+    public List<Violation> pendingPaymentOrders(int olderThanSeconds) {
+        return jdbc.sql("""
+                SELECT p.order_id::text AS entity, 'auth-initiated-stuck' AS variant
+                FROM arena.oa_payment_record p
+                  JOIN arena.oa_trade_order t ON t.id = p.order_id
+                WHERE p.kind = 'AUTH' AND p.result = 'INITIATED'
+                  AND p.initiated_at < now() - make_interval(secs => :sec)
+                  AND t.booking_status = 'CREATED'
+                """).param("sec", olderThanSeconds)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /** 重复扣款（F11 症状）：同订单多笔 CAPTURE 成功（支付层幂等失效） */
+    public List<Violation> duplicatePayments() {
+        return jdbc.sql("""
+                SELECT order_id::text AS entity, 'multi-capture' AS variant
+                FROM arena.oa_payment_record
+                WHERE kind = 'CAPTURE' AND result = 'SUCCEEDED'
+                GROUP BY order_id HAVING count(*) > 1
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /**
+     * 三方对账不平（F12 症状）：ENABLED 订单应有 4 类资源 DEDUCT 行，
+     * 缺任一类 = 记账与订单状态偏差（数量差型）。
+     */
+    public List<Violation> reconSkewOrders() {
+        return jdbc.sql("""
+                SELECT t.id::text AS entity,
+                       'deduct-types-' || (SELECT count(DISTINCT l.resource_type)
+                            FROM arena.oa_resource_ledger l
+                            WHERE l.order_id = t.id AND l.direction = 'DEDUCT') AS variant
+                FROM arena.oa_trade_order t
+                WHERE t.booking_status = 'ENABLED'
+                  AND (SELECT count(DISTINCT l.resource_type)
+                       FROM arena.oa_resource_ledger l
+                       WHERE l.order_id = t.id AND l.direction = 'DEDUCT') < 4
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /** 库存超卖（F13 症状）：INVENTORY DEDUCT 行数超过 ENABLED 订单数（竞态超发行） */
+    public List<Violation> inventoryOversell() {
+        return jdbc.sql("""
+                WITH ded AS (
+                    SELECT l.order_id::text AS entity
+                    FROM arena.oa_resource_ledger l
+                    JOIN arena.oa_trade_order t ON t.id = l.order_id
+                    WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
+                      AND t.booking_status = 'ENABLED'
+                )
+                SELECT entity FROM ded
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), "oversell"))
+                .list();
+    }
+
+    /** 对账差异数（C2c oa_recon_diff_current 值源）：ENABLED 订单中 DEDUCT 类型不全的行数 */
+    public long reconDiffCount() {
+        return jdbc.sql("""
+                SELECT count(*) FROM arena.oa_trade_order t
+                WHERE t.booking_status = 'ENABLED'
+                  AND (SELECT count(DISTINCT l.resource_type)
+                       FROM arena.oa_resource_ledger l
+                       WHERE l.order_id = t.id AND l.direction = 'DEDUCT') < 4
+                """).query((rs, i) -> rs.getLong(1)).single();
+    }
+
+    /** 对账差异明细（/recon/diffs 端点：差异订单 + 已扣资源类型 + 缺失资源类型） */
+    public List<Map<String, Object>> reconDiffDetails() {
+        return jdbc.sql("""
+                SELECT t.id::text AS order_id, t.sku, t.quantity,
+                       COALESCE(string_agg(DISTINCT l.resource_type, ','), '') AS deducted
+                  FROM arena.oa_trade_order t
+                  LEFT JOIN arena.oa_resource_ledger l
+                    ON l.order_id = t.id AND l.direction = 'DEDUCT'
+                 WHERE t.booking_status = 'ENABLED'
+                 GROUP BY t.id, t.sku, t.quantity
+                HAVING count(DISTINCT l.resource_type) < 4
+                 ORDER BY t.id
+                 LIMIT 200
+                """)
+                .query((rs, i) -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("orderId", rs.getString("order_id"));
+                    m.put("sku", rs.getString("sku"));
+                    m.put("quantity", rs.getInt("quantity"));
+                    m.put("deductedTypes", rs.getString("deducted"));
+                    return m;
+                }).list();
+    }
+
+    // ---------- M-a 业务量计数（counter 差值型规则的值源；增量由 DomainProbe 维护） ----------
+
+    /** 订单创建尝试数（含 CREATED——S24/S23 分母） */
+    public long countOrdersCreatedSince(java.time.Instant since) {
+        return jdbc.sql("""
+                SELECT count(*) FROM arena.oa_trade_order WHERE created_at >= :since
+                """).param("since", java.sql.Timestamp.from(since))
+                .query((rs, i) -> rs.getLong(1)).single();
+    }
+
+    /** 订单成功数（ENABLED——S23 分子） */
+    public long countOrdersSuccessSince(java.time.Instant since) {
+        return jdbc.sql("""
+                SELECT count(*) FROM arena.oa_trade_order
+                 WHERE enabled_at >= :since
+                """).param("since", java.sql.Timestamp.from(since))
+                .query((rs, i) -> rs.getLong(1)).single();
+    }
+
+    /** 支付成功数（CAPTURE SUCCEEDED——S16 差值左项） */
+    public long countPaymentsSuccessSince(java.time.Instant since) {
+        return jdbc.sql("""
+                SELECT count(*) FROM arena.oa_payment_record
+                 WHERE kind = 'CAPTURE' AND result = 'SUCCEEDED' AND settled_at >= :since
+                """).param("since", java.sql.Timestamp.from(since))
+                .query((rs, i) -> rs.getLong(1)).single();
+    }
+
+    /** 履约发起数（S21 差值右项） */
+    public long countFulfillmentsStartedSince(java.time.Instant since) {
+        return jdbc.sql("""
+                SELECT count(*) FROM arena.oa_fulfillment_order WHERE created_at >= :since
+                """).param("since", java.sql.Timestamp.from(since))
+                .query((rs, i) -> rs.getLong(1)).single();
+    }
+
     // ---------- episode 台账（C-7：开/续/关/复发=新号） ----------
 
     public Map<String, OpenFinding> openFindings(String findingType) {
