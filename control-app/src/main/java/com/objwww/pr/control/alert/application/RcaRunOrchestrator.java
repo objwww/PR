@@ -428,7 +428,9 @@ public class RcaRunOrchestrator {
                 PayloadFields fields = payloadFields(artifact);
                 notifier.onReportValidated(reportId, run.id(), attempt.id(),
                         fields.summary(), fields.component(), fields.faultType(),
-                        fields.reasonCode(), fields.impact(), fields.remediation(), now);
+                        fields.reasonCode(), fields.impact(), fields.remediation(), now,
+                        incidents.findById(run.incidentId())
+                                .map(i -> i.incidentKey()).orElse(null));
                 openCaseForReport(run, task, reportId, fields, now);
             } else {
                 StructuredLog.event(log, "report_publication_loser", Map.ofEntries(

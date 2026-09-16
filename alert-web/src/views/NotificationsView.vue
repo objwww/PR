@@ -88,6 +88,49 @@
       <div v-if="nextCursor" class="pager">
         <el-button :loading="loading" @click="load(false)">加载更多</el-button>
       </div>
+
+      <!-- 通知静默窗口（业界对齐：maintenance window / silence）：真源 notify_silence（V125） -->
+      <div class="card block" style="margin-top: 16px">
+        <div class="silence-head">
+          <h3>通知静默窗口</h3>
+          <el-button size="small" @click="silence.open = !silence.open">{{ silence.open ? '收起表单' : '新建静默' }}</el-button>
+        </div>
+        <p class="silence-note">命中规则的告警在窗口内不产生新通知（调查与报告不受影响，审计留痕）；到期自动失效，也可手动停用。</p>
+        <el-table v-if="silence.items.length" :data="silence.items" size="small" border>
+          <el-table-column label="告警名" width="230">
+            <template #default="{ row }">{{ row.alertname ?? '（全部告警）' }}</template>
+          </el-table-column>
+          <el-table-column label="服务" width="150">
+            <template #default="{ row }">{{ row.service ?? '（全部服务）' }}</template>
+          </el-table-column>
+          <el-table-column prop="reason" label="原因" />
+          <el-table-column label="剩余" width="130">
+            <template #default="{ row }">{{ Math.floor(row.remainingMinutes / 60) }} 小时 {{ row.remainingMinutes % 60 }} 分</template>
+          </el-table-column>
+          <el-table-column label="操作" width="90">
+            <template #default="{ row }">
+              <el-button size="small" type="danger" plain @click="disableSilence(row)">停用</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <EmptyState v-else kind="empty" description="当前没有生效的静默窗口" />
+        <div v-if="silence.open" style="margin-top: 12px">
+          <el-form inline>
+            <el-form-item label="告警名"><el-input v-model="silence.alertname" placeholder="留空=全部告警" clearable style="width: 200px" /></el-form-item>
+            <el-form-item label="服务"><el-input v-model="silence.service" placeholder="留空=全部服务" clearable style="width: 160px" /></el-form-item>
+            <el-form-item label="原因"><el-input v-model="silence.reason" placeholder="必填：静默原因" style="width: 220px" /></el-form-item>
+            <el-form-item label="时长">
+              <el-select v-model="silence.hours" style="width: 110px">
+                <el-option label="1 小时" :value="1" /><el-option label="4 小时" :value="4" />
+                <el-option label="8 小时" :value="8" /><el-option label="24 小时" :value="24" />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :disabled="!silence.reason?.trim() || silence.submitting" :loading="silence.submitting" @click="createSilence">创建静默</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -96,7 +139,7 @@
 // UI-4 值班通知页（/notifications）：收件箱布局——上行标题+时间，下行级别/来源/事件状态/投递摘要。
 // 未读=圆点+字重（不再叠 UNREAD 标签）；未读、告警/恢复、送达三维度分开表达。
 // 正文与通道尝试来自 /duty/notifications/feed 窗口（inbox 契约不带 body/deliveries，不新造端点）。
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ArrowDown, QuestionFilled } from '@element-plus/icons-vue'
 import { api } from '../api/client.js'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -104,6 +147,9 @@ import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtTime, fmtAgo } from '../utils/format'
+import { useSessionStore } from '../stores/session.js'
+
+const session = useSessionStore()
 
 const POLL_MS = 30000
 const PAGE_SIZE = 50
@@ -194,15 +240,62 @@ const stateLabel = s => ({
   CLAIMED: '投递中', SUPPRESSED: '已抑制', PENDING: '排队中',
 }[s] || s)
 
+// 通知静默窗口（前端产品化波次4）：列表/创建/停用，真源 /v1/notifications/silences
+const silence = reactive({ items: [], open: false, alertname: '', service: '', reason: '', hours: 4, submitting: false })
+async function loadSilences() {
+  try {
+    const res = await api('/v1/notifications/silences')
+    silence.items = res?.items ?? []
+  } catch { silence.items = [] }
+}
+async function createSilence() {
+  silence.submitting = true
+  try {
+    const res = await api('/v1/notifications/silences', {
+      method: 'POST',
+      body: { alertname: silence.alertname?.trim() || null, service: silence.service?.trim() || null, reason: silence.reason.trim(), createdBy: `human:${session.user || 'oncall'}`, hours: silence.hours },
+    })
+    if (res?.status === 'OK') {
+      ElMessage.success('静默窗口已创建')
+      silence.reason = ''
+      silence.open = false
+      await loadSilences()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch {
+    ElMessage.error('创建失败，请重试')
+  } finally {
+    silence.submitting = false
+  }
+}
+async function disableSilence(row) {
+  try {
+    const res = await api(`/v1/notifications/silences/${row.id}/disable`, { method: 'POST' })
+    if (res?.status === 'OK') {
+      ElMessage.success('已停用')
+      await loadSilences()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch {
+    ElMessage.error('停用失败，请重试')
+  }
+}
+
 onMounted(() => {
   load(true)
   loadFeedWindow()
+  loadSilences()
   timer = setInterval(() => { load(true); loadFeedWindow() }, POLL_MS)
 })
 onUnmounted(() => clearInterval(timer))
 </script>
 
 <style scoped>
+.silence-head { display: flex; align-items: center; justify-content: space-between; }
+.silence-head h3 { margin: 0 0 4px; }
+.silence-note { margin: 0 0 12px; font-size: 12px; color: var(--ink-2, #909399); }
 .notif-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 .help-ico { color: var(--ink-2); cursor: help; font-size: 18px; }
 

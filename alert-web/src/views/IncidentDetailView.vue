@@ -47,7 +47,7 @@
                 <span v-if="runState === 'COMPLETED'" class="cat-label">（对当前调查结论的裁决将计入采纳率）</span>
               </div>
               <div v-if="reviewPending" class="fb-pending" :class="{ overdue: reviewOverdue }">
-                复核待办：已等待 {{ reviewWait }}（时限 24 小时）<template v-if="reviewOverdue">——已超时，请尽快裁决</template>
+                复核待办（归属值班：{{ duty.onCall ?? '—' }}）：已等待 {{ reviewWait }}（时限 24 小时）<template v-if="reviewOverdue">——已超时，请尽快裁决</template>
               </div>
               <div v-if="fb.items.length" class="fb-list">
                 <div v-for="(f, i) in fb.items" :key="i" class="fb-row">
@@ -400,6 +400,15 @@ async function loadRunDetail() {
 }
 
 const latestFeedback = computed(() => fb.items[0] ?? null)
+
+// 复核归属（业界对齐）：待办归当前值班人（值班快照只读面，缺席如实 —）
+const duty = reactive({ onCall: null })
+async function loadDuty() {
+  try {
+    const res = await api('/duty/schedule/snapshot')
+    duty.onCall = res?.onCall ?? null
+  } catch { duty.onCall = null }
+}
 const latestRejected = computed(() => latestFeedback.value?.verdict === 'REJECTED')
 const REVIEW_DUE_HOURS = 24
 const reviewPending = computed(() =>
@@ -495,6 +504,7 @@ onMounted(() => {
   load()
   loadFeedback()
   loadRunDetail()
+  loadDuty()
 })
 watch(incidentId, () => { load(); loadFeedback(); loadRunDetail() })
 // runId 由事件详情异步就绪（d.run.runId），就绪后补拉调查证据链

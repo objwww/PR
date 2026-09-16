@@ -456,13 +456,21 @@ public class AlertFlowConfig {
     @Bean
     public ReportCompletedNotifier reportCompletedNotifier(ReportPublicationRepository publications,
                                                            NotifyOutboxRepository outbox,
+                                                           com.objwww.pr.control.alert.domain.repository.NotifySilenceStore silence,
                                                            @Value("${app.alert.notify.channels:test}") String channels,
                                                            @Value("${app.alert.notify.template-version:am3-candidate-v1}")
                                                            String templateVersion,
                                                            @Value("${app.alert.notify.max-excerpt-chars:280}")
                                                            int maxExcerptChars) {
         return new ReportCompletedNotifier(publications, outbox,
-                List.of(channels.split(",")), templateVersion, maxExcerptChars);
+                List.of(channels.split(",")), templateVersion, maxExcerptChars, silence);
+    }
+
+    /** 通知静默窗口仓储（V125） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.NotifySilenceStore notifySilenceStore(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresNotifySilenceStore(jdbc);
     }
 
     /** M3-07：attempt 原文 CAS 落档（脱敏文本内容寻址；目录可整体迁移） */
