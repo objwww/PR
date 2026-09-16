@@ -170,3 +170,11 @@ export const RISK_KIND_ZH = {
   QUARANTINE: '隔离命中',
   DEAD_LETTER: '死信',
 }
+
+/** 合并时间轴事件类型（/incidents/{id}/timeline-merged，3.3 补齐） */
+export const TIMELINE_KIND_ZH = {
+  ALERT_FIRING: '告警触发',
+  ALERT_RESOLVED: '告警恢复',
+  CHANGE: '变更',
+  DRILL: '演练',
+}

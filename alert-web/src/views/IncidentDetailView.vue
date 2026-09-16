@@ -148,6 +148,44 @@
             </el-descriptions>
             <el-button type="primary" style="margin-top: 12px" @click="goRun">查看调查详情</el-button>
           </div>
+
+          <!-- 3.3 补齐：关联告警（同键复发史 + 同服务 24h 并发，PagerDuty Related 同律） -->
+          <div class="card block">
+            <h3>关联告警</h3>
+            <template v-if="rel.loaded">
+              <h4 class="cat-sub">同告警键历史（复发 / 重开）</h4>
+              <el-table v-if="rel.sameKey.length" :data="rel.sameKey" size="small" border class="click-table"
+                @row-click="r => goIncident(r.incidentId)">
+                <el-table-column label="首次发生" width="170">
+                  <template #default="{ row }">{{ fmtTime(row.episodeStartedAt) }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+                </el-table-column>
+                <el-table-column prop="receivedCount" label="接收" width="80" align="right" />
+                <el-table-column label="解决时间" width="170">
+                  <template #default="{ row }">{{ fmtTime(row.resolvedAt) }}</template>
+                </el-table-column>
+              </el-table>
+              <EmptyState v-else kind="empty" description="同告警键无其他 episode" />
+              <h4 class="cat-sub">同服务近 24 小时并发</h4>
+              <el-table v-if="rel.sameService24h.length" :data="rel.sameService24h" size="small" border class="click-table"
+                @row-click="r => goIncident(r.incidentId)">
+                <el-table-column prop="alertname" label="告警名" min-width="180" />
+                <el-table-column label="状态" width="110">
+                  <template #default="{ row }"><StatusBadge :status="row.status" /></template>
+                </el-table-column>
+                <el-table-column label="首次发生" width="170">
+                  <template #default="{ row }">{{ fmtTime(row.firstSeenAt) }}</template>
+                </el-table-column>
+                <el-table-column label="解决时间" width="170">
+                  <template #default="{ row }">{{ fmtTime(row.resolvedAt) }}</template>
+                </el-table-column>
+              </el-table>
+              <EmptyState v-else kind="empty" description="同服务近 24 小时无并发告警" />
+            </template>
+            <div v-else v-loading="true" style="height: 120px" />
+          </div>
         </el-tab-pane>
 
         <!-- 调查：关联 run 关键信息卡 + 断言三态（已验证/已排除/待验证）+ 步骤与用量内联 -->
@@ -244,25 +282,38 @@
           </div>
         </el-tab-pane>
 
-        <!-- 时间线：垂直渲染，firing=红 / resolved=绿 -->
+        <!-- 时间线：3.3 合并轴（告警 + 同服务变更 + 演练，episode ±1h 窗归一排序）；
+             合并接口失败降级为告警单源并显式提示 -->
         <el-tab-pane label="时间线" name="timeline">
           <div class="card block">
-            <el-timeline v-if="timeline.length">
+            <div class="tl-filter">
+              <el-radio-group v-model="tl.filter" size="small">
+                <el-radio-button value="ALL">全部</el-radio-button>
+                <el-radio-button value="ALERT">告警</el-radio-button>
+                <el-radio-button value="CHANGE">变更</el-radio-button>
+                <el-radio-button value="DRILL">演练</el-radio-button>
+              </el-radio-group>
+              <span class="cell-sub">
+                窗口：episode ±1 小时 ｜ 事件 {{ mergedItems.length }} 条
+                <template v-if="tl.degraded">（合并轴加载失败，当前为告警单源降级）</template>
+              </span>
+            </div>
+            <el-timeline v-if="mergedItems.length">
               <el-timeline-item
-                v-for="ev in timeline" :key="ev.eventId"
-                :type="ev.status === 'firing' ? 'danger' : 'success'"
-                :timestamp="fmtTime(ev.startsAt) + (ev.endsAt ? ' ~ ' + fmtTime(ev.endsAt) : '')"
+                v-for="(ev, i) in mergedItems" :key="i"
+                :type="TL_TAG[ev.kind] ?? 'info'"
+                :timestamp="fmtTime(ev.at)"
                 placement="top"
               >
                 <div class="tl-head">
-                  <b>{{ ev.status === 'firing' ? '告警触发' : '告警恢复' }}</b>
-                  <StatusBadge v-if="mapSeverity(ev.severity).key" :severity="mapSeverity(ev.severity).key" />
-                  <el-tag v-else-if="ev.severity" type="info" disable-transitions>{{ ev.severity }}</el-tag>
+                  <el-tag size="small" :type="TL_TAG[ev.kind] ?? 'info'" disable-transitions>
+                    {{ TIMELINE_KIND_ZH[ev.kind] ?? ev.kind }}
+                  </el-tag>
                 </div>
-                <div v-if="evSummary(ev)" class="tl-summary">{{ evSummary(ev) }}</div>
+                <div class="tl-summary">{{ ev.title }}</div>
               </el-timeline-item>
             </el-timeline>
-            <EmptyState v-else kind="empty" description="暂无时间线事件" />
+            <EmptyState v-else kind="empty" description="窗口内无事件（告警 / 同服务变更 / 演练均无）" />
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -313,6 +364,7 @@ import KvTable from '../components/common/KvTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtDuration, fmtTime } from '../utils/format'
 import { CATEGORY_OVERRIDE_OPTIONS } from '../utils/category'
+import { TIMELINE_KIND_ZH } from '../dict/zh'
 import { useSessionStore } from '../stores/session'
 
 const session = useSessionStore()
@@ -386,6 +438,7 @@ async function submitOverride() {
 function evSummary(ev) {
   return ev?.annotations?.summary ?? ev?.annotations?.description ?? ''
 }
+// 证据页签折叠标题仍需 summary 摘要；时间线旧用法已由合并轴承载
 
 // 前端产品化波次2/3：AI 结论人工复核（标注闭环 + 复核待办 + 结构化驳回 + 重查入口）
 const fb = reactive({ items: [], submitting: false, rejectOpen: false, reason: '', category: '', actualCause: '', riSubmitting: false })
@@ -508,6 +561,46 @@ async function reinvestigate() {
 
 function goRun() { if (runId.value) router.push(`/runs/${runId.value}`) }
 
+// 3.3 补齐·关联告警：同键复发史 + 同服务 24h 并发（只读面，失败如实空列表）
+const rel = reactive({ loaded: false, sameKey: [], sameService24h: [] })
+async function loadRelated() {
+  rel.loaded = false
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/related`)
+    rel.sameKey = res?.sameKey ?? []
+    rel.sameService24h = res?.sameService24h ?? []
+  } catch {
+    rel.sameKey = []
+    rel.sameService24h = []
+  } finally {
+    rel.loaded = true
+  }
+}
+function goIncident(id) { router.push(`/alerts/${id}`) }
+
+// 3.3 补齐·合并时间轴：告警+同服务变更+演练归一轴；失败降级告警单源并显式提示
+const TL_GROUP = { ALERT_FIRING: 'ALERT', ALERT_RESOLVED: 'ALERT', CHANGE: 'CHANGE', DRILL: 'DRILL' }
+const TL_TAG = { ALERT_FIRING: 'danger', ALERT_RESOLVED: 'success', CHANGE: 'warning', DRILL: 'primary' }
+const tl = reactive({ items: null, filter: 'ALL', degraded: false })
+async function loadMerged() {
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/timeline-merged`)
+    tl.items = res?.items ?? []
+    tl.degraded = false
+  } catch {
+    tl.items = null
+    tl.degraded = true
+  }
+}
+const mergedItems = computed(() => {
+  const src = tl.items ?? timeline.value.map(ev => ({
+    kind: ev.status === 'firing' ? 'ALERT_FIRING' : 'ALERT_RESOLVED',
+    at: ev.startsAt,
+    title: ev.status === 'firing' ? '告警触发' : '告警恢复',
+  }))
+  return tl.filter === 'ALL' ? src : src.filter(e => (TL_GROUP[e.kind] ?? 'ALERT') === tl.filter)
+})
+
 async function load() {
   state.value = 'loading'
   d.value = null
@@ -567,8 +660,10 @@ onMounted(() => {
   loadRunDetail()
   loadDuty()
   loadDiag()
+  loadRelated()
+  loadMerged()
 })
-watch(incidentId, () => { load(); loadFeedback(); loadRunDetail(); loadDiag() })
+watch(incidentId, () => { load(); loadFeedback(); loadRunDetail(); loadDiag(); loadRelated(); loadMerged() })
 // runId 由事件详情异步就绪（d.run.runId），就绪后补拉调查证据链
 watch(runId, loadRunDetail)
 </script>
@@ -603,4 +698,6 @@ watch(runId, loadRunDetail)
 .diag-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .diag-row { padding: 8px 0; border-bottom: 1px solid var(--line, #ebeef5); display: flex; flex-direction: column; gap: 4px; }
 .diag-row .claim-text { white-space: pre-wrap; }
+.tl-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.click-table :deep(.el-table__row) { cursor: pointer; }
 </style>
