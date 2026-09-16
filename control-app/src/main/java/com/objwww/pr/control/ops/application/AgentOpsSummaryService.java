@@ -84,4 +84,11 @@ public class AgentOpsSummaryService {
                 stats.sourceFailed(), stats.undetermined(), stats.assessedRuns(),
                 "24h", "deterministic-rules.v1", true, at);
     }
+
+    /**
+     * 分层延迟（前端产品化波次1）：run/模型调用/工具调用三层 p50/p95，近 24h。
+     */
+    public AgentOpsReader.LatencyLayers latencyLayers() {
+        return reader.latencyLayers(now.get().minus(Duration.ofHours(24)));
+    }
 }

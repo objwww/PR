@@ -79,7 +79,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
-  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box,
+  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
 import { useSseStore } from '../stores/sseStatus.js'
@@ -105,6 +105,7 @@ const navGroups = [
       { label: '告警', to: '/alerts', match: ['/alerts', '/history'], icon: Bell },
       { label: '调查', to: '/runs', match: ['/runs'], icon: Search },
       { label: '处置', to: '/cases', match: ['/cases'], icon: Tickets },
+      { label: '审批处置', to: '/approvals', match: ['/approvals'], icon: Finished },
     ],
   },
   {

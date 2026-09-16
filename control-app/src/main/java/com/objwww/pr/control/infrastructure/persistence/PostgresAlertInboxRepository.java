@@ -207,6 +207,16 @@ public class PostgresAlertInboxRepository implements AlertInboxRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    @Override
+    public List<AlertInbox> listQuarantined() {
+        return jdbc.sql("""
+                SELECT * FROM alert_inbox WHERE state = 'QUARANTINED'
+                 ORDER BY received_at DESC LIMIT 100
+                """)
+                .query(this::mapRow)
+                .list();
+    }
+
     private AlertInbox mapRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         Timestamp leaseUntil = rs.getTimestamp("lease_until");
         Timestamp nextRetryAt = rs.getTimestamp("next_retry_at");

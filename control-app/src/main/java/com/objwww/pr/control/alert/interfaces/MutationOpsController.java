@@ -36,6 +36,7 @@ public class MutationOpsController {
     private final OperationLedgerStore operations;
     private final ResourceLockStore locks;
     private final RcaEventAppender events;
+    private final com.objwww.pr.control.alert.application.approval.ApprovalStore approvals;
 
     public MutationOpsController(
             org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner,
@@ -53,7 +54,9 @@ public class MutationOpsController {
                     decisionService,
             org.springframework.beans.factory.ObjectProvider<OperationLedgerStore> operations,
             org.springframework.beans.factory.ObjectProvider<ResourceLockStore> locks,
-            org.springframework.beans.factory.ObjectProvider<RcaEventAppender> events) {
+            org.springframework.beans.factory.ObjectProvider<RcaEventAppender> events,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.ApprovalStore> approvals) {
         this.planner = Objects.requireNonNull(planner);
         this.suspensions = suspensions == null ? null : suspensions.getIfAvailable();
         this.shadowReader = shadowReader == null ? null : shadowReader.getIfAvailable();
@@ -62,6 +65,7 @@ public class MutationOpsController {
         this.operations = operations == null ? null : operations.getIfAvailable();
         this.locks = locks == null ? null : locks.getIfAvailable();
         this.events = events == null ? null : events.getIfAvailable();
+        this.approvals = approvals == null ? null : approvals.getIfAvailable();
     }
 
     public record PlanRequest(UUID intentId) {
@@ -227,6 +231,77 @@ public class MutationOpsController {
         if (outcome.requestId() != null) {
             body.put("request_id", outcome.requestId().toString());
         }
+        return body;
+    }
+
+    // ------------------------------------------------ 前端产品化波次1：审批处置页查询面
+
+    /** 待审批清单（PENDING + 已投票计数；审批处置页主列表） */
+    @org.springframework.web.bind.annotation.GetMapping("/pending-approvals")
+    public Map<String, Object> pendingApprovals() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (approvals == null) {
+            body.put("status", "UNAVAILABLE");
+            body.put("reason", "APPROVAL_FACE_NOT_ASSEMBLED");
+            return body;
+        }
+        java.time.Instant now = java.time.Instant.now();
+        var rows = approvals.listPendingRequests(now);
+        java.util.List<Map<String, Object>> items = new java.util.ArrayList<>();
+        for (var r : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("request_id", r.requestId().toString());
+            item.put("intent_id", r.intentId().toString());
+            item.put("run_id", r.runId().toString());
+            item.put("action_id", r.actionId());
+            item.put("risk", r.risk());
+            item.put("required_approvers", r.requiredApprovers());
+            item.put("requested_at", r.requestedAt().toString());
+            item.put("expires_at", r.expiresAt().toString());
+            item.put("approved_count", r.approvedCount());
+            item.put("denied_count", r.deniedCount());
+            items.add(item);
+        }
+        body.put("status", "OK");
+        body.put("items", items);
+        body.put("count", items.size());
+        return body;
+    }
+
+    /** 升级人工清单（ESCALATED 操作 + 锁状态；审批处置页裁决列表） */
+    @org.springframework.web.bind.annotation.GetMapping("/escalations")
+    public Map<String, Object> escalations() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (operations == null) {
+            body.put("status", "UNAVAILABLE");
+            body.put("reason", "MUTATION_FACE_NOT_ASSEMBLED");
+            return body;
+        }
+        var ids = operations.idsInStatus(
+                com.objwww.pr.control.alert.domain.mutation.OperationStatus.ESCALATED);
+        java.util.List<Map<String, Object>> items = new java.util.ArrayList<>();
+        for (UUID id : ids) {
+            var op = operations.findById(id).orElse(null);
+            if (op == null) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("operation_id", op.operationId().toString());
+            item.put("run_id", op.runId().toString());
+            item.put("action_id", op.actionId());
+            item.put("resource_uid", op.resourceUid());
+            item.put("dry_run", op.dryRun());
+            item.put("prepared_at", op.preparedAt() == null ? null : op.preparedAt().toString());
+            item.put("params_json", op.paramsJson());
+            if (locks != null && op.resourceUid() != null) {
+                var lock = locks.find(op.resourceUid()).orElse(null);
+                item.put("lock_state", lock == null ? null : lock.state());
+            }
+            items.add(item);
+        }
+        body.put("status", "OK");
+        body.put("items", items);
+        body.put("count", items.size());
         return body;
     }
 }

@@ -53,10 +53,10 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                      where state in ('PENDING','CLAIMED','RETRY_WAIT')) as outbox_pending,
                   (select count(*) from notify_outbox
                      where state = 'DEAD' and updated_at >= :since) as outbox_failed_24h,
-                  (select count(*) from external_invocation_ledger
-                     where started_at >= :since) as llm_calls_24h,
-                  (select sum(total_tokens) from external_invocation_ledger
-                     where started_at >= :since) as tokens_24h
+                  (select count(*) from rca_model_call
+                     where created_at >= :since) as llm_calls_24h,
+                  (select sum(nullif(usage->>'total_tokens', '')::bigint)
+                     from rca_model_call where created_at >= :since) as tokens_24h
                 """)
                 .param("now", at)
                 .param("since", since)
@@ -74,13 +74,13 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                 })
                 .single();
 
-        // 账本无工具名列（V7 列面）：按 model 分组 Top5，契约键名仍叫 tool
+        // 真实工具名（前端产品化波次1 切源）：rca_tool_invocation 按工具分组 Top5
         List<ToolCallCount> topTools = jdbc.sql("""
-                select model as tool, count(*) as calls
-                from external_invocation_ledger
-                where started_at >= :since and model is not null
-                group by model
-                order by calls desc, model asc
+                select tool_name as tool, count(*) as calls
+                from rca_tool_invocation
+                where started_at >= :since and tool_name is not null
+                group by tool_name
+                order by calls desc, tool_name asc
                 limit 5
                 """)
                 .param("since", since)
@@ -191,5 +191,67 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
                 byClass.getOrDefault("SOURCE_FAILED", 0L),
                 byClass.getOrDefault("UNDETERMINED", 0L),
                 runs == null ? 0 : runs);
+    }
+
+    @Override
+    public LatencyLayers latencyLayers(Instant since) {
+        Timestamp from = Timestamp.from(since);
+        record Row(long runs, Long runP50, Long runP95, long llmCalls,
+                   Long llmP50, Long llmP95, long toolCalls, Long toolP50, Long toolP95) {
+        }
+        Row row = jdbc.sql("""
+                select
+                  (select count(*) from rca_run
+                     where finished_at is not null and created_at >= :since) as runs,
+                  (select percentile_cont(0.5) within group (
+                       order by extract(epoch from (finished_at - created_at)) * 1000)
+                     from rca_run
+                     where finished_at is not null and created_at >= :since) as run_p50,
+                  (select percentile_cont(0.95) within group (
+                       order by extract(epoch from (finished_at - created_at)) * 1000)
+                     from rca_run
+                     where finished_at is not null and created_at >= :since) as run_p95,
+                  (select count(*) from rca_model_call
+                     where created_at >= :since and latency_ms is not null) as llm_calls,
+                  (select percentile_cont(0.5) within group (order by latency_ms)
+                     from rca_model_call
+                     where created_at >= :since and latency_ms is not null) as llm_p50,
+                  (select percentile_cont(0.95) within group (order by latency_ms)
+                     from rca_model_call
+                     where created_at >= :since and latency_ms is not null) as llm_p95,
+                  (select count(*) from rca_tool_invocation
+                     where started_at >= :since and settled_at is not null) as tool_calls,
+                  (select percentile_cont(0.5) within group (
+                       order by extract(epoch from (settled_at - started_at)) * 1000)
+                     from rca_tool_invocation
+                     where started_at >= :since and settled_at is not null) as tool_p50,
+                  (select percentile_cont(0.95) within group (
+                       order by extract(epoch from (settled_at - started_at)) * 1000)
+                     from rca_tool_invocation
+                     where started_at >= :since and settled_at is not null) as tool_p95
+                """)
+                .param("since", from)
+                .query((rs, i) -> {
+                    // percentile_cont 返回 numeric——getObject(Long) 直拒（本类 javadoc 同律），走 BigDecimal
+                    java.math.BigDecimal runP50 = rs.getBigDecimal("run_p50");
+                    java.math.BigDecimal runP95 = rs.getBigDecimal("run_p95");
+                    java.math.BigDecimal llmP50 = rs.getBigDecimal("llm_p50");
+                    java.math.BigDecimal llmP95 = rs.getBigDecimal("llm_p95");
+                    java.math.BigDecimal toolP50 = rs.getBigDecimal("tool_p50");
+                    java.math.BigDecimal toolP95 = rs.getBigDecimal("tool_p95");
+                    return new Row(rs.getLong("runs"),
+                            runP50 == null ? null : runP50.longValue(),
+                            runP95 == null ? null : runP95.longValue(),
+                            rs.getLong("llm_calls"),
+                            llmP50 == null ? null : llmP50.longValue(),
+                            llmP95 == null ? null : llmP95.longValue(),
+                            rs.getLong("tool_calls"),
+                            toolP50 == null ? null : toolP50.longValue(),
+                            toolP95 == null ? null : toolP95.longValue());
+                })
+                .single();
+        return new LatencyLayers(row.runs(), row.runP50(), row.runP95(),
+                row.llmCalls(), row.llmP50(), row.llmP95(),
+                row.toolCalls(), row.toolP50(), row.toolP95());
     }
 }

@@ -18,15 +18,15 @@ import java.util.List;
  *   <li>openCases = operator_case OPEN+ACKED（OperatorQueryService tabs.all 同口径）；</li>
  *   <li>notifyOutboxPending = notify_outbox 未终态在途 = PENDING+CLAIMED+RETRY_WAIT；
  *       notifyOutboxFailed24h = 近 24h 落 DEAD（投递终败，updated_at 窗口）；</li>
- *   <li>llmCalls24h/tokens24h = external_invocation_ledger 近 24h 行数与
- *       total_tokens 求和（无数据 → tokens 如实 null，不回填 0）；</li>
- *   <li>topTools24h = 账本无工具名列（V7 列面只有 model）——按 model 分组 Top5，
- *       契约键名仍叫 tool（偏差已报备）。</li>
+ *   <li>llmCalls24h/tokens24h = rca_model_call 近 24h 行数与 usage->>'total_tokens'
+ *       求和（引擎收敛后唯一在写的模型调用账本；external_invocation_ledger 已停写——
+ *       2026-09-16 前端产品化波次1 切源；无数据 → tokens 如实 null，不回填 0）；</li>
+ *   <li>topTools24h = rca_tool_invocation 按 tool_name 分组 Top5（真实工具名）。</li>
  * </ul>
  */
 public interface AgentOpsReader {
 
-    /** 分组计数行（tool 实为 model 列值——账本无工具名列的诚实替代） */
+    /** 分组计数行（真实工具名，源自 rca_tool_invocation） */
     record ToolCallCount(String tool, long calls) {
     }
 
@@ -75,5 +75,21 @@ public interface AgentOpsReader {
     default ActionAssessmentStats actionAssessmentStats(Instant since) {
         throw new UnsupportedOperationException(
                 "actionAssessmentStats 仅 Postgres 读面实现（OP-03）");
+    }
+
+    /**
+     * 分层延迟（前端产品化波次1，腾讯云 Agent 可观测口径）：run = 创建→完成，
+     * llm = rca_model_call.latency_ms，tool = rca_tool_invocation 起点→结算；
+     * 近 24h 窗、只统计有完结值的行，p50/p95 = percentile_cont。
+     */
+    record LatencyLayers(long runs, Long runP50Ms, Long runP95Ms,
+                         long llmCalls, Long llmP50Ms, Long llmP95Ms,
+                         long toolCalls, Long toolP50Ms, Long toolP95Ms) {
+    }
+
+    /** 分层延迟聚合（since 窗口起点）。default 抛出 = 假件未镜像，PG 实现覆盖。 */
+    default LatencyLayers latencyLayers(Instant since) {
+        throw new UnsupportedOperationException(
+                "latencyLayers 仅 Postgres 读面实现（前端产品化波次1）");
     }
 }

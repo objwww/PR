@@ -50,4 +50,12 @@ public interface AlertInboxRepository {
     boolean releaseQuarantined(UUID id, String releasedBy, Instant now);
 
     Optional<AlertInbox> findById(UUID id);
+
+    /**
+     * 隔离区清单（前端产品化波次1 审批处置页）：QUARANTINED 行按接收时间降序，
+     * 上限 100。default 返回空 = 假件环境未镜像，真实 PG 实现覆盖。
+     */
+    default java.util.List<AlertInbox> listQuarantined() {
+        return java.util.List.of();
+    }
 }

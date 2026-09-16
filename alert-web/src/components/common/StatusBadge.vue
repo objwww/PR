@@ -52,6 +52,11 @@ const STATUS_MAP = {
   NO_DATA: { text: '无数据', type: 'info' },
   TRUE: { text: '成立', type: 'success' },
   FALSE: { text: '不成立', type: 'info' },
+  // AI 处理状态（前端产品化波次1，字典 aiStatusOf 输出）
+  已调查: { text: '已调查', type: 'success' },
+  调查失败: { text: '调查失败', type: 'danger' },
+  等待路由放量: { text: '等待路由放量', type: 'info' },
+  背压暂扣: { text: '背压暂扣', type: 'info' },
 }
 
 // severity 五级：自定义色（Arco 第 6 级），plain 底不喧宾夺主

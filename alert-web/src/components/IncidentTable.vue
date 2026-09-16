@@ -49,13 +49,17 @@
     <el-table-column label="接收 / 事件" width="100" align="right">
       <template #default="{ row }">{{ row.receivedCount ?? 0 }} / {{ row.distinctEventCount ?? 0 }}</template>
     </el-table-column>
-    <el-table-column label="调查状态" min-width="150">
+    <el-table-column label="AI 处理状态" min-width="160">
       <template #default="{ row }">
         <template v-if="row.currentRcaRunId">
-          <StatusBadge v-if="row.runState" :status="row.runState" />
+          <StatusBadge v-if="row.runState" :status="aiStatusOf(row)" />
           <el-tag v-else type="primary" disable-transitions>调查中</el-tag>
           <router-link class="run-link" :to="`/runs/${row.currentRcaRunId}`" @click.stop>查看调查</router-link>
         </template>
+        <el-tooltip v-else-if="row.waitingReason" :content="waitingLabel(row.waitingReason)"
+          placement="top">
+          <el-tag type="info" disable-transitions>{{ aiStatusOf(row) }}</el-tag>
+        </el-tooltip>
         <span v-else class="cell-sub">未发起</span>
       </template>
     </el-table-column>
@@ -75,6 +79,11 @@ import StatusBadge from './common/StatusBadge.vue'
 import CategoryBadge from './common/CategoryBadge.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtAgo, fmtTime } from '../utils/format'
+import { aiStatusOf, WAITING_REASON } from '../dict/zh'
+
+function waitingLabel(reason) {
+  return WAITING_REASON[reason] ?? reason
+}
 
 defineProps({
   rows: { type: Array, default: () => [] },

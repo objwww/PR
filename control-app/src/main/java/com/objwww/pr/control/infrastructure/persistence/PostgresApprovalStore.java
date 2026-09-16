@@ -164,6 +164,37 @@ public class PostgresApprovalStore implements ApprovalStore,
     }
 
     @Override
+    public List<PendingRequestView> listPendingRequests(Instant now) {
+        return tx.execute(status -> jdbc.sql("""
+                        select r.request_id, r.intent_id, r.run_id, r.action_id, r.risk,
+                               r.required_approvers, r.requested_at, r.expires_at,
+                               count(d.decision_id) filter (where d.decision = 'approved')
+                                   as approved_count,
+                               count(d.decision_id) filter (where d.decision = 'denied')
+                                   as denied_count
+                          from approval_request r
+                          left join approval_decisions d on d.request_id = r.request_id
+                         where r.state = 'PENDING'
+                         group by r.request_id, r.intent_id, r.run_id, r.action_id, r.risk,
+                               r.required_approvers, r.requested_at, r.expires_at
+                         order by r.requested_at desc
+                         limit 50
+                        """)
+                .query((rs, n) -> new PendingRequestView(
+                        rs.getObject("request_id", UUID.class),
+                        rs.getObject("intent_id", UUID.class),
+                        rs.getObject("run_id", UUID.class),
+                        rs.getString("action_id"),
+                        rs.getString("risk"),
+                        rs.getInt("required_approvers"),
+                        rs.getTimestamp("requested_at").toInstant(),
+                        rs.getTimestamp("expires_at").toInstant(),
+                        rs.getInt("approved_count"),
+                        rs.getInt("denied_count")))
+                .list());
+    }
+
+    @Override
     public void insertGrant(GrantView g) {
         tx.executeWithoutResult(status -> jdbc.sql("""
                 insert into approval_grant(grant_id, request_id, run_id, action_id,

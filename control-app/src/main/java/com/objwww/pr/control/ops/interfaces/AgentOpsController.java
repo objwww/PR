@@ -52,4 +52,11 @@ public class AgentOpsController {
     public AgentOpsSummaryService.ActionAssessmentResponse actionAssessment() {
         return service.actionAssessment();
     }
+
+    /** 分层延迟（前端产品化波次1）：run/模型调用/工具调用三层 p50/p95，近 24h。 */
+    @GetMapping("/latency-layers")
+    public com.objwww.pr.control.ops.domain.repository.AgentOpsReader.LatencyLayers
+            latencyLayers() {
+        return service.latencyLayers();
+    }
 }

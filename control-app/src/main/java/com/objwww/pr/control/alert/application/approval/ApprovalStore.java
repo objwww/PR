@@ -44,6 +44,23 @@ public interface ApprovalStore {
     record ExpiredRequest(UUID requestId, UUID runId) {
     }
 
+    /**
+     * 待审批列表行（前端产品化波次1 审批处置页）：审批请求 + 已投票计数聚合。
+     */
+    record PendingRequestView(UUID requestId, UUID intentId, UUID runId, String actionId,
+            String risk, int requiredApprovers, Instant requestedAt, Instant expiresAt,
+            int approvedCount, int deniedCount) {
+    }
+
+    /**
+     * PENDING 审批清单（requested_at 降序，上限 50）。default 抛出 = 假件未镜像
+     * （actionAssessmentStats 同款先例）——真实 PG 实现覆盖。
+     */
+    default List<PendingRequestView> listPendingRequests(Instant now) {
+        throw new UnsupportedOperationException(
+                "listPendingRequests 仅 Postgres 实现（前端产品化波次1）");
+    }
+
     // ---------------- grant ----------------
 
     record GrantView(UUID grantId, UUID requestId, UUID runId, String actionId,

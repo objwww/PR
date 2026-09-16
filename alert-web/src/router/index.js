@@ -12,6 +12,7 @@ const HistoryView = () => import('../views/HistoryView.vue')
 const RunsView = () => import('../views/RunsView.vue')
 const RunDetailView = () => import('../views/RunDetailView.vue')
 const CasesView = () => import('../views/CasesView.vue')
+const ApprovalOpsView = () => import('../views/ApprovalOpsView.vue')
 const DutyView = () => import('../views/DutyView.vue')
 const DutyChatView = () => import('../views/DutyChatView.vue')
 const NotificationsView = () => import('../views/NotificationsView.vue')
@@ -39,6 +40,7 @@ const routes = [
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },
   { path: '/cases', name: 'cases', component: CasesView, meta: { title: '处置中心' } },
+  { path: '/approvals', name: 'approvals', component: ApprovalOpsView, meta: { title: '审批处置' } },
   { path: '/duty', name: 'duty', component: DutyView, meta: { title: '值班管理' } },
   { path: '/duty/chat', name: 'duty-chat', component: DutyChatView, meta: { title: '通知预览' } },
   { path: '/notifications', name: 'notifications', component: NotificationsView, meta: { title: '值班通知' } },
