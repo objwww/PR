@@ -15,6 +15,11 @@ import java.util.Objects;
  * 期望告警标签 = 首条 expected_alerts 的 labels_frozen（C-6 指纹输入面，M3-17
  * ArenaChaosScenarioDriver 激活请求的 alertLabels——必含 alertname）。
  * 本类不做评分、不做注入，只承载期望面。
+ *
+ * <p>P2 执行形态（executionKind）：INJECT = 故障注入（既有驱动器，Prometheus 告警面）；
+ * REPLAY = 冻结载荷重放（DatasetCaseMapper 从 case_version 产的回放案例——
+ * OpenRCA/Meta point-in-time 形态：activate 重投 alert_inbox 冻结 firing 载荷，
+ * 告警面 = DB incident 新 episode，跳过 Prometheus 探针）。null = INJECT（旧注册表兼容）。
  */
 public record GoldenCase(
         String scenarioId,
@@ -26,7 +31,11 @@ public record GoldenCase(
         List<String> expectedSymptomCodes,
         Map<String, String> expectedAlertLabels,
         Injection injection,
-        Timing timing) {
+        Timing timing,
+        String executionKind) {
+
+    public static final String KIND_INJECT = "INJECT";
+    public static final String KIND_REPLAY = "REPLAY";
 
     public GoldenCase {
         Objects.requireNonNull(scenarioId, "scenarioId");
@@ -39,6 +48,11 @@ public record GoldenCase(
         expectedAlertLabels = expectedAlertLabels == null
                 ? Map.of() : Map.copyOf(expectedAlertLabels);
         Objects.requireNonNull(timing, "timing");
+        executionKind = executionKind == null || executionKind.isBlank()
+                ? KIND_INJECT : executionKind;
+        if (!KIND_INJECT.equals(executionKind) && !KIND_REPLAY.equals(executionKind)) {
+            throw new IllegalArgumentException("非法执行形态: " + executionKind);
+        }
     }
 
     /** 兼容 M3-10 旧形态的便捷构造（无期望告警标签、无注入参数） */
@@ -46,7 +60,21 @@ public record GoldenCase(
                       String target, TypedRootCause expectedRootCause,
                       List<String> expectedSymptomCodes, Timing timing) {
         this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
-                expectedSymptomCodes, Map.of(), null, timing);
+                expectedSymptomCodes, Map.of(), null, timing, KIND_INJECT);
+    }
+
+    /** M3-17 形态（带期望告警标签与注入参数；执行形态 = INJECT） */
+    public GoldenCase(String scenarioId, String name, String driver, String chaosFamily,
+                      String target, TypedRootCause expectedRootCause,
+                      List<String> expectedSymptomCodes, Map<String, String> expectedAlertLabels,
+                      Injection injection, Timing timing) {
+        this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
+                expectedSymptomCodes, expectedAlertLabels, injection, timing, KIND_INJECT);
+    }
+
+    /** 回放形态判定（runner 分支与驱动器分派共用同一判据） */
+    public boolean replay() {
+        return KIND_REPLAY.equals(executionKind);
     }
 
     /** 注入参数（注册表 injection 块；S1/S2 flag 面，靶场场景为 null） */

@@ -168,6 +168,27 @@ public final class GoldenScenarioRegistry {
                 .orElseThrow(() -> new IllegalArgumentException("场景未注册: " + scenarioId));
     }
 
+    /**
+     * P2 执行集接通：合并回放案例（DatasetCaseMapper 自 case_version 产）成执行注册表。
+     * 版本头（registry/schema/lexicon）承自 YAML 基座，contentDigest 天然覆盖合并后
+     * 全场景（可复现元数据口径不变）；scenario_id 重复即拒（YAML 与回放案例键空间
+     * 必须不相交——同键两场景会让执行归属不可判定）。
+     */
+    public GoldenScenarioRegistry plus(List<GoldenCase> extraScenarios) {
+        List<String> duplicateIds = extraScenarios.stream()
+                .map(GoldenCase::scenarioId)
+                .filter(id -> scenarios.stream().anyMatch(c -> c.scenarioId().equals(id)))
+                .toList();
+        if (!duplicateIds.isEmpty()) {
+            throw new IllegalArgumentException("场景键冲突（YAML 注册表与回放案例重叠）: "
+                    + duplicateIds);
+        }
+        List<GoldenCase> merged = new java.util.ArrayList<>(scenarios);
+        merged.addAll(extraScenarios);
+        return new GoldenScenarioRegistry(registryVersion, schemaVersion, lexiconBinding,
+                merged);
+    }
+
     /** 注册表内容摘要（canonical 行序化；EvalRun 可复现元数据的 dataset digest 来源） */
     public Digest contentDigest() {
         StringBuilder canonical = new StringBuilder("registry=").append(registryVersion)

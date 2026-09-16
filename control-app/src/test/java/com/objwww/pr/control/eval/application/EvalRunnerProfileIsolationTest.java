@@ -33,6 +33,12 @@ class EvalRunnerProfileIsolationTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(EvalRunnerConfig.class);
 
+    /** 回放案例桩（装配期零 SQL——装配隔离纪律与桩数据源同律）；P2 正式面=Postgres 实现 */
+    private static com.objwww.pr.control.eval.domain.repository.ReplayCaseReader
+            emptyReplayCases() {
+        return version -> java.util.List.of();
+    }
+
     /** 桩数据源：只供 JdbcClient 构造（eval-runner 装配期不建连） */
     private static DataSource stubDataSource() {
         return new SimpleDriverDataSource(new org.postgresql.Driver(),
@@ -65,10 +71,13 @@ class EvalRunnerProfileIsolationTest {
                         "app.alert.eval.alert-rule-digest=" + HEX_C,
                         "app.alert.eval.grader-version=grader-test-v1")
                 .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
+                .withBean(com.objwww.pr.control.eval.domain.repository.ReplayCaseReader.class,
+                        EvalRunnerProfileIsolationTest::emptyReplayCases)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasBean("evalJdbcClient");
                     assertThat(context).hasBean("goldenScenarioRegistry");
+                    assertThat(context).hasBean("replayScenarioDriver");
                     assertThat(context).hasBean("synonymLexicon");
                     assertThat(context).hasBean("singleCaseScorer");
                     assertThat(context).hasBean("alertProbe");
@@ -107,6 +116,8 @@ class EvalRunnerProfileIsolationTest {
                         "app.alert.eval.alert-rule-digest=" + HEX_C,
                         "app.alert.eval.grader-version=grader-test-v1")
                 .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
+                .withBean(com.objwww.pr.control.eval.domain.repository.ReplayCaseReader.class,
+                        EvalRunnerProfileIsolationTest::emptyReplayCases)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasBean("drillTemplateCatalog");
@@ -165,6 +176,8 @@ class EvalRunnerProfileIsolationTest {
                         "app.alert.eval.provider-fingerprint=fp-test",
                         "app.alert.eval.alert-rule-digest=" + HEX_C)
                 .withBean(DataSource.class, EvalRunnerProfileIsolationTest::stubDataSource)
+                .withBean(com.objwww.pr.control.eval.domain.repository.ReplayCaseReader.class,
+                        EvalRunnerProfileIsolationTest::emptyReplayCases)
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure().getMessage())

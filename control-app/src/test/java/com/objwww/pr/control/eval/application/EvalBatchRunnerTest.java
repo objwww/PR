@@ -383,6 +383,84 @@ class EvalBatchRunnerTest {
     }
 
     @Test
+    @DisplayName("P2 回放分支：跳过 Prometheus 探针、重放/清理各两轮、评分与终态照常")
+    void replayCaseSkipsPrometheusProbeAndScoresFromIncidentAnchor() {
+        UUID runId = seedHitChain();
+        ScriptedDriver replayDriver = new ScriptedDriver();
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        int[] probeCalls = {0};
+        AlertProbe countingProbe = new AlertProbe() {
+            @Override
+            public boolean awaitAllFiring(String scenarioId, int maxWaitSeconds) {
+                probeCalls[0]++;
+                return true;
+            }
+
+            @Override
+            public boolean awaitAllResolved(String scenarioId, int maxWaitSeconds) {
+                return true;
+            }
+
+            @Override
+            public boolean awaitSessionClosed(String scenarioId, int cleanupTimeoutSeconds) {
+                return true;
+            }
+
+            @Override
+            public Digest ruleDigest(String alertname) {
+                return Digest.sha256Of("rules:" + alertname);
+            }
+        };
+        GoldenCase replayCase = DatasetCaseMapper.toGoldenCase(
+                new com.objwww.pr.control.eval.domain.repository.ReplayCaseReader
+                        .ReplayCaseRow(UUID.randomUUID(), "op-smoke-ds", "eval-ds-1",
+                        "replay-case-1", "op-smoke-family",
+                        "{\"caseKey\":\"replay-case-1\",\"scenarioFamilyId\":"
+                                + "\"op-smoke-family\",\"expectedRootCause\":"
+                                + "{\"component\":\"payment\",\"faultType\":"
+                                + "\"BUSINESS_ERROR_RATE\",\"reasonCode\":"
+                                + "\"PAYMENT_CHARGE_FAILURE\"},"
+                                + "\"expectedSymptomCodes\":[\"checkout\"],"
+                                + "\"rawArtifact\":{\"source_run_id\":\""
+                                + UUID.randomUUID() + "\"}}",
+                        "d".repeat(64), base));
+        EvalBatchRunner batch = new EvalBatchRunner(
+                GoldenScenarioRegistry.load("registry_version: 1\n"
+                        + "schema_version: 1\nscenarios: []\n").plus(List.of(replayCase)),
+                Map.of("FlagdScenarioDriver", new ScriptedDriver(),
+                        "ReplayScenarioDriver", replayDriver),
+                countingProbe, (alertname, maxWaitSeconds) -> true,
+                new StubResolver(runId, null), scorer(), repo,
+                new BaselineReportGenerator(), metadata(), 2, new StepClock());
+
+        EvalBatchRunner.BatchResult result = batch.runBatch();
+
+        assertThat(probeCalls[0]).isZero();
+        assertThat(replayDriver.activations).isEqualTo(2);
+        assertThat(replayDriver.deactivations).isEqualTo(2);
+        assertThat(repo.cases).hasSize(2);
+        assertThat(repo.cases).allSatisfy(r -> {
+            assertThat(r.scenarioId()).isEqualTo("replay-case-1");
+            assertThat(r.verdict()).isEqualTo(ScoringVerdict.DECIDABLE);
+            assertThat(r.rootCauseHit()).isTrue();
+        });
+        assertThat(result.finalized()).isTrue();
+        assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("quote 转义控制字符：多行异常消息落 failure_sample 仍是合法 JSON")
+    void quoteEscapesControlChars() throws Exception {
+        String raw = "line1\nline\"2\\x\r\n\t tab\u0001ctl";
+        String json = "{\"error\":" + EvalBatchRunner.quote(raw) + "}";
+
+        com.fasterxml.jackson.databind.JsonNode node =
+                new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+
+        assertThat(node.get("error").asText()).isEqualTo(raw);
+    }
+
+    @Test
     @DisplayName("注入失败：该轮落档 activate_failed、不解除（未激活）、门关闭、批仍 SUCCEEDED")
     void activateFailureDocumentedAndGateCloses() {
         UUID runId = seedHitChain();

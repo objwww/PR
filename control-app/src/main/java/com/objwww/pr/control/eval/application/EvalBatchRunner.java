@@ -264,7 +264,8 @@ public class EvalBatchRunner {
         ScenarioDriver.ActivationReceipt activation;
         Instant activatedAt = clock.now();
         try {
-            lifecycle.record(evalRunId, "INJECTING", activatedAt, roundDetail(golden, round));
+            lifecycle.record(evalRunId, golden.replay() ? "REPLAYING" : "INJECTING",
+                    activatedAt, roundDetail(golden, round));
             activation = driver.activate(golden, round);
             activatedAt = clock.now();
         } catch (RuntimeException e) {
@@ -282,10 +283,16 @@ public class EvalBatchRunner {
         EvalCaseResult result;
         boolean gateOpen;
         try {
-            lifecycle.record(evalRunId, "AWAITING_ALERT", clock.now(),
-                    roundDetail(golden, round));
-            boolean fired = alertProbe.awaitAllFiring(golden.scenarioId(),
-                    golden.timing().maxFiringWaitSeconds());
+            // P2 回放分支：冻结载荷已重投（activate），告警面 = DB incident 新
+            // episode，不经 Prometheus——跳过 firing 探针直接等新 run 终态；
+            // 预算沿用 firingWait+hold（调查时长主导）。注入场景原语义不变。
+            boolean fired = true;
+            if (!golden.replay()) {
+                lifecycle.record(evalRunId, "AWAITING_ALERT", clock.now(),
+                        roundDetail(golden, round));
+                fired = alertProbe.awaitAllFiring(golden.scenarioId(),
+                        golden.timing().maxFiringWaitSeconds());
+            }
             if (!fired) {
                 result = absentCase(evalRunId, golden, round,
                         "{\"reason\":\"alerts_not_firing\"}");
@@ -440,8 +447,31 @@ public class EvalBatchRunner {
         return absentCase(evalRunId, golden, round, "{\"reason\":\"gate_blocked\"}");
     }
 
-    private static String quote(String value) {
-        return "\"" + (value == null ? "" : value.replace("\\", "\\\\").replace("\"", "'"))
-                + "\"";
+    /**
+     * failure_sample 的 JSON 字符串面（195 E2E 实证修正）：必须转义控制字符——
+     * 旧实现只处理反斜杠（引号直接换成单引号），异常消息里的裸换行（0x0a）使
+     * jsonb 入库报 "Character with value 0x0a must be escaped" 而炸掉落档面。
+     */
+    static String quote(String value) {
+        StringBuilder sb = new StringBuilder("\"");
+        String v = value == null ? "" : value;
+        for (int i = 0; i < v.length(); i++) {
+            char c = v.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.append('"').toString();
     }
 }

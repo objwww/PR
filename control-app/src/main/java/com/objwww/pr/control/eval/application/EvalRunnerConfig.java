@@ -5,6 +5,7 @@ import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository;
 import com.objwww.pr.control.eval.domain.EvalRunMetadata;
+import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.SynonymLexicon;
 import com.objwww.pr.control.eval.domain.repository.EvalRunRepository;
@@ -102,11 +103,54 @@ public class EvalRunnerConfig {
     @Bean
     public GoldenScenarioRegistry goldenScenarioRegistry(
             ResourceLoader loader,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.eval.domain.repository.ReplayCaseReader>
+                    replayCaseReader,
+            JdbcClient jdbc,
             @Value("${app.alert.eval.registry-path:classpath:eval/eval-scenarios.yml}")
-            String path) throws java.io.IOException {
+            String path,
+            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion)
+            throws java.io.IOException {
+        GoldenScenarioRegistry base;
         try (var in = loader.getResource(path).getInputStream()) {
-            return GoldenScenarioRegistry.load(in);
+            base = GoldenScenarioRegistry.load(in);
         }
+        // P2 执行集接通：materialize 入集案例（dataset version 精确键 + 适用期 +
+        // HOLDOUT RLS）映射为 REPLAY 场景合入执行注册表——"生产失败→评测用例"
+        // 闭环的最后一公里（OpenRCA/Meta point-in-time 回放形态）。
+        // reader 缺席 = 装配测试/离线形态（零回放案例）；在场 = Postgres 实现直连。
+        com.objwww.pr.control.eval.domain.repository.ReplayCaseReader reader =
+                replayCaseReader.getIfAvailable(
+                        () -> new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresReplayCaseReader(jdbc));
+        java.util.List<GoldenCase> replayCases = new java.util.ArrayList<>();
+        for (com.objwww.pr.control.eval.domain.repository.ReplayCaseReader.ReplayCaseRow row
+                : reader.listReplayCases(datasetVersion)) {
+            try {
+                replayCases.add(DatasetCaseMapper.toGoldenCase(row));
+            } catch (RuntimeException e) {
+                throw new IllegalStateException("回放案例装载失败（期望面残缺禁入评测）: "
+                        + row.caseKey() + " — " + e.getMessage(), e);
+            }
+        }
+        GoldenScenarioRegistry merged = base.plus(replayCases);
+        log.info("评测执行注册表装载：注入场景 {} + 回放案例 {}（dataset-version={}）",
+                base.scenarios().size(), replayCases.size(), datasetVersion);
+        return merged;
+    }
+
+    /** P2 回放驱动器（冻结载荷读面 + webhook 重投面；bearer env 注入 fail-closed） */
+    @Bean
+    public ReplayScenarioDriver replayScenarioDriver(
+            JdbcClient jdbc,
+            @Value("${app.alert.eval.webhook-url:http://control-app:8080/webhooks/alertmanager}")
+            String webhookUrl,
+            @Value("${app.alert.eval.webhook-bearer:}") String webhookBearer) {
+        return new ReplayScenarioDriver(
+                new com.objwww.pr.control.infrastructure.persistence.PostgresFrozenPayloadReader(
+                        jdbc),
+                new ReplayScenarioDriver.HttpWebhook(webhookUrl, webhookBearer),
+                java.time.Instant::now);
     }
 
     @Bean
@@ -240,6 +284,7 @@ public class EvalRunnerConfig {
                                            FlagdScenarioDriver flagd,
                                            ArenaChaosScenarioDriver arena,
                                            InfrastructureScenarioDriver infra,
+                                           ReplayScenarioDriver replay,
                                            AlertProbe alertProbe,
                                            IncidentResolutionProbe incidentProbe,
                                            RcaRunResolver resolver,
@@ -250,7 +295,8 @@ public class EvalRunnerConfig {
         return new EvalBatchRunner(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
-                        "InfrastructureScenarioDriver", infra),
+                        "InfrastructureScenarioDriver", infra,
+                        "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator, metadata,
                 2, systemClock());
     }
@@ -293,6 +339,7 @@ public class EvalRunnerConfig {
             FlagdScenarioDriver flagd,
             ArenaChaosScenarioDriver arena,
             InfrastructureScenarioDriver infra,
+            ReplayScenarioDriver replay,
             AlertProbe alertProbe,
             IncidentResolutionProbe incidentProbe,
             RcaRunResolver resolver,
@@ -307,7 +354,8 @@ public class EvalRunnerConfig {
         return new EvalLaunchExecutor(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
-                        "InfrastructureScenarioDriver", infra),
+                        "InfrastructureScenarioDriver", infra,
+                        "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
                 phaseSink, commands, metadata, 2, systemClock(), workerId, gate);
     }
