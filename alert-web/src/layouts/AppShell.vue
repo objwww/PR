@@ -80,7 +80,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
   ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished, TrendCharts,
-  DocumentChecked,
+  DocumentChecked, Files,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
 import { useSseStore } from '../stores/sseStatus.js'
@@ -133,6 +133,7 @@ const navGroups = [
       { label: '数据分析', to: '/analytics', match: ['/analytics'], icon: TrendCharts },
       { label: '版本中心', to: '/versions', match: ['/versions'], icon: Box },
       { label: '审计', to: '/audit', match: ['/audit'], icon: DocumentChecked },
+      { label: '服务目录', to: '/catalog', match: ['/catalog'], icon: Files },
     ],
   },
 ]
