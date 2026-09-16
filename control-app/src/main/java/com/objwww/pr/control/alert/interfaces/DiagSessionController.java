@@ -1,5 +1,9 @@
 package com.objwww.pr.control.alert.interfaces;
 
+import com.objwww.pr.control.alert.application.agent.RcaModelGateway;
+import com.objwww.pr.control.alert.domain.agent.RcaModelCallContext;
+import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
+import com.objwww.pr.shared.Digest;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,9 +42,13 @@ public class DiagSessionController {
     }
 
     private final JdbcClient jdbc;
+    /** v2 自由问答的模型网关（复用 RCA 账本纪律：有锚才触网） */
+    private final RcaModelGateway gateway;
 
-    public DiagSessionController(ObjectProvider<JdbcClient> jdbc) {
+    public DiagSessionController(ObjectProvider<JdbcClient> jdbc,
+            ObjectProvider<RcaModelGateway> gateway) {
         this.jdbc = jdbc.getIfAvailable();
+        this.gateway = gateway.getIfAvailable();
     }
 
     @GetMapping("/questions")
@@ -120,6 +128,114 @@ public class DiagSessionController {
         body.put("question", QUESTIONS.get(request.key()));
         body.put("answer", answer);
         return body;
+    }
+
+    public record FreeAskRequest(String question, String createdBy) {
+    }
+
+    /**
+     * v2 自由问答（接真模型）：账本锚=该事件最近一次模型调用的 run/task/attempt 三元组
+     * （已验证过的合法组合，不伪造上下文），roleId=diag-chat 与调查调用隔离可审计；
+     * 无历史调用（从未调查）→ REJECTED，不硬造锚。时长限 60s，问题限 500 字。
+     */
+    @PostMapping("/free")
+    public Map<String, Object> free(@PathVariable UUID incidentId, @RequestBody FreeAskRequest request) {
+        Objects.requireNonNull(request.question(), "question 必填");
+        String question = request.question().trim();
+        if (question.isEmpty()) {
+            return Map.of("status", "REJECTED", "reason", "QUESTION_REQUIRED");
+        }
+        if (question.length() > 500) {
+            return Map.of("status", "REJECTED", "reason", "QUESTION_TOO_LONG");
+        }
+        if (jdbc == null || gateway == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "GATEWAY_NOT_ASSEMBLED");
+        }
+        List<Map<String, Object>> anchors = jdbc.sql("""
+                select m.run_id, m.task_id, m.attempt_id, m.lease_epoch, m.config_epoch,
+                       m.release_digest
+                  from rca_model_call m
+                 where m.run_id in (select id from rca_run where incident_id = :id)
+                 order by m.created_at desc limit 1
+                """)
+                .param("id", incidentId)
+                .query((rs, i) -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("runId", rs.getObject("run_id", UUID.class));
+                    m.put("taskId", rs.getObject("task_id", UUID.class));
+                    m.put("attemptId", rs.getObject("attempt_id", UUID.class));
+                    m.put("leaseEpoch", rs.getLong("lease_epoch"));
+                    m.put("configEpoch", rs.getObject("config_epoch") == null
+                            ? null : rs.getLong("config_epoch"));
+                    m.put("releaseDigest", rs.getString("release_digest"));
+                    return m;
+                })
+                .list();
+        if (anchors.isEmpty()) {
+            return Map.of("status", "REJECTED", "reason", "NO_RUN_TO_ANCHOR");
+        }
+        Map<String, Object> a = anchors.get(0);
+        String prompt = "你是告警根因分析助手。以下是该告警事件的已核实事实：\n" + incidentContext(incidentId)
+                + "\n值班员的提问：" + question
+                + "\n要求：只基于以上事实回答；事实不足以回答时如实说明当前记录不足以回答。";
+        Instant now = Instant.now();
+        RcaModelCallContext ctx = new RcaModelCallContext(
+                (UUID) a.get("runId"), (UUID) a.get("taskId"), (UUID) a.get("attemptId"),
+                0, 0, "diag-chat", "v1", Digest.sha256Of("diag-chat-v1").value(),
+                (Long) a.get("leaseEpoch"), (Long) a.get("configEpoch"),
+                a.get("releaseDigest") == null ? null : String.valueOf(a.get("releaseDigest")),
+                Digest.sha256Of(prompt).value(), null,
+                now.plusSeconds(60), now.plusSeconds(60), () -> true);
+        RcaModelOutcome outcome;
+        try {
+            outcome = gateway.call(ctx, prompt, 1024);
+        } catch (com.objwww.pr.control.alert.domain.agent.RcaModelCallException e) {
+            return Map.of("status", "REJECTED", "reason", "MODEL_CALL_FAILED:" + e.errorCode());
+        }
+        UUID sessionId = UUID.randomUUID();
+        jdbc.sql("""
+                insert into diag_session (id, incident_id, question_key, question, answer,
+                    answer_refs, created_by, created_at)
+                values (:id, :incidentId, 'FREE', :question, :answer, :refs, :createdBy, :at)
+                """)
+                .param("id", sessionId)
+                .param("incidentId", incidentId)
+                .param("question", question)
+                .param("answer", outcome.content())
+                .param("refs", "{\"model\":\"" + outcome.actualModel() + "\",\"operationId\":\""
+                        + outcome.operationId() + "\",\"totalTokens\":" + outcome.totalTokens() + "}")
+                .param("createdBy", request.createdBy() == null || request.createdBy().isBlank()
+                        ? "operator" : request.createdBy().trim())
+                .param("at", Timestamp.from(now))
+                .update();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "OK");
+        body.put("session_id", sessionId.toString());
+        body.put("question", question);
+        body.put("answer", outcome.content());
+        body.put("model", outcome.actualModel());
+        body.put("totalTokens", outcome.totalTokens());
+        return body;
+    }
+
+    /** 事件已核实事实块（供提示词引用；全部真源 SQL） */
+    private String incidentContext(UUID incidentId) {
+        StringBuilder sb = new StringBuilder();
+        List<String> impact = jdbc.sql("""
+                select 'alert=' || coalesce(alertname, '-') || '; service=' || coalesce(service, '-')
+                       || '; status=' || status || '; received=' || received_count
+                  from incident where id = :id
+                """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list();
+        sb.append(impact.isEmpty() ? "event not found" : impact.get(0));
+        List<String> claims = jdbc.sql("""
+                select coalesce(c.reason, '') from rca_claim c
+                  join rca_run r on r.id = c.run_id
+                 where r.incident_id = :id limit 5
+                """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list();
+        if (!claims.isEmpty()) {
+            sb.append(". claims: ").append(String.join(" | ", claims));
+        }
+        return sb.toString();
     }
 
     @GetMapping
