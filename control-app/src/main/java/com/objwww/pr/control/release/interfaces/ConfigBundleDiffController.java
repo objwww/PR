@@ -32,6 +32,27 @@ public class ConfigBundleDiffController {
         this.jdbc = jdbc.getIfAvailable();
     }
 
+    /** 当前生效版本指针（真源 config_bundle_active；无生效行如实 ok=false） */
+    @GetMapping("/active-digest")
+    public Map<String, Object> activeDigest() {
+        if (jdbc == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "DB_FACE_NOT_ASSEMBLED");
+        }
+        List<Map<String, Object>> rows = jdbc.sql("""
+                select bundle_digest, activated_at, activated_by
+                  from config_bundle_active order by activated_at desc limit 1
+                """)
+                .query((rs, i) -> Map.<String, Object>of(
+                        "digest", (Object) rs.getString("bundle_digest"),
+                        "activatedAt", (Object) rs.getTimestamp("activated_at").toInstant().toString(),
+                        "activatedBy", (Object) rs.getString("activated_by")))
+                .list();
+        if (rows.isEmpty()) {
+            return Map.of("status", "OK", "active", false);
+        }
+        return Map.of("status", "OK", "active", true, "items", rows);
+    }
+
     /** 三类差异：changed（两侧都在值不同）/ added（基线无新增）/ removed（基线有已删） */
     @GetMapping("/{digest}/diff/{baseDigest}")
     public Map<String, Object> diff(@PathVariable String digest,

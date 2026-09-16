@@ -48,7 +48,7 @@
           </el-table-column>
           <!-- EV-10（方案 §4.3 / 体验方案 §4.3）：仅非 active 行给出命令入口；
                资格由服务端 RELEASE 角色裁定，按钮不做前端隐藏式权限替代 -->
-          <el-table-column label="操作" width="230" fixed="right">
+          <el-table-column label="操作" width="300" fixed="right">
             <template #default="{ row }">
               <template v-if="!row.active">
                 <el-button
@@ -59,6 +59,10 @@
                   size="small" plain
                   :disabled="bundleCmdPending" @click="confirmRollback(row)"
                 >回滚到此版本</el-button>
+                <el-button
+                  size="small" plain :loading="diff.loading && diff.target === row.digest"
+                  @click="openDiff(row)"
+                >与生效版对比</el-button>
               </template>
               <span v-else class="cell-sub">当前指针，无需操作</span>
             </template>
@@ -208,6 +212,35 @@
         </template>
       </div>
     </el-dialog>
+
+    <!-- 版本结构化 Diff（业界对齐 LaunchDarkly：按配置键对比三类差异，真源 diff 端点） -->
+    <el-dialog v-model="diff.open" title="与生效版本对比（结构化差异）" width="760px">
+      <div v-loading="diff.loading" class="detail-body">
+        <template v-if="diff.loaded">
+          <p class="cell-sub" style="margin-top: 0">
+            基线（生效版）→ 目标（所选版本）；无差异项不显示。未变更键 {{ diff.unchangedCount }} 个。
+          </p>
+          <template v-if="diffTotal">
+            <h4 class="diff-h">修改（{{ diff.changed.length }}）</h4>
+            <div v-for="c in diff.changed" :key="c.path" class="diff-row">
+              <code class="diff-path">{{ c.path }}</code>
+              <div class="diff-val"><span class="del">{{ c.base }}</span> → <span class="add">{{ c.target }}</span></div>
+            </div>
+            <h4 class="diff-h">新增（{{ diff.added.length }}）</h4>
+            <div v-for="c in diff.added" :key="c.path" class="diff-row">
+              <code class="diff-path">{{ c.path }}</code>
+              <div class="diff-val"><span class="add">{{ c.target }}</span></div>
+            </div>
+            <h4 class="diff-h">删除（{{ diff.removed.length }}）</h4>
+            <div v-for="c in diff.removed" :key="c.path" class="diff-row">
+              <code class="diff-path">{{ c.path }}</code>
+              <div class="diff-val"><span class="del">{{ c.base }}</span></div>
+            </div>
+          </template>
+          <EmptyState v-else kind="empty" description="两个版本配置完全一致" />
+        </template>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -219,7 +252,7 @@
 // rollback 均为 ConfigBundleController 的 EN-02 CAS 端点（expectedActiveRevision 必带，
 // 0=从未激活），资格门（422 QUALIFICATION_*）与 RELEASE 角色（403）由服务端裁定，前端
 // 不预判、不绕过；成功后刷新指针区，生效以服务端指针为准，不宣称「已生效」。
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import {
@@ -227,6 +260,7 @@ import {
   activateBundle, rollbackBundle,
 } from '../api/versions'
 import { fmtTime } from '../utils/format'
+import { api } from '../api/client'
 
 const KINDS = ['PROMPT', 'SKILL', 'TOOL_SCHEMA', 'RUNBOOK_DOC', 'RUNBOOK_CATALOG']
 
@@ -405,8 +439,41 @@ async function openDetail(row) {
   }
 }
 
+// ===== 版本结构化 Diff（LaunchDarkly 模式）：基线=当前激活行，三类差异真源 diff 端点 =====
+const diff = reactive({ open: false, loading: false, loaded: false, target: '', changed: [], added: [], removed: [], unchangedCount: 0 })
+const diffTotal = computed(() => diff.changed.length + diff.added.length + diff.removed.length > 0)
+async function openDiff(row) {
+  const base = bundles.value.active?.digest
+  if (!base) { ElMessage.warning('当前没有生效版本可作对比基线'); return }
+  diff.open = true
+  diff.loading = true
+  diff.loaded = false
+  diff.target = row.digest
+  try {
+    const res = await api(`/v1/config-bundles/${row.digest}/diff/${base}`)
+    diff.changed = res?.changed ?? []
+    diff.added = res?.added ?? []
+    diff.removed = res?.removed ?? []
+    diff.unchangedCount = res?.unchangedCount ?? 0
+    diff.loaded = true
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.reason || '差异查询失败，请重试')
+    diff.open = false
+  } finally {
+    diff.loading = false
+  }
+}
+
 onMounted(reload)
 </script>
+
+<style scoped>
+.diff-h { margin: 14px 0 6px; font-size: 13px; color: var(--head); }
+.diff-row { margin-bottom: 8px; }
+.diff-path { display: inline-block; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
+.diff-val { font-size: 13px; word-break: break-all; }
+.diff-val .del { color: var(--sev-p0, #F53F3F); text-decoration: line-through; }
+.diff-val .add { color: #23C343; font-weight: 600; }
 
 <style scoped>
 .versions-page { display: flex; flex-direction: column; gap: var(--section-gap); }
