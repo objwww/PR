@@ -115,7 +115,7 @@ public class ItsmTicketController {
         }
         List<Map<String, Object>> items = jdbc.sql("""
                 select t.id, t.title, t.priority, t.state, t.created_by, t.created_at,
-                       coalesce(i.alertname, '') as alertname
+                       coalesce(substring(i.incident_key from 'alertname=([^|]+)'), '') as alertname
                   from itsm_ticket t left join incident i on i.id = t.incident_id
                  order by t.created_at desc limit 50
                 """)

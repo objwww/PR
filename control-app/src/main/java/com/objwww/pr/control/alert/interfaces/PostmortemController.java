@@ -124,8 +124,8 @@ public class PostmortemController {
                 }).list();
         body.put("claims", claims);
         List<Map<String, Object>> runs = jdbc.sql("""
-                select '调用 ' || count(*) || ' 次：成功 ' || count(*) filter (where m.state = 'SUCCEEDED')
-                       || '，失败 ' || count(*) filter (where m.state in ('FAILED','EXPIRED')) as summary,
+                select '调用 ' || count(*) || ' 次：成功 ' || count(*) filter (where m.state = 'SUCCESS')
+                       || '，失败 ' || count(*) filter (where m.state = 'FAILED') as summary,
                        coalesce(round(sum(m.cost_micros) / 1000000.0, 4)::text || ' '
                        || coalesce(max(m.currency), ''), '') as cost
                   from rca_model_call m join rca_run r on r.id = m.run_id
