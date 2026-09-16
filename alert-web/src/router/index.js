@@ -34,6 +34,7 @@ const AuditView = () => import('../views/AuditView.vue')
 const CatalogView = () => import('../views/CatalogView.vue')
 const UsersView = () => import('../views/UsersView.vue')
 const PostmortemView = () => import('../views/PostmortemView.vue')
+const DiagChatView = () => import('../views/DiagChatView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -41,6 +42,7 @@ const routes = [
   { path: '/overview', name: 'overview', component: OverviewView, meta: { title: '总览' } },
   { path: '/alerts', name: 'alerts', component: AlertsView, meta: { title: '告警中心' } },
   { path: '/alerts/:incidentId', name: 'incident', component: IncidentDetailView, meta: { title: '告警详情' } },
+  { path: '/diag', name: 'diag-chat', component: DiagChatView, meta: { title: 'AI 诊断' } },
   { path: '/history', name: 'history', component: HistoryView, meta: { title: '历史档案' } },
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },

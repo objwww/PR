@@ -112,3 +112,18 @@ export function spanStateTagType(state) {
   if (state === 'UNKNOWN') return 'warning'
   return 'info'
 }
+
+/** 诊断问答类型（diag_session.question_key；'FREE'=自由问，其余=快捷问） */
+export const DIAG_TYPE = {
+  FREE: '自由问',
+}
+
+/** 诊断问答拒绝原因（/diag 端点 reason 字段；MODEL_CALL_FAILED:* 前端拼接错误码） */
+export const DIAG_REJECT = {
+  NO_RUN_TO_ANCHOR: '该事件尚无调查记录，自由问暂不可用——先完成一次调查以建立账本锚',
+  QUESTION_REQUIRED: '问题不能为空',
+  QUESTION_TOO_LONG: '问题超过 500 字上限',
+  UNKNOWN_QUESTION_KEY: '未知的问题词',
+  DB_FACE_NOT_ASSEMBLED: '服务端数据面未装配',
+  GATEWAY_NOT_ASSEMBLED: '服务端模型网关未装配',
+}

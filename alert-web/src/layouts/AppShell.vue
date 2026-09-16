@@ -79,7 +79,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
-  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished, TrendCharts,
+  ChatDotSquare, ChatDotRound, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished, TrendCharts,
   DocumentChecked, Files, Memo, UserFilled,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
@@ -104,6 +104,7 @@ const navGroups = [
     items: [
       { label: '总览', to: '/overview', match: ['/overview'], icon: DataAnalysis },
       { label: '告警', to: '/alerts', match: ['/alerts', '/history'], icon: Bell },
+      { label: 'AI 诊断', to: '/diag', match: ['/diag'], icon: ChatDotRound },
       { label: '调查', to: '/runs', match: ['/runs'], icon: Search },
       { label: '处置', to: '/cases', match: ['/cases'], icon: Tickets },
       { label: '审批处置', to: '/approvals', match: ['/approvals'], icon: Finished },

@@ -73,10 +73,17 @@ public class DiagSessionController {
         String answer;
         switch (request.key()) {
             case "impact" -> answer = text(jdbc.sql("""
-                    select '服务=' || coalesce(service, '—') || '；状态=' || status
-                           || '；首次发生=' || coalesce(episode_started_at::text, '—')
-                           || '；累计接收 ' || received_count || ' 次'
-                      from incident where id = :id
+                    select '服务=' || coalesce(e.lab->>'service', e.lab->>'service_name', '—')
+                           || '；状态=' || i.status
+                           || '；首次发生=' || to_char(i.episode_started_at, 'YYYY-MM-DD HH24:MI')
+                           || '；累计接收 ' || i.received_count || ' 次'
+                      from incident i
+                      left join lateral (
+                          select labels as lab from alert_event
+                           where incident_id = i.id
+                           order by recorded_at desc limit 1
+                      ) e on true
+                     where i.id = :id
                     """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
             case "hypothesis" -> answer = text(jdbc.sql("""
                     select coalesce(string_agg(c.reason, ' ｜ '), '尚无结构化断言（确定性引擎无假设清单）')
@@ -218,13 +225,21 @@ public class DiagSessionController {
         return body;
     }
 
-    /** 事件已核实事实块（供提示词引用；全部真源 SQL） */
+    /** 事件已核实事实块（供提示词引用；全部真源 SQL。alertname/service 无独立列——INV-AM1-4，
+     *  沿 IncidentQueryReader 契约从每 incident 最新一条 alert_event 的 labels jsonb 提取） */
     private String incidentContext(UUID incidentId) {
         StringBuilder sb = new StringBuilder();
         List<String> impact = jdbc.sql("""
-                select 'alert=' || coalesce(alertname, '-') || '; service=' || coalesce(service, '-')
-                       || '; status=' || status || '; received=' || received_count
-                  from incident where id = :id
+                select 'alert=' || coalesce(e.lab->>'alertname', '-')
+                       || '; service=' || coalesce(e.lab->>'service', e.lab->>'service_name', '-')
+                       || '; status=' || i.status || '; received=' || i.received_count
+                  from incident i
+                  left join lateral (
+                      select labels as lab from alert_event
+                       where incident_id = i.id
+                       order by recorded_at desc limit 1
+                  ) e on true
+                 where i.id = :id
                 """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list();
         sb.append(impact.isEmpty() ? "event not found" : impact.get(0));
         List<String> claims = jdbc.sql("""
@@ -241,13 +256,15 @@ public class DiagSessionController {
     @GetMapping
     public Map<String, Object> history(@PathVariable UUID incidentId) {
         List<Map<String, Object>> items = jdbc == null ? List.of() : jdbc.sql("""
-                select question, answer, created_by, created_at
+                select question_key, answer_refs, question, answer, created_by, created_at
                   from diag_session where incident_id = :id
                  order by created_at desc limit 20
                 """)
                 .param("id", incidentId)
                 .query((rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("question_key", rs.getString("question_key"));
+                    m.put("answer_refs", rs.getString("answer_refs"));
                     m.put("question", rs.getString("question"));
                     m.put("answer", rs.getString("answer"));
                     m.put("created_by", rs.getString("created_by"));
