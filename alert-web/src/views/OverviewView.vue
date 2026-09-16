@@ -54,10 +54,30 @@
       </div>
 
       <div class="side-col">
-        <!-- 交接摘要：无真数据源，如实空态（交接功能立项后接入） -->
+        <!-- 交接摘要：真源 /v1/handovers（V130），创建时后端实测注入当班事实 -->
         <div class="card panel">
-          <div class="panel-title">交接摘要</div>
-          <EmptyState description="暂无交接记录（交接功能未立项，无数据源）" :image-size="80" />
+          <div class="panel-head">
+            <span class="panel-title">交接摘要</span>
+            <el-button size="small" @click="ho.open = !ho.open">{{ ho.open ? '收起' : '写交接' }}</el-button>
+          </div>
+          <template v-if="ho.items.length">
+            <div v-for="(h, i) in ho.items" :key="i" class="ho-row">
+              <div class="ho-meta">
+                <el-tag size="small" effect="plain" disable-transitions>{{ h.from_oncall }} → {{ h.to_oncall || '待接' }}</el-tag>
+                <span class="health-asof">{{ fmtTime(h.created_at) }}</span>
+              </div>
+              <div class="health-detail">{{ h.notes }}</div>
+              <div class="health-detail" v-if="hoStats(h)">当班事实：{{ hoStats(h) }}</div>
+            </div>
+          </template>
+          <EmptyState v-else kind="empty" description="还没有交接记录——写下第一条" :image-size="60" />
+          <div v-if="ho.open" style="margin-top: 10px">
+            <el-input v-model="ho.toOncall" placeholder="接班人（可留空）" size="small" style="margin-bottom: 6px" />
+            <el-input v-model="ho.notes" type="textarea" :rows="3" maxlength="500"
+              placeholder="必填：遗留事项 / 注意点（当班事实系统自动附上）" />
+            <el-button size="small" type="primary" style="margin-top: 6px"
+              :disabled="!ho.notes?.trim() || ho.submitting" :loading="ho.submitting" @click="createHandover">提交交接</el-button>
+          </div>
         </div>
         <!-- 系统健康：真源 /v1/system/health（DB/事件链/在途调查/通知投递/隔离区，30s 实测） -->
         <div class="card panel">
@@ -87,7 +107,7 @@
 // §三.1：首行三行动指标 = 待处理 / 调查异常 / 通知失败 24h；主区待办消费 topRisk（severity 风险序）
 // 数据全真：GET /v1/overview/summary（KPI/趋势/值班/待办 单端点聚合）
 // 字段可 null → 显「—」；交接与健康无真数据源，EmptyState 如实说明
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
 import PageHeader from '../components/common/PageHeader.vue'
@@ -96,6 +116,9 @@ import IncidentTable from '../components/IncidentTable.vue'
 import { fmtTime } from '../utils/format'
 // RV11：图表组件局部化（echarts 按需注册随页面懒加载，首包不再携带大依赖）
 import { useChart } from '../composables/echarts'
+import { useSessionStore } from '../stores/session.js'
+
+const session = useSessionStore()
 
 const VChart = useChart()
 
@@ -211,9 +234,40 @@ async function loadHealth() {
   }
 }
 
+// 交接摘要真源（UI-DATA-1 收官补项）：列表 + 写交接，创建时后端注入当班事实
+const ho = reactive({ items: [], open: false, toOncall: '', notes: '', submitting: false })
+function hoStats(h) {
+  try {
+    const s = JSON.parse(h.stats || '{}')
+    return `在警 ${s.firingIncidents} ｜ 在途调查 ${s.inflightRuns} ｜ 生效静默 ${s.activeSilences}`
+  } catch { return '' }
+}
+async function loadHandovers() {
+  try { ho.items = (await api('/v1/handovers'))?.items ?? [] } catch { ho.items = [] }
+}
+async function createHandover() {
+  ho.submitting = true
+  try {
+    const res = await api('/v1/handovers', {
+      method: 'POST',
+      body: { toOncall: ho.toOncall?.trim() || null, notes: ho.notes.trim(), createdBy: session.user || 'oncall' },
+    })
+    if (res?.status === 'OK') {
+      ElMessage.success('交接记录已写入')
+      ho.notes = ''
+      ho.toOncall = ''
+      ho.open = false
+      await loadHandovers()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('提交失败，请重试') } finally { ho.submitting = false }
+}
+
 onMounted(() => {
   refresh()
   loadHealth()
+  loadHandovers()
   timer = setInterval(() => { refresh(); loadHealth() }, 30000) // 轮询 30s，不接 SSE
 })
 onBeforeUnmount(() => clearInterval(timer))
@@ -264,6 +318,11 @@ onBeforeUnmount(() => clearInterval(timer))
 .health-name { font-size: var(--fs-body); color: var(--head); font-weight: 600; flex: none; }
 .health-detail { font-size: var(--fs-aux); color: var(--ink-2); }
 .health-loading { height: 96px; }
+
+/* 交接摘要 */
+.ho-row { padding: 8px 0; border-bottom: 1px solid var(--line, #ebeef5); }
+.ho-row:last-child { border-bottom: none; }
+.ho-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 
 @media (max-width: 1100px) {
   .grid-2col { flex-direction: column; }
