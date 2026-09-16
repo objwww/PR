@@ -184,6 +184,95 @@
       </DetailDrawer>
     </template>
 
+    <!-- ============ 调用链：三层 span 瀑布（3.17；rca_attempt/rca_model_call/rca_tool_invocation 真账本直出） ============ -->
+    <template v-else-if="viewTab === 'trace'">
+      <div class="card panel">
+        <div v-if="traceLoadState === 'ok'" class="trace-toolbar">
+          <span class="trace-stat">任务尝试 <b>{{ trace?.summary?.taskSpans ?? 0 }}</b></span>
+          <span class="trace-stat">模型调用 <b>{{ trace?.summary?.modelSpans ?? 0 }}</b></span>
+          <span class="trace-stat">工具调用 <b>{{ trace?.summary?.toolSpans ?? 0 }}</b></span>
+          <span class="trace-stat">
+            Token 合计 <b>{{ fmtNum(trace?.summary?.tokensTotal) }}</b>
+            <em v-if="trace?.summary?.tokenMissing" class="trace-warn">（{{ trace.summary.tokenMissing }} 笔未回报，未计入——合计为下限）</em>
+          </span>
+          <span class="trace-stat">费用 <b>{{ trace?.summary?.costMicros != null ? fmtNum(trace.summary.costMicros) + ' 微单位' : '未定价' }}</b></span>
+          <span class="trace-stat">窗口 <b>{{ traceWindow ? fmtDur(traceWindow.span) : '—' }}</b></span>
+          <span class="flex-spacer" />
+          <el-button size="small" @click="loadTrace">刷新</el-button>
+        </div>
+
+        <div v-if="traceLoadState === 'loading'" class="trace-tip">调用链加载中……</div>
+        <div v-else-if="traceLoadState === 'error'" class="trace-tip">
+          {{ traceError }}
+          <el-button size="small" style="margin-left: 10px" @click="loadTrace">重试</el-button>
+        </div>
+        <EmptyState
+          v-else-if="!traceWindow"
+          kind="empty"
+          description="该 run 在任务尝试/模型调用/工具调用三张账本均无行——通常为排队中尚未执行，或旧版 run 无账本记录；本页只呈现真实账本数据。"
+        />
+        <div v-else class="trace-body">
+          <!-- 时间标尺（相对窗口起点偏移） -->
+          <div class="trace-row trace-ruler">
+            <span class="trace-row-label">时间轴</span>
+            <div class="trace-track">
+              <span v-for="t in rulerTicks" :key="t.pct" class="trace-tick" :style="{ left: t.pct + '%' }">
+                <i /><em>{{ t.label }}</em>
+              </span>
+            </div>
+            <span class="trace-dur" />
+          </div>
+
+          <!-- 事件锚点：结论/证据/失败·审控三类关键事件叠加 -->
+          <div v-if="traceAnchors.length" class="trace-row">
+            <span class="trace-row-label">事件锚点（{{ traceAnchors.length }}）</span>
+            <div class="trace-track">
+              <span
+                v-for="a in traceAnchors" :key="a.seq"
+                class="anchor-dot" :class="a.cls"
+                :style="{ left: anchorPct(a) + '%' }" :title="a.title"
+              />
+            </div>
+            <span class="trace-dur" />
+          </div>
+
+          <!-- 三层 span 瀑布（同一起点时间轴，点击行展开明细） -->
+          <template v-for="sec in traceSections" :key="sec.kind">
+            <div class="trace-section-title">{{ sec.title }}（{{ sec.rows.length }}）</div>
+            <template v-for="s in sec.rows" :key="s.id">
+              <div class="trace-row span-row" @click="openSpanId = openSpanId === s.id ? null : s.id">
+                <span class="trace-row-label" :title="s.label">
+                  {{ s.label }}<em class="seq">{{ spanSeqLabel(s) }}</em>
+                </span>
+                <div class="trace-track">
+                  <i
+                    class="span-bar" :class="spanClass(s)"
+                    :style="{ left: s.pct + '%', width: Math.max(s.wPct, 0.5) + '%' }"
+                  />
+                </div>
+                <span class="trace-dur">{{ s.durLabel }}</span>
+                <el-tag size="small" :type="spanStateTagType(s.state)" disable-transitions>{{ stateZh(s) }}</el-tag>
+              </div>
+              <div v-if="openSpanId === s.id" class="trace-kv">
+                <div v-for="[k, v] in spanKv(s)" :key="k" class="kv-line">
+                  <span class="k">{{ k }}</span><span class="v">{{ v }}</span>
+                </div>
+              </div>
+            </template>
+          </template>
+
+          <div class="trace-legend">
+            <span><i class="lg lg-task" />任务尝试</span>
+            <span><i class="lg lg-model" />模型调用</span>
+            <span><i class="lg lg-tool" />工具调用</span>
+            <span><i class="lg lg-fail" />失败</span>
+            <span><i class="lg lg-unknown" />结果未知/进行中</span>
+            <span>点击行可展开该次调用的明细（模型/Token/费用/原因码等）。</span>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <!-- ============ 事件流：Transcript 卡片流 ============ -->
     <template v-else-if="viewTab === 'events'">
       <div class="card panel">
@@ -601,6 +690,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import KvTable from '../components/common/KvTable.vue'
 import { STATUS_STYLE, STATUS_ORDER } from '../components/RunDagStatus.js'
 import { EVENT_TYPE_ZH, zh } from '../dict/displayNameZh.js'
+import { SPAN_KIND, ATTEMPT_STATE, LEDGER_STATE, spanStateTagType } from '../dict/zh.js'
 import { useSseStore } from '../stores/sseStatus.js'
 import { fmtTime } from '../utils/format'
 
@@ -616,6 +706,7 @@ const viewTab = ref('summary')
 const viewTabs = [
   { key: 'summary', label: '摘要' },
   { key: 'dag', label: '执行过程' },
+  { key: 'trace', label: '调用链' },
   { key: 'events', label: '事件流' },
   { key: 'claims', label: '结论与证据' },
   { key: 'report', label: '报告' },
@@ -662,6 +753,161 @@ async function loadReport() {
       : '报告加载失败（后端不可达或接口未部署）'
   }
 }
+
+// ===== 调用链 tab（GET /api/rca-runs/{id}/trace；3.17 Trace 瀑布，懒加载 + 失败重试）=====
+// 数据源 = rca_attempt / rca_model_call / rca_tool_invocation 三张真账本 UNION 直出；
+// 事件锚点复用本页已加载的事件流（allEvents），不做第二份数据源。
+const trace = ref(null)
+const traceLoadState = ref('idle') // idle | loading | ok | error
+const traceError = ref('')
+const openSpanId = ref(null)
+
+async function loadTrace() {
+  traceLoadState.value = 'loading'
+  traceError.value = ''
+  try {
+    trace.value = await api(`/rca-runs/${route.params.runId}/trace`)
+    traceLoadState.value = 'ok'
+  } catch (e) {
+    traceLoadState.value = 'error'
+    traceError.value = e?.response?.data?.error
+      ? `调用链加载失败：${e.response.data.error}`
+      : '调用链加载失败（后端不可达或接口未部署）'
+  }
+}
+
+const TRACE_SECTIONS = [
+  { kind: 'task', title: '任务尝试' },
+  { kind: 'model', title: '模型调用' },
+  { kind: 'tool', title: '工具调用' },
+]
+const ANCHOR_FAMILIES = [
+  { match: t => /^CLAIM_/.test(t), cls: 'an-claim', name: '结论' },
+  { match: t => /^EVIDENCE_/.test(t), cls: 'an-evidence', name: '证据' },
+  { match: t => /FAILED|CANCEL|GUARDIAN|APPROVAL/.test(t), cls: 'an-fail', name: '失败/审控' },
+]
+
+function parseMs(v) { return v ? Date.parse(v) : null }
+function spanEndMs(s) {
+  const en = parseMs(s.end)
+  if (en) return en
+  const st = parseMs(s.start)
+  return (st != null && s.latencyMs != null) ? st + s.latencyMs : null
+}
+
+// 时间窗 = 全部 span 起止与锚点时刻的并集（PENDING/STARTED 无终点行不参与终点计算）
+const traceWindow = computed(() => {
+  const spans = trace.value?.spans ?? []
+  if (!spans.length) return null
+  let t0 = Infinity, t1 = -Infinity
+  for (const s of spans) {
+    const st = parseMs(s.start)
+    if (st != null) { t0 = Math.min(t0, st) }
+    const en = spanEndMs(s)
+    if (en != null) { t0 = Math.min(t0, en); t1 = Math.max(t1, en) }
+    if (st != null) t1 = Math.max(t1, st)
+  }
+  for (const a of traceAnchors.value) {
+    t0 = Math.min(t0, a.ms); t1 = Math.max(t1, a.ms)
+  }
+  if (!isFinite(t0) || !isFinite(t1)) return null
+  return { t0, t1, span: Math.max(t1 - t0, 1) }
+})
+
+function posPct(ms) {
+  const w = traceWindow.value
+  if (!w || ms == null) return 0
+  return Math.min(100, Math.max(0, ((ms - w.t0) / w.span) * 100))
+}
+
+// 事件锚点：结论/证据/失败·审控三类关键事件（与业界 Trace 叠加变更/结论事件同思路）
+const traceAnchors = computed(() => {
+  const out = []
+  for (const ev of allEvents.value) {
+    const fam = ANCHOR_FAMILIES.find(f => f.match(ev.type))
+    if (!fam) continue
+    const ms = parseMs(ev.createdAt)
+    if (ms == null) continue
+    out.push({
+      seq: ev.seq, ms, cls: fam.cls,
+      title: `#${ev.seq} ${eventZh(ev.type)}${ev.summary ? '｜' + ev.summary : ''}｜${fmtTime(ev.createdAt)}`,
+    })
+  }
+  return out.sort((a, b) => a.ms - b.ms)
+})
+
+const traceSections = computed(() => {
+  const w = traceWindow.value
+  if (!w) return []
+  return TRACE_SECTIONS.map(sec => ({
+    ...sec,
+    rows: (trace.value?.spans ?? [])
+      .filter(s => s.kind === sec.kind)
+      .map(s => {
+        const st = parseMs(s.start)
+        const en = spanEndMs(s)
+        return { ...s, pct: posPct(st), wPct: en != null ? Math.max(posPct(en) - posPct(st), 0) : 0,
+          durLabel: en != null && st != null ? fmtDur(en - st) : '—' }
+      })
+      .sort((a, b) => (parseMs(a.start) ?? 0) - (parseMs(b.start) ?? 0)),
+  })).filter(sec => sec.rows.length)
+})
+
+const rulerTicks = computed(() => {
+  const w = traceWindow.value
+  if (!w) return []
+  return [0, 25, 50, 75, 100].map(p => ({ pct: p, label: fmtDur(w.span * p / 100) }))
+})
+
+function anchorPct(a) { return posPct(a.ms) }
+
+const kindZh = k => zh(SPAN_KIND, k)
+const stateZh = s => zh(s.kind === 'task' ? ATTEMPT_STATE : LEDGER_STATE, s.state)
+function spanClass(s) {
+  return ['k-' + s.kind, {
+    'is-fail': /FAILED/.test(s.state ?? ''),
+    'is-unknown': s.state === 'UNKNOWN',
+    'is-pending': s.state === 'PENDING' || s.state === 'STARTED',
+  }]
+}
+function spanSeqLabel(s) {
+  return s.kind === 'task' ? `第 ${s.attemptNo ?? s.seq} 次尝试` : `序 ${s.seq}`
+}
+function spanKv(s) {
+  const kv = [
+    ['类型', kindZh(s.kind)],
+    ['状态', stateZh(s)],
+    ['开始', s.start ? fmtTime(s.start) : '—'],
+    ['结束', s.end ? fmtTime(s.end) : (s.kind === 'model' ? '—（时长来自模型账本延迟）' : '—（未回执）')],
+    ['耗时', s.durLabel ?? '—'],
+  ]
+  if (s.kind === 'model') {
+    kv.push(
+      ['模型', s.model ?? '—'],
+      ['角色', s.roleId ?? '—'],
+      ['Token（提示/补全/合计）', s.totalTokens != null
+        ? `${s.promptTokens ?? '—'} / ${s.completionTokens ?? '—'} / ${s.totalTokens}`
+        : '未回报（不计入合计）'],
+      ['费用（微单位）', s.costMicros != null ? fmtNum(s.costMicros) : '未定价'],
+    )
+  }
+  if (s.kind === 'tool') kv.push(['原因码', s.errorCode ?? '—'])
+  if (s.kind === 'task') kv.push(['执行器', s.worker ?? '—'])
+  kv.push(['错误码', s.errorCode ?? '—'])
+  return kv
+}
+function fmtDur(ms) {
+  if (ms == null) return '—'
+  if (ms < 1000) return `${Math.round(ms)} 毫秒`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)} 秒`
+  if (ms < 3600000) {
+    const m = Math.floor(ms / 60000), s = Math.round((ms % 60000) / 1000)
+    return s ? `${m} 分 ${s} 秒` : `${m} 分`
+  }
+  const h = Math.floor(ms / 3600000), m = Math.round((ms % 3600000) / 60000)
+  return m ? `${h} 时 ${m} 分` : `${h} 时`
+}
+function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('zh-CN') }
 
 // ===== OP-04 终态报告评价（POST/GET /rca-runs/{runId}/report/{reportId}/feedback）=====
 // 与运行中命令面（顶部 FEEDBACK 命令按钮）分离；失败保留本地草稿（v-model 不清）
@@ -1289,6 +1535,7 @@ function switchTab(key) {
   if (key === 'events') nextTick(scrollEvToBottom)
   if (key === 'meta' && cfgState.value === 'idle') loadCfgEpochs() // 配置切换区懒加载
   if (key === 'report' && reportLoadState.value === 'idle') loadReport() // 报告面懒加载
+  if (key === 'trace' && traceLoadState.value === 'idle') loadTrace() // 调用链懒加载
 }
 
 function onSelectTask(id) {
@@ -1489,6 +1736,67 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 }
 .dlg-note { line-height: 1.7; margin-bottom: 12px; }
 .dlg-select { width: 100%; margin-bottom: 10px; }
+
+/* ===== 3.17 调用链瀑布（真账本直出；配色沿用 tokens 令牌，不改视觉身份） ===== */
+.trace-toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.trace-stat { color: var(--ink-2); font-size: var(--fs-aux); }
+.trace-stat b { color: var(--ink); font-size: var(--fs-body); margin-left: 2px; }
+.trace-warn { color: var(--warn); font-style: normal; }
+.trace-tip { color: var(--ink-2); padding: 24px 0; text-align: center; }
+
+.trace-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; min-height: 26px; }
+.trace-row-label {
+  flex: 0 0 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--fs-aux); color: var(--ink);
+}
+.trace-row-label .seq { color: var(--ink-2); font-style: normal; margin-left: 6px; }
+.trace-track { position: relative; flex: 1 1 auto; height: 14px; background: #f4f6fa; border-radius: 3px; }
+.trace-dur { flex: 0 0 76px; text-align: right; color: var(--ink-2); font-size: var(--fs-aux); }
+
+.trace-ruler .trace-track { background: none; }
+.trace-tick { position: absolute; top: 0; height: 100%; }
+.trace-tick i { position: absolute; top: 0; width: 1px; height: 10px; background: var(--line-strong); }
+.trace-tick em { position: absolute; top: 11px; left: 3px; font-style: normal; font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+
+.anchor-dot {
+  position: absolute; top: 1px; width: 10px; height: 10px; border-radius: 50%;
+  transform: translateX(-5px); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line-strong);
+  cursor: help;
+}
+.an-claim { background: var(--cat-platform); }
+.an-evidence { background: var(--cat-application); }
+.an-fail { background: var(--sev-p0); }
+
+.trace-section-title {
+  margin: 12px 0 4px; font-size: var(--fs-aux); font-weight: 600; color: var(--ink-2);
+  border-bottom: 1px dashed var(--line); padding-bottom: 4px;
+}
+.span-row { cursor: pointer; }
+.span-row:hover .trace-row-label { color: var(--brand); }
+.span-bar { position: absolute; top: 3px; height: 8px; border-radius: 4px; min-width: 4px; }
+.span-bar.k-task { background: var(--brand); }
+.span-bar.k-model { background: var(--cat-dependency); }
+.span-bar.k-tool { background: var(--cat-network); }
+.span-bar.is-fail { background: var(--sev-p0) !important; }
+.span-bar.is-unknown { background: var(--sev-p2) !important; }
+.span-bar.is-pending { background: repeating-linear-gradient(45deg, var(--sev-info), var(--sev-info) 4px, #fff 4px, #fff 6px) !important; }
+
+.trace-kv {
+  flex: 0 0 auto; margin: 2px 0 8px 250px; padding: 8px 12px;
+  background: var(--brand-soft); border-radius: var(--radius); display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 24px;
+}
+.kv-line { display: flex; gap: 8px; font-size: var(--fs-aux); min-width: 0; }
+.kv-line .k { color: var(--ink-2); flex: 0 0 auto; }
+.kv-line .v { color: var(--ink); word-break: break-all; }
+
+.trace-legend { display: flex; gap: 16px; align-items: center; margin-top: 14px; color: var(--ink-2); font-size: var(--fs-aux); flex-wrap: wrap; }
+.trace-legend .lg { display: inline-block; width: 14px; height: 8px; border-radius: 4px; margin-right: 4px; }
+.lg-task { background: var(--brand); }
+.lg-model { background: var(--cat-dependency); }
+.lg-tool { background: var(--cat-network); }
+.lg-fail { background: var(--sev-p0); }
+.lg-unknown { background: var(--sev-p2); }
 
 .loading { height: 320px; }
 </style>

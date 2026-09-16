@@ -16,6 +16,7 @@ import com.objwww.pr.control.alert.domain.model.RunTrigger;
 import com.objwww.pr.control.alert.domain.model.TaskExecutionBinding;
 import com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
+import com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader.SpanRow;
 import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskEdgeRepository;
 import com.objwww.pr.control.alert.domain.repository.TaskExecutionBindingRepository;
@@ -658,5 +659,78 @@ class RunQueryServiceTest {
             return state == com.objwww.pr.control.alert.domain.tool.ToolInvocationState.UNKNOWN
                     ? unknownByRun.getOrDefault(runId, 0L) : 0L;
         }
+    }
+
+    // ------------------------------------------------ 3.17 Trace 瀑布（trace 读面）
+
+    /** 三层 span 假读面：按 run 给固定行（task/model/tool 各一） */
+    private static class FakeTrace implements com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader {
+        final Map<UUID, List<SpanRow>> byRun = new LinkedHashMap<>();
+
+        @Override
+        public List<SpanRow> spansByRun(UUID runId) {
+            return byRun.getOrDefault(runId, List.of());
+        }
+    }
+
+    @Test
+    void traceProjectsSpansAndSummaryFromReader() {
+        UUID runId = run(RcaRunState.SUCCEEDED);
+        FakeTrace traceReader = new FakeTrace();
+        UUID taskId = UUID.randomUUID();
+        traceReader.byRun.put(runId, List.of(
+                new SpanRow("task", UUID.randomUUID(), taskId, "PRIMARY_INVESTIGATE", 1,
+                        "SUCCEEDED", "2026-09-08T09:58:00Z", "2026-09-08T09:59:00Z",
+                        null, null, null, null, null, null, null,
+                        "worker-a", 1, null),
+                new SpanRow("model", UUID.randomUUID(), taskId, "primary-investigator", 3,
+                        "SUCCESS", "2026-09-08T09:58:10Z", null,
+                        4200L, "deepseek-v4", 300, 120, 420, 15000L, null,
+                        null, null, "primary-investigator"),
+                new SpanRow("model", UUID.randomUUID(), taskId, "primary-investigator", 4,
+                        "FAILED", "2026-09-08T09:58:30Z", null,
+                        null, null, null, null, null, null, "OUTPUT_BUDGET_EXHAUSTED",
+                        null, null, "primary-investigator"),
+                new SpanRow("tool", UUID.randomUUID(), taskId, "logs.query", 2,
+                        "SUCCESS", "2026-09-08T09:58:20Z", "2026-09-08T09:58:25Z",
+                        null, null, null, null, null, null, null,
+                        null, null, null)));
+        RunQueryService withTrace = new RunQueryService(runs, tasks, edges, bindings,
+                usage, claims, CLOCK, null, null, null, traceReader);
+
+        Map<String, Object> trace = withTrace.trace(runId).orElseThrow();
+
+        assertThat(((Map<?, ?>) trace.get("run")).get("status")).isEqualTo("SUCCEEDED");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> spans = (List<Map<String, Object>>) trace.get("spans");
+        assertThat(spans).hasSize(4);
+        assertThat(spans.get(0)).containsEntry("kind", "task").containsEntry("label", "PRIMARY_INVESTIGATE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) trace.get("summary");
+        assertThat(summary).containsEntry("taskSpans", 1L)
+                .containsEntry("modelSpans", 2L)
+                .containsEntry("toolSpans", 1L)
+                .containsEntry("tokensTotal", 420L)
+                .containsEntry("tokenMissing", 1L)
+                .containsEntry("costMicros", 15000L);
+    }
+
+    @Test
+    void traceDegradesToEmptySpansWithoutReaderAndUnknownRunIsEmpty() {
+        UUID runId = run(RcaRunState.SUCCEEDED);
+        task(runId, "PRIMARY_INVESTIGATE", RcaTaskState.DONE);
+
+        // 字段级 service = 7 参构造（无 trace 读面）→ span 空表如实，汇总全零
+        Map<String, Object> trace = service.trace(runId).orElseThrow();
+        assertThat((List<?>) trace.get("spans")).isEmpty();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> summary = (Map<String, Object>) trace.get("summary");
+        assertThat(summary).containsEntry("taskSpans", 0L)
+                .containsEntry("modelSpans", 0L)
+                .containsEntry("toolSpans", 0L)
+                .containsEntry("tokensTotal", 0L)
+                .containsEntry("tokenMissing", 0L)
+                .containsEntry("costMicros", null);
+        assertThat(service.trace(UUID.randomUUID())).isEmpty();
     }
 }

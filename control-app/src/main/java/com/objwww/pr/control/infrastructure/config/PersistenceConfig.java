@@ -707,6 +707,14 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    /** 3.17 Trace 瀑布读口：rca_attempt/rca_model_call/rca_tool_invocation 三账本 UNION 直出 */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader
+    rcaRunTraceReader(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaRunTraceReader(
+                jdbc);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.application.RunQueryService runQueryService(
             com.objwww.pr.control.alert.domain.repository.RcaRunRepository rcaRunRepository,
@@ -722,14 +730,16 @@ public class PersistenceConfig {
             com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger
                     rcaToolInvocationLedger,
             com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository
-                    operatorCommandRepository) {
+                    operatorCommandRepository,
+            com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader
+                    rcaRunTraceReader) {
         // WC-5：取消收敛读面（terminationRequestedAt/localExecutionState/
-        // inflightCount/unknownActionCount）接线
+        // inflightCount/unknownActionCount）接线；3.17：Trace 瀑布读面接线
         return new com.objwww.pr.control.alert.application.RunQueryService(
                 rcaRunRepository, rcaTaskRepository, taskEdgeRepository,
                 taskExecutionBindingRepository, rcaModelCallUsageReader,
                 claimStore, java.time.Instant::now, am4InFlightToolCancels,
-                rcaToolInvocationLedger, operatorCommandRepository);
+                rcaToolInvocationLedger, operatorCommandRepository, rcaRunTraceReader);
     }
 
     // ---------------- UI-1 告警只读查询投影（/api/v1/**；HTTP 面 = alert/interfaces IncidentQueryController） ----------------

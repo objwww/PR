@@ -79,3 +79,36 @@ export function aiStatusTagType(status) {
   if (status === '调查失败') return 'danger'
   return 'warning'
 }
+
+/** 调用链 span 类型（前端产品化 3.17 Trace 瀑布页签） */
+export const SPAN_KIND = {
+  task: '任务尝试',
+  model: '模型调用',
+  tool: '工具调用',
+}
+
+/** 任务尝试状态（rca_attempt.status 六态） */
+export const ATTEMPT_STATE = {
+  STARTED: '进行中',
+  SUCCEEDED: '成功',
+  FAILED_RETRYABLE: '失败·可重试',
+  FAILED_TERMINAL: '失败·终态',
+  ABANDONED: '已放弃',
+  STALE: '已失效',
+}
+
+/** 账本调用状态（rca_model_call.state / rca_tool_invocation.state 四态） */
+export const LEDGER_STATE = {
+  PENDING: '待回执',
+  SUCCESS: '成功',
+  FAILED: '失败',
+  UNKNOWN: '结果未知',
+}
+
+/** span 状态 → 徽章类型（element-plus tag type） */
+export function spanStateTagType(state) {
+  if (state === 'SUCCEEDED' || state === 'SUCCESS') return 'success'
+  if (state === 'FAILED_RETRYABLE' || state === 'FAILED_TERMINAL' || state === 'FAILED') return 'danger'
+  if (state === 'UNKNOWN') return 'warning'
+  return 'info'
+}

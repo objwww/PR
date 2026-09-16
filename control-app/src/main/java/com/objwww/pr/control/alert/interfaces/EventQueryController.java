@@ -71,6 +71,19 @@ public class EventQueryController {
                 .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "run 不存在")));
     }
 
+    /** 3.17 Trace 瀑布：任务尝试/模型调用/工具调用三层 span + 汇总（读侧真账本直出） */
+    @GetMapping(path = "/api/rca-runs/{runId}/trace", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> trace(
+            @PathVariable String runId) {
+        UUID id = parseRunId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return runQuery.trace(id)
+                .<ResponseEntity<Map<String, Object>>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "run 不存在")));
+    }
+
     /** 初次读取 {@code ?after_seq=0}；gap=true → 客户端按 latestSeq 全量重同步 */
     @GetMapping(path = "/api/rca-runs/{runId}/events", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> events(

@@ -67,6 +67,8 @@ public class RunQueryService {
     private final com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels;
     private final com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger;
     private final com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository commands;
+    /** 3.17 Trace 瀑布读面（可空=旧装配无此面 → span 空表如实） */
+    private final com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader traceReader;
 
     public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
                            TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
@@ -82,6 +84,18 @@ public class RunQueryService {
                            com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels,
                            com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
                            com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository commands) {
+        this(runs, tasks, edges, bindings, modelCalls, claims, now,
+                cancels, toolLedger, commands, null);
+    }
+
+    public RunQueryService(RcaRunRepository runs, RcaTaskRepository tasks,
+                           TaskEdgeRepository edges, TaskExecutionBindingRepository bindings,
+                           RcaModelCallUsageReader modelCalls, ClaimStore claims,
+                           Supplier<Instant> now,
+                           com.objwww.pr.control.alert.application.tool.InFlightToolCancels cancels,
+                           com.objwww.pr.control.alert.domain.tool.RcaToolInvocationLedger toolLedger,
+                           com.objwww.pr.control.alert.domain.repository.OperatorCommandRepository commands,
+                           com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader traceReader) {
         this.runs = Objects.requireNonNull(runs, "runs");
         this.tasks = Objects.requireNonNull(tasks, "tasks");
         this.edges = Objects.requireNonNull(edges, "edges");
@@ -92,6 +106,7 @@ public class RunQueryService {
         this.cancels = cancels;
         this.toolLedger = toolLedger;
         this.commands = commands;
+        this.traceReader = traceReader;
     }
 
     /** 队列页：summary 计数 + 全量 rows（O-5：游标分页未落，nextCursor 恒 null） */
@@ -286,6 +301,68 @@ public class RunQueryService {
             block.put("pricingVersion", u.pricingVersion());
             return block;
         }).orElse(null);
+    }
+
+    /**
+     * 3.17 Trace 瀑布（/api/rca-runs/{id}/trace）：任务尝试/模型调用/工具调用三层
+     * span + 汇总。tokensTotal 只加已回报行（下限口径，与 RV08 同律——缺失行数单列
+     * tokenMissing，不猜零）；costMicros 为已定价行合计（全未定价 → null 如实）。
+     * 读面未装配 → span 空表（前端空态说明口径，不造数）。
+     */
+    public Optional<Map<String, Object>> trace(UUID runId) {
+        return runs.findById(runId).map(run -> {
+            List<com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader.SpanRow> spans =
+                    traceReader == null
+                            ? List.of()
+                            : traceReader.spansByRun(runId);
+            Map<String, Object> head = new LinkedHashMap<>();
+            head.put("id", run.id().toString());
+            head.put("status", run.state().name());
+
+            List<Map<String, Object>> rows = new ArrayList<>(spans.size());
+            for (com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader.SpanRow s : spans) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("kind", s.kind());
+                row.put("id", s.id().toString());
+                row.put("taskId", s.taskId() == null ? null : s.taskId().toString());
+                row.put("label", s.label());
+                row.put("seq", s.seq());
+                row.put("state", s.state());
+                row.put("start", s.start());
+                row.put("end", s.end());
+                row.put("latencyMs", s.latencyMs());
+                row.put("model", s.model());
+                row.put("promptTokens", s.promptTokens());
+                row.put("completionTokens", s.completionTokens());
+                row.put("totalTokens", s.totalTokens());
+                row.put("costMicros", s.costMicros());
+                row.put("errorCode", s.errorCode());
+                row.put("worker", s.worker());
+                row.put("attemptNo", s.attemptNo());
+                row.put("roleId", s.roleId());
+                rows.add(row);
+            }
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("taskSpans", spans.stream().filter(s -> "task".equals(s.kind())).count());
+            summary.put("modelSpans", spans.stream().filter(s -> "model".equals(s.kind())).count());
+            summary.put("toolSpans", spans.stream().filter(s -> "tool".equals(s.kind())).count());
+            summary.put("tokensTotal", spans.stream()
+                    .map(com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader.SpanRow::totalTokens)
+                    .filter(Objects::nonNull).mapToLong(Integer::longValue).sum());
+            summary.put("tokenMissing", spans.stream()
+                    .filter(s -> "model".equals(s.kind()) && s.totalTokens() == null).count());
+            summary.put("costMicros", spans.stream()
+                    .map(com.objwww.pr.control.alert.domain.repository.RcaRunTraceReader.SpanRow::costMicros)
+                    .filter(Objects::nonNull).mapToLong(Long::longValue)
+                    .boxed().reduce(Long::sum).orElse(null));
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("run", head);
+            out.put("spans", rows);
+            out.put("summary", summary);
+            return out;
+        });
     }
 
     // ------------------------------------------------------------------ 行投影
