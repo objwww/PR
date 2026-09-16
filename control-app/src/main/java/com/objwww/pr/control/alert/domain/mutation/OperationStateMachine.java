@@ -18,7 +18,9 @@ import java.util.Set;
  * RECONCILING → VERIFIED | RETRYABLE | ESCALATED | FAILED_CONFIRMED
  * RETRYABLE   → DISPATCHED             （重派，锁保持）
  * VERIFIED    → COMPLETED
- * 终态（COMPLETED/FAILED_CONFIRMED/ESCALATED/CANCELLED_BEFORE_DISPATCH）→ 无出边
+ * ESCALATED   → COMPLETED | FAILED_CONFIRMED   （AM8 人工裁决专用边——终态复活
+ *               的唯一合法通道，裁决人/结论必须事件留痕；锁随裁决释放）
+ * 终态（COMPLETED/FAILED_CONFIRMED/CANCELLED_BEFORE_DISPATCH）→ 无出边
  * </pre>
  *
  * <p>跃迁合法性是域层纯函数：消费模板（B4 §2.8）与 reconcile 驱动（B5）共用同一张表，
@@ -43,7 +45,8 @@ public final class OperationStateMachine {
             Map.entry(OperationStatus.VERIFIED, Set.of(OperationStatus.COMPLETED)),
             Map.entry(OperationStatus.COMPLETED, Set.of()),
             Map.entry(OperationStatus.FAILED_CONFIRMED, Set.of()),
-            Map.entry(OperationStatus.ESCALATED, Set.of()),
+            Map.entry(OperationStatus.ESCALATED,
+                    Set.of(OperationStatus.COMPLETED, OperationStatus.FAILED_CONFIRMED)),
             Map.entry(OperationStatus.CANCELLED_BEFORE_DISPATCH, Set.of()));
 
     private OperationStateMachine() {

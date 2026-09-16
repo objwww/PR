@@ -1,6 +1,9 @@
 package com.objwww.pr.control.alert.interfaces;
 
+import com.objwww.pr.control.alert.application.mutation.OperationLedgerStore;
 import com.objwww.pr.control.alert.application.mutation.OperationPlanner;
+import com.objwww.pr.control.alert.application.mutation.ResourceLockStore;
+import com.objwww.pr.control.alert.domain.event.RcaEventAppender;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +31,11 @@ public class MutationOpsController {
             shadowReader;
     private final com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService
             guardianFlow;
+    private final com.objwww.pr.control.alert.application.approval.ApprovalDecisionService
+            decisionService;
+    private final OperationLedgerStore operations;
+    private final ResourceLockStore locks;
+    private final RcaEventAppender events;
 
     public MutationOpsController(
             org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner,
@@ -39,11 +47,21 @@ public class MutationOpsController {
                     shadowReader,
             org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService>
-                    guardianFlow) {
+                    guardianFlow,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.ApprovalDecisionService>
+                    decisionService,
+            org.springframework.beans.factory.ObjectProvider<OperationLedgerStore> operations,
+            org.springframework.beans.factory.ObjectProvider<ResourceLockStore> locks,
+            org.springframework.beans.factory.ObjectProvider<RcaEventAppender> events) {
         this.planner = Objects.requireNonNull(planner);
         this.suspensions = suspensions == null ? null : suspensions.getIfAvailable();
         this.shadowReader = shadowReader == null ? null : shadowReader.getIfAvailable();
         this.guardianFlow = guardianFlow == null ? null : guardianFlow.getIfAvailable();
+        this.decisionService = decisionService == null ? null : decisionService.getIfAvailable();
+        this.operations = operations == null ? null : operations.getIfAvailable();
+        this.locks = locks == null ? null : locks.getIfAvailable();
+        this.events = events == null ? null : events.getIfAvailable();
     }
 
     public record PlanRequest(UUID intentId) {
@@ -100,6 +118,75 @@ public class MutationOpsController {
         }
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("resumed", suspensions.resume(request.runId()));
+        return body;
+    }
+
+    /** AM8 人工决策入口：PENDING 审批的人类裁决（approver 不得冒用 guardian 前缀） */
+    public record DecideRequest(UUID requestId, String approverId, String approverRole,
+            boolean approved) {
+    }
+
+    @PostMapping("/decide")
+    public Map<String, Object> decide(@RequestBody DecideRequest request) {
+        Objects.requireNonNull(request.requestId(), "requestId 必填");
+        if (decisionService == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "APPROVAL_FACE_NOT_ASSEMBLED");
+        }
+        if (request.approverId() == null || request.approverId().startsWith("guardian:")) {
+            return Map.of("status", "REJECTED", "reason", "INVALID_APPROVER");
+        }
+        String state = decisionService.decide(request.requestId(), request.approverId(),
+                request.approverRole(), request.approved());
+        return Map.of("status", "OK", "approval_state", state);
+    }
+
+    /** AM8 人工裁决：ESCALATED operation 的终裁（COMPLETED/FAILED_CONFIRMED），锁随裁决释放 */
+    public record OperateRequest(UUID operationId, String ruling, String operatorId) {
+    }
+
+    @PostMapping("/operate")
+    public Map<String, Object> operate(@RequestBody OperateRequest request) {
+        Objects.requireNonNull(request.operationId(), "operationId 必填");
+        Objects.requireNonNull(request.operatorId(), "operatorId 必填");
+        var target = "COMPLETED".equals(request.ruling())
+                ? com.objwww.pr.control.alert.domain.mutation.OperationStatus.COMPLETED
+                : "FAILED_CONFIRMED".equals(request.ruling())
+                ? com.objwww.pr.control.alert.domain.mutation.OperationStatus.FAILED_CONFIRMED
+                : null;
+        if (target == null) {
+            return Map.of("status", "REJECTED", "reason", "INVALID_RULING");
+        }
+        if (operations == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "MUTATION_FACE_NOT_ASSEMBLED");
+        }
+        var operation = operations.findById(request.operationId()).orElse(null);
+        if (operation == null || operation.status()
+                != com.objwww.pr.control.alert.domain.mutation.OperationStatus.ESCALATED) {
+            return Map.of("status", "REJECTED", "reason", "NOT_ESCALATED");
+        }
+        boolean advanced = operations.transition(request.operationId(),
+                com.objwww.pr.control.alert.domain.mutation.OperationStatus.ESCALATED,
+                target, java.time.Instant.now());
+        if (!advanced) {
+            return Map.of("status", "REJECTED", "reason", "CAS_LOST");
+        }
+        boolean lockReleased = operation.resourceUid() != null
+                && locks != null
+                && locks.releaseOnTerminalState(operation.resourceUid(),
+                request.operationId());
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("kind", "OPERATION_RULING");
+        payload.put("operation_id", request.operationId().toString());
+        payload.put("ruling", request.ruling());
+        payload.put("operator_id", request.operatorId());
+        payload.put("lock_released", lockReleased);
+        events.append(operation.runId(), new RcaEventAppender.EventDraft(UUID.randomUUID(),
+                "OPERATION_RULING", com.objwww.pr.control.alert.application.mutation
+                .OperationPlanner.CanonicalEventJson.canonicalize(payload)));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "OK");
+        body.put("ruling", request.ruling());
+        body.put("lock_released", lockReleased);
         return body;
     }
 

@@ -183,6 +183,20 @@ public class PostgresAlertInboxRepository implements AlertInboxRepository {
     }
 
     @Override
+    public boolean releaseQuarantined(UUID id, String releasedBy, Instant now) {
+        return jdbc.sql("""
+                UPDATE alert_inbox SET state = 'RECEIVED', updated_at = :now,
+                    last_error = jsonb_set(COALESCE(last_error, '{}'::jsonb),
+                        '{released_by}', to_jsonb(:releasedBy::text))
+                 WHERE id = :id AND state = 'QUARANTINED'
+                """)
+                .param("now", Timestamp.from(now))
+                .param("releasedBy", releasedBy)
+                .param("id", id)
+                .update() == 1;
+    }
+
+    @Override
     public Optional<AlertInbox> findById(UUID id) {
         List<AlertInbox> rows = jdbc.sql(SELECT_BY_ID)
                 .param("id", id)

@@ -46,5 +46,8 @@ public interface AlertInboxRepository {
     /** 崩溃回收：租约过期的 PROCESSING→RECEIVED（epoch 不动，重领时再 +1） */
     long reclaimExpired(Instant now);
 
+    /** AM8 人工放行：QUARANTINED→RECEIVED（CAS；false=非隔离态）；放行人入审计 */
+    boolean releaseQuarantined(UUID id, String releasedBy, Instant now);
+
     Optional<AlertInbox> findById(UUID id);
 }

@@ -35,7 +35,10 @@ class OperationStateMachineTest {
                 new Edge(OperationStatus.RECONCILING, OperationStatus.ESCALATED),
                 new Edge(OperationStatus.RECONCILING, OperationStatus.FAILED_CONFIRMED),
                 new Edge(OperationStatus.RETRYABLE, OperationStatus.DISPATCHED),
-                new Edge(OperationStatus.VERIFIED, OperationStatus.COMPLETED));
+                new Edge(OperationStatus.VERIFIED, OperationStatus.COMPLETED),
+                // PE-E2：AM8 人工裁决专用边（ESCALATED 锁保持至人工裁决后的两个出口）
+                new Edge(OperationStatus.ESCALATED, OperationStatus.COMPLETED),
+                new Edge(OperationStatus.ESCALATED, OperationStatus.FAILED_CONFIRMED));
         for (Edge edge : legal) {
             assertThat(OperationStateMachine.canTransition(edge.from(), edge.to()))
                     .as("合法边 %s → %s", edge.from(), edge.to())
@@ -63,7 +66,9 @@ class OperationStateMachineTest {
                 OperationStatus.DISPATCHED, OperationStatus.CANCELLED_BEFORE_DISPATCH))
                 .isInstanceOf(IllegalTransitionException.class);
         for (OperationStatus terminal : OperationStatus.values()) {
-            if (!terminal.isTerminal()) {
+            if (!terminal.isTerminal() || terminal == OperationStatus.ESCALATED) {
+                // ESCALATED 保留人工裁决出边（PE-E2：COMPLETED/FAILED_CONFIRMED 专用边），
+                // 不在"零出边"断言范围
                 continue;
             }
             for (OperationStatus any : OperationStatus.values()) {

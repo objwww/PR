@@ -323,6 +323,12 @@ class AlertWebhookControllerTest {
             }
 
             @Override
+            public boolean releaseQuarantined(java.util.UUID id, String releasedBy,
+                                              java.time.Instant now) {
+                throw new DataAccessResourceFailureException("db down");
+            }
+
+            @Override
             public Optional<AlertInbox> claimNext(String owner, java.time.Instant now,
                                                   java.time.Duration lease) {
                 return Optional.empty();

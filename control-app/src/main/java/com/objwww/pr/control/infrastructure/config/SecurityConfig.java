@@ -101,7 +101,8 @@ public class SecurityConfig {
                                 // PC-C2：mutation shadow 操作面 = operator bearer 机器线
                                 // 驱动（cookie 凭证不参与；浏览器无此入口），路径级豁免
                                 // 不产生跨站伪造窗口（config-bundles 同律）
-                                "/api/mutation/**")
+                                // PE-E2：AM8 人工面同上（operator bearer 机器线）
+                                "/api/mutation/**", "/api/inbox-admin/**")
                         .ignoringRequestMatchers(
                                 new AntPathRequestMatcher("/api/duty/notifications", "POST")))
                 .addFilterBefore(machineBearerAuthnFilter, UsernamePasswordAuthenticationFilter.class)
@@ -140,7 +141,8 @@ public class SecurityConfig {
                                 "/api/mcp-servers/**", "/api/release-assets/**",
                                 // PC-C2：mutation shadow 操作面（真锚消费模板驱动；
                                 // Runner 恒 dry-run，真实执行随 Phase D 另设门）
-                                "/api/mutation/**")
+                                // PE-E2：AM8 人工面（审批决策/操作裁决/隔离放行）
+                                "/api/mutation/**", "/api/inbox-admin/**")
                         .hasRole("OPERATOR")
                         .anyRequest().denyAll())
                 .formLogin(form -> form

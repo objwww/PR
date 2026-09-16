@@ -211,6 +211,20 @@ public final class AlertInMemoryStores {
         }
 
         @Override
+        public synchronized boolean releaseQuarantined(UUID id, String releasedBy,
+                Instant now) {
+            AlertInbox row = rows.get(id);
+            if (row == null || row.state() != InboxState.QUARANTINED) {
+                return false;
+            }
+            rows.put(id, new AlertInbox(row.id(), row.envelope(), InboxState.RECEIVED,
+                    row.decision(), row.leaseOwner(), row.leaseUntil(), row.leaseEpoch(),
+                    row.attemptCount(), row.maxAttempts(), row.nextRetryAt(),
+                    row.lastError(), row.receivedAt(), now, row.processedAt()));
+            return true;
+        }
+
+        @Override
         public synchronized Optional<AlertInbox> claimNext(String owner, Instant now, Duration lease) {
             Optional<AlertInbox> candidate = rows.values().stream()
                     .filter(r -> r.state() == InboxState.RECEIVED || r.state() == InboxState.RETRY_WAIT)
