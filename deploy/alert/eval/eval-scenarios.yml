@@ -18,10 +18,15 @@
 #   （S1R1 恢复判败 alerts_still_firing → 门关闭 → 9 Case gate_blocked，批 14 分钟空转）；
 #   证据 docs/测试证据/eval/full-0910/。S3~S5 不动：靶场 Gauge 面秒级 resolved
 #   （S3 烟测两轮实测 off→resolved ≤30s），600s 留 20x 余量。
-registry_version: 2
+# v3（2026-09-18）= M-a 业务扩编：追加 I 类业务交易链路 S16~S25（v2 设计 §3.1，chaos_family
+#   F9~F17）+ 词库扩容绑定 lexicon_version 2（business.* 语义枚举 10 值 + reason_code 10 值）；
+#   执行契约 order 扩至 15 场景。HOLDOUT H7/H8 只留设计不注册（§3.5，M-e 批次处理）。
+#   S23 复合低剂量标注"部分验证"：M-a 只交付规则面+注册，复合激活（C3）与评分器部分分（E3）
+#   依赖 M-b；S16/S18/S20/S23=TUNING，S17/S19/S21/S22/S24/S25=VALIDATION（§6.2）。
+registry_version: 3
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
-lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 1)"
+lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 2)"
 
 authority_refs:
   - docs/告警AM3-技术方案.md §6.4（三指标冻结公式）/ §6.7（五场景枚举写死）
@@ -29,12 +34,18 @@ authority_refs:
   - docs/告警AM3-落码技术方案.md M3-17（统一 ScenarioDriver + 评测时间参数显式化 + 上轮 resolved 未归并禁入下轮）
   - deploy/alert/prometheus/rules/arena.yml（AM2 症状规则落码面：告警名/标签/指标名）
   - deploy/alert/prometheus/rules/prometheus-rules-checkout.yml（AM0 Sloth 烧损率规则落码面）
+  - research/alert-agent-eval-20260917/故障场景扩展详细设计.md（v3 扩编权威：§1.2 七要素 /
+      §3.1 S16~S25 详设 / §6.2 分区归属）
+  - deploy/alert/prometheus/rules/arena-business.yml（v3 业务症状规则落码面：alertname/
+      severity/fault_type 标签冻结来源）
 
 # -------------------------------------------------------------------------------------
 # 执行契约（全场景共有，冻结面）
 # -------------------------------------------------------------------------------------
 execution_contract:
-  order: [S1, S2, S3, S4, S5]        # 串行执行（§6.7）；[P5 提案] 顺序 = AM0 两个在前、靶场三个在后
+  # v3 扩编：S16~S25 追加入串行序（T8/T9 演练顺序=S16→S25；S23 复合激活前不参与跑批，
+  # 标注部分验证）；AM0 长窗场景（S1/S2）评测编排排最后的既定原则在批内排序时仍适用
+  order: [S1, S2, S3, S4, S5, S16, S17, S18, S19, S20, S21, S22, S23, S24, S25]
   scenario_concurrency: 1            # eval 场景并发=1（§6.8）；全局 Live E2E slot=1（AM2 C-6）
   rounds_per_scenario: 2             # 每场景 2 轮取稳定性（§6.7）；每轮独立 scenario_id/eval_case_result（E2E-M3-02）
   next_round_gate: >-                # M3-17 冻结：上轮复原确认 + resolved 归并前禁止进入下一轮/下一场景
@@ -276,6 +287,524 @@ scenarios:
       max_resolved_wait_seconds: 600
       cleanup_timeout_seconds: 120
 
+  # =================================================================================
+  # M-a 业务扩编（v3，2026-09-18）：I 类业务交易链路 S16~S25
+  # 共同特征（设计 §3.1）：技术指标全部正常或仅轻微异常，只有业务计数/对账指标暴露问题；
+  # 告警面全部落在 arena-business.yml 业务埋点指标（INV-AM2-5：DomainProbe 探测产物）。
+  # 扩展键 partition / complexity / expected_evidence_checkpoints / expected_behavior_note
+  # 为白名单外注记——GoldenScenarioRegistry 只读已知键、未知键忽略（装载器头注），
+  # "只增不改"纪律下旧装载器不因新键失效；E2 检查点判定器（M-b）消费 checkpoints。
+  # HOLDOUT H7（F18_PRICE_CALC 金额错算）/H8（缓存-DB 不一致）按 §3.5 只留设计、不进本
+  # 注册表（RLS 封存；M-e HOLDOUT 实例化批次处理）。
+  # =================================================================================
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S16                        # [文档已定] v2 设计 §3.1
+    name: F9 掉单（支付成功订单未推进）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-掉单
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F9
+    target: order-arena chaos- 前缀评测流量的支付收口路径
+    partition: TUNING                       # [文档已定] v2 设计 §6.2
+    complexity: 单根因-业务对账型           # [文档已定] "技术指标全绿但业务不一致"教学范式
+    injection:
+      mechanism: 同 S3（chaos on 激活事务 + 四约束 + TTL；FaultType=F9_CALLBACK_DROP）
+      effect: >-
+        支付网关 capture 成功后故障点跳过 markPaid 收口——支付侧成功事实落库、订单侧不推进
+        （掉单）；故障点静默、无错误日志（设计 §3.1 S16 机理）
+      selector_semantics: 仅 chaos- 前缀 correlationId 命中，live 流量零污染
+      ttl: 由 eval-runner 按本轮 timing 显式给定（须落 DB TTL 上下界内）
+      token_discipline: CHAOS_ADMIN_TOKEN 仅 env 注入（INV-AM3-3），本文件不携带
+    expected_root_cause:
+      component: order-arena                # 回调收口环节在 order-arena（设计稿 order-arena/payment-callback 的模块限定）
+      fault_type: business.order_lost
+      reason_code: F9_CALLBACK_DROP
+    expected_symptom_codes:
+      - ArenaPaymentOrderMismatch           # [文档已定] arena-business.yml 落码规则
+    expected_alerts:
+      - alertname: ArenaPaymentOrderMismatch
+        severity: page
+        basis: oa_payment_order_mismatch_current > 0（探测面检出：CAPTURE 成功 × 订单未推进）
+        labels_frozen: {alertname: ArenaPaymentOrderMismatch, service: order-arena, fault_type: F9}
+    expected_evidence_checkpoints:          # [文档已定] §3.1 S16；E8 业务量化（M-b）消费
+      - 对比支付成功数与订单创建数两条业务曲线（查错误日志无果——故障点静默）
+      - 定位回调收口环节（markPaid 缺失）
+      - 量化掉单量（估计误差 ≤20% 算命中）
+    expected_behavior_note: >-
+      工具序列骨架=业务计数对比→对账明细查询→根因环节定位；应引用 oa_payments_success_total /
+      oa_payment_order_mismatch_current 证据源；不应以"无错误日志"为由拒答
+    recovery:
+      criteria:                              # 沿 S3~S5 三条件 + C-4
+        - chaos off → CAS ACTIVE→RECOVERING→CLOSED（恢复面 F9 → 注入关闭即恢复，新流量不再掉单）
+        - oa_payment_order_mismatch_current == 0（存量掉单经既有对账/补偿面收敛后归零）
+        - 无残留 firing + 补偿台账清平
+      restore_probe: oa_payment_order_mismatch_current 归零（Gauge 真值，M2-21 同源）
+      note: 存量掉单收敛依赖既有 UNKNOWN 对账/补偿机制（M2-20 面）；T8 演练实测后回填校准
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300          # 探测 gauge 面 30s 周期，秒级检出
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S17
+    name: F10 支付悬挂（下单后支付未发起）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-支付悬挂
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F10
+    target: order-arena chaos- 前缀评测流量的支付发起路径
+    partition: VALIDATION                   # [文档已定] §6.2；与 S5 构成鉴别对（有痕超时 vs 沉默悬挂）
+    complexity: 单根因
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F10_PAYMENT_SILENT）
+      effect: >-
+        支付授权 INITIATED 出生后故障点沉默——不发起网关请求也不报错，订单停"待支付"积压
+        （设计 §3.1 S17 机理）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.payment_pending
+      reason_code: F10_PAYMENT_SILENT
+    expected_symptom_codes:
+      - ArenaPendingPaymentBacklog
+    expected_alerts:
+      - alertname: ArenaPendingPaymentBacklog
+        severity: ticket
+        basis: oa_pending_payment_orders_current > 20 持续 5m（ticket 档先 firing）
+        labels_frozen: {alertname: ArenaPendingPaymentBacklog, service: order-arena, fault_type: F10, severity: ticket}
+      - alertname: ArenaPendingPaymentBacklog
+        severity: page
+        basis: 持续 15m 升 page（双档规则，page 档可能同批 firing）
+        labels_frozen: {alertname: ArenaPendingPaymentBacklog, service: order-arena, fault_type: F10, severity: page}
+    expected_evidence_checkpoints:
+      - 识别积压订单的年龄段分布（超龄 INITIATED 授权记录）
+      - 排除用户行为解释（对比历史同时段基线）
+      - 定位支付发起环节缺失而非支付网关本身（S5 鉴别：无技术超时痕迹）
+    expected_behavior_note: >-
+      与 S5（F3 超时悬挂）构成鉴别对——S5 有 UNKNOWN 对账痕迹，S17 是沉默悬挂；
+      应引用 oa_pending_payment_orders_current 与授权记录查询证据
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F10 → 注入关闭即恢复（新订单支付正常发起）
+        - oa_pending_payment_orders_current 回落至阈值（20）下
+        - 无残留 firing
+      restore_probe: oa_pending_payment_orders_current 回落阈值下
+      note: 存量 INITIATED 挂单收敛路径（对账/补偿面）在 T8 演练实测校准；若不收敛属恢复面
+            缺口，回填 ChaosRecoveryService（挂单 UNKNOWN 化）后递增 registry_version
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 900          # gauge 需积压 >20 + for 5m
+      max_resolved_wait_seconds: 900
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S18
+    name: F11 重复扣款（支付层幂等失效）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-重复扣款
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F11
+    target: order-arena chaos- 前缀评测流量的支付重试路径
+    partition: TUNING                       # [文档已定] §6.2
+    complexity: 单根因-跨层鉴别对           # [文档已定] 与 S3（订单层幂等）跨层鉴别
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F11_DOUBLE_CHARGE）
+      effect: >-
+        支付重试故障点跳过已支付闸——已 PAID 订单放行重复 capture，同订单多笔支付成功
+        （设计 §3.1 S18 机理）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.duplicate_charge
+      reason_code: F11_DOUBLE_CHARGE
+    expected_symptom_codes:
+      - ArenaDuplicatePayments
+    expected_alerts:
+      - alertname: ArenaDuplicatePayments
+        severity: page
+        basis: oa_duplicate_payments_current > 0（同订单多笔 CAPTURE 成功）
+        labels_frozen: {alertname: ArenaDuplicatePayments, service: order-arena, fault_type: F11}
+    expected_evidence_checkpoints:
+      - 与 S3 重复订单鉴别（S3 订单层幂等失效 vs S18 支付层幂等失效——跨层）
+      - 给出受影响订单规模
+      - 止损建议（冻结重试通道）
+    expected_behavior_note: >-
+      应引用支付记录（同单多笔成功 CAPTURE）与 oa_duplicate_payments_current；
+      结论必须落在"支付层"而非"订单层"幂等，否则按 S3 误答（鉴别对面）
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F11 → 注入关闭即恢复（已支付闸重新生效）
+        - oa_duplicate_payments_current == 0
+        - 无残留 firing + 重复扣款订单的退赔台账清平
+      restore_probe: oa_duplicate_payments_current 归零
+      note: 存量重复扣款的退赔路径（refund 链）在 T8 演练实测校准
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S19
+    name: F12 三方对账不平（数量差）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-对账不平
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F12
+    target: order-arena chaos- 前缀评测流量的库存扣减记账路径
+    partition: VALIDATION                   # [文档已定] §6.2
+    complexity: 单根因-多数据源关联         # [文档已定] 考对账明细新数据源的下钻
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F12_RECON_SKEW）+ C2c 对账作业（探测面产出
+        oa_recon_diff_current 与 /orders/recon/diffs 差异明细端点）
+      effect: >-
+        F12 命中订单跳过 DISCOUNT 扣减行——订单-支付-库存三方记账数量差，对账作业检出差异
+        （设计 §3.1 S19 机理；本场景教"数量差"，金额差型是 H7 组合留出）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.reconciliation_mismatch
+      reason_code: F12_RECON_SKEW
+    expected_symptom_codes:
+      - ArenaReconciliationDiff
+    expected_alerts:
+      - alertname: ArenaReconciliationDiff
+        severity: page
+        basis: abs(oa_recon_diff_current) > 0（对账作业差异明细见 /orders/recon/diffs）
+        labels_frozen: {alertname: ArenaReconciliationDiff, service: order-arena, fault_type: F12}
+    expected_evidence_checkpoints:
+      - 读对账差异明细（/orders/recon/diffs 新数据源）
+      - 下钻差异类型（缺扣减资源类型——数量差）
+      - 关联同时段其他告警（排除复合故障）
+    expected_behavior_note: >-
+      应引用 oa_recon_diff_current 与差异明细端点；HOLDOUT H7 同告警不同根因
+      （金额差→F18_PRICE_CALC），本场景必须答数量差方向
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F12 → 注入关闭即恢复（扣减行重新齐全）
+        - oa_recon_diff_current == 0（对账作业复扫归零）
+        - 无残留 firing
+      restore_probe: oa_recon_diff_current 归零
+      note: 存量差异订单的补记账路径在 T8 演练实测校准
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S20
+    name: F13 库存超卖（预占竞态）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-库存超卖
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F13
+    target: order-arena chaos- 前缀评测流量的库存预占路径
+    partition: TUNING                       # [文档已定] §6.2
+    complexity: 单根因-并发条件            # [文档已定] 考竞态推理
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F13_OVERSELL）
+      effect: >-
+        库存预占故障点在正常扣减行后补插超额 INVENTORY DEDUCT 行（同订单多笔扣减=超卖事实）。
+        落码为确定性超额行（设计稿"check-then-act 竞态+流量脉冲"的等价实现——两 driver 协同
+        的脉冲编排依赖 M-b 组合注入，届时递增 registry_version 校准）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.inventory_oversell
+      reason_code: F13_OVERSELL
+    expected_symptom_codes:
+      - ArenaOversell
+    expected_alerts:
+      - alertname: ArenaOversell
+        severity: page
+        basis: oa_inventory_negative_total > 0（同订单多笔 INVENTORY DEDUCT）
+        labels_frozen: {alertname: ArenaOversell, service: order-arena, fault_type: F13}
+    expected_evidence_checkpoints:
+      - 确认超卖事实（负库存/超额扣减记录）
+      - 识别竞态条件模式（与流量时间线对齐）
+      - 区分"超卖"与"库存数据错误"
+    expected_behavior_note: >-
+      应引用资源台账（INVENTORY DEDUCT 行数>1）与 oa_inventory_negative_total；
+      量化超卖单量（E8 误差 ≤20%）
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F13 → 注入关闭即恢复（不再产生超额行）
+        - oa_inventory_negative_total == 0
+        - 无残留 firing + 超额扣减的回补台账清平
+      restore_probe: oa_inventory_negative_total 归零
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S21
+    name: F14 下单事件丢失（履约未触发）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-消息丢失
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F14
+    target: order-arena chaos- 前缀评测流量的履约触发路径
+    partition: VALIDATION                   # [文档已定] §6.2
+    complexity: 单根因-无痕丢失型           # [文档已定]
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F14_EVENT_LOST）
+      effect: >-
+        收口故障点跳过履约单落地（dropFulfillment）——订单已创建但履约下游零感知，
+        无错误日志（设计 §3.1 S21 机理）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.event_lost
+      reason_code: F14_EVENT_LOST
+    expected_symptom_codes:
+      - ArenaFulfillmentGap
+    expected_alerts:
+      - alertname: ArenaFulfillmentGap
+        severity: ticket
+        basis: increase(oa_orders_created_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
+        labels_frozen: {alertname: ArenaFulfillmentGap, service: order-arena, fault_type: F14}
+    expected_evidence_checkpoints:
+      - 对比上下游业务计数差（创建 vs 履约发起）
+      - 查消息链路（履约触发面）而非错误日志（无痕）
+      - 估计丢失时间窗
+    expected_behavior_note: >-
+      counter 差值式告警——firing 需 10m 窗累积，评测编排应放长 max_firing_wait；
+      应引用 oa_orders_created_total / oa_fulfillments_started_total 两条 counter 曲线
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F14 → 注入关闭即恢复（履约单重新成对落地）
+        - increase 差值回落阈值（10）下——10m 窗稀释需 ~10min
+        - 无残留 firing
+      restore_probe: oa_orders_created_total 与 oa_fulfillments_started_total 差值回落
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 900          # 10m 差值窗 + 余量
+      max_resolved_wait_seconds: 900        # 复位后 10m 窗稀释
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S22
+    name: F15 消息重复消费（重复履约）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-重复消费
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F15
+    target: order-arena chaos- 前缀评测流量的履约消费路径
+    partition: VALIDATION                   # [文档已定] §6.2
+    complexity: 单根因-鉴别对               # [文档已定] 与 S18 鉴别（消息层 vs 支付层）
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F15_DUPLICATE_CONSUME）+ C2d 履约消费模拟器
+        （oa_fulfillment_attempt 台账，V8 迁移）
+      effect: >-
+        消费端故障点对已履约单重复插 attempt 行——at-least-once 语义下消费幂等缺失，
+        重复履约/重复通知（设计 §3.1 S22 机理）
+      selector_semantics: 仅 chaos- 前缀命中（consumeOnce 扫 CONFIRMED 无 attempt 行的履约单），
+        live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.duplicate_fulfillment
+      reason_code: F15_DUPLICATE_CONSUME
+    expected_symptom_codes:
+      - ArenaDuplicateFulfillment
+    expected_alerts:
+      - alertname: ArenaDuplicateFulfillment
+        severity: ticket
+        basis: oa_duplicate_fulfillments_current > 0（履约单 attempt 行数>1）
+        labels_frozen: {alertname: ArenaDuplicateFulfillment, service: order-arena, fault_type: F15}
+    expected_evidence_checkpoints:
+      - 识别 at-least-once 语义下的消费幂等缺失
+      - 与 S18 重复扣款鉴别（消息层 vs 支付层——用户体感同为"重复"，根因层不同）
+      - 给出重复通知的影响面
+    expected_behavior_note: >-
+      应引用 oa_fulfillment_attempt 台账与 oa_duplicate_fulfillments_current；
+      与 S18 构成鉴别对（S18 答支付层、S22 必须答消息层）
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F15 → 注入关闭即恢复（消费幂等闸重新生效）
+        - oa_duplicate_fulfillments_current == 0
+        - 无残留 firing
+      restore_probe: oa_duplicate_fulfillments_current 归零
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300          # 消费循环 10s 周期，检出快
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S23
+    name: 下单成功率 KPI 下跌（多因素低剂量）
+    fault_source: AM2 靶场                  # 复合低剂量（F1 低比例 + 下游小延迟）
+    scenario_type: 业务交易链路-KPI 下跌
+    driver: ArenaChaosScenarioDriver        # M-b 起双 driver 协同（chaos + flagd 延迟）
+    chaos_family: COMPOSITE_LOW_DOSE        # 告警标签面 fault_type（arena-business.yml S23 行）
+    target: order-arena chaos- 前缀评测流量的下单全链路
+    partition: TUNING                       # [文档已定] §6.2
+    complexity: 多因素低剂量                # [文档已定] 业务 SLO 驱动诊断的范式教学
+    injection:
+      mechanism: >-
+        [部分验证] M-a 只交付告警规则面+本注册（ArenaOrderSuccessRateLow promtool 绿）；
+        复合注入本体 = chaos F1 低比例（2%）+ flagd 下游小延迟（200ms）双 driver 协同，
+        依赖 M-b C3 复合激活（DB 约束放宽"同 scenario 多 fault"）后启用跑批
+      effect: >-
+        每条技术指标单独看都不越阈，但业务成功率从 ~99.5% 跌到 ~96%（设计 §3.1 S23 机理）
+      selector_semantics: 仅 chaos- 前缀命中（F1 面），延迟面 flagd 全局——演练须全 chaos-
+        隔离面运行（execution_contract.traffic_isolation）
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.kpi_degradation
+      reason_code: COMPOSITE_LOW_DOSE
+    expected_symptom_codes:
+      - ArenaOrderSuccessRateLow
+    expected_alerts:
+      - alertname: ArenaOrderSuccessRateLow
+        severity: page
+        basis: sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_created_total[5m])) < 0.98 持续 5m
+        labels_frozen: {alertname: ArenaOrderSuccessRateLow, service: order-arena, fault_type: COMPOSITE_LOW_DOSE}
+    expected_evidence_checkpoints:
+      - 从业务 KPI 反推技术贡献分解
+      - 识别多因素叠加（幂等失效低比例 + 下游延迟）
+      - 避免强行归因单根因——输出"双因素贡献拆分"才算满分，只答一个=部分命中（E3 评分器，M-b）
+    expected_behavior_note: >-
+      多根因场景（S15 之后的第二个复合点）——评分器集合匹配+部分分依赖 M-b E3；
+      sum() 全局口径要求演练在全 chaos- 隔离面运行（live 基线并存时稀释成功率）
+    recovery:
+      criteria:
+        - 复合注入全部归零（F1 比例归零 + 延迟归零）→ 成功率回升 ≥0.98
+        - 告警 resolved 无残留 firing
+        - 无补偿台账残留
+      restore_probe: oa_orders_success_total / oa_orders_created_total 速率比回升 0.98 上
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 900          # rate 5m 窗 + for 5m
+      max_resolved_wait_seconds: 900
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S24
+    name: F16 断流（零订单）
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-断流
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F16
+    target: order-arena chaos- 前缀评测流量的创单入口
+    partition: VALIDATION                   # [文档已定] §6.2；教学-考试对（教 S24 → 考 H6 静默盲区）
+    complexity: 单根因                      # [文档已定] H6 静默场景的教学前置
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F16_INGRESS_SILENT）
+      effect: >-
+        入口静默——create() 直接返回 accepted 零落单，订单创建计数归零
+        （设计 §3.1 S24 机理；白天基线下 5 分钟零订单即断流）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.zero_flow
+      reason_code: F16_INGRESS_SILENT
+    expected_symptom_codes:
+      - ArenaOrderZeroFlow
+    expected_alerts:
+      - alertname: ArenaOrderZeroFlow
+        severity: page
+        basis: sum(rate(oa_orders_created_total[5m])) == 0 持续 5m
+        labels_frozen: {alertname: ArenaOrderZeroFlow, service: order-arena, fault_type: F16}
+    expected_evidence_checkpoints:
+      - 区分"真断流"与"指标采集断了"（查探针自证 oa_domain_probe_up——H6 教学前置）
+      - 定位入口环节（create() 静默拒绝）
+      - 排除流量发生器侧解释（发生器仍在投递）
+    expected_behavior_note: >-
+      sum() 全局口径在 live 基线并存时不会归零——演练按执行契约 traffic_isolation
+      全 chaos- 面运行；Agent 应先查探针自证再下"断流"结论
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F16 → 注入关闭即恢复（创单入口重新放行）
+        - oa_orders_created_total 速率恢复非零
+        - 无残留 firing
+      restore_probe: 订单创建速率恢复 > 0
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 900          # rate 5m 归零窗 + for 5m
+      max_resolved_wait_seconds: 900        # 复位后 5m 零窗稀释
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  - scenario_id: S25
+    name: F17 履约超时积压
+    fault_source: AM2 靶场
+    scenario_type: 业务交易链路-履约积压
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F17
+    target: order-arena chaos- 前缀评测流量的履约收口路径
+    partition: VALIDATION                   # [文档已定] §6.2
+    complexity: 单根因                      # [文档已定] 告警在链路下游，诱导归因到下单环节
+    injection:
+      mechanism: 同 S3（chaos on；FaultType=F17_FULFILL_SLOW）
+      effect: >-
+        履约收口故障点 enableBookingOnly——履约单停 CONFIRMING 不再推进，SLA 超时积压；
+        下单链路完全正常（设计 §3.1 S25 机理）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      ttl: 同 S3
+      token_discipline: 同 S3
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.fulfillment_timeout
+      reason_code: F17_FULFILL_SLOW
+    expected_symptom_codes:
+      - ArenaFulfillmentSlaBreach
+    expected_alerts:
+      - alertname: ArenaFulfillmentSlaBreach
+        severity: ticket
+        basis: oa_fulfillment_overdue_current > 15（CONFIRMING 超龄积压）
+        labels_frozen: {alertname: ArenaFulfillmentSlaBreach, service: order-arena, fault_type: F17}
+    expected_evidence_checkpoints:
+      - 积压趋势识别（CONFIRMING 停留时长分布）
+      - 定位履约环节而非下单环节（告警在下游——诱导归因错误的反面教材）
+      - SLA 影响量化（超龄单量）
+    expected_behavior_note: >-
+      应引用 oa_fulfillment_overdue_current 与履约单状态查询；结论必须落在履约收口
+      而非下单链路（下游告警的归因诱导面）
+    recovery:
+      criteria:
+        - chaos off → 恢复面 F17 → 注入关闭即恢复（新订单履约正常收口）
+        - oa_fulfillment_overdue_current 回落阈值（15）下
+        - 无残留 firing
+      restore_probe: oa_fulfillment_overdue_current 回落阈值下
+      note: 存量 CONFIRMING 积压单的收敛（补收口/补偿面）在 T9 演练实测校准
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 600          # gauge 需积压 >15
+      max_resolved_wait_seconds: 900
+      cleanup_timeout_seconds: 120
+
 # -------------------------------------------------------------------------------------
 # 与 ScenarioMapExportV1（AM2 M2-24）的字段对齐（消费方 AM3 M3-10）
 # 本文件 = 激活前的"预登记面"；ExportV1 = 激活后按 C-6 归属算法回填的"运行时面"。
@@ -305,3 +834,8 @@ scenario_map_export_mapping:
     与 expected_root_cause.fault_type 同值域），保证 S1/S2（无靶场故障族）与 S3~S5 同构；
     靶场告警标签面上的 fault_type=F1/F2/F3 单列于 chaos_family 与 expected_alerts.labels_frozen，
     两者是不同值域（语义枚举 vs 故障族代号），C-6 指纹消费的是后者。
+  fault_type_vocabulary_note_v3: >-
+    v3 扩编沿用同构原则：S16~S25 顶层 fault_type 取语义枚举（business.*，v2 设计 §3.1 原文
+    取值），已扩入同目录 synonym-lexicon-v1.yml（v2 词表，lexicon_version: 2）；靶场告警标签面
+    fault_type=F9~F17 / COMPOSITE_LOW_DOSE 单列于 chaos_family 与 labels_frozen。
+    ExportV1 的"未知 fault_type/reason_code 拒绝"按词表当前版本判定（M2-24 契约）。

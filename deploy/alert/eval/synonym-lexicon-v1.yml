@@ -14,7 +14,13 @@
 #       待首批评测人工复核与主会话确认。
 # =====================================================================================
 
-lexicon_version: 1
+# v2（2026-09-18）= M-a 业务扩编：I 类业务交易链路 S16~S25 扩入 fault_type 10 值
+#   （business.* dotted 语义枚举——v2 设计 §3.1 GT 原文取值，与首批 UPPER_SNAKE 并存，
+#   评分=全串精确等值不受风格影响）+ reason_code 10 值（F9~F17 + COMPOSITE_LOW_DOSE）；
+#   component 不新增（order-arena 复用，绑定扩展以注释标注）。
+#   评分侧影响：词表外取值仍 NO_MATCH（M-04），扩值只放宽不收紧；
+#   H7/H8 的 GT（business.price_miscalc/F18_PRICE_CALC 等）随 M-e HOLDOUT 批次入表。
+lexicon_version: 2
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
 applies_to:
@@ -205,6 +211,228 @@ fault_types:
       - 状态回跳
       - 依赖不可达
 
+  # ------------------------- v2 扩编：I 类业务交易链路（S16~S25） -------------------------
+
+  - code: business.order_lost            # [文档已定] v2 设计 §3.1 S16 GT 原文
+    chaos_family: F9
+    bound_scenario: S16
+    description: 支付侧成功但订单侧未推进（掉单）——技术指标全绿，只有业务对账指标暴露
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S16
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaPaymentOrderMismatch）
+    synonyms:
+      - order lost
+      - order_lost
+      - dropped order
+      - dropped orders
+      - missing orders
+      - payment success without order
+      - payment-order mismatch
+      - 掉单
+      - 订单丢失
+      - 支付成功无订单
+      - 支付订单不一致
+      - 有款无单
+    negative_examples:
+      - 重复扣款
+      - 支付悬挂
+
+  - code: business.payment_pending       # [文档已定] §3.1 S17
+    chaos_family: F10
+    bound_scenario: S17
+    description: 支付发起沉默——不发起网关请求也不报错，订单停"待支付"积压（与 S5 有痕超时构成鉴别对）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S17
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaPendingPaymentBacklog）
+    synonyms:
+      - payment pending
+      - payment_pending
+      - pending payment backlog
+      - silent payment initiation
+      - awaiting payment backlog
+      - 支付悬挂
+      - 待支付积压
+      - 待支付订单积压
+      - 支付未发起
+      - 沉默悬挂
+    negative_examples:
+      - 超时未知
+      - 支付网关不可达
+
+  - code: business.duplicate_charge      # [文档已定] §3.1 S18
+    chaos_family: F11
+    bound_scenario: S18
+    description: 同一订单多笔支付成功（支付层幂等失效）——与 S3 订单层幂等失效跨层鉴别
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S18
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaDuplicatePayments）
+    synonyms:
+      - duplicate charge
+      - duplicate_charge
+      - double charge
+      - multiple successful payments per order
+      - repeated capture
+      - 重复扣款
+      - 双重扣款
+      - 一单多扣
+      - 重复支付成功
+    negative_examples:
+      - 重复创单
+      - 重复履约
+
+  - code: business.reconciliation_mismatch   # [文档已定] §3.1 S19
+    chaos_family: F12
+    bound_scenario: S19
+    description: 订单-支付-库存三方记账数量差（对账作业检出）——金额差型是 H7 组合留出，本值域只教数量差
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S19
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaReconciliationDiff）
+    synonyms:
+      - reconciliation mismatch
+      - reconciliation_mismatch
+      - recon diff
+      - reconciliation diff
+      - ledger mismatch
+      - 对账不平
+      - 三方对账差异
+      - 对账差异
+      - 记账数量差
+      - 数量差
+    negative_examples:
+      - 金额差
+      - 价格算错
+
+  - code: business.inventory_oversell    # [文档已定] §3.1 S20
+    chaos_family: F13
+    bound_scenario: S20
+    description: 库存预占竞态（check-then-act 原子性缺失）致同订单多笔扣减/负库存——超卖事实
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S20
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaOversell）
+    synonyms:
+      - inventory oversell
+      - inventory_oversell
+      - oversell
+      - negative inventory
+      - oversold stock
+      - 超卖
+      - 库存超卖
+      - 负库存
+      - 超额扣减
+      - 库存竞态
+    negative_examples:
+      - 库存数据错误
+      - 对账不平
+
+  - code: business.event_lost            # [文档已定] §3.1 S21
+    chaos_family: F14
+    bound_scenario: S21
+    description: 下单事件无痕丢失——订单已创建但履约下游零感知，无错误日志
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S21
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaFulfillmentGap）
+    synonyms:
+      - event lost
+      - event_lost
+      - message lost
+      - fulfillment gap
+      - event not delivered
+      - 消息丢失
+      - 事件丢失
+      - 下单事件丢失
+      - 履约未触发
+      - 无痕丢失
+    negative_examples:
+      - 重复消费
+      - 消息积压
+
+  - code: business.duplicate_fulfillment   # [文档已定] §3.1 S22
+    chaos_family: F15
+    bound_scenario: S22
+    description: at-least-once 语义下消费幂等缺失——同一履约单重复执行（与 S18 鉴别：消息层 vs 支付层）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S22
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaDuplicateFulfillment）
+    synonyms:
+      - duplicate fulfillment
+      - duplicate_fulfillment
+      - duplicate consumption
+      - message duplicate consume
+      - at-least-once duplicate
+      - 重复消费
+      - 消息重复消费
+      - 重复履约
+      - 重复通知
+    negative_examples:
+      - 重复扣款
+      - 重复创单
+
+  - code: business.kpi_degradation       # [文档已定] §3.1 S23
+    chaos_family: COMPOSITE_LOW_DOSE
+    bound_scenario: S23
+    description: 多因素低剂量叠加致业务 KPI（下单成功率）下跌——单条技术指标均不越阈，考贡献拆分
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S23
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaOrderSuccessRateLow）
+    synonyms:
+      - kpi degradation
+      - kpi_degradation
+      - success rate drop
+      - success rate degradation
+      - composite low dose
+      - KPI 下跌
+      - 成功率下跌
+      - 下单成功率下跌
+      - 多因素低剂量
+      - 低剂量叠加
+    negative_examples:
+      - 单根因
+      - 依赖不可达
+
+  - code: business.zero_flow             # [文档已定] §3.1 S24
+    chaos_family: F16
+    bound_scenario: S24
+    description: 创单入口静默致零订单（真断流）——须先与"指标采集断流"鉴别（探针自证）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S24
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaOrderZeroFlow）
+    synonyms:
+      - zero flow
+      - zero_flow
+      - no orders
+      - order flow stopped
+      - ingress silent
+      - 断流
+      - 零订单
+      - 无订单
+      - 入口静默
+      - 流量归零
+    negative_examples:
+      - 探针失明
+      - 监控盲区
+
+  - code: business.fulfillment_timeout   # [文档已定] §3.1 S25
+    chaos_family: F17
+    bound_scenario: S25
+    description: 履约收口变慢致 SLA 超时积压——下单链路正常，告警在链路下游（归因诱导面）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S25
+      - deploy/alert/prometheus/rules/arena-business.yml（ArenaFulfillmentSlaBreach）
+    synonyms:
+      - fulfillment timeout
+      - fulfillment_timeout
+      - fulfillment backlog
+      - sla breach
+      - fulfillment overdue
+      - 履约超时
+      - 履约积压
+      - 履约延迟
+      - SLA 超时
+      - 超时积压
+    negative_examples:
+      - 卡单
+      - 下单失败
+
 # -------------------------------------------------------------------------------------
 # reason_code 枚举（首批 5 值，一 fault_type 一码；[P5 提案]：文档未钉 reason_code 取值，
 # 以下按各场景注入机制的"机制级命名"拟定，待首批评测人工复核校准）
@@ -299,6 +527,158 @@ reason_codes:
     negative_examples:
       - charge failure
 
+  # ------------------------- v2 扩编：I 类业务交易链路（S16~S25） -------------------------
+  # reason_code 取值 = v2 设计 §3.1 GT 原文（F9~F17 机制级命名 + S23 复合标注）；
+  # 从属 fault_type 字段（本表 owner 面）与注册表 expected_root_cause 严格一致（M-05）。
+
+  - code: F9_CALLBACK_DROP
+    fault_type: business.order_lost
+    bound_scenario: S16
+    description: 支付回调收口故障点静默跳过 markPaid——支付成功事实落库、订单侧不推进
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S16
+    synonyms:
+      - callback drop
+      - f9_callback_drop
+      - 支付回调丢弃
+      - 回调被吞
+      - 回调收口缺失
+      - markpaid 跳过
+    negative_examples:
+      - double charge
+
+  - code: F10_PAYMENT_SILENT
+    fault_type: business.payment_pending
+    bound_scenario: S17
+    description: 支付授权 INITIATED 后网关调用沉默——不发起请求也不报错，订单停待支付
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S17
+    synonyms:
+      - payment silent
+      - f10_payment_silent
+      - 支付发起沉默
+      - 网关调用未发起
+      - 授权后静默
+    negative_examples:
+      - payment gateway timeout
+
+  - code: F11_DOUBLE_CHARGE
+    fault_type: business.duplicate_charge
+    bound_scenario: S18
+    description: 支付重试故障点跳过已支付闸——PAID 订单放行重复 capture
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S18
+    synonyms:
+      - double charge fault
+      - f11_double_charge
+      - 重试跳过幂等
+      - 已支付闸被跳过
+      - 重复重发扣款
+    negative_examples:
+      - idempotency bypass on create
+
+  - code: F12_RECON_SKEW
+    fault_type: business.reconciliation_mismatch
+    bound_scenario: S19
+    description: 库存扣减记账偏差（跳过 DISCOUNT 扣减行）——三方对账作业检出数量差
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S19
+    synonyms:
+      - recon skew
+      - f12_recon_skew
+      - 记账偏差
+      - 扣减行缺失
+      - 库存扣减偏差
+    negative_examples:
+      - price miscalc
+
+  - code: F13_OVERSELL
+    fault_type: business.inventory_oversell
+    bound_scenario: S20
+    description: 库存预占故障点产生超额 INVENTORY 扣减行（check-then-act 原子性缺失）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S20
+    synonyms:
+      - oversell race
+      - f13_oversell
+      - 库存预占竞态
+      - 原子扣减缺失
+      - 超额扣减注入
+    negative_examples:
+      - stock data corruption
+
+  - code: F14_EVENT_LOST
+    fault_type: business.event_lost
+    bound_scenario: S21
+    description: 收口故障点跳过履约单落地——订单创建与履约发起计数差（无痕丢失）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S21
+    synonyms:
+      - event lost fault
+      - f14_event_lost
+      - 履约触发丢弃
+      - 事件未投递
+      - 消息发送丢弃
+    negative_examples:
+      - consumer lag
+
+  - code: F15_DUPLICATE_CONSUME
+    fault_type: business.duplicate_fulfillment
+    bound_scenario: S22
+    description: 消费端对已履约单重复插 attempt 行——ack 幂等闸缺失（at-least-once 重复消费）
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S22
+    synonyms:
+      - duplicate consume
+      - f15_duplicate_consume
+      - ack 失败重复消费
+      - 消费幂等缺失
+      - 重复投递消费
+    negative_examples:
+      - double charge
+
+  - code: F16_INGRESS_SILENT
+    fault_type: business.zero_flow
+    bound_scenario: S24
+    description: 创单入口静默——create() 直接返回 accepted 零落单
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S24
+    synonyms:
+      - ingress silent
+      - f16_ingress_silent
+      - 入口静默
+      - 创单入口静默拒绝
+    negative_examples:
+      - probe blind
+
+  - code: F17_FULFILL_SLOW
+    fault_type: business.fulfillment_timeout
+    bound_scenario: S25
+    description: 履约收口故障点 enableBookingOnly——履约单停 CONFIRMING 超 SLA 积压
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S25
+    synonyms:
+      - fulfill slow
+      - f17_fulfill_slow
+      - 履约收口变慢
+      - 履约作业迟滞
+    negative_examples:
+      - order stuck
+
+  - code: COMPOSITE_LOW_DOSE
+    fault_type: business.kpi_degradation
+    bound_scenario: S23
+    description: 多因素低剂量叠加（F1 低比例 + 下游小延迟）——单指标均不越阈、业务 KPI 下跌
+    source_refs:
+      - research/alert-agent-eval-20260917/故障场景扩展详细设计.md §3.1 S23
+    synonyms:
+      - composite low dose
+      - composite_low_dose
+      - 多因素低剂量叠加
+      - 低剂量复合注入
+    negative_examples:
+      - single root cause
+
 # -------------------------------------------------------------------------------------
 # component 枚举（首批 2 值；root_cause.component 匹配面）
 # component 语义 = 根因所在组件；与告警面上的 service 标签（checkout/order-arena）区分：
@@ -330,6 +710,9 @@ components:
       - 订单靶场
     negative_examples:
       - checkout
+    # v2 词表（2026-09-18）：S16~S25（I 类业务交易链路）的 component 同为 order-arena——
+    # 只增不改纪律下以注释标注绑定扩展，不改上方既有行；
+    # 注册表 S16 注明"order-arena/payment-callback"为模块限定记法，component 值仍取 order-arena
 
 # -------------------------------------------------------------------------------------
 # 全局负样本（任意维度都必须 NO_MATCH——评分器单测的回归面；防止"噪音表述"跨类误收）

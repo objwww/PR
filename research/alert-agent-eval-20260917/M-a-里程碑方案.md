@@ -66,7 +66,7 @@
 | T3 | C2b 故障点（上） | F9/F10/F11/F12 挂接（支付回调/支付沉默/重复扣款/库存偏差）+ 各自单测 | 单测绿；chaos- 隔离单测（live 流量不受影响） | ⬜ |
 | T4 | C2b 故障点（下） | F13/F14/F15/F16/F17 挂接（超卖/消息丢失/ack 失败/入口静默/履约变慢）+ FulfillmentSimulator 最小组件 + 单测 | 同上（T3 同轮交付） | ✅ 2026-09-17（30 测试全绿） |
 | T5 | R1a 规则 | arena-business.yml 10 条规则 + promtool 单测文件；本地 promtool test rules 全绿 | promtool 全绿 | ✅ 2026-09-17（195 promtool v3.13.1 实跑 SUCCESS——11 条规则行/10 alertname，S17 双档 for 窗与 sum 聚合标签经测试修正） |
-| T6 | E1a 注册 | eval-scenarios.yml 追加 S16~S25（七要素）；GoldenScenarioRegistry 解析通过（本地启动验证或既有注册表单测跑绿） | 注册解析零拒绝 | ⬜ |
+| T6 | E1a 注册 | eval-scenarios.yml 追加 S16~S25（七要素）；GoldenScenarioRegistry 解析通过（本地启动验证或既有注册表单测跑绿） | 注册解析零拒绝 | ✅ 2026-09-18（registry_version 2→3：15 场景全解析[七要素+partition/complexity/checkpoints 扩展键]；词库同轮扩容 lexicon_version 1→2——business.* fault_type 10 值 + reason_code 10 值，注册表 lexicon_binding 同步；jshell 真实文件装载零拒绝 + GoldenScenarioRegistryTest 4/4 + SynonymLexiconTest 5/5 全绿；H7/H8 未注册✓；S23 标注部分验证✓） |
 | T7 | 构建+部署 195 | order-arena / arena-chaos-admin 镜像构建部署（compose alert 项目）；health 200；/metrics 新指标在场 | health 200 + 指标在场 | ⬜ |
 | T8 | 真栈演练 A | S16→S17→S18→S19 逐个：激活→firing→恢复→resolved→SQL 对账，记录时间线 | 4 场景全链闭环 | ⬜ |
 | T9 | 真栈演练 B | S20→S21→S22→S24→S25 同上；S23 规则在场标注"部分验证（待 M-b 复合激活）" | 5 场景闭环 + S23 标注 | ⬜ |
