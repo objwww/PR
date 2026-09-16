@@ -25,6 +25,75 @@
       </div>
     </div>
 
+    <!-- 韧性覆盖矩阵 + 四段复盘（3.12：/api/v1/drill-matrix 真账本直出） -->
+    <div class="card matrix-zone" v-if="matrix">
+      <div class="zone-head">
+        <h3 class="zone-title">韧性覆盖矩阵（场景 × 靶场）</h3>
+        <el-tag size="small" :type="matrix.coverage?.pct >= 50 ? 'success' : 'warning'" disable-transitions>
+          覆盖率 {{ matrix.coverage?.pct ?? '—' }}%（{{ matrix.coverage?.covered ?? 0 }}/{{ matrix.coverage?.total ?? 0 }}）
+        </el-tag>
+        <span class="dim">空格 = 该组合从未演练，即韧性缺口；模板目录即故障模式库（registryVersion {{ matrix.registryVersion ?? '—' }}）</span>
+      </div>
+      <el-table :data="matrixRows" size="small">
+        <el-table-column label="故障模式（场景）" min-width="240">
+          <template #default="{ row }">
+            <div class="cell-main">{{ row.name }}</div>
+            <div class="dim">{{ row.faultSource }}（{{ row.chaosFamily }}）</div>
+          </template>
+        </el-table-column>
+        <el-table-column v-for="env in matrix.envs" :key="env" :label="env" min-width="130">
+          <template #default="{ row }">
+            <template v-if="row.cells[env]">
+              <el-tag size="small" :type="stateTone(row.cells[env].lastState)" disable-transitions>
+                {{ row.cells[env].drills }} 次 · {{ stateZh(row.cells[env].lastState) }}
+              </el-tag>
+              <div class="dim">{{ fmtTime(row.cells[env].lastAt) }}</div>
+            </template>
+            <span v-else class="dim">未演练</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <div class="card four-zone" v-if="fourPhase.length">
+      <div class="zone-head">
+        <h3 class="zone-title">四段复盘（注入 / 感知 / 定界 / 恢复）</h3>
+        <span class="dim">注入=作业推进过预检；感知=已关联事故；定界=已关联调查；恢复=状态闭环。全部来自 drill_job 真列。</span>
+      </div>
+      <el-table :data="fourPhase" size="small">
+        <el-table-column label="演练" min-width="180">
+          <template #default="{ row }">
+            {{ row.scenarioName }}<span class="dim">（{{ row.targetEnv }}）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="① 注入" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.inject ? 'success' : 'info'" disable-transitions>{{ row.inject ? '已注入' : '未到' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="② 感知" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.perceive ? 'success' : 'info'" disable-transitions>{{ row.perceive ? '已关联事故' : '未关联' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="③ 定界" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.locate ? 'success' : 'info'" disable-transitions>{{ row.locate ? '已关联调查' : '未关联' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="④ 恢复" width="130">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.recoverDone ? 'success' : (row.recoverFailed ? 'danger' : 'info')" disable-transitions>
+              {{ row.recoverDone ? '闭环' : (row.recoverFailed ? '恢复失败' : '未到') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="170">
+          <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
+        </el-table-column>
+      </el-table>
+    </div>
+
     <!-- 演练列表 -->
     <div class="table-zone card">
       <template v-if="listState === 'ok'">
@@ -91,10 +160,52 @@
 // /api/drills 依赖 DR-02，未实现路由的 403/404 统一归类为「接口未就绪」，与真实错误、真实空数据三态区分。
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import { listDrills, ApiNotReadyError } from '../api/drills'
 import { fmtDuration, fmtTime } from '../utils/format'
+
+// ===== 3.12 韧性覆盖矩阵 + 四段复盘（/api/v1/drill-matrix 真账本直出） =====
+const matrix = ref(null)
+const matrixRows = ref([])
+const fourPhase = ref([])
+const DRILL_STATE_ZH = {
+  QUEUED: '排队中', PRECHECK: '预检中', INJECTING: '注入中', OBSERVING: '观测中',
+  RECOVERING: '恢复中', VERIFYING: '恢复核验中', CLOSED: '已闭环', RECOVERY_FAILED: '恢复失败',
+}
+function stateZh(s) { return DRILL_STATE_ZH[s] ?? s }
+function stateTone(s) {
+  if (s === 'CLOSED') return 'success'
+  if (s === 'RECOVERY_FAILED') return 'danger'
+  return 'warning'
+}
+async function loadMatrix() {
+  try {
+    const res = await api('/v1/drill-matrix')
+    if (res?.status === 'OK') {
+      matrix.value = res
+      const byKey = {}
+      for (const c of res.cells ?? []) {
+        byKey[c.scenarioName + '|' + c.targetEnv] = c
+      }
+      matrixRows.value = (res.scenarios ?? []).map(s => {
+        const cells = {}
+        for (const env of res.envs ?? []) {
+          const hit = byKey[s.name + '|' + env]
+          if (hit) cells[env] = hit
+        }
+        return { ...s, cells }
+      })
+    }
+  } catch { /* 洞察面缺席如实隐藏 */ }
+}
+async function loadFourPhase() {
+  try {
+    const res = await api('/v1/drill-matrix/four-phase')
+    if (res?.status === 'OK') fourPhase.value = res.items ?? []
+  } catch { /* 四段面缺席如实隐藏 */ }
+}
 
 const router = useRouter()
 
@@ -147,7 +258,7 @@ async function loadMore() {
   }
 }
 
-onMounted(loadList)
+onMounted(() => { loadList(); loadMatrix(); loadFourPhase() })
 </script>
 
 <style scoped>
