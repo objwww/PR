@@ -40,7 +40,7 @@ public class ServiceCatalogController {
                        count(*) as total,
                        coalesce(sum(received_count), 0) as received_total,
                        max(last_event_at) as last_event_at,
-                       string_agg(distinct coalesce(substring(incident_key from 'alertname=([^|]+)'), alertname), ', ') as alerts
+                       string_agg(distinct substring(incident_key from 'alertname=([^|]+)'), ', ') as alerts
                   from incident
                  group by incident_key
                  order by firing desc, total desc
