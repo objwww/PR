@@ -101,4 +101,9 @@ public class AgentOpsSummaryService {
     public List<AgentOpsReader.RiskEvent> riskEvents() {
         return reader.riskEvents(now.get().minus(Duration.ofDays(7)));
     }
+
+    /** 性能概览环比（§3.10）：当前滚动 24h vs 上一 24h，滚动窗口不重叠。 */
+    public AgentOpsReader.PerfTrend perfTrend() {
+        return reader.perfTrend(now.get());
+    }
 }

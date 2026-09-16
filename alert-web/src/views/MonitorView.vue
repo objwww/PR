@@ -131,23 +131,37 @@
       <div v-else v-loading="true" class="loading-box-sm" />
     </div>
 
-    <!-- 第三行双列：模型调用 + 工具调用 TopN（同属 agent-ops/summary，错误态共用上方空态） -->
+    <!-- 第三行双列：性能概览环比 + 工具调用 TopN（§3.10：环比对比上一滚动 24h 窗口） -->
     <div v-if="summaryState === 'ok'" class="cols">
       <div class="card panel">
         <div class="panel-head">
-          <span class="panel-title">模型调用（近 24h）</span>
-          <span class="panel-meta">单位：次 / token</span>
+          <span class="panel-title">模型调用 · 性能概览（近 24h）</span>
+          <span class="panel-meta">
+            环比上一滚动 24h 窗口（不重叠）
+            <el-tag v-if="perf.error" type="danger" size="small">刷新失败，当前为缓存数据</el-tag>
+          </span>
         </div>
-        <div class="llm-nums">
-          <div class="llm-item">
-            <span class="llm-num">{{ num(summary?.llmCalls24h) }}</span>
-            <span class="llm-label">调用次数</span>
-          </div>
-          <div class="llm-item">
-            <span class="llm-num">{{ fmtTokens(summary?.tokens24h) }}</span>
-            <span class="llm-label">Token 消耗</span>
-          </div>
-        </div>
+        <template v-if="perf.state === 'ok'">
+          <el-table :data="perfRows" size="small">
+            <el-table-column prop="label" label="指标" min-width="110" />
+            <el-table-column label="当前" width="120" align="right">
+              <template #default="{ row }">
+                <span :class="{ 'perf-bad': row.badNow }">{{ row.cur }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="上一窗口" width="120" align="right">
+              <template #default="{ row }">{{ row.prev }}</template>
+            </el-table-column>
+            <el-table-column label="环比" width="90" align="right">
+              <template #default="{ row }">
+                <span :class="deltaClass(row)">{{ row.delta }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+        <EmptyState v-else-if="perf.state === 'forbidden'" kind="forbidden" />
+        <EmptyState v-else-if="perf.state === 'error'" kind="error" description="性能概览加载失败，请重试" @retry="loadPerf" />
+        <div v-else v-loading="true" class="loading-box-sm" />
       </div>
       <div class="card panel">
         <div class="panel-head">
@@ -349,6 +363,29 @@ function fmtMs(v) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} 秒` : `${Math.round(n)} ms`
 }
 
+// 环比双窗行（§3.10）：调用/Token/成本/平均延迟/失败；成本与失败上升=坏（红）
+const perfRows = computed(() => {
+  const c = perf.data?.current
+  const p = perf.data?.previous
+  if (!c) return []
+  return [
+    { label: '调用次数', cur: num(c.calls), prev: num(p?.calls), delta: pct(c.calls, p?.calls) },
+    { label: 'Token 消耗', cur: fmtTokens(c.tokens), prev: fmtTokens(p?.tokens), delta: pct(c.tokens, p?.tokens) },
+    { label: '成本（元）', cur: fmtCost(c.costMicros), prev: fmtCost(p?.costMicros), delta: pct(c.costMicros, p?.costMicros), badWhenUp: true },
+    { label: '平均延迟', cur: fmtMs(c.avgLatencyMs), prev: fmtMs(p?.avgLatencyMs), delta: pct(c.avgLatencyMs, p?.avgLatencyMs), badWhenUp: true },
+    { label: '失败次数', cur: num(c.errors), prev: num(p?.errors), delta: pct(c.errors, p?.errors), badWhenUp: true, badNow: c.errors > 0 },
+  ]
+})
+function pct(cur, prev) {
+  if (cur == null || prev == null || Number(prev) === 0) return '—'
+  const v = Math.round((Number(cur) - Number(prev)) * 100 / Number(prev))
+  return v > 0 ? `+${v}%` : `${v}%`
+}
+function deltaClass(row) {
+  if (!row.delta || row.delta === '—') return ''
+  if (row.badWhenUp) return row.delta.startsWith('+') ? 'delta-bad' : 'delta-good'
+  return row.delta.startsWith('+') ? 'delta-up' : 'delta-down'
+}
 // 微单位成本 → 主币种 4 位小数（V129 回算口径）；null → '—'
 function fmtCost(micros) {
   if (micros == null || Number.isNaN(Number(micros))) return '—'
@@ -460,15 +497,17 @@ function panel() {
 const latency = panel()
 const costs = panel()
 const risk = panel()
+const perf = panel()
 const loadLatency = () => latency.load(() => api('/agent-ops/latency-layers'))
 const loadCosts = () => costs.load(() => api('/agent-ops/costs'))
 const loadRisk = () => risk.load(() => api('/agent-ops/risk-events'))
+const loadPerf = () => perf.load(() => api('/agent-ops/perf-trend'))
 
 async function loadAll() {
   refreshing.value = true
   try {
     await Promise.all([loadSummary(), loadTrend(), loadHost(), loadWorkers(),
-      loadLatency(), loadCosts(), loadRisk()])
+      loadLatency(), loadCosts(), loadRisk(), loadPerf()])
   } finally {
     refreshing.value = false
     now.value = Date.now()
@@ -645,4 +684,10 @@ onBeforeUnmount(() => {
 
 /* 风险审计无 run 锚行的占位 */
 .risk-norun { color: var(--ink-2); }
+
+/* 环比语义色：成本/失败上升=坏（红），下降=好（绿）；调用/Token 中性 */
+.delta-bad { color: var(--sev-p0); font-weight: 600; }
+.delta-good { color: var(--ok); }
+.delta-up, .delta-down { color: var(--ink-2); }
+.perf-bad { color: var(--sev-p0); font-weight: 600; }
 </style>

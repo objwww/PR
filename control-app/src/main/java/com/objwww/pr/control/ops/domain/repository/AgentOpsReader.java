@@ -120,4 +120,16 @@ public interface AgentOpsReader {
     default List<RiskEvent> riskEvents(Instant since) {
         throw new UnsupportedOperationException("riskEvents 仅 Postgres 读面实现（§3.10 Wave4）");
     }
+
+    /** 单窗口性能概览（§3.10：AI 请求数/平均耗时/错误/模型调用/Token/成本） */
+    record PerfWindow(long calls, Long tokens, Long costMicros, Long avgLatencyMs, long errors) {
+    }
+
+    /** 环比双窗（当前 24h vs 上一 24h；窗口滚动不重叠）。default 抛出 = 假件未镜像。 */
+    default PerfTrend perfTrend(Instant now) {
+        throw new UnsupportedOperationException("perfTrend 仅 Postgres 读面实现（§3.10 环比）");
+    }
+
+    record PerfTrend(PerfWindow current, PerfWindow previous) {
+    }
 }

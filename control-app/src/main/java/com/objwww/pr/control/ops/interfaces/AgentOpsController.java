@@ -72,4 +72,10 @@ public class AgentOpsController {
             riskEvents() {
         return service.riskEvents();
     }
+
+    /** 性能概览环比（§3.10）：当前滚动 24h vs 上一 24h。 */
+    @GetMapping("/perf-trend")
+    public com.objwww.pr.control.ops.domain.repository.AgentOpsReader.PerfTrend perfTrend() {
+        return service.perfTrend();
+    }
 }

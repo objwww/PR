@@ -276,6 +276,57 @@ public class PostgresAgentOpsReader implements AgentOpsReader {
     }
 
     @Override
+    public PerfTrend perfTrend(Instant now) {
+        Timestamp curFrom = Timestamp.from(now.minusSeconds(86_400));
+        Timestamp prevFrom = Timestamp.from(now.minusSeconds(172_800));
+        record Row(long curCalls, Long curTokens, Long curCost, Long curAvgLat, long curErrors,
+                   long prevCalls, Long prevTokens, Long prevCost, Long prevAvgLat, long prevErrors) {
+        }
+        // 单查询双窗聚合（滚动 24h 互不重叠）；错误=rca_model_call.state FAILED
+        Row row = jdbc.sql("""
+                select
+                  count(*) filter (where created_at >= :curFrom) as cur_calls,
+                  sum(case when created_at >= :curFrom and usage->>'total_tokens' ~ '^[0-9]+$'
+                           then (usage->>'total_tokens')::bigint else 0 end) as cur_tokens,
+                  sum(cost_micros) filter (where created_at >= :curFrom) as cur_cost,
+                  avg(latency_ms) filter (where created_at >= :curFrom and latency_ms is not null) as cur_avg_lat,
+                  count(*) filter (where created_at >= :curFrom and state = 'FAILED') as cur_errors,
+                  count(*) filter (where created_at >= :prevFrom and created_at < :curFrom) as prev_calls,
+                  sum(case when created_at >= :prevFrom and created_at < :curFrom
+                            and usage->>'total_tokens' ~ '^[0-9]+$'
+                           then (usage->>'total_tokens')::bigint else 0 end) as prev_tokens,
+                  sum(cost_micros) filter (where created_at >= :prevFrom and created_at < :curFrom) as prev_cost,
+                  avg(latency_ms) filter (where created_at >= :prevFrom and created_at < :curFrom
+                            and latency_ms is not null) as prev_avg_lat,
+                  count(*) filter (where created_at >= :prevFrom and created_at < :curFrom
+                            and state = 'FAILED') as prev_errors
+                  from rca_model_call
+                 where created_at >= :prevFrom
+                """)
+                .param("curFrom", curFrom)
+                .param("prevFrom", prevFrom)
+                .query((rs, i) -> new Row(
+                        rs.getLong("cur_calls"),
+                        rs.getObject("cur_tokens") == null ? null : rs.getLong("cur_tokens"),
+                        rs.getObject("cur_cost") == null ? null : rs.getLong("cur_cost"),
+                        rs.getBigDecimal("cur_avg_lat") == null
+                                ? null : rs.getBigDecimal("cur_avg_lat").longValue(),
+                        rs.getLong("cur_errors"),
+                        rs.getLong("prev_calls"),
+                        rs.getObject("prev_tokens") == null ? null : rs.getLong("prev_tokens"),
+                        rs.getObject("prev_cost") == null ? null : rs.getLong("prev_cost"),
+                        rs.getBigDecimal("prev_avg_lat") == null
+                                ? null : rs.getBigDecimal("prev_avg_lat").longValue(),
+                        rs.getLong("prev_errors")))
+                .single();
+        return new PerfTrend(
+                new PerfWindow(row.curCalls(), row.curTokens(), row.curCost(),
+                        row.curAvgLat(), row.curErrors()),
+                new PerfWindow(row.prevCalls(), row.prevTokens(), row.prevCost(),
+                        row.prevAvgLat(), row.prevErrors()));
+    }
+
+    @Override
     public CostBreakdown costs(Instant since) {
         Timestamp from = Timestamp.from(since);
         List<ModelCost> models = jdbc.sql("""
