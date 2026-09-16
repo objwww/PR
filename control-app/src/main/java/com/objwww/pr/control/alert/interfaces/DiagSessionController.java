@@ -169,7 +169,10 @@ public class DiagSessionController {
         }
         List<Map<String, Object>> anchors = jdbc.sql("""
                 select m.run_id, m.task_id, m.attempt_id, m.lease_epoch, m.config_epoch,
-                       m.release_digest
+                       m.release_digest,
+                       (select coalesce(max(x.action_seq), -1) + 1 from rca_model_call x
+                         where x.run_id = m.run_id and x.task_id = m.task_id
+                           and x.attempt_id = m.attempt_id) as next_action_seq
                   from rca_model_call m
                  where m.run_id in (select id from rca_run where incident_id = :id)
                  order by m.created_at desc limit 1
@@ -184,6 +187,7 @@ public class DiagSessionController {
                     m.put("configEpoch", rs.getObject("config_epoch") == null
                             ? null : rs.getLong("config_epoch"));
                     m.put("releaseDigest", rs.getString("release_digest"));
+                    m.put("nextActionSeq", rs.getLong("next_action_seq"));
                     return m;
                 })
                 .list();
@@ -197,7 +201,7 @@ public class DiagSessionController {
         Instant now = Instant.now();
         RcaModelCallContext ctx = new RcaModelCallContext(
                 (UUID) a.get("runId"), (UUID) a.get("taskId"), (UUID) a.get("attemptId"),
-                0, 0, "diag-chat", "v1", Digest.sha256Of("diag-chat-v1").value(),
+                (Long) a.get("nextActionSeq"), 0, "diag-chat", "v1", Digest.sha256Of("diag-chat-v1").value(),
                 (Long) a.get("leaseEpoch"), (Long) a.get("configEpoch"),
                 a.get("releaseDigest") == null ? null : String.valueOf(a.get("releaseDigest")),
                 Digest.sha256Of(prompt).value(), null,
@@ -212,7 +216,8 @@ public class DiagSessionController {
         jdbc.sql("""
                 insert into diag_session (id, incident_id, question_key, question, answer,
                     answer_refs, created_by, created_at)
-                values (:id, :incidentId, 'FREE', :question, :answer, :refs, :createdBy, :at)
+                values (:id, :incidentId, 'FREE', :question, :answer,
+                        cast(:refs as jsonb), :createdBy, :at)
                 """)
                 .param("id", sessionId)
                 .param("incidentId", incidentId)
