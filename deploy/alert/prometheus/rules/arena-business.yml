@@ -1,0 +1,110 @@
+# M-a 业务交易链路症状规则（v2 设计 §3.1/§4.2 R1，S16~S25）：
+# 全部指标由 DomainProbe 探测面产出（INV-AM2-5），注入点不自报。
+# 告警标签是 C-6 指纹的输入面——alertname/fault_type/service 冻结。
+# 与设计稿偏差说明：S16 由 counter 差值式改为 episode gauge（探测面精确检出，
+# 差值式受窗口抖动影响；alertname/标签面与设计一致）。
+groups:
+  - name: arena-business-symptoms
+    rules:
+      - alert: ArenaPaymentOrderMismatch
+        expr: oa_payment_order_mismatch_current > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F9
+        annotations:
+          summary: "掉单（F9 症状）：支付成功但订单未推进——技术指标全绿、业务对账暴露"
+
+      - alert: ArenaPendingPaymentBacklog
+        expr: oa_pending_payment_orders_current > 20
+        for: 5m
+        labels:
+          severity: ticket
+          service: order-arena
+          fault_type: F10
+        annotations:
+          summary: "待支付积压（F10 症状）：支付发起沉默，订单停待支付（ticket 档）"
+
+      - alert: ArenaPendingPaymentBacklog
+        expr: oa_pending_payment_orders_current > 20
+        for: 15m
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F10
+        annotations:
+          summary: "待支付积压持续（F10 症状）：沉默悬挂超 15 分钟（page 档）"
+
+      - alert: ArenaDuplicatePayments
+        expr: oa_duplicate_payments_current > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F11
+        annotations:
+          summary: "重复扣款（F11 症状）：同订单多笔支付成功——支付层幂等失效"
+
+      - alert: ArenaReconciliationDiff
+        expr: abs(oa_recon_diff_current) > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F12
+        annotations:
+          summary: "三方对账不平（F12 症状）：订单-支付-库存记账数量差，明细见 /orders/recon/diffs"
+
+      - alert: ArenaOversell
+        expr: oa_inventory_negative_total > 0
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F13
+        annotations:
+          summary: "库存超卖（F13 症状）：竞态下 INVENTORY 超额扣减"
+
+      - alert: ArenaFulfillmentGap
+        expr: increase(oa_orders_created_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
+        labels:
+          severity: ticket
+          service: order-arena
+          fault_type: F14
+        annotations:
+          summary: "履约缺口（F14 症状）：订单创建与履约发起计数差——消息无痕丢失"
+
+      - alert: ArenaDuplicateFulfillment
+        expr: oa_duplicate_fulfillments_current > 0
+        labels:
+          severity: ticket
+          service: order-arena
+          fault_type: F15
+        annotations:
+          summary: "重复履约（F15 症状）：at-least-once 下消费幂等缺失"
+
+      - alert: ArenaOrderSuccessRateLow
+        expr: (sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_created_total[5m]))) < 0.98
+        for: 5m
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: COMPOSITE_LOW_DOSE
+        annotations:
+          summary: "下单成功率 KPI 下跌（S23）：多因素低剂量叠加——技术指标可全不越阈"
+
+      - alert: ArenaOrderZeroFlow
+        expr: sum(rate(oa_orders_created_total[5m])) == 0
+        for: 5m
+        labels:
+          severity: page
+          service: order-arena
+          fault_type: F16
+        annotations:
+          summary: "断流（F16 症状）：零订单——先区分真断流与监控断流（探针自证）"
+
+      - alert: ArenaFulfillmentSlaBreach
+        expr: oa_fulfillment_overdue_current > 15
+        labels:
+          severity: ticket
+          service: order-arena
+          fault_type: F17
+        annotations:
+          summary: "履约 SLA 超时积压（F17 症状）：告警在链路下游，警惕归因到下单环节"

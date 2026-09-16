@@ -1,0 +1,218 @@
+# M-a 业务规则 promtool 单元测试（在 195 上执行：docker run --rm -v $PWD:/w -w /w
+#   quay.io/prometheus/prometheus:v3.13.1 promtool test rules prometheus/arena-business-rules-test.yml）
+# 本文件位于 rules/ 目录之外——rule_files glob 只装载 rules/*.yml，测试文件不入生产加载面。
+rule_files:
+  - rules/arena-business.yml
+
+evaluation_interval: 1m
+
+tests:
+  # S16 掉单
+  - interval: 1m
+    input_series:
+      - series: 'oa_payment_order_mismatch_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 0 2 2'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ArenaPaymentOrderMismatch
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ArenaPaymentOrderMismatch
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F9
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "掉单（F9 症状）：支付成功但订单未推进——技术指标全绿、业务对账暴露"
+
+  # S17 待支付积压：两档（for 5m ticket / for 15m page）
+  - interval: 1m
+    input_series:
+      - series: 'oa_pending_payment_orders_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 25 25 25 25 25 25 25 25 25 25 25 25 25 25 25 25 25 25'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ArenaPendingPaymentBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: order-arena
+              fault_type: F10
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "待支付积压（F10 症状）：支付发起沉默，订单停待支付（ticket 档）"
+      - eval_time: 17m
+        alertname: ArenaPendingPaymentBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F10
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "待支付积压持续（F10 症状）：沉默悬挂超 15 分钟（page 档）"
+          - exp_labels:
+              severity: ticket
+              service: order-arena
+              fault_type: F10
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "待支付积压（F10 症状）：支付发起沉默，订单停待支付（ticket 档）"
+
+  # S18 重复扣款
+  - interval: 1m
+    input_series:
+      - series: 'oa_duplicate_payments_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaDuplicatePayments
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F11
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "重复扣款（F11 症状）：同订单多笔支付成功——支付层幂等失效"
+
+  # S19 三方对账不平
+  - interval: 1m
+    input_series:
+      - series: 'oa_recon_diff_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 -3 -3'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaReconciliationDiff
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F12
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "三方对账不平（F12 症状）：订单-支付-库存记账数量差，明细见 /orders/recon/diffs"
+
+  # S20 库存超卖
+  - interval: 1m
+    input_series:
+      - series: 'oa_inventory_negative_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 4 4'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaOversell
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F13
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "库存超卖（F13 症状）：竞态下 INVENTORY 超额扣减"
+
+  # S21 履约缺口（counter 差值）
+  - interval: 1m
+    input_series:
+      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100 110 120 130'
+      - series: 'oa_fulfillments_started_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 10 20 30 40 50 60 70 80 90 100 100 100 100'
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: ArenaFulfillmentGap
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: order-arena
+              fault_type: F14
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "履约缺口（F14 症状）：订单创建与履约发起计数差——消息无痕丢失"
+
+  # S22 重复履约
+  - interval: 1m
+    input_series:
+      - series: 'oa_duplicate_fulfillments_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 2 2'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ArenaDuplicateFulfillment
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: order-arena
+              fault_type: F15
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "重复履约（F15 症状）：at-least-once 下消费幂等缺失"
+
+  # S23 下单成功率 KPI 下跌（分子分母 counter 速率）
+  - interval: 1m
+    input_series:
+      # 成功 96/分钟、尝试 100/分钟 → 成功率 96% < 98%
+      - series: 'oa_orders_success_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 96 192 288 384 480 576 672'
+      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 100 200 300 400 500 600 700'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ArenaOrderSuccessRateLow
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: COMPOSITE_LOW_DOSE
+            exp_annotations:
+              summary: "下单成功率 KPI 下跌（S23）：多因素低剂量叠加——技术指标可全不越阈"
+
+  # S24 断流（零订单速率）
+  - interval: 1m
+    input_series:
+      # 前 2 分钟有流量、之后归零——归零满 5 分钟（for 5m）后触发
+      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 50 100 100 100 100 100 100 100 100 100 100 100 100 100 100'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ArenaOrderZeroFlow
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: ArenaOrderZeroFlow
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: order-arena
+              fault_type: F16
+            exp_annotations:
+              summary: "断流（F16 症状）：零订单——先区分真断流与监控断流（探针自证）"
+
+  # S25 履约 SLA 超时积压
+  - interval: 1m
+    input_series:
+      - series: 'oa_fulfillment_overdue_current{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+        values: '0 10 16 16'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ArenaFulfillmentSlaBreach
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: ArenaFulfillmentSlaBreach
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: order-arena
+              fault_type: F17
+              job: order-arena
+              instance: order-arena:8080
+            exp_annotations:
+              summary: "履约 SLA 超时积压（F17 症状）：告警在链路下游，警惕归因到下单环节"
