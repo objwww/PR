@@ -34,7 +34,7 @@
               title="原因待确认"
               description="尚未形成已确认的根因结论；调查进展见「调查」页签。"
             />
-            <!-- 前端产品化波次2：AI 结论人工复核（确认/驳回 → conclusion_feedback 标注闭环） -->
+            <!-- 前端产品化波次2/3：AI 结论人工复核（标注闭环 + 复核待办 + 结构化驳回 + 重查入口） -->
             <div class="fb-block">
               <div class="fb-actions">
                 <span class="cat-label">人工复核：</span>
@@ -42,7 +42,12 @@
                   @click="submitFeedback('CONFIRMED')">确认结论</el-button>
                 <el-button size="small" type="danger" plain :disabled="fb.submitting"
                   @click="fb.rejectOpen = true">驳回结论</el-button>
+                <el-button v-if="latestRejected" size="small" type="warning" plain
+                  :loading="fb.riSubmitting" @click="reinvestigate">重新排查</el-button>
                 <span v-if="runState === 'COMPLETED'" class="cat-label">（对当前调查结论的裁决将计入采纳率）</span>
+              </div>
+              <div v-if="reviewPending" class="fb-pending" :class="{ overdue: reviewOverdue }">
+                复核待办：已等待 {{ reviewWait }}（时限 24 小时）<template v-if="reviewOverdue">——已超时，请尽快裁决</template>
               </div>
               <div v-if="fb.items.length" class="fb-list">
                 <div v-for="(f, i) in fb.items" :key="i" class="fb-row">
@@ -51,16 +56,34 @@
                   </el-tag>
                   <span class="fb-actor">{{ f.actor }}</span>
                   <span class="cell-sub">{{ fmtTime(f.created_at) }}</span>
+                  <span v-if="f.category" class="cell-sub">分类：{{ rejectCategoryZh(f.category) }}</span>
                   <span v-if="f.reason && f.reason !== '—'" class="cell-sub">理由：{{ f.reason }}</span>
+                  <span v-if="f.actual_cause" class="cell-sub">真实根因：{{ f.actual_cause }}</span>
                 </div>
               </div>
             </div>
-            <el-dialog v-model="fb.rejectOpen" title="驳回 AI 结论" width="420px">
-              <el-input v-model="fb.reason" type="textarea" :rows="3"
-                placeholder="请填写驳回理由（必填，将进入采纳率统计与反馈环）" />
+            <el-dialog v-model="fb.rejectOpen" title="驳回 AI 结论" width="500px">
+              <el-form label-width="90px">
+                <el-form-item label="驳回分类" required>
+                  <el-select v-model="fb.category" style="width: 100%" placeholder="选择驳回分类">
+                    <el-option label="证据不足" value="INSUFFICIENT_EVIDENCE" />
+                    <el-option label="误报" value="FALSE_POSITIVE" />
+                    <el-option label="根因方向错误" value="WRONG_DIRECTION" />
+                    <el-option label="其他" value="OTHER" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="真实根因">
+                  <el-input v-model="fb.actualCause" type="textarea" :rows="2" maxlength="300"
+                    placeholder="选填：你认为的真实根因（进入反馈环）" />
+                </el-form-item>
+                <el-form-item label="理由" required>
+                  <el-input v-model="fb.reason" type="textarea" :rows="3" maxlength="500"
+                    placeholder="必填：驳回理由（写入标注审计）" />
+                </el-form-item>
+              </el-form>
               <template #footer>
                 <el-button @click="fb.rejectOpen = false">取消</el-button>
-                <el-button type="danger" :disabled="!fb.reason?.trim() || fb.submitting"
+                <el-button type="danger" :disabled="!fb.reason?.trim() || !fb.category || fb.submitting"
                   @click="submitFeedback('REJECTED')">提交驳回</el-button>
               </template>
             </el-dialog>
@@ -127,7 +150,7 @@
           </div>
         </el-tab-pane>
 
-        <!-- 调查：关联 run 关键信息卡 + 跳转；无 run 显式空态 -->
+        <!-- 调查：关联 run 关键信息卡 + 断言三态（已验证/已排除/待验证）+ 步骤与用量内联 -->
         <el-tab-pane label="调查" name="run">
           <div v-if="runId" class="card block">
             <h3>关联调查</h3>
@@ -142,7 +165,34 @@
             </el-descriptions>
             <el-button type="primary" style="margin-top: 12px" @click="goRun">查看调查详情</el-button>
           </div>
-          <div v-else class="card block">
+          <div v-if="runClaims.length" class="card block">
+            <h3>调查断言（假设与验证状态）</h3>
+            <div v-for="c in runClaims" :key="c.id" class="claim-row">
+              <div class="claim-head">
+                <el-tag :type="claimTagType(c.verdict)" size="small" disable-transitions>{{ claimZh(c.verdict) }}</el-tag>
+                <span class="cell-sub">{{ claimKindZh(c.kind) }}</span>
+              </div>
+              <div class="claim-text">{{ c.text || '（无文字说明）' }}</div>
+              <div v-if="c.evidences && c.evidences.length" class="cell-sub">证据引用 {{ c.evidences.length }} 条（见调查详情）</div>
+            </div>
+          </div>
+          <div v-if="runDetail && runDetail.tasks && runDetail.tasks.length" class="card block">
+            <h3>调查步骤</h3>
+            <el-table :data="runDetail.tasks" size="small" border>
+              <el-table-column prop="name" label="步骤" />
+              <el-table-column label="状态" width="120">
+                <template #default="{ row }">{{ taskStateZh(row.status) }}</template>
+              </el-table-column>
+              <el-table-column prop="attempts" label="尝试次数" width="90" />
+            </el-table>
+            <p class="cell-sub" style="margin-top: 8px">
+              模型调用 {{ runDetail.usage?.callCount ?? 0 }} 次<template v-if="runDetail.usage">（输入 {{ runDetail.usage.tokensIn ?? 0 }} / 输出 {{ runDetail.usage.tokensOut ?? 0 }} tokens）</template><template v-else>（本轮调查无模型调用记录）</template>
+            </p>
+          </div>
+          <div v-if="runId && !runClaims.length" class="card block">
+            <EmptyState kind="empty" description="本轮调查未产出结构化断言（确定性引擎无假设清单）；完整过程可在「查看调查详情」的事件流水逐条核对" />
+          </div>
+          <div v-if="!runId" class="card block">
             <EmptyState kind="empty" description="尚未发起调查" />
           </div>
         </el-tab-pane>
@@ -316,8 +366,58 @@ function evSummary(ev) {
   return ev?.annotations?.summary ?? ev?.annotations?.description ?? ''
 }
 
-// 前端产品化波次2：AI 结论人工复核（标注闭环）
-const fb = reactive({ items: [], submitting: false, rejectOpen: false, reason: '' })
+// 前端产品化波次2/3：AI 结论人工复核（标注闭环 + 复核待办 + 结构化驳回 + 重查入口）
+const fb = reactive({ items: [], submitting: false, rejectOpen: false, reason: '', category: '', actualCause: '', riSubmitting: false })
+
+// 断言三态（后端 ClaimStatus：TRUE/FALSE/UNKNOWN）与调查步骤词表
+const CLAIM_ZH = { TRUE: ['已验证', 'success'], FALSE: ['已排除', 'danger'], UNKNOWN: ['待验证', 'warning'] }
+function claimZh(v) { return CLAIM_ZH[v]?.[0] ?? '断言' }
+function claimTagType(v) { return CLAIM_ZH[v]?.[1] ?? 'info' }
+function claimKindZh(k) {
+  return { HYPOTHESIS: '假设', EVIDENCE: '证据', CONCLUSION: '结论' }[k] ?? '断言'
+}
+function taskStateZh(s) {
+  return {
+    QUEUED: '等待', LEASED: '执行中', RUNNING: '执行中', REPORTING: '报告组装中',
+    DONE: '已完成', SKIPPED: '已跳过', BLOCKED: '卡住', RETRY_WAIT: '等待重试',
+    CANCELLED: '已取消', DEAD: '失败', FAILED_TERMINAL: '失败', STALE: '已过期',
+  }[s] ?? s
+}
+const REJECT_CATEGORY_ZH = {
+  INSUFFICIENT_EVIDENCE: '证据不足', FALSE_POSITIVE: '误报',
+  WRONG_DIRECTION: '根因方向错误', OTHER: '其他',
+}
+function rejectCategoryZh(c) { return REJECT_CATEGORY_ZH[c] ?? c }
+
+// 调查页签内联证据链：复用 runs 只读投影（断言/任务/用量），无独立新面
+const runDetail = ref(null)
+const runClaims = computed(() => runDetail.value?.claims ?? [])
+async function loadRunDetail() {
+  if (!runId.value) { runDetail.value = null; return }
+  try {
+    runDetail.value = await api(`/rca-runs/${runId.value}`)
+  } catch { runDetail.value = null }
+}
+
+const latestFeedback = computed(() => fb.items[0] ?? null)
+const latestRejected = computed(() => latestFeedback.value?.verdict === 'REJECTED')
+const REVIEW_DUE_HOURS = 24
+const reviewPending = computed(() =>
+  !latestFeedback.value && d.value?.run?.state === 'SUCCEEDED' && !!d.value?.run?.finishedAt)
+const reviewWait = computed(() => {
+  const end = d.value?.run?.finishedAt
+  if (!end) return '—'
+  const ms = Date.now() - new Date(end).getTime()
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  return h > 0 ? `${h} 小时 ${m} 分钟` : `${m} 分钟`
+})
+const reviewOverdue = computed(() => {
+  const end = d.value?.run?.finishedAt
+  if (!end) return false
+  return Date.now() - new Date(end).getTime() > REVIEW_DUE_HOURS * 3600000
+})
+
 async function loadFeedback() {
   try {
     const res = await api(`/v1/incidents/${incidentId.value}/conclusion-feedback`)
@@ -329,12 +429,21 @@ async function submitFeedback(verdict) {
   try {
     const res = await api(`/v1/incidents/${incidentId.value}/conclusion-feedback`, {
       method: 'POST',
-      body: { verdict, actor: `human:${session.user || 'oncall'}`, reason: verdict === 'REJECTED' ? fb.reason?.trim() : null, runId: runId.value },
+      body: {
+        verdict,
+        actor: `human:${session.user || 'oncall'}`,
+        reason: verdict === 'REJECTED' ? fb.reason?.trim() : null,
+        category: verdict === 'REJECTED' ? fb.category : null,
+        actualCause: verdict === 'REJECTED' ? (fb.actualCause?.trim() || null) : null,
+        runId: runId.value,
+      },
     })
     if (res?.status === 'OK') {
       ElMessage.success(res.verdict)
       fb.rejectOpen = false
       fb.reason = ''
+      fb.category = ''
+      fb.actualCause = ''
       await loadFeedback()
     } else {
       ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
@@ -343,6 +452,27 @@ async function submitFeedback(verdict) {
     ElMessage.error('提交失败，请重试')
   } finally {
     fb.submitting = false
+  }
+}
+
+/** 重新排查：显式重查（复用等待重驱同闸路径；路由未放量/活跃 run 在则诚实拒绝） */
+async function reinvestigate() {
+  fb.riSubmitting = true
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/reinvestigate`, { method: 'POST' })
+    if (res?.status === 'OK') {
+      ElMessage.success('已发起新一轮调查')
+      await load()
+      await loadRunDetail()
+    } else if (res?.status === 'REJECTED') {
+      ElMessage.warning('暂不能重查：已有进行中的调查，或该告警未在路由放量名单')
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch (e) {
+    ElMessage.error('发起失败，请重试')
+  } finally {
+    fb.riSubmitting = false
   }
 }
 
@@ -364,8 +494,11 @@ async function load() {
 onMounted(() => {
   load()
   loadFeedback()
+  loadRunDetail()
 })
-watch(incidentId, load)
+watch(incidentId, () => { load(); loadFeedback(); loadRunDetail() })
+// runId 由事件详情异步就绪（d.run.runId），就绪后补拉调查证据链
+watch(runId, loadRunDetail)
 </script>
 
 <style scoped>
@@ -383,4 +516,15 @@ watch(incidentId, load)
 .tl-head { display: flex; align-items: center; gap: 8px; }
 .tl-summary { margin-top: 4px; color: var(--ink-2); }
 .loading-box { height: 320px; }
+.fb-block { margin-top: 12px; }
+.fb-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fb-pending { margin-top: 8px; font-size: var(--fs-aux); color: var(--ink-2); }
+.fb-pending.overdue { color: var(--el-color-danger); font-weight: 600; }
+.fb-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.fb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fb-actor { font-size: var(--fs-aux); color: var(--head); font-weight: 600; }
+.claim-row { padding: 10px 0; border-bottom: 1px solid var(--line, #ebeef5); }
+.claim-row:last-child { border-bottom: none; }
+.claim-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.claim-text { font-size: var(--fs-body); color: var(--ink); }
 </style>

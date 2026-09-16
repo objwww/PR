@@ -62,6 +62,9 @@ async function onLogin() {
     await http.get('/auth/csrf')
     const form = new URLSearchParams({ username: username.value, password: password.value })
     await http.post('/auth/login', form)
+    // CSRF-FIX：登录成功会 rotate XSRF token（旧 cookie 被清空）——不重新拉取，
+    // 之后所有浏览器写面（审批/命令/标注/重查）一律 403。此处强制落新 cookie。
+    await http.get('/auth/csrf')
     session.markLogin(username.value)
     const target = typeof route.query.redirect === 'string' ? route.query.redirect : '/overview'
     router.replace(target)

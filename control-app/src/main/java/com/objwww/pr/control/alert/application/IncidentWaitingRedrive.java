@@ -95,6 +95,20 @@ public class IncidentWaitingRedrive {
         return cast;
     }
 
+    /**
+     * 定向重查（人工驳回后的显式补链入口，与扫描同闸同事务）：
+     * 活跃 run 在则不重铸（uq_rca_run_active_incident 同兜底）；路由意愿不在
+     * （非白名单 → HOLMES 意愿）如实返回 false，不伪装成交付。
+     */
+    public boolean redriveIncident(UUID incidentId) {
+        Incident incident = incidents.findById(incidentId).orElse(null);
+        if (incident == null || runs.findActiveByIncidentId(incidentId).isPresent()) {
+            return false;
+        }
+        Boolean minted = tx.execute(status -> mintRunAndTask(incident));
+        return Boolean.TRUE.equals(minted);
+    }
+
     /** 单事故补铸（事务内）：路由意愿仍不在则不铸，返回 false */
     private boolean mintRunAndTask(Incident incident) {
         UUID runId = UUID.randomUUID();
