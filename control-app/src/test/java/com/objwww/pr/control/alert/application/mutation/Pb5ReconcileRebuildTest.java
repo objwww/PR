@@ -289,6 +289,27 @@ class Pb5ReconcileRebuildTest {
     }
 
     @Test
+    void pbR04_真执行UNKNOWN_不猜VERIFIED_ESCALATED人工() {
+        UUID runId = UUID.randomUUID();
+        FakeOperations operations = new FakeOperations();
+        UUID opId = UUID.randomUUID();
+        RcaOperation real = RcaOperation.prepareReal(opId, UUID.randomUUID(), runId, null,
+                "chaos.resolve", "a".repeat(64), "res://demo/checkout", 1, "{}",
+                FIXED.instant());
+        operations.rows.put(opId, real.withStatus(OperationStatus.DISPATCHED,
+                FIXED.instant()).withStatus(OperationStatus.UNKNOWN, FIXED.instant()));
+        FakeEvents events = new FakeEvents();
+        var reconciler = new OperationReconciler(operations, new FakeOutbox(),
+                new FakeLocks(), events, OperationReconciler.Verdict.VERIFIED,
+                Duration.ofMinutes(10), Duration.ofMinutes(1), FIXED);
+
+        reconciler.reconcileOnce();
+
+        assertThat(operations.rows.get(opId).status()).isEqualTo(OperationStatus.ESCALATED);
+        assertThat(events.rows.stream().map(EventRow::type)).contains("OPERATION_ESCALATED");
+    }
+
+    @Test
     void pbG01_reschedule闸_活跃mutation拒_无mutation放() {
         UUID runId = UUID.randomUUID();
         FakeOperations operations = new FakeOperations();

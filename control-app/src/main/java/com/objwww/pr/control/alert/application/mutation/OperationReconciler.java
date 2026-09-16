@@ -118,6 +118,16 @@ public class OperationReconciler {
             return 0;
         }
         emit(operation, "OPERATION_RECONCILING");
+        // PD-D1 纪律：真执行（dry_run=false）的 UNKNOWN 不得被 dry-run 裁决自动
+        // VERIFIED——无真实 resource_probe 前一律 ESCALATED 人工裁决（不猜）
+        if (!operation.dryRun()) {
+            if (operations.transition(operationId, OperationStatus.RECONCILING,
+                    OperationStatus.ESCALATED, clock.instant())) {
+                emit(operation, "OPERATION_ESCALATED",
+                        Map.of("reason", "REAL_EXECUTION_NO_PROBE"));
+            }
+            return 1;
+        }
         return switch (verdict) {
             case VERIFIED -> {
                 if (operations.transition(operationId, OperationStatus.RECONCILING,
