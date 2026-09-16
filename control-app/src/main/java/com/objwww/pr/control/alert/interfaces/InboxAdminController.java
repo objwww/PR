@@ -66,6 +66,10 @@ public class InboxAdminController {
             item.put("group_key", row.envelope() == null ? null : row.envelope().groupKey());
             var labels = row.envelope() == null ? Map.<String, String>of()
                     : row.envelope().groupLabels();
+            if (labels.isEmpty()) {
+                // 注入载荷可能只在 commonLabels 携带标签（AM 真信封才填 groupLabels）
+                labels = row.envelope().commonLabels();
+            }
             item.put("alertname", labels.getOrDefault("alertname", "—"));
             item.put("service", labels.getOrDefault("service", "—"));
             item.put("severity", labels.getOrDefault("severity", "—"));
