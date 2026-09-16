@@ -43,8 +43,9 @@ public class ChaosActivationService {
                                Integer ttlSeconds, String operator, String configDigest,
                                GtFields groundTruth, Map<String, String> alertLabels,
                                String ruleDigest) {
-        if (faultType == null || !faultType.matches("F[123]")) {
-            throw new InvalidRequestException("faultType 必须是 F1/F2/F3");
+        // M-a 业务扩编：F1~F3 存量 + F9~F18 业务交易链路（F18=H7 HOLDOUT 预留）
+        if (faultType == null || !faultType.matches("F([1-9]|1[0-8])")) {
+            throw new InvalidRequestException("faultType 必须是 F1~F3 或 F9~F18");
         }
         if (scenarioId == null || !SCENARIO_ID.matcher(scenarioId).matches()) {
             throw new InvalidRequestException("scenarioId 形态非法（[a-z0-9][a-z0-9-]{2,63}）");

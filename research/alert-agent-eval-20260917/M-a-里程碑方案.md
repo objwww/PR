@@ -61,7 +61,7 @@
 
 | # | 工序 | 内容 | 验收判据 | 状态 |
 |---|---|---|---|---|
-| T1 | C1b 枚举与激活面 | FaultType 扩 F9~F17+F18（注释带场景映射）；chaos-admin 校验正则放宽 `F(1[0-8]|[1-9])`；arena-admin 单测更新 | 两服务单测绿 | ⬜ |
+| T1 | C1b 枚举与激活面 | FaultType 扩 F9~F17+F18（注释带场景映射）；chaos-admin 校验正则放宽 `F(1[0-8]|[1-9])`；arena-admin 单测更新 | 两服务单测绿 | ✅ 2026-09-17（chaos-admin 14 测试全绿；order-arena test-compile 绿——FaultType 扩展+ChaosRecoveryService 恢复 switch 补齐 F9~F18 无动作分支+激活正则放宽） |
 | T2 | C2d+C2c 探测面 | ReconciliationProbe + DomainProbe 业务对账扩展（8 个新 Gauge + 差异明细端点 `/recon/diffs`）；单测（对账差值计算/失败保留末值纪律） | 单测绿；本地 /metrics 出现新指标 | ⬜ |
 | T3 | C2b 故障点（上） | F9/F10/F11/F12 挂接（支付回调/支付沉默/重复扣款/库存偏差）+ 各自单测 | 单测绿；chaos- 隔离单测（live 流量不受影响） | ⬜ |
 | T4 | C2b 故障点（下） | F13/F14/F15/F16/F17 挂接（超卖/消息丢失/ack 失败/入口静默/履约变慢）+ FulfillmentSimulator 最小组件 + 单测 | 同上 | ⬜ |

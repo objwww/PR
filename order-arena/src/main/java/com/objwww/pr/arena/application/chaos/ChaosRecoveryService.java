@@ -70,6 +70,9 @@ public class ChaosRecoveryService {
                     case F1 -> handleF1(session);
                     case F2 -> handleF2(session);
                     case F3 -> handleF3(session);
+                    // M-a 业务族（F9~F18）：注入关闭即恢复（症状由探测面自然归零），
+                    // 无注入侧恢复动作；场景专用取证随演练细化后在此补 handleFn
+                    case F9, F10, F11, F12, F13, F14, F15, F16, F17, F18 -> 0;
                 };
             } catch (RuntimeException e) {
                 log.warn("chaos 会话处理失败（下轮重试）: scenario={} {}",
