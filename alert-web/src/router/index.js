@@ -32,6 +32,7 @@ const DrillDetailView = () => import('../views/DrillDetailView.vue')
 const VersionsView = () => import('../views/VersionsView.vue')
 const AuditView = () => import('../views/AuditView.vue')
 const CatalogView = () => import('../views/CatalogView.vue')
+const PostmortemView = () => import('../views/PostmortemView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -72,6 +73,7 @@ const routes = [
   // 审计与变更历史（业界路线 v2 第1项）：auth_event + change_event 统一只读流
   { path: '/audit', name: 'audit', component: AuditView, meta: { title: '审计与变更历史' } },
   { path: '/catalog', name: 'catalog', component: CatalogView, meta: { title: '服务目录' } },
+  { path: '/postmortems', name: 'postmortems', component: PostmortemView, meta: { title: '复盘草稿' } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
