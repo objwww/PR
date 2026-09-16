@@ -72,11 +72,12 @@ public class DiagSessionController {
         }
         String answer;
         switch (request.key()) {
-            case "impact" -> answer = text(jdbc.sql("""
-                    select '服务=' || coalesce(e.lab->>'service', e.lab->>'service_name', '—')
-                           || '；状态=' || i.status
-                           || '；首次发生=' || to_char(i.episode_started_at, 'YYYY-MM-DD HH24:MI')
-                           || '；累计接收 ' || i.received_count || ' 次'
+            case "impact" -> answer = lines(jdbc.sql("""
+                    select '· 服务：' || coalesce(e.lab->>'service', e.lab->>'service_name', '—')
+                           || char(10) || '· 告警：' || coalesce(substring(i.incident_key from 'alertname=([^|]+)'), '—')
+                           || char(10) || '· 状态：' || i.status
+                           || coalesce(char(10) || '· 首次发生：' || to_char(i.episode_started_at, 'YYYY-MM-DD HH24:MI'), '')
+                           || char(10) || '· 累计接收 ' || i.received_count || ' 次（去重事件 ' || i.distinct_event_count || '）'
                       from incident i
                       left join lateral (
                           select labels as lab from alert_event
@@ -84,33 +85,41 @@ public class DiagSessionController {
                            order by recorded_at desc limit 1
                       ) e on true
                      where i.id = :id
-                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
-            case "hypothesis" -> answer = text(jdbc.sql("""
-                    select coalesce(string_agg(c.reason, ' ｜ '), '尚无结构化断言（确定性引擎无假设清单）')
-                      from rca_claim c
-                      join rca_run r on r.id = c.run_id
-                     where r.incident_id = :id
-                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
-            case "timeline" -> answer = text(jdbc.sql("""
-                    select coalesce(string_agg(e.status || '@' || to_char(e.starts_at, 'MM-DD HH24:MI'), ' → '),
-                           '暂无事件')
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),
+                    "· 事件不存在");
+            case "hypothesis" -> answer = lines(jdbc.sql("""
+                    select '· [' || coalesce(c.status, '—') || '] ' || c.reason
+                      from rca_claim c join rca_run r on r.id = c.run_id
+                     where r.incident_id = :id limit 5
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),
+                    "· 尚无结构化断言（确定性引擎无假设清单）——可用自由追问让模型基于事实作答");
+            case "timeline" -> answer = lines(jdbc.sql("""
+                    select '· ' || to_char(e.starts_at, 'MM-DD HH24:MI') || ' ' ||
+                           case e.status when 'firing' then '告警触发' else '恢复' end
                       from (select status, starts_at from alert_event
                              where incident_id = :id order by starts_at desc limit 8) e
-                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
-            case "history" -> answer = text(jdbc.sql("""
-                    select '累计 ' || count(*) || ' 次调查：成功 ' || count(*) filter (where state = 'SUCCEEDED')
-                           || '，失败 ' || count(*) filter (where state in ('FAILED','EXPIRED'))
-                           || '，在途 ' || count(*) filter (where state in ('QUEUED','RUNNING','REPORTING'))
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),
+                    "· 暂无事件");
+            case "history" -> answer = lines(jdbc.sql("""
+                    select '· 累计调查 ' || count(*) || ' 次'
+                           || char(10) || '· 成功 ' || count(*) filter (where state = 'SUCCEEDED')
+                           || ' ｜ 失败 ' || count(*) filter (where state in ('FAILED','EXPIRED'))
+                           || ' ｜ 在途 ' || count(*) filter (where state in ('QUEUED','RUNNING','REPORTING'))
                       from rca_run where incident_id = :id
-                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
-            case "cost" -> answer = text(jdbc.sql("""
-                    select coalesce('累计模型费用 ' || round(sum(m.cost_micros) / 1000000.0, 4) || ' '
-                           || coalesce(max(m.currency), ''), '暂无可计价调用（模型名缺失或 usage 缺失，如实未知）')
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),
+                    "· 尚未发起过调查");
+            case "cost" -> answer = lines(jdbc.sql("""
+                    select '· 模型调用 ' || count(m.id) || ' 次'
+                           || char(10) || '· 累计费用 ' || coalesce(round(sum(m.cost_micros) / 1000000.0, 4)::text || ' ' || coalesce(max(m.currency), ''), '—')
                       from rca_model_call m join rca_run r on r.id = m.run_id
-                      where r.incident_id = :id
-                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list());
+                     where r.incident_id = :id
+                    """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),
+                    "· 暂无可计价调用（模型名缺失或 usage 缺失，如实未知）");
             default -> answer = "不支持的问题";
         }
+        answer = answer + System.lineSeparator() + "—— 数据截至 "
+                + Timestamp.from(Instant.now()).toInstant().toString().replace('T', ' ').substring(0, 16)
+                + "（实时查询，与事件状态一致）";
         UUID sessionId = UUID.randomUUID();
         Instant now = Instant.now();
         jdbc.sql("""
@@ -277,5 +286,22 @@ public class DiagSessionController {
 
     private static String text(List<String> rows) {
         return rows.isEmpty() || rows.get(0) == null ? "未找到相关记录" : String.join("；", rows);
+    }
+
+    /** 多行答案组装：每行一个事实点；无行时用兜底文案（不再单行分号串） */
+    private static String lines(List<String> rows, String fallback) {
+        if (rows == null || rows.isEmpty()) {
+            return fallback;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String r : rows) {
+            if (r != null && !r.isBlank()) {
+                if (sb.length() > 0) {
+                    sb.append(System.lineSeparator());
+                }
+                sb.append(r.startsWith("·") ? r : "· " + r);
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : fallback;
     }
 }

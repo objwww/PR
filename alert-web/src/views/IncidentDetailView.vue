@@ -602,4 +602,5 @@ watch(runId, loadRunDetail)
 .diag-qs { display: flex; gap: 8px; flex-wrap: wrap; }
 .diag-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
 .diag-row { padding: 8px 0; border-bottom: 1px solid var(--line, #ebeef5); display: flex; flex-direction: column; gap: 4px; }
+.diag-row .claim-text { white-space: pre-wrap; }
 </style>
