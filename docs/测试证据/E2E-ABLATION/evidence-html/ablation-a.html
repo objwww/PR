@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>消融A · Guardian 低危白名单 · 195 真机</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:24px;background:#f5f7fa;color:#1f2933}
+h1{font-size:22px} h2{font-size:16px;margin-top:28px}
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;margin-right:8px}
+.on{background:#e6f4ea;color:#137333}.off{background:#fce8e6;color:#a50e0e}
+.card{background:#fff;border:1px solid #d8dee4;border-radius:8px;padding:16px;margin-top:14px}
+pre{background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+.verdict{font-size:15px;font-weight:600}
+table{border-collapse:collapse;font-size:13px}
+td,th{border:1px solid #d8dee4;padding:6px 12px;text-align:left}
+th{background:#eef2f6}
+</style>
+</head>
+<body>
+<h1>消融A：Guardian 低危白名单 <span class="badge on">有组件</span><span class="badge off">无组件</span></h1>
+<p>对象：<b>MutationGuardian</b>（确定性三值裁决：SAFE 自动签发 / UNSAFE 自动拒绝 / UNCERTAIN 转人工）。<br>
+切换方式：<code>APP_ALERT_MUTATION_GUARDIAN_LOW_RISK_TOOLS</code>（chaos.resolve → 空）+ 容器重建；同一 R2 意图（chaos.resolve，res://demo/checkout/ablation-a-*），仅白名单不同。</p>
+
+<div class="card">
+<h2>① 白名单开启（含 chaos.resolve）→ SAFE 自动批准</h2>
+<pre>container_whitelist=chaos.resolve
+auto_decide_A1={"verdict":"SAFE","approval_state":"APPROVED",
+  "reason":"LOW_RISK_ALLOWLIST + PARAMS_IN_BUDGET",
+  "request_id":"98fcf2ba-43d6-460f-a620-98fb773a96f8"}
+request=98fcf2ba…|APPROVED
+decision=guardian:pb-prod-v1|GUARDIAN|approved
+grant=ff260118-f798-448f-9ead-819c15d686be|ACTIVE
+event_on=SAFE|LOW_RISK_ALLOWLIST + PARAMS_IN_BUDGET</pre>
+<p class="verdict">R2 单批即达 quorum：机器审批者 guardian:pb-prod-v1 落 decisions 表（显式可见）， Grant 即刻 ACTIVE。</p>
+</div>
+
+<div class="card">
+<h2>② 白名单移除（空清单）→ UNCERTAIN 转人工</h2>
+<pre>container_whitelist=&lt;empty&gt;
+auto_decide_A2={"verdict":"UNCERTAIN","approval_state":"PENDING_HUMAN",
+  "reason":"TOOL_NOT_IN_LOW_RISK_ALLOWLIST: chaos.resolve"}
+request_count_for_A2=0          ← 不铸审批请求、不代决策，人工 decide 面接管
+event_off=UNCERTAIN|TOOL_NOT_IN_LOW_RISK_ALLOWLIST: chaos.resolve</pre>
+<p class="verdict">"宁可转人工，绝不硬凑 SAFE"：白名单一旦收窄，同一工具立即失去自动放行资格。</p>
+</div>
+
+<div class="card">
+<h2>③ 还原与结论</h2>
+<pre>APP_ALERT_MUTATION_GUARDIAN_LOW_RISK_TOOLS=chaos.resolve   ← .env 已还原
+container_whitelist_restored=chaos.resolve
+health=200 after 7x3s</pre>
+<table>
+<tr><th>状态</th><th>Guardian 裁决</th><th>审批状态</th><th>人工介入</th></tr>
+<tr><td><b>有白名单</b></td><td>SAFE</td><td>APPROVED（grant 签发）</td><td>零</td></tr>
+<tr><td><b>无白名单</b></td><td>UNCERTAIN</td><td>PENDING_HUMAN（零请求零代签）</td><td>必须</td></tr>
+</table>
+<p>组件差异：Guardian 白名单 = 低危工具自动执行的唯一通道；移除后自动化收益归零、安全性不降（fail-closed 转人工）。</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>评测指标 · mutation shadow-summary · 195 真机</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:24px;background:#f5f7fa;color:#1f2933}
+h1{font-size:22px} h2{font-size:16px;margin-top:28px}
+.card{background:#fff;border:1px solid #d8dee4;border-radius:8px;padding:16px;margin-top:14px}
+pre{background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+table{border-collapse:collapse;font-size:13px;margin-top:10px}
+td,th{border:1px solid #d8dee4;padding:6px 12px;text-align:left}
+th{background:#eef2f6}
+</style>
+</head>
+<body>
+<h1>评测指标面：/api/mutation/shadow-summary（195 真机实时投影）</h1>
+<div class="card">
+<h2>实时值（GET，operator bearer 机器线）</h2>
+<pre>GET /api/mutation/shadow-summary
+{
+  "requests": 5,                    ← 审批请求累计（R2/R3 全走四账本）
+  "approved": 5,                    ← 全部批准（Guardian SAFE 自动批 + 人工双批）
+  "denied": 0, "expired": 0,
+  "grants": 5,                      ← ONCE/SESSION grant 签发数
+  "consumed_authorizations": 2,     ← single-use 授权恰一次消费
+  "avg_decision_seconds": 0.0459,   ← 机器审批平均裁决耗时（~46ms）
+  "suspensions_total": 1,           ← 挂起一次（C3 双时钟）
+  "suspensions_active": 0,
+  "human_wait_seconds_total": 20.026← 人工等待显式计价（shadow 观测）
+}</pre>
+</div>
+<div class="card">
+<h2>指标口径与用途</h2>
+<table>
+<tr><th>指标</th><th>评测意义</th></tr>
+<tr><td>requests / approved / denied / expired</td><td>审批漏斗：每个 mutation 意图恰好一个请求，无旁路</td></tr>
+<tr><td>grants / consumed_authorizations</td><td>授权范围签发 vs 恰一次消费（single-use CAS）</td></tr>
+<tr><td>avg_decision_seconds</td><td>Guardian 自动裁决成本（毫秒级，可忽略）</td></tr>
+<tr><td>suspensions_total / active</td><td>durable 挂起（不占 slot）面使用情况</td></tr>
+<tr><td>human_wait_seconds_total</td><td>Limited Autonomy 的人工代价显式化——UNCERTAIN/ESCALATED 的等待时间全部入账</td></tr>
+</table>
+<p>同一 JSON 亦见于消融E证据页③；web 评测中心指标页（端到端命中率/条件准确率/根因可判定覆盖率/未决率/错误确认率）见 12-eval-run-detail.png。</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>消融E · 真执行对账闭环 · 195 真机</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:24px;background:#f5f7fa;color:#1f2933}
+h1{font-size:22px} h2{font-size:16px;margin-top:28px}
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;margin-right:8px}
+.on{background:#e6f4ea;color:#137333}.off{background:#fce8e6;color:#a50e0e}
+.card{background:#fff;border:1px solid #d8dee4;border-radius:8px;padding:16px;margin-top:14px}
+pre{background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+.verdict{font-size:15px;font-weight:600}
+</style>
+</head>
+<body>
+<h1>消融E：真执行对账闭环（UNKNOWN 不猜 FAILED/VERIFIED） <span class="badge on">对账闭环</span><span class="badge off">无闭环对照</span></h1>
+<p>对象：<b>OperationReconciler + AM8 operate 人工终裁</b>（真执行超时 ≠ 失败：UNKNOWN→RECONCILING→ESCALATED 人工收口，绝不自动 VERIFIED）。<br>
+证据源：195 真实靶（arena-chaos-admin）真派发生命周期，run 4950d39b seq 52–57；operation 行 ad4a472f。</p>
+
+<div class="card">
+<h2>① 真执行全生命周期（真实 HTTP 往返 + 失败诚实穿越）</h2>
+<pre>op=ad4a472f|status=FAILED_CONFIRMED|dry_run=false|resource=res://demo/checkout
+
+seq=52 OPERATION_PREPARED      :: dry_run=false, unlocked=true, epoch=5, grant 锚在案
+seq=53 OPERATION_DISPATCHED    :: 真实 HTTP POST arena-chaos-admin:8080/chaos/latency/off
+seq=54 OPERATION_UNKNOWN       :: timeout!=failed; 锁保持 BUSY; reconcile 裁决
+seq=55 OPERATION_RECONCILING   :: 进入对账轮
+seq=56 OPERATION_ESCALATED     :: reason=REAL_EXECUTION_NO_PROBE（真执行不猜 VERIFIED）
+seq=57 OPERATION_RULING        :: ruling=FAILED_CONFIRMED, operator_id=human-oncall,
+                                  lock_released=true</pre>
+<p class="verdict">中间态被显式穿越：UNKNOWN 不被美化成 FAILED、更不被自动 VERIFIED；唯一出口 = 人工裁决（AM8 operate 面），裁决后放锁收口。</p>
+</div>
+
+<div class="card">
+<h2>② 消融对照：若没有对账闭环</h2>
+<p>无 Reconciler/ESCALATED 出边的系统里，超时只有两条路：① 猜 FAILED → 可能误杀一次实际生效的变更（靶已执行但响应丢失）；② 猜 SUCCESS → 未验证的副作用被当成功放锁。两者都把"不确定"伪装成"确定"。<br>
+本系统把第三条路做成结构唯一：UNKNOWN 只能 RECONCILING，无探针证据只能 ESCALATED，锁在裁决前永不释放（TTL 仅孤儿化为 ORPHANED，不让渡）。</p>
+<pre>对照实验（PE-E3 实测）：PLAN(dry_run=false) → DISPATCHED → 靶 4xx → TIMEOUT_UNKNOWN
+  → UNKNOWN → RECONCILING → ESCALATED(REAL_EXECUTION_NO_PROBE) → 人工 FAILED_CONFIRMED
+  → 放锁（locks_left=0）；事件链 seq52–57 与 op 行如上，全链在案可审计。</pre>
+</div>
+
+<div class="card">
+<h2>③ shadow-summary（mutation 面投影）</h2>
+<pre>GET /api/mutation/shadow-summary
+{"requests":5,"approved":5,"denied":0,"expired":0,"grants":5,
+ "consumed_authorizations":2,"avg_decision_seconds":0.0458642,
+ "suspensions_total":1,"suspensions_active":0,
+ "human_wait_seconds_total":20.026}</pre>
+<p>组件差异：对账闭环 = "不确定"态的受控降落跑道。没有它，自动化执行面要么停摆（锁死）要么说谎（假终态）；有它，不确定被显式计价（ESCALATED 等人工），人工等待时间进入 shadow 观测（human_wait_seconds_total）。</p>
+</div>
+</body>
+</html>

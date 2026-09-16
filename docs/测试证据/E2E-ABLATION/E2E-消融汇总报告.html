@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>E2E 全流程 + 消融实验汇总报告 · 告警 RCA Agent · 195 真机（2026-09-16）</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:0;background:#eef1f5;color:#1f2933}
+header{background:linear-gradient(120deg,#10233f,#1c4d8f);color:#fff;padding:36px 48px}
+header h1{margin:0 0 8px;font-size:26px}
+header p{margin:4px 0;opacity:.85;font-size:14px}
+main{max-width:1280px;margin:0 auto;padding:28px 32px 64px}
+h2{font-size:20px;margin:40px 0 12px;border-left:5px solid #1c4d8f;padding-left:12px}
+h3{font-size:16px;margin:22px 0 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+figure{margin:0;background:#fff;border:1px solid #d8dee4;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(16,35,63,.08)}
+figure img{width:100%;display:block}
+figcaption{padding:10px 14px;font-size:13px;background:#f7f9fb;border-top:1px solid #e6ebf0}
+.wide{grid-column:1 / -1}
+.tag{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;margin-right:6px;vertical-align:middle}
+.ok{background:#e6f4ea;color:#137333}.warn{background:#fef7e0;color:#b26a00}.info{background:#e8f0fe;color:#1967d2}
+table{border-collapse:collapse;font-size:13.5px;width:100%;background:#fff}
+td,th{border:1px solid #d8dee4;padding:8px 12px;text-align:left;vertical-align:top}
+th{background:#eef2f6;white-space:nowrap}
+p{line-height:1.75}
+code{background:#e8edf3;padding:1px 6px;border-radius:4px;font-size:.92em}
+footer{max-width:1280px;margin:0 auto;padding:0 32px 40px;color:#5f6b7a;font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>告警 RCA Agent · E2E 全流程 + 组件消融实验汇总报告</h1>
+  <p>195 真机 · 2026-09-16 · 方案 B v2（Durable Agent Workflow + Safety Control Plane）收官取证</p>
+  <p>范围：E2E 端到端走查（告警→incident→run→调查→报告→页面）｜ A–E 五项消融（有/无组件对照）｜ 评测指标与页面 ｜ 19 张截图证据</p>
+</header>
+<main>
+
+<h2>一、E2E 全流程（真机闭环）</h2>
+<p>AM 信封载荷直打 <code>/webhooks/alertmanager</code>（202 accepted）→ inbox 消化 → incident 投影 → canary 路由（白名单内 alertname，材料变化 → RERUN）→ NATIVE run <code>82cf4cbf</code> 秒级 SUCCEEDED → 报告 <code>STRUCTURE_VALIDATED</code>。非白名单告警则记 <code>WAITING_CAPABILITY</code> 不铸 run——路由纪律的活体证据。</p>
+<div class="grid">
+  <figure><img src="images/01-overview.png" alt="总览"><figcaption>01 · 登录后总览：待处理告警 / 24h 趋势 / 按风险待办（operator 会话）</figcaption></figure>
+  <figure><img src="images/02-alerts-list.png" alt="告警中心"><figcaption>02 · 告警中心：注入事件已并入 P0「CheckoutRpcClientErrorRateHigh」（1 分钟前），演示告警 E2EAblationFullFlow 处于告警中</figcaption></figure>
+  <figure><img src="images/03-incident-detail.png" alt="告警详情"><figcaption>03 · 告警详情：持续 18h / 接收 45 次 / 分类规则 APPLICATION-ALERTNAME 命中 ux01-rules-v1</figcaption></figure>
+  <figure><img src="images/04-runs-queue.png" alt="调查队列"><figcaption>04 · 调查队列：进行中 2 / 待干预 58 / 已结束 0（失败、等待、需干预的收敛面）</figcaption></figure>
+  <figure><img src="images/05-run-detail-dag.png" alt="调查详情"><figcaption>05 · 调查 82cf4cbf 摘要：NATIVE 引擎 2 任务 2 完成，待审宣（UNRESOLVED 如实呈现）</figcaption></figure>
+  <figure><img src="images/06-run-execution-dag.png" alt="任务抽屉"><figcaption>06 · 执行过程·任务抽屉：NATIVE_INVESTIGATE 完成（优先级 200，租约 control-1 epoch 1，尝试 1 次）</figcaption></figure>
+  <figure><img src="images/07-run-dag-canvas.png" alt="DAG"><figcaption>07 · DAG 全景：NATIVE_INVESTIGATE ✓ / PRIMARY_INVESTIGATE 双 DONE，任务 2（完成 2 / 运行 0 / 阻塞 0）</figcaption></figure>
+  <figure><img src="images/08-run-report.png" alt="报告"><figcaption>08 · 报告页签：ID c89f5c9c / schema v2 / STRUCTURE_VALIDATED / UNRESOLVED（confirmed=0）+ 证据 claim 哈希</figcaption></figure>
+</div>
+
+<h2>二、组件消融实验（有 vs 无，唯一变量对照）</h2>
+<table>
+<tr><th>消融</th><th>组件</th><th>有组件时</th><th>无组件时（缺席事故）</th><th>截图</th></tr>
+<tr><td>A</td><td>Guardian 低危白名单</td><td>R2 意图 SAFE → 自动 APPROVED，机器审批者 <code>guardian:pb-prod-v1</code> 显式落账，grant ACTIVE</td><td>UNCERTAIN → PENDING_HUMAN：不铸请求不代签——越权自动放行被结构性消灭</td><td>15</td></tr>
+<tr><td>B</td><td>入口注入扫描</td><td>注入载荷 → QUARANTINED（命中特征原文落 last_error 审计列）</td><td>PROCESSED 直通 → incident FIRING，恶意指令直抵模型上下文（上下文投毒）</td><td>16</td></tr>
+<tr><td>C</td><td>资源互斥锁</td><td>同资源第二写 <code>REJECTED / LOCK_BUSY</code>，planner 整体回滚</td><td>无锁行即 PLANNED→COMPLETED 畅行——并发双写从竞态变结构不可能，全靠它</td><td>17</td></tr>
+<tr><td>D</td><td>事件哈希链</td><td>中段篡改（连 digest 一起重算）→ 全链重算 <code>brokenAtSeq=34</code> 报红</td><td>无链时篡改行内自洽、不可见——审计行可信全靠链</td><td>18</td></tr>
+<tr><td>E</td><td>真执行对账闭环</td><td>UNKNOWN→RECONCILING→ESCALATED→人工 FAILED_CONFIRMED→放锁（真靶全生命周期）</td><td>无闭环只能猜 FAILED（误杀生效变更）或猜 SUCCESS（假终态放锁）</td><td>19</td></tr>
+</table>
+
+<div class="grid">
+  <figure class="wide"><img src="images/15-ablation-a-guardian.png" alt="消融A"><figcaption>15 · 消融A：白名单开=SAFE 自动批准（grant ACTIVE）；白名单关=UNCERTAIN 转人工（零请求零代签）——fail-closed 收益归零、安全性不降</figcaption></figure>
+  <figure class="wide"><img src="images/16-ablation-b-injection.png" alt="消融B"><figcaption>16 · 消融B：扫描开=QUARANTINED（patterns 落审计）；扫描关=PROCESSED 直通 incident——上下文投毒第一道防线的有无之别</figcaption></figure>
+  <figure class="wide"><img src="images/17-ablation-c-lock.png" alt="消融C"><figcaption>17 · 消融C：同一意图同一资源，唯一差异一把 HELD 锁——LOCK_BUSY 整体回滚 vs PLANNED→COMPLETED 畅行</figcaption></figure>
+  <figure class="wide"><img src="images/18-ablation-d-chain.png" alt="消融D"><figcaption>18 · 消融D：78 行全链基线全绿 → seq=34 中段篡改（高级攻击者姿态）→ brokenAtSeq=34（77/78）→ 字节级还原复验 78/78 全绿</figcaption></figure>
+  <figure class="wide"><img src="images/19-ablation-e-reconcile.png" alt="消融E"><figcaption>19 · 消融E：真靶（arena-chaos-admin）真派发生命周期 seq52–57——UNKNOWN 不猜终态，ESCALATED 人工收口后放锁</figcaption></figure>
+</div>
+
+<h2>三、评测指标与页面</h2>
+<div class="grid">
+  <figure><img src="images/09-monitor.png" alt="监控"><figcaption>09 · 监控页：活跃调查 2 / 待审查 55 / 开放处置 5 + 24h 接收恢复趋势 + 主机 CPU/内存/磁盘</figcaption></figure>
+  <figure><img src="images/10-eval-runs.png" alt="实验列表"><figcaption>10 · 评测中心·实验列表：demo-eval-ds1-L（qwen3-max × am4-native-v1，10 案例已完成）等，质量摘要=端到端命中/未决/错误确认</figcaption></figure>
+  <figure><img src="images/11-eval-compare.png" alt="对比工作台"><figcaption>11 · 评测对比工作台（基线/候选选择器 + 案例级对比入口）</figcaption></figure>
+  <figure><img src="images/12-eval-run-detail.png" alt="实验详情"><figcaption>12 · 实验详情指标：端到端命中率 / 条件准确率 / 根因可判定覆盖率 / 未决率 / 错误确认率 + 质量门 + 证据汇总（EV-05）</figcaption></figure>
+  <figure><img src="images/13-cases.png" alt="处置中心"><figcaption>13 · 处置中心：全部待办 5 / case 状态机操作（认领·处理·转派）+ 处置记录全时间线</figcaption></figure>
+  <figure><img src="images/14-shadow-summary.png" alt="shadow-summary"><figcaption>14 · mutation 面投影：5 requests / 5 approved / 5 grants / 2 恰一次消费 / avg 0.046s / human_wait 20.026s（人工代价显式化）</figcaption></figure>
+</div>
+
+<h2>四、结论</h2>
+<p><span class="tag ok">E2E 闭环</span><span class="tag ok">五项消融全过</span><span class="tag ok">环境逐项还原</span><span class="tag info">19 张截图入库</span></p>
+<p>方案 B v2 的五层安全组件在 195 真机上完成"有/无"消融：每个组件的缺席都对应一类具体事故——<b>越权自动放行（A）、上下文投毒（B）、并发双写（C）、审计不可信（D）、假终态（E）</b>；在场时这些事故分别被三值裁决、隔离区、BUSY、断链报红、人工终裁<b>结构性消灭</b>。E2E 主链路（webhook→inbox→incident→canary 路由→run→报告→页面）全程真实数据、真实引擎、真实账本行。</p>
+<p>配套文件：<code>runs/as-deploy-20260916/e2e-ablation-195-verify.md</code>（验收台账）· <code>evidence-html/ablation-a..e.html</code>（单项证据页源）· <code>images/01–19</code>。</p>
+</main>
+<footer>生成于 2026-09-16 · 告警 RCA Agent · E2E-ABLATION 波次 · 证据与截图均来自 195 真机实跑（bearer/凭据零落文档）</footer>
+</body>
+</html>

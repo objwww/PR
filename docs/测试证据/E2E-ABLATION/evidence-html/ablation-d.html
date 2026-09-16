@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>消融D · 事件哈希链 · 195 真机</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:24px;background:#f5f7fa;color:#1f2933}
+h1{font-size:22px} h2{font-size:16px;margin-top:28px}
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;margin-right:8px}
+.on{background:#e6f4ea;color:#137333}.off{background:#fce8e6;color:#a50e0e}
+.card{background:#fff;border:1px solid #d8dee4;border-radius:8px;padding:16px;margin-top:14px}
+pre{background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+.verdict{font-size:15px;font-weight:600}
+</style>
+</head>
+<body>
+<h1>消融D：事件哈希链（篡改检测） <span class="badge on">有链</span><span class="badge off">无链</span></h1>
+<p>对象：<b>rca_event 哈希链</b>（append-only；event_hash = sha256(prev_hash : seq : event_type : payload_digest)，Genesis='GENESIS'）。<br>
+方法：对 run 4950d39b（78 行全链）seq=34 做中段篡改——payload 修改且 <b>payload_digest 同步重算</b>（高级攻击者姿态，行内自洽）；验链公式与 PostgresRcaEventAppender.verifyChain 完全一致，SQL 现场复算。全程备份→篡改→取证→字节级还原。</p>
+
+<div class="card">
+<h2>① 篡改前基线：链全绿</h2>
+<pre>backup_rows=78
+baseline=verified 78/78 brokenAtSeq=-1</pre>
+</div>
+
+<div class="card">
+<h2>② 篡改后：无链世界不可见，有链世界必报断</h2>
+<pre>UPDATE 1
+tampered=seq 34 marked=true          ← payload 已含 tampered_by 标记，digest 已同步重算
+
+── 无链对照（行内自洽性）：payload ↔ payload_digest 相互一致，行内零矛盾；
+   若系统只存 payload+digest（无 prev_hash/event_hash 链列），该篡改不留任何可检痕迹。
+
+── 有链：全链重算
+chain_check=brokenAtSeq=34 verified=77/78</pre>
+<p class="verdict">seq=34 event_hash 与重算不符 → 链自断点起报红；后续 44 行因前驱变化全部纳入怀疑范围。审计义务移交人工（不自动修复、不猜、不删）。</p>
+</div>
+
+<div class="card">
+<h2>③ 还原复验：回到全绿</h2>
+<pre>UPDATE 78
+restored=verified 78/78 brokenAtSeq=-1
+backup_table_dropped=yes</pre>
+<p>组件差异：哈希链把"审计行被改"从不可见变成结构性必现（哪怕攻击者连摘要一起重算）。这是 R9 口径 tamper-evident 的落点，也是 RCA 报告可信度的根基。</p>
+</div>
+</body>
+</html>

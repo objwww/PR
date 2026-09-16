@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>消融C · 资源互斥锁 · 195 真机</title>
+<style>
+body{font-family:"Microsoft YaHei",system-ui,sans-serif;margin:24px;background:#f5f7fa;color:#1f2933}
+h1{font-size:22px} h2{font-size:16px;margin-top:28px}
+.badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:12px;margin-right:8px}
+.on{background:#e6f4ea;color:#137333}.off{background:#fce8e6;color:#a50e0e}
+.card{background:#fff;border:1px solid #d8dee4;border-radius:8px;padding:16px;margin-top:14px}
+pre{background:#0d1117;color:#c9d1d9;padding:12px;border-radius:6px;overflow-x:auto;font-size:12.5px;line-height:1.55}
+.verdict{font-size:15px;font-weight:600}
+table{border-collapse:collapse;font-size:13px;margin-top:10px}
+td,th{border:1px solid #d8dee4;padding:6px 12px;text-align:left}
+th{background:#eef2f6}
+</style>
+</head>
+<body>
+<h1>消融C：资源互斥锁 <span class="badge on">有锁</span><span class="badge off">无锁</span></h1>
+<p>对象：<b>ResourceCoordinator / resource_mutation_lock</b>（同资源写互斥：BUSY 显式拒绝、不排队不覆盖；锁释放绑定 Operation 终态）。<br>
+对照组设计：同一意图（chaos.resolve → res://demo/checkout/ablation-c，Guardian 自动批 grant 均已就绪），唯一差异 = 该资源上是否存在另一操作的 HELD 锁行。</p>
+
+<div class="card">
+<h2>① 有锁：HELD 锁占住资源 → plan 整体拒绝</h2>
+<pre>lock=res://demo/checkout/ablation-c|state=HELD|epoch=7   ← 占锁方 op（UNKNOWN 持有中）
+plan_with_lock={"status":"REJECTED","reason":"LOCK_BUSY"}</pre>
+<p class="verdict">BUSY 是显式结果：宁可串行不可并发 mutation；planner 整体回滚（意图/授权/锁/出箱五步全不出半步）。</p>
+</div>
+
+<div class="card">
+<h2>② 无锁：删掉锁行后同一 plan → 直通执行到完成</h2>
+<pre>lock_rows_after_delete=0
+plan_without_lock={"status":"PLANNED","operation_id":"1af7d612-4b41-4a8d-a2fe-baf149b9c350",
+  "resource_epoch":1}
+op_final=COMPLETED|dry_run=true
+locks_left=0                              ← 终态自动放锁
+plan_without_lock 后 outbox→dispatch→VERIFIED→COMPLETED 全链 14s 内走完</pre>
+<p class="verdict">没有锁的世界里同一副作用畅行无阻——对照证明锁是并发 mutation 的唯一串行化点。</p>
+</div>
+
+<div class="card">
+<h2>③ 结论</h2>
+<table>
+<tr><th>状态</th><th>plan 结果</th><th>副作用</th></tr>
+<tr><td><b>有 HELD 锁</b></td><td>REJECTED / LOCK_BUSY</td><td>零（整体回滚）</td></tr>
+<tr><td><b>无锁</b></td><td>PLANNED</td><td>完整执行（COMPLETED）</td></tr>
+</table>
+<p>组件差异：锁把"同资源并发写"从竞态变成结构不可能；其代价（BUSY 拒绝）由 Reconciler/人工裁决面有序收口。</p>
+</div>
+</body>
+</html>
