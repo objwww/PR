@@ -119,6 +119,18 @@ public class EvalQueryService {
     }
 
     /**
+     * EV-09 稳定性分面（Agent 非确定性一级指标——业界共识：IBM ITBench
+     * run-to-run consistency / Majority-at-k、RCAEval Avg@5；单轮命中率会被
+     * 幸运轮抬走，稳定性必须独立计量）：passAt1 = 命中轮次/总轮次（逐轮平均）；
+     * passAllRounds = 全轮命中场景/场景数（pass@k 严格口径，连 k 轮全过才算稳）；
+     * scenarioConsistency = 判定与实际根因三元组全轮一致的场景/场景数（结果漂移
+     * 即不一致，与对错正交）。无案例落档 → 三件套 UNKNOWN，不填 0。
+     */
+    public record StabilityFacet(RatioStat passAt1, RatioStat passAllRounds,
+                                 RatioStat scenarioConsistency) {
+    }
+
+    /**
      * 状态分面（§5.1）：各面分开表达，互不顶替。leaseHeartbeatAt 无租约数据源 → null；
      * usageStatus/costStatus 自 EV-06 起接真值（rca_model_call 沿 rca_run_id 身份链
      * 聚合，RunUsageRollup；无 rca 链/无已结算调用 → UNKNOWN）；EV-04 起
@@ -175,7 +187,8 @@ public class EvalQueryService {
                                   Integer tp, Integer fp, Integer fn,
                                   String displayName, String mode,
                                   long caseCount, Integer totalScenarios,
-                                  QualityFacet quality, RunFacets facets) {
+                                  QualityFacet quality, StabilityFacet stability,
+                                  RunFacets facets) {
     }
 
     public record EvalRunListResponse(List<EvalRunListItem> items, String nextCursor,
@@ -189,7 +202,8 @@ public class EvalQueryService {
                                         Double endToEndHitRate, Double unresolvedRate,
                                         Integer tp, Integer fp, Integer fn, long caseCount,
                                         String displayName, String mode, Integer totalScenarios,
-                                        QualityFacet quality, RunFacets facets, Instant asOf,
+                                        QualityFacet quality, StabilityFacet stability,
+                                        RunFacets facets, Instant asOf,
                                         String terminalReason, JsonNode launchPlan) {
     }
 
@@ -352,9 +366,17 @@ public class EvalQueryService {
         for (EvalQueryReader.UsageCallRow callRow : reader.listUsageCallsForRuns(runIds)) {
             usageByRun.computeIfAbsent(callRow.evalRunId(), k -> new ArrayList<>()).add(callRow);
         }
+        // EV-09：页内 run 的场景轮次聚合一次批量取回（禁 N+1），稳定性三件套进分面
+        Map<UUID, List<EvalQueryReader.ScenarioRoundStatRow>> statsByRun = new LinkedHashMap<>();
+        for (EvalQueryReader.ScenarioRoundStatRow statRow :
+                reader.listScenarioRoundStatsForRuns(runIds)) {
+            statsByRun.computeIfAbsent(statRow.evalRunId(), k -> new ArrayList<>()).add(statRow);
+        }
         List<EvalRunListItem> items = new ArrayList<>(page.items().size());
         for (EvalRunRow row : page.items()) {
-            items.add(toListItem(row, usageByRun.getOrDefault(row.runId(), List.of())));
+            items.add(toListItem(row,
+                    usageByRun.getOrDefault(row.runId(), List.of()),
+                    statsByRun.getOrDefault(row.runId(), List.of())));
         }
         return new EvalRunListResponse(List.copyOf(items), nextCursor, Instant.now());
     }
@@ -366,7 +388,9 @@ public class EvalQueryService {
                 row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
-                qualityFacet(row), facets(row, usageRollup(runId)), Instant.now(),
+                qualityFacet(row),
+                stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId))),
+                facets(row, usageRollup(runId)), Instant.now(),
                 row.terminalReason(), parseLaunchPlan(row.launchPlanJson())));
     }
 
@@ -916,13 +940,41 @@ public class EvalQueryService {
     // ------------------------------------------------------------------ 分面装配（纯函数段）
 
     private EvalRunListItem toListItem(EvalRunRow row,
-            List<EvalQueryReader.UsageCallRow> usageRows) {
+            List<EvalQueryReader.UsageCallRow> usageRows,
+            List<EvalQueryReader.ScenarioRoundStatRow> statRows) {
         return new EvalRunListItem(row.runId(), row.datasetVersion(), row.registryDigest(),
                 row.model(), row.promptVersion(), row.configDigest(), row.state(),
                 row.startedAt(), row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 row.displayName(), row.mode(), row.caseCount(), row.totalScenarios(),
-                qualityFacet(row), facets(row, RunUsageRollup.of(usageRows)));
+                qualityFacet(row), stabilityFacet(statRows),
+                facets(row, RunUsageRollup.of(usageRows)));
+    }
+
+    /** EV-09：场景轮次聚合行 → 稳定性三件套（无案例落档 → UNKNOWN；分母全用
+     *  真实落档轮次/场景数；单轮场景天然一致——分子分母如实呈现，不隐藏轮数） */
+    private StabilityFacet stabilityFacet(List<EvalQueryReader.ScenarioRoundStatRow> rows) {
+        if (rows.isEmpty()) {
+            return new StabilityFacet(unknownRatio(), unknownRatio(), unknownRatio());
+        }
+        long rounds = 0;
+        long hits = 0;
+        long scenarios = 0;
+        long allHit = 0;
+        long consistent = 0;
+        for (EvalQueryReader.ScenarioRoundStatRow row : rows) {
+            rounds += row.rounds();
+            hits += row.hits();
+            scenarios++;
+            if (row.rounds() > 0 && row.hits() == row.rounds()) {
+                allHit++;
+            }
+            if (row.distinctVerdicts() <= 1 && row.distinctActualCauses() <= 1) {
+                consistent++;
+            }
+        }
+        return new StabilityFacet(ratio(hits, rounds), ratio(allHit, scenarios),
+                ratio(consistent, scenarios));
     }
 
     /** 质量分面：计数列未回填（RUNNING/FAILED）→ 五比率全 UNKNOWN，不填 0 */

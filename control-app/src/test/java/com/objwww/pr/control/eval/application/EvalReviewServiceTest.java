@@ -255,6 +255,12 @@ class EvalReviewServiceTest {
                 Iterable<UUID> evalRunIds) {
             return List.of();
         }
+
+        @Override
+        public List<EvalQueryReader.ScenarioRoundStatRow> listScenarioRoundStatsForRuns(
+                Iterable<UUID> evalRunIds) {
+            return List.of();
+        }
     }
 
     private InMemoryAssignments assignments;

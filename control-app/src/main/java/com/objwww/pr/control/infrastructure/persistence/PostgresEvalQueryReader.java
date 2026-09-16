@@ -529,6 +529,38 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    /** EV-09：场景轮次聚合（actual_root_cause 以 jsonb 原文文本计 distinct，null 记一值） */
+    @Override
+    public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {
+        List<UUID> ids = new ArrayList<>();
+        for (UUID id : evalRunIds) {
+            ids.add(Objects.requireNonNull(id));
+        }
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        select eval_run_id, scenario_id,
+                               count(*) as rounds,
+                               count(*) filter (where verdict = 'DECIDABLE' and root_cause_hit) as hits,
+                               count(distinct verdict) as distinct_verdicts,
+                               count(distinct coalesce(actual_root_cause::text, '~null~'))
+                                   as distinct_actuals
+                          from eval_case_result
+                         where eval_run_id in (:ids)
+                         group by eval_run_id, scenario_id
+                        """)
+                .param("ids", ids)
+                .query((rs, i) -> new ScenarioRoundStatRow(
+                        rs.getObject("eval_run_id", UUID.class),
+                        rs.getString("scenario_id"),
+                        rs.getLong("rounds"),
+                        rs.getLong("hits"),
+                        rs.getInt("distinct_verdicts"),
+                        rs.getInt("distinct_actuals")))
+                .list();
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；

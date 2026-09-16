@@ -70,6 +70,18 @@
             <div class="qs-label">错误确认率</div>
             <div class="qs-value">{{ fmtRatioStat(run.quality?.falseConfirmation) }}</div>
           </div>
+          <div class="qs-item">
+            <div class="qs-label">pass@1（逐轮）</div>
+            <div class="qs-value">{{ fmtRatioStat(run.stability?.passAt1) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">pass@k（全轮命中）</div>
+            <div class="qs-value">{{ fmtRatioStat(run.stability?.passAllRounds) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">轮间一致性</div>
+            <div class="qs-value">{{ fmtRatioStat(run.stability?.scenarioConsistency) }}</div>
+          </div>
         </div>
 
         <!-- EV-03 六状态分面：各面独立表达互不顶替；UNKNOWN/字段缺席一律“未统计”，tooltip 注明数据来源归属 -->

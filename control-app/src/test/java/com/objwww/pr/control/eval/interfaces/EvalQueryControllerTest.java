@@ -431,5 +431,10 @@ class EvalQueryControllerTest {
         public List<UsageCallRow> listUsageCallsForRuns(Iterable<UUID> evalRunIds) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

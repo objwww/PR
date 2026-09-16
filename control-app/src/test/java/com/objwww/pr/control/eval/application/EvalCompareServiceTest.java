@@ -730,6 +730,12 @@ class EvalCompareServiceTest {
                 Iterable<UUID> evalRunIds) {
             return usageRows;
         }
+
+        @Override
+        public List<EvalQueryReader.ScenarioRoundStatRow> listScenarioRoundStatsForRuns(
+                Iterable<UUID> evalRunIds) {
+            return List.of();
+        }
     }
 
     private static final class FakeComparisons implements EvalComparisonRepository {

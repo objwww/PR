@@ -79,6 +79,15 @@
               </div>
             </template>
           </el-table-column>
+          <el-table-column label="稳定性（EV-09）" width="150">
+            <template #default="{ row }">
+              <div class="cell-main">pass@1：{{ fmtRatioStat(row.stability?.passAt1) }}</div>
+              <div class="cell-sub">
+                全轮命中 {{ fmtRatioStat(row.stability?.passAllRounds) }}
+                · 轮间一致 {{ fmtRatioStat(row.stability?.scenarioConsistency) }}
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="费用状态与耗时" width="140">
             <template #default="{ row }">
               <div class="cell-main">费用：{{ fmtCost(row) }}</div>

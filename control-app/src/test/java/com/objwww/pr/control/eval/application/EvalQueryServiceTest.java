@@ -89,6 +89,40 @@ class EvalQueryServiceTest {
         assertThat(reader.lastRunCursor).isEqualTo(new KeysetCursor(at, id));
     }
 
+    /** EV-09 稳定性三件套：多轮聚合 + 无案例 UNKNOWN 两态 */
+    @Test
+    void listRunsAssemblesStabilityFacetFromScenarioRoundStats() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRow(runId, NOW, "SUCCEEDED")), false);
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                // s1：2 轮全命中且判定/根因一致 → 全过 + 一致
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "s1", 2, 2, 1, 1),
+                // s2：2 轮 1 命中、判定漂移（DECIDABLE/UNRESOLVED）→ 非全过 + 不一致
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "s2", 2, 1, 2, 1)));
+
+        EvalQueryService.EvalRunListResponse out = service.listRuns(null, null, 50);
+
+        EvalQueryService.StabilityFacet stability = out.items().get(0).stability();
+        assertThat(stability.passAt1().numerator()).isEqualTo(3L);
+        assertThat(stability.passAt1().denominator()).isEqualTo(4L);
+        assertThat(stability.passAllRounds().numerator()).isEqualTo(1L);
+        assertThat(stability.passAllRounds().denominator()).isEqualTo(2L);
+        assertThat(stability.scenarioConsistency().numerator()).isEqualTo(1L);
+        assertThat(stability.scenarioConsistency().denominator()).isEqualTo(2L);
+    }
+
+    @Test
+    void listRunsWithoutCaseRowsReportsUnknownStability() {
+        reader.runPage = new EvalRunPage(List.of(runRow(UUID.randomUUID(), NOW, "SUCCEEDED")), false);
+
+        EvalQueryService.EvalRunListResponse out = service.listRuns(null, null, 50);
+
+        EvalQueryService.StabilityFacet stability = out.items().get(0).stability();
+        assertThat(stability.passAt1().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.passAllRounds().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.scenarioConsistency().status()).isEqualTo("UNKNOWN");
+    }
+
     @Test
     void malformedCursorAndBadStateAreRejected() {
         assertThatThrownBy(() -> service.listRuns(null, "garbage", 50))
@@ -1099,6 +1133,19 @@ class EvalQueryServiceTest {
             List<EvalQueryReader.UsageCallRow> out = new ArrayList<>();
             for (UUID id : evalRunIds) {
                 out.addAll(usageCallsForRuns.getOrDefault(id, List.of()));
+            }
+            return out;
+        }
+
+        java.util.Map<UUID, List<EvalQueryReader.ScenarioRoundStatRow>> scenarioRoundStats =
+                java.util.Map.of();
+
+        @Override
+        public List<EvalQueryReader.ScenarioRoundStatRow> listScenarioRoundStatsForRuns(
+                Iterable<UUID> evalRunIds) {
+            List<EvalQueryReader.ScenarioRoundStatRow> out = new ArrayList<>();
+            for (UUID id : evalRunIds) {
+                out.addAll(scenarioRoundStats.getOrDefault(id, List.of()));
             }
             return out;
         }

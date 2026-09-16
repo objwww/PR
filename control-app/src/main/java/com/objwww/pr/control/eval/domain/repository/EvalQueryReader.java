@@ -252,6 +252,21 @@ public interface EvalQueryReader {
                         String currency, boolean usageMissing) {
     }
 
+    // ------------------------------------------------------------------ EV-09 稳定性投影
+
+    /**
+     * 场景轮次聚合行（EV-09 稳定性一级指标，对标 IBM ITBench run-to-run
+     * consistency / RCAEval Avg@k）：逐 (run, scenario) 聚合——rounds = 已落档轮次，
+     * hits = DECIDABLE 且根因命中的轮次，distinct 判定/实际根因三元组供轮间
+     * 一致性装配（三件套 RatioStat 装配归应用服务）。
+     */
+    record ScenarioRoundStatRow(UUID evalRunId, String scenarioId, long rounds, long hits,
+                                int distinctVerdicts, int distinctActualCauses) {
+    }
+
+    /** 批量面（EV-09 列表接线，单查询禁 N+1）；evalRunIds 为空 → 空表（不拼 IN ()） */
+    List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds);
+
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 
     /** eval_phase_event 投影行（V80 全列减去 created_at；detail 为 jsonb ::text 原文
