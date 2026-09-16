@@ -79,7 +79,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, BellFilled, DataAnalysis, Bell, Search, Tickets, Calendar,
-  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished,
+  ChatDotSquare, Message, Aim, Monitor, Fold, Expand, Warning, Box, Finished, TrendCharts,
 } from '@element-plus/icons-vue'
 import { useSessionStore } from '../stores/session.js'
 import { useSseStore } from '../stores/sseStatus.js'
@@ -129,6 +129,7 @@ const navGroups = [
     title: '系统',
     items: [
       { label: '监控', to: '/monitor', match: ['/monitor'], icon: Monitor },
+      { label: '数据分析', to: '/analytics', match: ['/analytics'], icon: TrendCharts },
       { label: '版本中心', to: '/versions', match: ['/versions'], icon: Box },
     ],
   },
