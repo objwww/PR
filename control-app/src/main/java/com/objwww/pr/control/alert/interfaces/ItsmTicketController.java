@@ -40,9 +40,13 @@ public class ItsmTicketController {
             return Map.of("status", "UNAVAILABLE", "reason", "DB_FACE_NOT_ASSEMBLED");
         }
         List<Map<String, Object>> impact = jdbc.sql("""
-                select coalesce(alertname, '—') as alertname, coalesce(service, '—') as service,
-                       severity, received_count, episode_started_at
-                  from incident where id = :id
+                select coalesce(substring(i.incident_key from 'alertname=([^|]+)'), '—') as alertname,
+                       coalesce(substring(i.incident_key from 'service=([^|]+)'), '—') as service,
+                       coalesce((select e.labels->>'severity' from alert_event e
+                                  where e.incident_id = i.id
+                                  order by e.recorded_at desc limit 1), '') as severity,
+                       i.received_count, i.episode_started_at
+                  from incident i where i.id = :id
                 """).param("id", incidentId)
                 .query((rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<>();

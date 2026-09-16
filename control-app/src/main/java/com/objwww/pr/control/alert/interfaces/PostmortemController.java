@@ -37,7 +37,8 @@ public class PostmortemController {
             return body;
         }
         List<Map<String, Object>> items = jdbc.sql("""
-                select id, alertname, coalesce(service, '') as service,
+                select id, coalesce(substring(incident_key from 'alertname=([^|]+)'), '—') as alertname,
+                       coalesce(substring(incident_key from 'service=([^|]+)'), '—') as service,
                        episode_started_at, resolved_at, received_count
                   from incident where status = 'RESOLVED'
                  order by resolved_at desc nulls last limit 50
@@ -70,8 +71,9 @@ public class PostmortemController {
             return body;
         }
         List<Map<String, Object>> impact = jdbc.sql("""
-                select alertname, coalesce(service, '') as service, status,
-                       episode_started_at, resolved_at, received_count
+                select coalesce(substring(incident_key from 'alertname=([^|]+)'), '—') as alertname,
+                       coalesce(substring(incident_key from 'service=([^|]+)'), '—') as service,
+                       status, episode_started_at, resolved_at, received_count
                   from incident where id = :id
                 """).param("id", incidentId)
                 .query((rs, i) -> {

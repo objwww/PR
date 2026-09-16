@@ -34,15 +34,15 @@ public class ServiceCatalogController {
             return body;
         }
         List<Map<String, Object>> items = jdbc.sql("""
-                select coalesce(service, '（未知服务）') as service,
+                select coalesce(substring(incident_key from 'service=([^|]+)'), '（未知服务）') as service,
                        count(*) filter (where status = 'FIRING') as firing,
                        count(*) filter (where status = 'RESOLVED') as resolved,
                        count(*) as total,
                        coalesce(sum(received_count), 0) as received_total,
                        max(last_event_at) as last_event_at,
-                       string_agg(distinct alertname, ', ') as alerts
+                       string_agg(distinct coalesce(substring(incident_key from 'alertname=([^|]+)'), alertname), ', ') as alerts
                   from incident
-                 group by service
+                 group by incident_key
                  order by firing desc, total desc
                 """)
                 .query((rs, i) -> {

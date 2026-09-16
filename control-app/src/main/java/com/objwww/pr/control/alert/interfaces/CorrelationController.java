@@ -35,15 +35,15 @@ public class CorrelationController {
             return body;
         }
         List<Map<String, Object>> groups = jdbc.sql("""
-                select i.service,
+                select coalesce(substring(i.incident_key from 'service=([^|]+)'), '（未知服务）') as service,
                        count(*) as firing_count,
                        sum(i.received_count) as received_total,
                        max(i.last_event_at) as last_event_at,
-                       string_agg(i.alertname, ', ' order by i.last_event_at desc) as alerts
+                       string_agg(coalesce(substring(i.incident_key from 'alertname=([^|]+)'), i.incident_key), ', ' order by i.last_event_at desc) as alerts
                   from incident i
                  where i.status = 'FIRING'
                    and i.last_event_at > now() - interval '30 minutes'
-                 group by i.service
+                 group by i.incident_key
                 having count(*) > 1
                  order by firing_count desc, last_event_at desc
                 """)
