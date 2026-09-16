@@ -127,3 +127,22 @@ export const DIAG_REJECT = {
   DB_FACE_NOT_ASSEMBLED: '服务端数据面未装配',
   GATEWAY_NOT_ASSEMBLED: '服务端模型网关未装配',
 }
+
+/** 告警分类（incident.category，V82 词表） */
+export const CATEGORY_ZH = {
+  BUSINESS: '业务',
+  APPLICATION: '应用',
+  DEPENDENCY: '依赖',
+  INFRA: '基础设施',
+  NETWORK: '网络',
+  DATA: '数据',
+  SECURITY: '安全',
+  PLATFORM: '控制面',
+  UNCLASSIFIED: '未分类',
+}
+
+/** 分类来源（incident.category_source 生成列） */
+export const CATEGORY_SOURCE = {
+  RULE: '规则判定',
+  OVERRIDE: '人工修正',
+}
