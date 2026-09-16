@@ -15,12 +15,14 @@
     <div class="summary-row">
       <div class="card sum-card">
         <div class="sum-label">活动演练</div>
-        <div class="sum-value">{{ notReady ? '—' : (summary.active ?? '—') }}</div>
+        <div class="sum-value sum-active">{{ notReady ? '—' : (summary.active ?? '—') }}</div>
         <div class="sum-note">{{ notReady ? '统计依赖 DR-02 作业投影，暂未开放' : '同一靶场同一时间仅允许一个活动演练（§7.3 互斥）' }}</div>
       </div>
       <div class="card sum-card">
         <div class="sum-label">恢复异常</div>
-        <div class="sum-value">{{ notReady ? '—' : (summary.recoveryFailed ?? '—') }}</div>
+        <div class="sum-value" :class="{ 'sum-bad': !notReady && (summary.recoveryFailed ?? 0) > 0 }">
+          {{ notReady ? '—' : (summary.recoveryFailed ?? '—') }}
+        </div>
         <div class="sum-note">{{ notReady ? '统计依赖 DR-02 作业投影，暂未开放' : 'RECOVERY_FAILED 保留占位并阻止下一场演练（§7.4）' }}</div>
       </div>
     </div>
@@ -269,6 +271,8 @@ onMounted(() => { loadList(); loadMatrix(); loadFourPhase() })
 .sum-card { padding: 16px var(--card-pad); }
 .sum-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .sum-value { font-size: 28px; font-weight: 700; color: var(--head); line-height: 1.3; margin-top: 4px; }
+.sum-active { color: var(--brand); }
+.sum-bad { color: var(--sev-p0); }
 .sum-note { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 6px; }
 
 .table-zone { padding: 8px var(--card-pad) 12px; }

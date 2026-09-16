@@ -30,6 +30,24 @@
               <el-button size="small" style="margin-top: 6px" @click="goRun">查看调查</el-button>
             </el-alert>
             <el-alert
+              v-else-if="runId" type="info" :closable="false"
+              title="调查进行中（结论以调查报告为准）"
+            >
+              <el-button size="small" style="margin-top: 6px" @click="goRun">查看进展</el-button>
+            </el-alert>
+            <el-alert
+              v-else-if="d.waitingReason" type="info" :closable="false"
+              :title="`AI 尚未自动调查：${waitingZh(d.waitingReason)}`"
+            >
+              <div style="font-size: 12px; line-height: 1.7; margin-top: 4px">
+                AI 自动调查按 canary 放量受控灰度：告警键哈希桶 vs 当前放量百分比，放量与决策可在
+                <router-link to="/config">配置中心 → 调查路由</router-link>
+                查看；放量后系统自动补铸调查（无需等待下一次告警）。
+              </div>
+              <el-button size="small" type="primary" style="margin-top: 6px"
+                :loading="fb.riSubmitting" @click="reinvestigate">尝试立即发起根因分析</el-button>
+            </el-alert>
+            <el-alert
               v-else type="warning" :closable="false"
               title="原因待确认"
               description="尚未形成已确认的根因结论；调查进展见「调查」页签。"
@@ -369,7 +387,7 @@ import KvTable from '../components/common/KvTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtDuration, fmtTime } from '../utils/format'
 import { CATEGORY_OVERRIDE_OPTIONS } from '../utils/category'
-import { TIMELINE_KIND_ZH } from '../dict/zh'
+import { TIMELINE_KIND_ZH, WAITING_REASON_ZH } from '../dict/zh'
 import { useSessionStore } from '../stores/session'
 
 const session = useSessionStore()
@@ -543,7 +561,9 @@ async function submitFeedback(verdict) {
   }
 }
 
-/** 重新排查：显式重查（复用等待重驱同闸路径；路由未放量/活跃 run 在则诚实拒绝） */
+function waitingZh(r) { return WAITING_REASON_ZH[r] ?? r }
+
+/** 重新排查：显式重查（复用等待重驱同闸路径；路由未放量/活跃 run 在则诚实拒绝并解释） */
 async function reinvestigate() {
   fb.riSubmitting = true
   try {
@@ -553,7 +573,10 @@ async function reinvestigate() {
       await load()
       await loadRunDetail()
     } else if (res?.status === 'REJECTED') {
-      ElMessage.warning('暂不能重查：已有进行中的调查，或该告警未在路由放量名单')
+      const why = d.value?.waitingReason === 'DEFERRED'
+        ? '该告警处于背压暂扣，任务积压回落后自动重驱'
+        : 'canary 路由未放量（配置中心 → 调查路由 可查看放量与决策）；放量后系统自动补铸调查'
+      ElMessageBox.alert(`暂不能立即发起：${why}。`, '路由未意愿', { type: 'info' })
     } else {
       ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
     }
@@ -677,7 +700,10 @@ watch(runId, loadRunDetail)
 .incident-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 .detail-tabs :deep(.el-tabs__item) { font-size: var(--fs-body); }
 .block { padding: var(--card-pad); margin-bottom: var(--section-gap); }
-.block h3 { font-size: var(--fs-section); font-weight: 600; color: var(--head); margin-bottom: 12px; }
+.block h3 {
+  font-size: var(--fs-section); font-weight: 600; color: var(--head); margin-bottom: 12px;
+  padding-left: 9px; border-left: 3px solid var(--brand);
+}
 .impact { margin-bottom: 12px; color: var(--ink); }
 .cat-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .cat-title-row h3 { margin-bottom: 0; }

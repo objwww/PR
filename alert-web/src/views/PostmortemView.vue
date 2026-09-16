@@ -179,6 +179,12 @@ onMounted(() => { load(); loadTickets() })
 .row { display: flex; gap: var(--section-gap); align-items: flex-start; }
 .list { flex: none; width: 360px; max-height: calc(100vh - 200px); overflow-y: auto; }
 .detail { flex: 1; min-width: 0; }
+.detail h3 {
+  font-size: var(--fs-body); font-weight: 600; color: var(--head);
+  padding-left: 9px; border-left: 3px solid var(--brand);
+  margin: 18px 0 8px; display: flex; align-items: center;
+}
+.detail h3:first-child { margin-top: 0; }
 .zone { padding: 16px var(--card-pad); }
 .pm-item { padding: 10px; border: 1px solid var(--line, #ebeef5); border-radius: 6px; margin-bottom: 8px; cursor: pointer; }
 .pm-item.cur { box-shadow: 0 0 0 2px var(--brand, #409EFF); }

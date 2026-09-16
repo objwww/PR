@@ -2,7 +2,7 @@
   <div>
     <PageHeader
       title="配置中心"
-      subtitle="告警分类 / 接入管理 / 通知渠道 / 权限与角色——全部读面直连既有真表与部署装配；密钥原文不出环境变量"
+      subtitle="告警分类 / 接入管理 / 通知渠道 / 权限与角色 / 调查路由——全部读面直连既有真表与部署装配；密钥原文不出环境变量"
     />
 
     <div class="card panel">
@@ -154,6 +154,83 @@
             <template #empty><span class="dim">账号清单加载失败或为空——完整读写面见账号管理页</span></template>
           </el-table>
         </el-tab-pane>
+
+        <!-- ============ 调查路由（回答"有告警为什么没有 RCA"） ============ -->
+        <el-tab-pane label="调查路由" name="routing">
+          <div class="hint-row">
+            AI 自动调查走 canary 粘性桶位路由：告警键哈希桶 vs 当前放量百分比，每条决策全账本落账。
+            放量百分比由发布管线的 bundle 激活驱动（版本中心），告警域不设开关——本页为决策账本的只读可视化。
+            「桶内·降级观测」= 桶位在放量内但原生执行面未就绪，降级观测不铸调查（如实分态）。
+          </div>
+          <template v-if="routing">
+            <h3 class="sec-title">等待放量的事件（尚未自动 RCA 与原因）</h3>
+            <el-table :data="routing.waiting" size="small" style="margin-bottom: 16px">
+              <el-table-column label="告警名" min-width="180">
+                <template #default="{ row }">{{ row.alertname ?? '—' }}</template>
+              </el-table-column>
+              <el-table-column label="服务" min-width="140">
+                <template #default="{ row }">{{ row.service ?? '—' }}</template>
+              </el-table-column>
+              <el-table-column label="等待原因" width="150">
+                <template #default="{ row }">
+                  <el-tag size="small" type="warning" disable-transitions>
+                    {{ WAITING_REASON_ZH[row.waitingReason] ?? row.waitingReason }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="首次发生" width="160">
+                <template #default="{ row }">{{ fmtTime(row.firstSeenAt) }}</template>
+              </el-table-column>
+              <el-table-column label="接收" width="80" align="right">
+                <template #default="{ row }">{{ row.receivedCount }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="110">
+                <template #default="{ row }">
+                  <router-link :to="`/alerts/${row.incidentId}`">
+                    <el-button size="small" plain>打开详情</el-button>
+                  </router-link>
+                </template>
+              </el-table-column>
+              <template #empty><span class="dim">当前无等待放量的事件——告警事件均在自动调查覆盖内</span></template>
+            </el-table>
+
+            <h3 class="sec-title">每告警键最新放量状态</h3>
+            <el-table :data="routing.latest" size="small" style="margin-bottom: 16px" max-height="300">
+              <el-table-column prop="key" label="告警键" min-width="280" show-overflow-tooltip />
+              <el-table-column label="放量" width="90" align="right">
+                <template #default="{ row }">{{ row.percent }}%</template>
+              </el-table-column>
+              <el-table-column label="最新决策" width="150">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="decTag(row.decision)" disable-transitions>{{ decZh(row.decision) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="决策时间" width="160">
+                <template #default="{ row }">{{ fmtTime(row.at) }}</template>
+              </el-table-column>
+            </el-table>
+
+            <h3 class="sec-title">最近决策流水（最新 20 条）</h3>
+            <el-table :data="routing.recent" size="small" max-height="300">
+              <el-table-column label="时间" width="160">
+                <template #default="{ row }">{{ fmtTime(row.at) }}</template>
+              </el-table-column>
+              <el-table-column prop="key" label="告警键" min-width="260" show-overflow-tooltip />
+              <el-table-column label="桶位" width="80" align="right">
+                <template #default="{ row }">{{ row.bucket }}</template>
+              </el-table-column>
+              <el-table-column label="放量" width="80" align="right">
+                <template #default="{ row }">{{ row.percent }}%</template>
+              </el-table-column>
+              <el-table-column label="决策" width="150">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="decTag(row.decision)" disable-transitions>{{ decZh(row.decision) }}</el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </template>
+          <div v-else class="empty-note">路由决策账本加载失败或为空（canary_route_decision）。</div>
+        </el-tab-pane>
       </el-tabs>
     </div>
   </div>
@@ -169,7 +246,8 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../api/client'
 import { useSessionStore } from '../stores/session.js'
-import { CATEGORY_ZH } from '../dict/zh.js'
+import { CATEGORY_ZH, ROUTE_DECISION_ZH, WAITING_REASON_ZH } from '../dict/zh.js'
+import { fmtTime } from '../utils/format'
 import PageHeader from '../components/common/PageHeader.vue'
 
 const session = useSessionStore()
@@ -179,11 +257,22 @@ const catStats = ref(null)
 const intake = ref(null)
 const channels = ref([])
 const users = ref([])
+const routing = ref(null)
 const testLoading = ref(false)
 const testResult = ref('')
 
 function catZh(c) { return CATEGORY_ZH[c] ?? c }
+function decZh(d) { return ROUTE_DECISION_ZH[d] ?? d }
+function decTag(d) {
+  return { BUCKETED_NATIVE: 'success', WHITELISTED: 'primary', BUCKETED_HOLMES: 'warning', CANARY_DISABLED: 'info' }[d] ?? 'info'
+}
 function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('zh-CN') }
+// 分类占比条（修复既有缺陷：模板引用但函数缺失，渲染即 TypeError）
+function barPct(total) {
+  const t = Number(catStats.value?.total ?? 0)
+  if (!t || total == null) return 0
+  return Math.round(Number(total) * 1000 / t) / 10
+}
 
 async function loadCategory() {
   try {
@@ -225,8 +314,14 @@ async function loadUsers() {
     users.value = Array.isArray(res) ? res : (res?.items ?? [])
   } catch { users.value = [] }
 }
+async function loadRouting() {
+  try {
+    const res = await api('/v1/routing/overview')
+    if (res?.status === 'OK') routing.value = res
+  } catch { /* 路由账本缺席如实留空 */ }
+}
 
-onMounted(() => { loadCategory(); loadIntake(); loadChannels(); loadUsers() })
+onMounted(() => { loadCategory(); loadIntake(); loadChannels(); loadUsers(); loadRouting() })
 </script>
 
 <script>

@@ -178,3 +178,17 @@ export const TIMELINE_KIND_ZH = {
   CHANGE: '变更',
   DRILL: '演练',
 }
+
+/** canary 路由决策类型（canary_route_decision.decision，调查路由可视化） */
+export const ROUTE_DECISION_ZH = {
+  BUCKETED_NATIVE: '桶内·原生执行',
+  BUCKETED_HOLMES: '桶内·降级观测',
+  WHITELISTED: '白名单直通',
+  CANARY_DISABLED: '放量未开启',
+}
+
+/** 告警等待原因（incident.waiting_reason） */
+export const WAITING_REASON_ZH = {
+  WAITING_CAPABILITY: '等待路由放量',
+  DEFERRED: '背压暂扣',
+}
