@@ -270,6 +270,10 @@ onMounted(() => { loadList(); loadMatrix(); loadFourPhase() })
 .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--section-gap); }
 .sum-card { padding: 16px var(--card-pad); }
 .sum-label { font-size: var(--fs-aux); color: var(--ink-2); }
+.zone-title {
+  font-size: var(--fs-section); font-weight: 600; color: var(--head); margin: 0 0 10px;
+  padding-left: 9px; border-left: 3px solid var(--brand);
+}
 .sum-value { font-size: 28px; font-weight: 700; color: var(--head); line-height: 1.3; margin-top: 4px; }
 .sum-active { color: var(--brand); }
 .sum-bad { color: var(--sev-p0); }

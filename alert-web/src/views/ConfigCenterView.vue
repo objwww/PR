@@ -333,7 +333,10 @@ export default { name: 'ConfigCenterView' }
 .cfg-stats { display: flex; gap: 20px; margin-bottom: 10px; color: var(--ink-2); font-size: var(--fs-aux); }
 .cfg-stats b { color: var(--ink); }
 .zone-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
-.sec-title { font-size: var(--fs-section); }
+.sec-title {
+  font-size: var(--fs-section); font-weight: 600; color: var(--head);
+  padding-left: 9px; border-left: 3px solid var(--brand); margin: 14px 0 8px;
+}
 .kv-line { display: flex; gap: 10px; align-items: baseline; padding: 4px 0; font-size: var(--fs-body); }
 .kv-line .k { flex: 0 0 90px; color: var(--ink-2); font-size: var(--fs-aux); }
 .keyid { margin-right: 6px; }

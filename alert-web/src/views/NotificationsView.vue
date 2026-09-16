@@ -294,7 +294,10 @@ onUnmounted(() => clearInterval(timer))
 
 <style scoped>
 .silence-head { display: flex; align-items: center; justify-content: space-between; }
-.silence-head h3 { margin: 0 0 4px; }
+.silence-head h3 {
+  margin: 0 0 4px; font-size: var(--fs-body); font-weight: 600; color: var(--head);
+  padding-left: 9px; border-left: 3px solid var(--brand);
+}
 .silence-note { margin: 0 0 12px; font-size: 12px; color: var(--ink-2, #909399); }
 .notif-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 .help-ico { color: var(--ink-2); cursor: help; font-size: 18px; }
