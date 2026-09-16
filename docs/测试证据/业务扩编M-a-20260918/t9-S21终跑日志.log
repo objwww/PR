@@ -1,0 +1,35 @@
+======== S21 重跑：下单事件丢失（F14，履约缺口 counter 差值）========
+[on] 201 {"generation":0,"sessionId":"7aacc8b3-832a-4114-be91-16d4580e415a","alertFingerprint":"c81191a9ddba25b3","scenarioId":"ma-t9-s21r-061908"}
+[create 25 单：履约行被吞（created+25, fulfillments+0）]
+[SQL: 断点核验，期望 with_fulfillment=0]
+     0
+
+[等 firing（差值>10，轮询 4 分钟）]
+poll[1] firing_hits=0 gap="25.641025641025635"
+poll[2] firing_hits=1 gap="25.641025641025635"
+FIRED=1
+[off]（恢复=计数窗口自然稀释 ~10min；会话 TTL 600s 到期由 reaper 收口）
+202 {"scenarioId":"ma-t9-s21r-061908","state":"RECOVERING"}
+[轮询 resolved（最长 13 分钟）]
+resolve[1] firing_hits=1
+resolve[2] firing_hits=1
+resolve[3] firing_hits=1
+resolve[4] firing_hits=1
+resolve[5] firing_hits=1
+resolve[6] firing_hits=1
+resolve[7] firing_hits=1
+resolve[8] firing_hits=1
+resolve[9] firing_hits=1
+resolve[10] firing_hits=1
+resolve[11] firing_hits=1
+resolve[12] firing_hits=1
+resolve[13] firing_hits=1
+resolve[14] firing_hits=1
+resolve[15] firing_hits=1
+resolve[16] firing_hits=1
+resolve[17] firing_hits=1
+resolve[18] firing_hits=1
+resolve[19] firing_hits=1
+resolve[20] firing_hits=0
+ s21_session(到期收口前可为RECOVERING)=CLOSED
+

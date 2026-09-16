@@ -87,14 +87,17 @@ public class ChaosRecoveryService {
                             t -> injectionStore.insertF12MissingDeductions(t));
                     case F13 -> handleBusiness(session, "F13",
                             t -> injectionStore.deleteF13ExtraInventory(t));
-                    case F14 -> 0;   // 计数窗口型症状：注入关闭后 increase 差值随窗稀释
+                    case F14 -> handleBusiness(session, "F14", t -> 0);
+                    // F14/F16 无注入工件（症状=计数窗口/速率，注入关闭后自然回落），
+                    // 但会话收口仍需 RECOVERED 审计（closeRecovered 谓词）——审计 repaired=0
                     case F15 -> handleBusiness(session, "F15",
                             t -> injectionStore.deleteF15ExtraAttempts(t));
-                    case F16 -> 0;   // 入口关闭即恢复：创建速率自然回升
+                    case F16 -> handleBusiness(session, "F16", t -> 0);
                     case F17 -> handleBusiness(session, "F17",
                             t -> injectionStore.confirmF17OverdueFulfillments(
                                     t, stuckThresholdSeconds));
-                    case F18 -> 0;   // H7 HOLDOUT 预留（M-a 不挂接演练）
+                    case F18 -> handleBusiness(session, "F18", t -> 0);
+                    // F18 = H7 HOLDOUT 预留（M-a 不挂接演练），同样保持会话可闭
                 };
             } catch (RuntimeException e) {
                 log.warn("chaos 会话处理失败（下轮重试）: scenario={} {}",

@@ -1,0 +1,112 @@
+T9 START 2026-09-16T21:46:46Z
+======== S20 库存超卖（F13）========
+[on] 201 {"generation":0,"sessionId":"072933b4-21a9-4bcf-acb6-98bc6c326f9a","alertFingerprint":"9b82f5f578bf7c69","scenarioId":"ma-t9-s20-054646"}
+[create] 7b0d0b7e-f289-4647-8ac6-d53724a4653e（补插超额 INVENTORY 行）
+[pay] {"orderId":"7b0d0b7e-f289-4647-8ac6-d53724a4653e","payStatus":"PAID"}
+[gauge] "1"
+[alerts]
+ s20_inv_rows(期望2=正常1+超额1)=2
+
+[off] 202 {"scenarioId":"ma-t9-s20-054646","state":"RECOVERING"}
+poll[1] state=CLOSED gauge="0"
+[alerts_final]
+ s20_residual_inv_rows(期望1)=1
+
+ RECOVERED | F13        | {"detail": "repaired=1"}
+
+======== S22 消息重复消费（F15）========
+[on] 201 {"generation":0,"sessionId":"15ab0354-7f15-4a28-a848-b3fec2212b07","alertFingerprint":"5a5fbde49f119fbd","scenarioId":"ma-t9-s22-054803"}
+[create] f42dab0c-eea7-48cf-b295-8bf8aa276564
+[pay] {"orderId":"f42dab0c-eea7-48cf-b295-8bf8aa276564","payStatus":"PAID"}
+[wait 40s：消费循环(10s)先插 attempt1，F15 命中再插 attempt2]
+[gauge] "0"
+[alerts]
+ s22_attempts(期望2)=0
+
+[off] 202 {"scenarioId":"ma-t9-s22-054803","state":"RECOVERING"}
+poll[1] state=CLOSED gauge="0"
+[alerts_final]
+ s22_attempts_residual(期望1)=0
+
+ RECOVERED | F15        | {"detail": "repaired=0"}
+
+======== S25 履约超时积压（F17）========
+[on] 201 {"generation":0,"sessionId":"507b99c2-c460-474a-8d34-7fb2f2c269cb","alertFingerprint":"06525f978ee63927","scenarioId":"ma-t9-s25-054909"}
+[create 16 单：booking ENABLED，履约停 CONFIRMING]
+[wait 75s（超龄 60s + 探测窗）]
+[gauge(期望>15)] "16"
+[alerts]
+[off] 202 {"scenarioId":"ma-t9-s25-054909","state":"RECOVERING"}
+poll[1] state=CLOSED gauge="16"
+[alerts_final]
+ s25_residual_confirming(期望0)=0
+
+ RECOVERED | F17        | {"detail": "repaired=16"}
+
+======== S21 下单事件丢失（F14，履约缺口 counter 差值）========
+[on] 201 {"generation":0,"sessionId":"66e7a35e-e131-4050-a32d-1a8504a9db26","alertFingerprint":"c81191a9ddba25b3","scenarioId":"ma-t9-s21-055051"}
+[create 25 单：履约行被吞（created+25, fulfillments+0）]
+[等 firing（差值>10，轮询 4 分钟）]
+poll[1] firing_hits=0 gap=400 Bad Request
+poll[2] firing_hits=0 gap=400 Bad Request
+poll[3] firing_hits=0 gap=400 Bad Request
+poll[4] firing_hits=0 gap=400 Bad Request
+poll[5] firing_hits=0 gap=400 Bad Request
+poll[6] firing_hits=0 gap=400 Bad Request
+poll[7] firing_hits=0 gap=400 Bad Request
+poll[8] firing_hits=0 gap=400 Bad Request
+poll[9] firing_hits=0 gap=400 Bad Request
+poll[10] firing_hits=0 gap=400 Bad Request
+poll[11] firing_hits=0 gap=400 Bad Request
+poll[12] firing_hits=0 gap=400 Bad Request
+poll[13] firing_hits=0 gap=400 Bad Request
+poll[14] firing_hits=0 gap=400 Bad Request
+poll[15] firing_hits=0 gap=400 Bad Request
+poll[16] firing_hits=0 gap=400 Bad Request
+FIRED=0
+[off]（恢复=计数窗口自然稀释 ~10min；会话 TTL 600s 到期收口）
+202 {"scenarioId":"ma-t9-s21-055051","state":"RECOVERING"}
+[轮询 resolved（最长 13 分钟）]
+resolve[1] firing_hits=0 gap=400 Bad Request
+ s21_session=RECOVERING（F14 无修复动作，TTL 到期由 reaper 收口）
+
+======== S24 断流（F16）——需临时停流量发生器（.env 备份纪律）========
+[env 备份] /tmp/env-backup-s24-1789595732
+ Container alert-order-arena-1  Started
+[health] {"status":"UP"}
+[on] 201 {"generation":0,"sessionId":"b3d8892c-ec5c-409f-8f24-a0b6ea2c0b91","alertFingerprint":"860dfd07f02065fc","scenarioId":"ma-t9-s24-055532"}
+[chaos 突发 25 请求：全部被入口静默吞掉（accepted 但零落单）]
+[SQL: 断流期间 chaos 落单数（期望0）] 0
+[等 rate[5m]==0 + for 5m（约 10-11 分钟），轮询 15 分钟]
+poll[1] firing_hits=0
+poll[2] firing_hits=0
+poll[3] firing_hits=0
+poll[4] firing_hits=0
+poll[5] firing_hits=0
+poll[6] firing_hits=0
+poll[7] firing_hits=0
+poll[8] firing_hits=0
+poll[9] firing_hits=0
+poll[10] firing_hits=0
+poll[11] firing_hits=0
+poll[12] firing_hits=0
+poll[13] firing_hits=0
+poll[14] firing_hits=0
+poll[15] firing_hits=0
+poll[16] firing_hits=0
+poll[17] firing_hits=0
+poll[18] firing_hits=0
+poll[19] firing_hits=1
+FIRED=1
+[off] 202 {"scenarioId":"ma-t9-s24-055532","state":"RECOVERING"}
+[恢复流量：chaos 突发应重新落单]
+[SQL: off 后落单数（期望5）] 5
+[gauge] "0.016771520467836257"
+[alerts_final]
+[恢复 .env 与流量发生器]
+ Container alert-order-arena-1  Started
+[health] {"status":"UP"}
+
+T9 DONE 2026-09-16T22:06:51Z
+======== S23 部分验证标注取证（M-a 只验规则在场，复合激活依赖 M-b）========
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"instance":"order-arena:8080","job":"order-arena"

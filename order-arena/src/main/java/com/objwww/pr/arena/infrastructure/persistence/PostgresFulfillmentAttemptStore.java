@@ -23,11 +23,14 @@ public class PostgresFulfillmentAttemptStore {
     }
 
     public List<Candidate> confirmedWithoutAttempt() {
+        // 回看窗 30min：履约消费是"近期事件"语义——表内存在百万级历史 CONFIRMED 单
+        // （attempt 台账上线前的存量），无界最老优先扫描使新单数小时内得不到消费（T9 捕获）
         return jdbc.sql("""
                 SELECT f.id::text AS fid, t.correlation_id AS corr
                 FROM arena.oa_fulfillment_order f
                   JOIN arena.oa_trade_order t ON t.id = f.trade_order_id
                 WHERE f.state = 'CONFIRMED'
+                  AND f.created_at >= now() - make_interval(secs => 1800)
                   AND NOT EXISTS (SELECT 1 FROM arena.oa_fulfillment_attempt a
                                   WHERE a.fulfillment_id = f.id)
                 ORDER BY f.created_at LIMIT 100

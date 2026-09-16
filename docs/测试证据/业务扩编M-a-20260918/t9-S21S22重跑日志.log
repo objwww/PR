@@ -1,0 +1,47 @@
+======== S21 重跑：下单事件丢失（F14，履约缺口 counter 差值）========
+[on] 409 {"error":"scenario 已存在或同型同靶会话仍活跃"}
+[create 25 单：履约行被吞（created+25, fulfillments+0）]
+[SQL: 断点核验，期望 with_fulfillment=0]
+    25
+
+[等 firing（差值>10，轮询 4 分钟）]
+poll[1] firing_hits=0 gap="0"
+poll[2] firing_hits=0 gap="0"
+poll[3] firing_hits=0 gap="0"
+poll[4] firing_hits=0 gap="0"
+poll[5] firing_hits=0 gap="0"
+poll[6] firing_hits=0 gap="0"
+poll[7] firing_hits=0 gap="0"
+poll[8] firing_hits=0 gap="0"
+poll[9] firing_hits=0 gap="0"
+poll[10] firing_hits=0 gap="0"
+poll[11] firing_hits=0 gap="0"
+poll[12] firing_hits=0 gap="0"
+poll[13] firing_hits=0 gap="0"
+poll[14] firing_hits=0 gap="0"
+poll[15] firing_hits=0 gap="0"
+poll[16] firing_hits=0 gap="0"
+FIRED=0
+[off]（恢复=计数窗口自然稀释 ~10min；会话 TTL 600s 到期由 reaper 收口）
+409 {"error":"CAS 未中：会话不存在/状态不符/generation 过期"}
+[轮询 resolved（最长 13 分钟）]
+resolve[1] firing_hits=0
+
+======== S22 消息重复消费（F15）========
+[on] 201 {"generation":0,"sessionId":"1d62c645-d915-421e-80d0-c7c13b7917c5","alertFingerprint":"5a5fbde49f119fbd","scenarioId":"ma-t9-s22-061544"}
+[create] aa2be356-b014-40e3-ae49-851e99f36e11
+[pay] {"payStatus":"PAID","orderId":"aa2be356-b014-40e3-ae49-851e99f36e11"}
+[wait 40s：消费循环(10s)先插 attempt1，F15 命中再插 attempt2]
+[gauge] "1"
+[alerts]
+      1 "alertstate":"firing"
+ s22_attempts(期望2)=2
+
+[off] 202 {"scenarioId":"ma-t9-s22-061544","state":"RECOVERING"}
+poll[1] state=CLOSED gauge="1"
+[alerts_final]
+      1 "alertstate":"firing"
+ s22_attempts_residual(期望1)=1
+
+ RECOVERED | F15        | {"detail": "repaired=1"}
+
