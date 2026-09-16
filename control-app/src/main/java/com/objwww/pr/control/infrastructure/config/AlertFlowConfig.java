@@ -275,10 +275,14 @@ public class AlertFlowConfig {
             @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion,
             org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.application.mutation.UnlockScopeStore>
-                    unlockScopes) {
+                    unlockScopes,
+            @Value("${app.alert.mutation.hardline-tools:}") String hardlineTools) {
         return new com.objwww.pr.control.alert.application.mutation.OperationPlanner(
                 intents, operations, outbox, locks, approvalGate, events, tx, lockTtl,
                 planEnabled, approvalEnabled, policyVersion, unlockScopes.getIfAvailable(),
+                java.util.Arrays.stream(hardlineTools.split(",")).map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(java.util.stream.Collectors.toSet()),
                 java.time.Clock.systemUTC());
     }
 
@@ -386,6 +390,34 @@ public class AlertFlowConfig {
             @Value("${app.alert.approval.sweep-interval:PT30S}") Duration sweepInterval) {
         return new com.objwww.pr.control.alert.application.approval.ApprovalSweepLoop(
                 store, events, sweepInterval, java.time.Clock.systemUTC());
+    }
+
+    // ---------------- PE-E1：Guardian 预审 + 自动决策流（低危 R2 自动执行） ----------------
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.MutationGuardian mutationGuardian(
+            com.objwww.pr.control.alert.application.mutation.ActionIntentStore intents,
+            com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
+            org.springframework.transaction.support.TransactionOperations tx,
+            @Value("${app.alert.mutation.guardian.low-risk-tools:}") String lowRiskTools,
+            @Value("${app.alert.mutation.guardian.max-param-chars:2000}") int maxParamChars,
+            @Value("${app.alert.mutation.policy-version:pb-prod-v1}") String policyVersion) {
+        return new com.objwww.pr.control.alert.application.approval.MutationGuardian(
+                intents, events, tx,
+                java.util.Arrays.stream(lowRiskTools.split(",")).map(String::trim)
+                        .filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
+                maxParamChars, policyVersion, java.time.Clock.systemUTC());
+    }
+
+    @Bean
+    public com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService
+    guardianAutoDecisionService(
+            com.objwww.pr.control.alert.application.approval.MutationGuardian guardian,
+            com.objwww.pr.control.alert.application.approval.ApprovalRequestService requests,
+            com.objwww.pr.control.alert.application.approval.ApprovalDecisionService
+                    decisions) {
+        return new com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService(
+                guardian, requests, decisions);
     }
 
     // ---------------- PC-C3：durable suspension + 双时钟（V120） ----------------

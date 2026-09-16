@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -61,6 +62,7 @@ public class OperationPlanner {
     private final boolean approvalEnabled;
     private final String policyVersion;
     private final UnlockScopeStore unlockScopes; // 可空=解锁面关闭（永远 dry-run）
+    private final Set<String> hardlineTools; // Phase E：绝对禁止清单，先于一切
     private final Clock clock;
 
     public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
@@ -89,6 +91,18 @@ public class OperationPlanner {
             RcaEventAppender events, TransactionOperations tx, Duration lockTtl,
             boolean dryRunPlanEnabled, boolean approvalEnabled, String policyVersion,
             UnlockScopeStore unlockScopes, Clock clock) {
+        this(intents, operations, outbox, locks, approvalGate, events, tx, lockTtl,
+                dryRunPlanEnabled, approvalEnabled, policyVersion, unlockScopes,
+                java.util.Set.of(), clock);
+    }
+
+    /** PE-E1 全参形态：hardlineTools 绝对禁止清单——先于一切（注册表也解不了锁） */
+    public OperationPlanner(ActionIntentStore intents, OperationLedgerStore operations,
+            OperationOutboxStore outbox, ResourceLockStore locks,
+            com.objwww.pr.control.alert.application.approval.ApprovalPlannerGate approvalGate,
+            RcaEventAppender events, TransactionOperations tx, Duration lockTtl,
+            boolean dryRunPlanEnabled, boolean approvalEnabled, String policyVersion,
+            UnlockScopeStore unlockScopes, Set<String> hardlineTools, Clock clock) {
         this.intents = Objects.requireNonNull(intents);
         this.operations = Objects.requireNonNull(operations);
         this.outbox = Objects.requireNonNull(outbox);
@@ -104,6 +118,7 @@ public class OperationPlanner {
         this.approvalEnabled = approvalEnabled;
         this.policyVersion = policyVersion;
         this.unlockScopes = unlockScopes;
+        this.hardlineTools = Set.copyOf(hardlineTools);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -121,6 +136,11 @@ public class OperationPlanner {
     private Outcome doPlan(UUID intentId) {
         ActionIntentStore.IntentView intent = intents.findById(intentId)
                 .orElseThrow(() -> new Rollback(rejected("INTENT_NOT_FOUND")));
+        // Hardline 先于一切（§2.0）：命中绝对禁止清单 = 阻断 + 拒绝理由留痕，
+        // 解锁注册表/Guardian 都解不了锁
+        if (hardlineTools.contains(intent.toolName())) {
+            throw new Rollback(rejected("HARDLINE"));
+        }
         if (intent.resolvedResourceUid() == null || intent.scopeSnapshotHash() == null) {
             throw new Rollback(rejected("NOT_RESOLVED")); // fail-closed：无快照锚不计划
         }

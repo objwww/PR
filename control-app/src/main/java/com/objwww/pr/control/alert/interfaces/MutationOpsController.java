@@ -26,6 +26,8 @@ public class MutationOpsController {
             suspensions;
     private final com.objwww.pr.control.alert.application.approval.ApprovalShadowReader
             shadowReader;
+    private final com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService
+            guardianFlow;
 
     public MutationOpsController(
             org.springframework.beans.factory.ObjectProvider<OperationPlanner> planner,
@@ -34,10 +36,14 @@ public class MutationOpsController {
                     suspensions,
             org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.application.approval.ApprovalShadowReader>
-                    shadowReader) {
+                    shadowReader,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.approval.GuardianAutoDecisionService>
+                    guardianFlow) {
         this.planner = Objects.requireNonNull(planner);
         this.suspensions = suspensions == null ? null : suspensions.getIfAvailable();
         this.shadowReader = shadowReader == null ? null : shadowReader.getIfAvailable();
+        this.guardianFlow = guardianFlow == null ? null : guardianFlow.getIfAvailable();
     }
 
     public record PlanRequest(UUID intentId) {
@@ -109,6 +115,24 @@ public class MutationOpsController {
             body.put("suspensions_total", stats.total());
             body.put("suspensions_active", stats.active());
             body.put("human_wait_seconds_total", stats.humanWaitSeconds());
+        }
+        return body;
+    }
+
+    /** PE-E1：Guardian 自动决策（低危 R2 SAFE 自动批准 / UNSAFE 拒 / UNCERTAIN 转人工） */
+    @PostMapping("/auto-decide")
+    public Map<String, Object> autoDecide(@RequestBody PlanRequest request) {
+        Objects.requireNonNull(request.intentId(), "intentId 必填");
+        if (guardianFlow == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "GUARDIAN_FACE_NOT_ASSEMBLED");
+        }
+        var outcome = guardianFlow.autoDecide(request.intentId());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("verdict", outcome.verdict());
+        body.put("approval_state", outcome.approvalState());
+        body.put("reason", outcome.reason());
+        if (outcome.requestId() != null) {
+            body.put("request_id", outcome.requestId().toString());
         }
         return body;
     }
