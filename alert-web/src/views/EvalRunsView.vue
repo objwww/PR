@@ -235,12 +235,17 @@ const pairMarked = ref(false)
 const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: 'FAILED' }[s] ?? s)
 const shortId = id => (id && id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id ?? '—')
 
-// EV-06 费用状态：rollup 三态 → 中文；UNKNOWN/字段缺席（旧契约或无 rca 链）→ 未统计
+// EV-06 费用状态：rollup 三态 → 中文；有金额直接显示（costMicros=百万分之一币单位）
 function fmtCost(row) {
   const f = row.facets ?? {}
   if (f.usageStatus === 'USAGE_MISSING') return '用量未知'
   if (f.costStatus === 'UNPRICED') return '未定价'
-  if (f.usageStatus === 'OK' && f.costStatus === 'OK') return '已计价'
+  if (f.usageStatus === 'OK' && f.costStatus === 'OK') {
+    if (typeof f.costMicros === 'number') {
+      return `已计价 ¥${(f.costMicros / 1000000).toFixed(4)}${f.currency ? ' ' + f.currency : ''}`
+    }
+    return '已计价'
+  }
   return '未统计'
 }
 

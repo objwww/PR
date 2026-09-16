@@ -128,7 +128,7 @@ public class EvalQueryService {
                             Instant lastProgressAt, Instant leaseHeartbeatAt,
                             String qualityVerdict, String recoveryState,
                             String usageStatus, String costStatus, String freshness,
-                            Instant cancelRequestedAt) {
+                            Instant cancelRequestedAt, Long costMicros, String currency) {
     }
 
     /**
@@ -136,9 +136,9 @@ public class EvalQueryService {
      * run 级取最坏态——任何一笔 usage_missing 即整 run 用量未知，任何一笔
      * unpriced 即整 run 费用未定价。无 rca 链/无已结算调用 → 双 UNKNOWN 如实）。
      */
-    record RunUsageRollup(String usageStatus, String costStatus) {
+    record RunUsageRollup(String usageStatus, String costStatus, Long costMicros, String currency) {
         static final RunUsageRollup UNKNOWN_FACETS =
-                new RunUsageRollup(STATUS_UNKNOWN, STATUS_UNKNOWN);
+                new RunUsageRollup(STATUS_UNKNOWN, STATUS_UNKNOWN, null, null);
 
         static RunUsageRollup of(List<EvalQueryReader.UsageCallRow> rows) {
             if (rows.isEmpty()) {
@@ -146,16 +146,24 @@ public class EvalQueryService {
             }
             boolean usageMissing = false;
             boolean unpriced = false;
+            long costMicros = 0L;
+            String currency = null;
             for (EvalQueryReader.UsageCallRow row : rows) {
                 String s = usageStatusOf(row);
                 usageMissing |= "usage_missing".equals(s);
                 unpriced |= "unpriced".equals(s);
+                if (row.costMicros() != null) {
+                    costMicros += row.costMicros();
+                    if (currency == null) {
+                        currency = row.currency();
+                    }
+                }
             }
             if (usageMissing) {
-                return new RunUsageRollup(STATUS_USAGE_MISSING, STATUS_UNKNOWN);
+                return new RunUsageRollup(STATUS_USAGE_MISSING, STATUS_UNKNOWN, null, null);
             }
-            return unpriced ? new RunUsageRollup(STATUS_OK, STATUS_UNPRICED)
-                    : new RunUsageRollup(STATUS_OK, STATUS_OK);
+            return unpriced ? new RunUsageRollup(STATUS_OK, STATUS_UNPRICED, null, null)
+                    : new RunUsageRollup(STATUS_OK, STATUS_OK, costMicros, currency);
         }
     }
 
@@ -963,7 +971,8 @@ public class EvalQueryService {
                 row.lastProgressAt(), null,
                 qualityVerdict(row), recoveryFacet,
                 usage.usageStatus(), usage.costStatus(),
-                FRESHNESS_LIVE, row.cancelRequestedAt());
+                FRESHNESS_LIVE, row.cancelRequestedAt(),
+                usage.costMicros(), usage.currency());
     }
 
     /** EV-07 qualityVerdict 真值映射（落档门结论 → 分面词表；无落档/无法判定 → UNKNOWN） */
