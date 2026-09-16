@@ -243,9 +243,14 @@
               <el-button size="small" type="primary" :disabled="!diag.free?.trim() || diag.freeLoading"
                 :loading="diag.freeLoading" @click="askFree">提问</el-button>
             </div>
-            <div v-if="diag.items.length" class="diag-list">
+              <div v-if="diag.items.length" class="diag-list">
               <div v-for="(d, i) in diag.items" :key="i" class="diag-row">
-                <div class="cell-sub">{{ d.created_by }} · {{ fmtTime(d.created_at) }}</div>
+                <div class="cell-sub">{{ d.created_by }} · {{ fmtTime(d.created_at) }}
+                  <el-tag v-if="d.rating === 'UP'" size="small" type="success" disable-transitions>有用</el-tag>
+                  <el-tag v-else-if="d.rating === 'DOWN'" size="small" type="danger" disable-transitions>
+                    无用{{ d.feedback_reason ? ' · ' + d.feedback_reason : '' }}
+                  </el-tag>
+                </div>
                 <div class="claim-text"><b>{{ d.question }}</b></div>
                 <div class="claim-text">{{ d.answer }}</div>
               </div>

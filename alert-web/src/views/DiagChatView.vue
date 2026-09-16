@@ -11,6 +11,10 @@
       <div class="stat-card"><span class="stat-num">{{ fmtNum(stats?.incidents) }}</span><span class="stat-label">涉及事件</span></div>
       <div class="stat-card"><span class="stat-num">{{ fmtNum(stats?.today) }}</span><span class="stat-label">今日新增</span></div>
       <div class="stat-card"><span class="stat-num">{{ freeShare }}</span><span class="stat-label">自由问占比</span></div>
+      <div class="stat-card">
+        <span class="stat-num">{{ praiseRate }}</span><span class="stat-label">回答好评率</span>
+        <span class="stat-sub-inline">有用 {{ fmtNum(stats?.upCount) }} / 无用 {{ fmtNum(stats?.downCount) }}</span>
+      </div>
       <div class="stat-updated">数据更新至 {{ updatedAt }}</div>
     </div>
 
@@ -77,6 +81,28 @@
                 <div class="a-meta">
                   {{ fmtTime(d.created_at) }} · {{ String(d.created_by ?? '').replace(/^human:/, '') }}
                   <template v-if="refInfo(d)"> · 模型 {{ refInfo(d).model ?? '—' }} · Token {{ fmtNum(refInfo(d).totalTokens) }}</template>
+                </div>
+                <!-- 3.4 补强：回答评价（Bits AI thumbs 同律）——一答一评可改评，踩可选原因 -->
+                <div class="fb-line">
+                  <el-button size="small" :type="d.rating === 'UP' ? 'success' : ''" plain
+                    :loading="fbLoadingId === d.id" @click="submitFeedback(d, 'UP')">有用</el-button>
+                  <el-button size="small" :type="d.rating === 'DOWN' ? 'danger' : ''" plain
+                    :loading="fbLoadingId === d.id" @click="toggleDown(d)">无用</el-button>
+                  <el-tag v-if="d.rating === 'UP'" size="small" type="success" disable-transitions>已评：有用</el-tag>
+                  <el-tag v-else-if="d.rating === 'DOWN'" size="small" type="danger" disable-transitions>
+                    已评：无用{{ d.feedback_reason ? ' · ' + d.feedback_reason : '' }}
+                  </el-tag>
+                </div>
+                <div v-if="downOpenId === d.id" class="fb-down">
+                  <el-select v-model="downReason" size="small" style="width: 180px"
+                    placeholder="原因（可选）">
+                    <el-option label="答非所问" value="OFF_TARGET" />
+                    <el-option label="事实不准确" value="INACCURATE" />
+                    <el-option label="信息不完整" value="INCOMPLETE" />
+                    <el-option label="其他" value="OTHER" />
+                  </el-select>
+                  <el-button size="small" type="danger" :loading="fbLoadingId === d.id"
+                    @click="submitFeedback(d, 'DOWN')">提交无用评价</el-button>
                 </div>
               </div>
             </div>
@@ -152,6 +178,13 @@ const freeShare = computed(() => {
   const t = Number(stats.value?.total ?? 0)
   if (!t) return '—'
   return Math.round(Number(stats.value?.freeCount ?? 0) * 100 / t) + '%'
+})
+// 好评率：有用/(有用+无用)，未评不计入分母（ Bits AI 同口径）；无评价如实 —
+const praiseRate = computed(() => {
+  const up = Number(stats.value?.upCount ?? 0)
+  const down = Number(stats.value?.downCount ?? 0)
+  if (up + down === 0) return '—'
+  return Math.round(up * 100 / (up + down)) + '%'
 })
 
 function refInfo(d) {
@@ -233,6 +266,38 @@ async function askFree() {
   } catch { ElMessage.error('提问失败，请重试') } finally { freeLoading.value = false }
 }
 
+// 3.4 补强·回答评价：一答一评 upsert 可改评；踩先展开原因（可选）再提交
+const fbLoadingId = ref('')
+const downOpenId = ref('')
+const downReason = ref('')
+function toggleDown(d) {
+  if (downOpenId.value === d.id) { downOpenId.value = ''; return }
+  downOpenId.value = d.id
+  downReason.value = ''
+}
+async function submitFeedback(d, rating) {
+  fbLoadingId.value = d.id
+  try {
+    const res = await api(`/v1/incidents/${selectedId.value}/diag/feedback`, {
+      method: 'POST',
+      body: {
+        sessionId: d.id, rating,
+        reason: rating === 'DOWN' ? downReason.value : null,
+        createdBy: `human:${session.user || 'oncall'}`,
+      },
+    })
+    if (res?.status === 'OK') {
+      ElMessage.success(rating === 'UP' ? '已评：有用' : '已评：无用')
+      downOpenId.value = ''
+      downReason.value = ''
+      await loadHistory()
+      await loadStats()
+    } else {
+      ElMessage.warning(`被拒绝：${rejectZh(res?.reason)}`)
+    }
+  } catch { ElMessage.error('评价失败，请重试') } finally { fbLoadingId.value = '' }
+}
+
 onMounted(() => { loadStats(); loadIncidents() })
 </script>
 
@@ -271,6 +336,9 @@ onMounted(() => { loadStats(); loadIncidents() })
 .bubble.a { background: #fff; border: 1px solid var(--line); margin-top: 6px; max-width: 88%; }
 .a-text { color: var(--ink); white-space: pre-wrap; word-break: break-word; }
 .a-meta { margin-top: 4px; font-size: var(--fs-aux); color: var(--ink-2); }
+.fb-line { margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+.fb-down { margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+.stat-sub-inline { font-size: var(--fs-aux); color: var(--ink-2); }
 .chat-quick { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 10px; }
 .chat-input { display: flex; gap: 8px; margin-top: 10px; }
 .chat-input .el-input { flex: 1 1 auto; }

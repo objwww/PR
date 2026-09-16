@@ -270,23 +270,80 @@ public class DiagSessionController {
     @GetMapping
     public Map<String, Object> history(@PathVariable UUID incidentId) {
         List<Map<String, Object>> items = jdbc == null ? List.of() : jdbc.sql("""
-                select question_key, answer_refs, question, answer, created_by, created_at
-                  from diag_session where incident_id = :id
-                 order by created_at desc limit 20
+                select s.id, s.question_key, s.answer_refs, s.question, s.answer,
+                       s.created_by, s.created_at,
+                       f.rating, f.reason as feedback_reason
+                  from diag_session s
+                  left join diag_session_feedback f on f.session_id = s.id
+                 where s.incident_id = :id
+                 order by s.created_at desc limit 20
                 """)
                 .param("id", incidentId)
                 .query((rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", rs.getObject("id", UUID.class).toString());
                     m.put("question_key", rs.getString("question_key"));
                     m.put("answer_refs", rs.getString("answer_refs"));
                     m.put("question", rs.getString("question"));
                     m.put("answer", rs.getString("answer"));
                     m.put("created_by", rs.getString("created_by"));
                     m.put("created_at", rs.getTimestamp("created_at").toInstant().toString());
+                    m.put("rating", rs.getString("rating"));
+                    m.put("feedback_reason", rs.getString("feedback_reason"));
                     return m;
                 })
                 .list();
         return Map.of("status", "OK", "items", items, "count", items.size());
+    }
+
+    public record FeedbackRequest(String sessionId, String rating, String reason, String createdBy) {
+    }
+
+    /**
+     * 回答评价（V137，Datadog Bits thumbs 同律）：一答一评（session_id 主键 upsert，
+     * 改评覆盖）；踩可选填原因；评价人落档。session 必须属于本事件，防跨事件锚。
+     */
+    @PostMapping("/feedback")
+    public Map<String, Object> feedback(@PathVariable UUID incidentId,
+            @RequestBody FeedbackRequest request) {
+        if (request.sessionId() == null || request.sessionId().isBlank()
+                || !("UP".equals(request.rating()) || "DOWN".equals(request.rating()))) {
+            return Map.of("status", "REJECTED", "reason", "INVALID_FEEDBACK");
+        }
+        if (request.reason() != null && request.reason().length() > 300) {
+            return Map.of("status", "REJECTED", "reason", "REASON_TOO_LONG");
+        }
+        if (jdbc == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "DB_FACE_NOT_ASSEMBLED");
+        }
+        UUID sessionId;
+        try {
+            sessionId = UUID.fromString(request.sessionId());
+        } catch (IllegalArgumentException e) {
+            return Map.of("status", "REJECTED", "reason", "INVALID_SESSION_ID");
+        }
+        List<UUID> owned = jdbc.sql(
+                        "select id from diag_session where id = :id and incident_id = :incidentId")
+                .param("id", sessionId).param("incidentId", incidentId)
+                .query((rs, i) -> rs.getObject("id", UUID.class)).list();
+        if (owned.isEmpty()) {
+            return Map.of("status", "REJECTED", "reason", "NOT_FOUND");
+        }
+        jdbc.sql("""
+                insert into diag_session_feedback (session_id, rating, reason, created_by)
+                values (:sessionId, :rating, :reason, :createdBy)
+                on conflict (session_id) do update set
+                    rating = excluded.rating, reason = excluded.reason,
+                    created_by = excluded.created_by, created_at = now()
+                """)
+                .param("sessionId", sessionId)
+                .param("rating", request.rating())
+                .param("reason", request.reason() == null || request.reason().isBlank()
+                        ? null : request.reason().trim())
+                .param("createdBy", request.createdBy() == null || request.createdBy().isBlank()
+                        ? "operator" : request.createdBy().trim())
+                .update();
+        return Map.of("status", "OK", "sessionId", sessionId.toString(), "rating", request.rating());
     }
 
     private static String text(List<String> rows) {

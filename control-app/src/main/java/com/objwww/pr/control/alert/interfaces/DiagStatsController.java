@@ -34,7 +34,9 @@ public class DiagStatsController {
                 select count(*) as total,
                        count(distinct incident_id) as incidents,
                        count(*) filter (where created_at >= date_trunc('day', now())) as today,
-                       count(*) filter (where question_key = 'FREE') as free_count
+                       count(*) filter (where question_key = 'FREE') as free_count,
+                       (select count(*) from diag_session_feedback where rating = 'UP') as up_count,
+                       (select count(*) from diag_session_feedback where rating = 'DOWN') as down_count
                   from diag_session
                 """)
                 .query((rs, i) -> {
@@ -44,6 +46,8 @@ public class DiagStatsController {
                     m.put("incidents", rs.getLong("incidents"));
                     m.put("today", rs.getLong("today"));
                     m.put("freeCount", rs.getLong("free_count"));
+                    m.put("upCount", rs.getLong("up_count"));
+                    m.put("downCount", rs.getLong("down_count"));
                     return m;
                 })
                 .single();
