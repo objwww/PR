@@ -192,6 +192,20 @@
           <div v-if="runId && !runClaims.length" class="card block">
             <EmptyState kind="empty" description="本轮调查未产出结构化断言（确定性引擎无假设清单）；完整过程可在「查看调查详情」的事件流水逐条核对" />
           </div>
+          <div v-if="runId" class="card block">
+            <h3>问一问（引用式诊断问答）</h3>
+            <div class="diag-qs">
+              <el-button v-for="q in diagQuestions" :key="q.key" size="small" plain
+                :loading="diag.loadingKey === q.key" @click="askDiag(q)">{{ q.text }}</el-button>
+            </div>
+            <div v-if="diag.items.length" class="diag-list">
+              <div v-for="(d, i) in diag.items" :key="i" class="diag-row">
+                <div class="cell-sub">{{ d.created_by }} · {{ fmtTime(d.created_at) }}</div>
+                <div class="claim-text"><b>{{ d.question }}</b></div>
+                <div class="claim-text">{{ d.answer }}</div>
+              </div>
+            </div>
+          </div>
           <div v-if="!runId" class="card block">
             <EmptyState kind="empty" description="尚未发起调查" />
           </div>
@@ -500,13 +514,39 @@ async function load() {
   }
 }
 
+// 诊断会话（业界路线v2第2项 v1）：五词表引用式问答，答案真源组装零幻觉，落库回放
+const diag = reactive({ questions: [], items: [], loadingKey: '' })
+const diagQuestions = computed(() => diag.questions)
+async function loadDiag() {
+  try {
+    const qs = await api(`/v1/incidents/${incidentId.value}/diag/questions`)
+    diag.questions = qs?.questions ?? []
+    const his = await api(`/v1/incidents/${incidentId.value}/diag`)
+    diag.items = (his?.items ?? []).slice().reverse()
+  } catch { /* 问答面缺席如实留空 */ }
+}
+async function askDiag(q) {
+  diag.loadingKey = q.key
+  try {
+    const res = await api(`/v1/incidents/${incidentId.value}/diag`, {
+      method: 'POST', body: { key: q.key, createdBy: `human:${session.user || 'oncall'}` },
+    })
+    if (res?.status === 'OK') {
+      await loadDiag()
+    } else {
+      ElMessage.warning(`被拒绝：${res?.reason ?? '未知原因'}`)
+    }
+  } catch { ElMessage.error('问答失败，请重试') } finally { diag.loadingKey = '' }
+}
+
 onMounted(() => {
   load()
   loadFeedback()
   loadRunDetail()
   loadDuty()
+  loadDiag()
 })
-watch(incidentId, () => { load(); loadFeedback(); loadRunDetail() })
+watch(incidentId, () => { load(); loadFeedback(); loadRunDetail(); loadDiag() })
 // runId 由事件详情异步就绪（d.run.runId），就绪后补拉调查证据链
 watch(runId, loadRunDetail)
 </script>
@@ -537,4 +577,7 @@ watch(runId, loadRunDetail)
 .claim-row:last-child { border-bottom: none; }
 .claim-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .claim-text { font-size: var(--fs-body); color: var(--ink); }
+.diag-qs { display: flex; gap: 8px; flex-wrap: wrap; }
+.diag-list { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.diag-row { padding: 8px 0; border-bottom: 1px solid var(--line, #ebeef5); display: flex; flex-direction: column; gap: 4px; }
 </style>
