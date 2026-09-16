@@ -47,6 +47,14 @@ public class TwoStepOrderService {
         record PendingReconciliation(UUID orderId) implements CreateOutcome {
         }
 
+        /** F10：支付沉默——AUTH 停 INITIATED（无结果行，区别于 F3 UNKNOWN），订单不可见 */
+        record SilentPending(UUID orderId) implements CreateOutcome {
+        }
+
+        /** F16：入口静默——请求被吞没不落单（流量面看似被接受） */
+        record IngressSilent() implements CreateOutcome {
+        }
+
         record Replayed(UUID orderId, boolean discarded) implements CreateOutcome {
         }
 
@@ -117,6 +125,12 @@ public class TwoStepOrderService {
     public CreateOutcome create(String intentId, String correlationId, String buyerId,
                                 String sku, int quantity, BigDecimal amount) {
         validateCorrelation(correlationId);
+        // M-a F16：入口静默——请求吞没不落单（流量面看似被接受，oa_orders_created 不再增长）
+        if (correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F16, correlationId)) {
+            log.warn("F16 入口静默：请求吞没不落单: intent={}", intentId);
+            return new CreateOutcome.IngressSilent();
+        }
         // INV-AM2-1：故障只对 chaos- 前缀生效（live 流量永不跳过幂等）
         boolean f1Active = correlationId.startsWith("chaos-")
                 && faultGate.active(FaultType.F1, correlationId);
@@ -173,13 +187,31 @@ public class TwoStepOrderService {
 
     private CreateOutcome runSteps(String intentId, String correlationId, String buyerId,
                                    String sku, int quantity, BigDecimal amount, UUID orderId) {
+        // M-a：F10/F12/F13/F14 激活判定（与 F1 同款双条件——chaos- 前缀 + 会话在场，INV-AM2-1）
+        boolean f10Silent = correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F10, correlationId);
+        boolean f12Skew = correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F12, correlationId);
+        boolean f13Oversell = correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F13, correlationId);
+        boolean f14Lost = correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F14, correlationId);
+
         TradeOrder newOrder = TradeOrder.create(orderId, intentId, correlationId, buyerId,
                 sku, quantity, amount);
         var snapshot = steps.createSnapshotTx(newOrder);
+        if (f14Lost) {
+            // F14 消息丢失：履约行删除（下游从未感知的无痕丢失，S21）
+            steps.dropFulfillmentTx(orderId);
+        }
 
         // 逐资源独立短事务扣减（NO_ROOM 即停，进入废单补偿）
         ResourceType[] plan = ResourceType.values();
         for (int i = 0; i < plan.length; i++) {
+            // F12 库存偏差：跳过 DISCOUNT 资源的台账扣减（订单推进但记账缺失 → 对账不平）
+            if (f12Skew && plan[i] == ResourceType.DISCOUNT) {
+                continue;
+            }
             try {
                 steps.deductResourceTx(snapshot, plan[i], i + 1, quantity);
             } catch (OrderCreationSteps.NoRoomException e) {
@@ -188,15 +220,33 @@ public class TwoStepOrderService {
                 return new CreateOutcome.Discarded(orderId, reason);
             }
         }
+        if (f13Oversell) {
+            // F13 超卖：竞态超额行（同单第二笔 INVENTORY DEDUCT，正常恰一行）
+            steps.deductResourceTx(snapshot, ResourceType.INVENTORY,
+                    plan.length + 1, quantity);
+        }
 
         // 支付授权：INITIATED 落库（独立事务）→ 进程内网关 → 结果 CAS 落定
         var auth = steps.initiateAuthTx(orderId, amount);
+        if (f10Silent) {
+            // F10 支付悬挂：网关调用本身沉默——AUTH 停 INITIATED（无结果行），
+            // 订单停 CREATED（不可见）→ 待支付积压（区别于 F3 的 UNKNOWN 挂起）
+            log.warn("F10 支付沉默：AUTH 停 INITIATED，订单挂起: orderId={}", orderId);
+            return new CreateOutcome.SilentPending(orderId);
+        }
         PaymentResult result = gateway.authorize(correlationId, sku, amount);
         steps.resolveAuthTx(auth.id(), result);
 
         return switch (result) {
             case SUCCEEDED -> {
-                steps.enableTx(orderId);
+                // F17 履约变慢：只收口交易单，履约停 CONFIRMING（SLA 超时积压，S25）
+                boolean f17Slow = correlationId.startsWith("chaos-")
+                        && faultGate.active(FaultType.F17, correlationId);
+                if (f17Slow) {
+                    steps.enableBookingOnlyTx(orderId);
+                } else {
+                    steps.enableTx(orderId);
+                }
                 yield new CreateOutcome.Created(orderId);
             }
             case DECLINED -> {
@@ -211,12 +261,15 @@ public class TwoStepOrderService {
         };
     }
 
-    /** C-1：pay() 回调只作用于 ENABLED 订单（NOT_PAY） */
+    /** C-1：pay() 回调只作用于 ENABLED 订单（NOT_PAY）；F11 命中时放行 PAID 重复扣款 */
     public PayOutcome pay(UUID orderId, String correlationId) {
         validateCorrelation(correlationId);
+        // M-a F11：chaos- 前缀 + 会话在场 → 跳过"已支付"闸（支付层幂等失效）
+        boolean f11Double = correlationId.startsWith("chaos-")
+                && faultGate.active(FaultType.F11, correlationId);
         TradeOrder order = tradeOrders.findById(orderId).orElse(null);
         if (order == null || order.bookingStatus() != BookingStatus.ENABLED
-                || order.payStatus() != PayStatus.NOT_PAY) {
+                || (order.payStatus() != PayStatus.NOT_PAY && !f11Double)) {
             return order == null
                     ? new PayOutcome.NotFound(orderId)
                     : new PayOutcome.Illegal(orderId, order.bookingStatus() + "/" + order.payStatus());
@@ -226,7 +279,14 @@ public class TwoStepOrderService {
         steps.resolveCaptureTx(capture.id(), result);
         return switch (result) {
             case SUCCEEDED -> {
-                steps.markPaidTx(orderId);
+                // F9 掉单：支付事实已落（CAPTURE SUCCEEDED），回调后状态推进被吞——订单停 NOT_PAY
+                boolean f9Drop = correlationId.startsWith("chaos-")
+                        && faultGate.active(FaultType.F9, correlationId);
+                if (!f9Drop) {
+                    steps.markPaidTx(orderId);
+                } else {
+                    log.warn("F9 回调丢弃：支付成功但订单状态推进被吞: orderId={}", orderId);
+                }
                 yield new PayOutcome.Paid(orderId);
             }
             case DECLINED -> new PayOutcome.Declined(orderId);

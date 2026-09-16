@@ -144,19 +144,64 @@ public class PostgresProbeStore {
                 .list();
     }
 
-    /** 库存超卖（F13 症状）：INVENTORY DEDUCT 行数超过 ENABLED 订单数（竞态超发行） */
+    /**
+     * 库存超卖（F13 症状）：同订单多笔 INVENTORY DEDUCT（正常恰一行；竞态超额行即超卖事实）
+     */
     public List<Violation> inventoryOversell() {
         return jdbc.sql("""
-                WITH ded AS (
-                    SELECT l.order_id::text AS entity
+                WITH multi AS (
+                    SELECT l.order_id
                     FROM arena.oa_resource_ledger l
-                    JOIN arena.oa_trade_order t ON t.id = l.order_id
+                      JOIN arena.oa_trade_order t ON t.id = l.order_id
                     WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
                       AND t.booking_status = 'ENABLED'
+                    GROUP BY l.order_id HAVING count(*) > 1
                 )
-                SELECT entity FROM ded
+                SELECT l.order_id::text AS entity, 'multi-inventory-deduct' AS variant
+                FROM arena.oa_resource_ledger l JOIN multi m ON m.order_id = l.order_id
+                WHERE l.resource_type = 'INVENTORY' AND l.direction = 'DEDUCT'
                 """)
-                .query((rs, i) -> new Violation(rs.getString("entity"), "oversell"))
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    // ---------- M-a 履约/消息对账事实查询（S21/S22/S25，v2 设计 §3.1） ----------
+
+    /** 履约缺口（F14 症状）：ENABLED 订单无履约记录（消息无痕丢失） */
+    public List<Violation> fulfillmentGapOrders() {
+        return jdbc.sql("""
+                SELECT t.id::text AS entity, 'no-fulfillment' AS variant
+                FROM arena.oa_trade_order t
+                WHERE t.booking_status = 'ENABLED'
+                  AND NOT EXISTS (SELECT 1 FROM arena.oa_fulfillment_order f
+                                  WHERE f.trade_order_id = t.id)
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /** 重复消费（F15 症状）：消费尝试 >1 次的履约单（at-least-once 幂等缺失） */
+    public List<Violation> duplicateFulfillments() {
+        return jdbc.sql("""
+                SELECT f.id::text AS entity, 'multi-attempt' AS variant
+                FROM arena.oa_fulfillment_order f
+                  JOIN arena.oa_fulfillment_attempt a ON a.fulfillment_id = f.id
+                GROUP BY f.id HAVING count(a.id) > 1
+                """)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
+                .list();
+    }
+
+    /** 履约超时（F17 症状）：ENABLED 订单的履约停 CONFIRMING 超龄（SLA 积压） */
+    public List<Violation> fulfillmentOverdue(int olderThanSeconds) {
+        return jdbc.sql("""
+                SELECT f.id::text AS entity, 'confirming-overdue' AS variant
+                FROM arena.oa_fulfillment_order f
+                  JOIN arena.oa_trade_order t ON t.id = f.trade_order_id
+                WHERE t.booking_status = 'ENABLED' AND f.state = 'CONFIRMING'
+                  AND f.created_at < now() - make_interval(secs => :sec)
+                """).param("sec", olderThanSeconds)
+                .query((rs, i) -> new Violation(rs.getString("entity"), rs.getString("variant")))
                 .list();
     }
 

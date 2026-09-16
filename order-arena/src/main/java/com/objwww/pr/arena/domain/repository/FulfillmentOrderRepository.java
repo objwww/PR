@@ -14,4 +14,7 @@ public interface FulfillmentOrderRepository {
     Optional<FulfillmentOrder> findByTradeOrderId(UUID tradeOrderId);
 
     boolean casState(UUID tradeOrderId, FulfillmentState from, FulfillmentState to);
+
+    /** M-a F14：无痕丢失——删除履约行（下游从未感知的账面语义） */
+    void deleteByTradeOrderId(UUID tradeOrderId);
 }

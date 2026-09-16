@@ -53,4 +53,10 @@ public class PostgresFulfillmentOrderRepository implements FulfillmentOrderRepos
                 """).param("to", to.name()).param("id", tradeOrderId).param("from", from.name())
                 .update() == 1;
     }
+
+    @Override
+    public void deleteByTradeOrderId(UUID tradeOrderId) {
+        jdbc.sql("DELETE FROM arena.oa_fulfillment_order WHERE trade_order_id=:id")
+                .param("id", tradeOrderId).update();
+    }
 }

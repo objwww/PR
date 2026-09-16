@@ -2,8 +2,10 @@ package com.objwww.pr.arena;
 
 import com.objwww.pr.arena.application.CompensationWorker;
 import com.objwww.pr.arena.application.DomainProbe;
+import com.objwww.pr.arena.application.FulfillmentAttemptSimulator;
 import com.objwww.pr.arena.application.F3ReconcileService;
 import com.objwww.pr.arena.application.OrderCreationSteps;
+import com.objwww.pr.arena.application.chaos.FaultGate;
 import com.objwww.pr.arena.application.PaymentGatewaySimulator;
 import com.objwww.pr.arena.application.RefundChainService;
 import com.objwww.pr.arena.application.TrafficGenerator;
@@ -17,6 +19,7 @@ import com.objwww.pr.arena.infrastructure.persistence.PostgresFulfillmentOrderRe
 import com.objwww.pr.arena.infrastructure.persistence.PostgresIdempotencyRepository;
 import com.objwww.pr.arena.infrastructure.persistence.PostgresPaymentRecordRepository;
 import com.objwww.pr.arena.infrastructure.persistence.PostgresProbeStore;
+import com.objwww.pr.arena.infrastructure.persistence.PostgresFulfillmentAttemptStore;
 import com.objwww.pr.arena.infrastructure.persistence.PostgresRefundOrderRepository;
 import com.objwww.pr.arena.infrastructure.persistence.PostgresResourceLedgerRepository;
 import com.objwww.pr.arena.infrastructure.persistence.PostgresTradeOrderRepository;
@@ -213,6 +216,18 @@ public class ArenaConfig {
     }
 
     @Bean
+    public PostgresFulfillmentAttemptStore fulfillmentAttemptStore(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc) {
+        return new PostgresFulfillmentAttemptStore(jdbc);
+    }
+
+    @Bean
+    public FulfillmentAttemptSimulator fulfillmentAttemptSimulator(
+            PostgresFulfillmentAttemptStore attemptStore, FaultGate faultGate) {
+        return new FulfillmentAttemptSimulator(attemptStore, faultGate);
+    }
+
+    @Bean
     public TrafficGenerator trafficGenerator(TwoStepOrderService orders,
                                             MeterRegistry registry,
                                             @Value("${app.arena.traffic.concurrency:4}")
@@ -242,6 +257,7 @@ public class ArenaConfig {
                                      F3ReconcileService f3,
                                      DomainProbe probe,
                                      TrafficGenerator traffic,
+                                     FulfillmentAttemptSimulator attemptSimulator,
                                      @Value("${app.arena.compensation.poll-interval-ms:2000}")
                                      long compensationIntervalMs,
                                      @Value("${app.arena.chaos.scan-interval-ms:5000}")
@@ -250,6 +266,8 @@ public class ArenaConfig {
                                      long f3IntervalMs,
                                      @Value("${app.arena.probe.interval-ms:30000}")
                                      long probeIntervalMs,
+                                     @Value("${app.arena.fulfillment.consume-interval-ms:10000}")
+                                     long fulfillmentConsumeIntervalMs,
                                      @Value("${app.arena.traffic.enabled:false}")
                                      boolean trafficEnabled) {
         var runtime = new ArenaRuntime(List.of(
@@ -258,7 +276,9 @@ public class ArenaConfig {
                         compensationIntervalMs),
                 new ArenaRuntime.Loop("chaos-recovery", recovery::scanOnce, chaosIntervalMs),
                 new ArenaRuntime.Loop("f3-reconcile", f3::reconcileOnce, f3IntervalMs),
-                new ArenaRuntime.Loop("domain-probe", probe::scanOnce, probeIntervalMs)));
+                new ArenaRuntime.Loop("domain-probe", probe::scanOnce, probeIntervalMs),
+                new ArenaRuntime.Loop("fulfillment-consumer",
+                        attemptSimulator::consumeOnce, fulfillmentConsumeIntervalMs)));
         if (trafficEnabled) {
             runtime.withStartable(traffic);
         }

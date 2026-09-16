@@ -103,6 +103,17 @@ public class OrderCreationSteps {
         });
     }
 
+    /** M-a F14：无痕丢失——删除履约行（订单照常推进，下游从未感知） */
+    public void dropFulfillmentTx(UUID orderId) {
+        tx.executeWithoutResult(status -> fulfillments.deleteByTradeOrderId(orderId));
+    }
+
+    /** M-a F17：履约变慢——只收口交易单，履约停 CONFIRMING（SLA 超时积压） */
+    public boolean enableBookingOnlyTx(UUID orderId) {
+        return tx.execute(status -> tradeOrders.casBookingStatus(orderId,
+                BookingStatus.CREATED, BookingStatus.ENABLED, null));
+    }
+
     /**
      * 废单收口（M2-12 的同生共死点）：DISCARDED + 履约 CANCELLED + 补偿 outbox 行
      * 同一事务——任一失败整单回滚（崩溃窗口两向由 IT 验证）。

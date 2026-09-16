@@ -82,6 +82,14 @@ public class OrderController {
                     ResponseEntity.status(201).body(Map.of(
                             "orderId", p.orderId().toString(), "bookingStatus", "CREATED",
                             "paymentResult", "UNKNOWN"));
+            case TwoStepOrderService.CreateOutcome.SilentPending p ->
+                    // F10 支付沉默：调用面与 F3 挂起同响应（账面差异在 AUTH 停 INITIATED）
+                    ResponseEntity.status(201).body(Map.of(
+                            "orderId", p.orderId().toString(), "bookingStatus", "CREATED",
+                            "paymentResult", "SILENT"));
+            case TwoStepOrderService.CreateOutcome.IngressSilent s ->
+                    // F16 入口静默：调用面返回受理形态，实际零落单（S24 断流源）
+                    ResponseEntity.status(201).body(Map.of("accepted", true));
             case TwoStepOrderService.CreateOutcome.Replayed r -> ResponseEntity.ok().body(Map.of(
                     "orderId", r.orderId().toString(), "replayed", true,
                     "bookingStatus", r.discarded() ? "DISCARDED" : "ENABLED"));

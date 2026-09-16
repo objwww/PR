@@ -42,6 +42,9 @@ public class DomainProbe {
     public static final String DUPLICATE_PAYMENT = "DUPLICATE_PAYMENT";
     public static final String RECON_SKEW = "RECON_SKEW";
     public static final String INVENTORY_OVERSELL = "INVENTORY_OVERSELL";
+    public static final String FULFILLMENT_GAP = "FULFILLMENT_GAP";
+    public static final String DUPLICATE_FULFILLMENT = "DUPLICATE_FULFILLMENT";
+    public static final String FULFILLMENT_OVERDUE = "FULFILLMENT_OVERDUE";
 
     /** @param ok false = 本轮失败（保留末值语义生效） */
     public record ScanResult(boolean ok, int stuck, int duplicates, int stateViolations) {
@@ -102,6 +105,12 @@ public class DomainProbe {
                 .description("三方对账差异数（F12 症状：DEDUCT 类型不全的 ENABLED 订单）").register(registry);
         Gauge.builder("oa_inventory_negative_total", () -> openCount(INVENTORY_OVERSELL))
                 .description("库存超卖 episode 数（F13 症状：INVENTORY 超额扣减）").register(registry);
+        Gauge.builder("oa_orders_vs_fulfillments_diff", () -> openCount(FULFILLMENT_GAP))
+                .description("履约缺口 episode 数（F14 症状：ENABLED 无履约记录）").register(registry);
+        Gauge.builder("oa_duplicate_fulfillments_current", () -> openCount(DUPLICATE_FULFILLMENT))
+                .description("重复消费 episode 数（F15 症状：消费尝试 >1）").register(registry);
+        Gauge.builder("oa_fulfillment_overdue_current", () -> openCount(FULFILLMENT_OVERDUE))
+                .description("履约超时积压 episode 数（F17 症状：CONFIRMING 超龄）").register(registry);
     }
 
     private double openCount(String type) {
@@ -133,6 +142,12 @@ public class DomainProbe {
                     "oa_recon_skew_detected");
             sync(INVENTORY_OVERSELL, store.inventoryOversell(),
                     "oa_inventory_oversell_detected");
+            sync(FULFILLMENT_GAP, store.fulfillmentGapOrders(),
+                    "oa_fulfillment_gap_detected");
+            sync(DUPLICATE_FULFILLMENT, store.duplicateFulfillments(),
+                    "oa_duplicate_fulfillment_detected");
+            sync(FULFILLMENT_OVERDUE, store.fulfillmentOverdue(stuckThresholdSeconds),
+                    "oa_fulfillment_overdue_detected");
             syncBusinessCounters();
             probeUp = true;
             lastSuccessEpoch = Instant.now().getEpochSecond();
