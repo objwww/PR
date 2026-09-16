@@ -1,6 +1,11 @@
 # M-a 业务交易链路症状规则（v2 设计 §3.1/§4.2 R1，S16~S25）：
 # 全部指标由 DomainProbe 探测面产出（INV-AM2-5），注入点不自报。
 # 告警标签是 C-6 指纹的输入面——alertname/fault_type/service 冻结。
+# 指标名经 T7 真机校准（195 实测 Micrometer/OpenMetrics 保留后缀变换）：
+#   counter 注册 oa_orders_created_total 渲染为 oa_orders_total（_created 为 OpenMetrics
+#   保留字被剥——设计稿 S23/S24 表达式原本就用 oa_orders_total，本面统一到渲染真名）；
+#   gauge 注册 oa_inventory_negative_total 渲染为 oa_inventory_negative（gauge 不保留
+#   _total 尾缀）；DomainProbe 注册名已同步（注册面=渲染面=规则面）。
 # 与设计稿偏差说明：S16 由 counter 差值式改为 episode gauge（探测面精确检出，
 # 差值式受窗口抖动影响；alertname/标签面与设计一致）。
 groups:
@@ -54,7 +59,7 @@ groups:
           summary: "三方对账不平（F12 症状）：订单-支付-库存记账数量差，明细见 /orders/recon/diffs"
 
       - alert: ArenaOversell
-        expr: oa_inventory_negative_total > 0
+        expr: oa_inventory_negative > 0
         labels:
           severity: page
           service: order-arena
@@ -63,7 +68,7 @@ groups:
           summary: "库存超卖（F13 症状）：竞态下 INVENTORY 超额扣减"
 
       - alert: ArenaFulfillmentGap
-        expr: increase(oa_orders_created_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
+        expr: increase(oa_orders_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
         labels:
           severity: ticket
           service: order-arena
@@ -81,7 +86,7 @@ groups:
           summary: "重复履约（F15 症状）：at-least-once 下消费幂等缺失"
 
       - alert: ArenaOrderSuccessRateLow
-        expr: (sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_created_total[5m]))) < 0.98
+        expr: (sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_total[5m]))) < 0.98
         for: 5m
         labels:
           severity: page
@@ -91,7 +96,7 @@ groups:
           summary: "下单成功率 KPI 下跌（S23）：多因素低剂量叠加——技术指标可全不越阈"
 
       - alert: ArenaOrderZeroFlow
-        expr: sum(rate(oa_orders_created_total[5m])) == 0
+        expr: sum(rate(oa_orders_total[5m])) == 0
         for: 5m
         labels:
           severity: page

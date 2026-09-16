@@ -23,6 +23,9 @@
 #   执行契约 order 扩至 15 场景。HOLDOUT H7/H8 只留设计不注册（§3.5，M-e 批次处理）。
 #   S23 复合低剂量标注"部分验证"：M-a 只交付规则面+注册，复合激活（C3）与评分器部分分（E3）
 #   依赖 M-b；S16/S18/S20/S23=TUNING，S17/S19/S21/S22/S24/S25=VALIDATION（§6.2）。
+#   v3 校准（T7 真机 2026-09-18）：场景注记中指标名统一到 Prometheus 渲染真名——
+#   counter oa_orders_created_total 实渲染 oa_orders_total（OpenMetrics 保留字 _created 被剥）、
+#   gauge oa_inventory_negative_total 实渲染 oa_inventory_negative；alertname/标签/GT 不变。
 registry_version: 3
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
@@ -532,7 +535,7 @@ scenarios:
     expected_alerts:
       - alertname: ArenaOversell
         severity: page
-        basis: oa_inventory_negative_total > 0（同订单多笔 INVENTORY DEDUCT）
+        basis: oa_inventory_negative > 0（同订单多笔 INVENTORY DEDUCT）
         labels_frozen: {alertname: ArenaOversell, service: order-arena, fault_type: F13}
     expected_evidence_checkpoints:
       - 确认超卖事实（负库存/超额扣减记录）
@@ -546,7 +549,7 @@ scenarios:
         - chaos off → 恢复面 F13 → 注入关闭即恢复（不再产生超额行）
         - oa_inventory_negative_total == 0
         - 无残留 firing + 超额扣减的回补台账清平
-      restore_probe: oa_inventory_negative_total 归零
+      restore_probe: oa_inventory_negative 归零
     timing:
       preheat_seconds: 60
       hold_seconds: 600
@@ -581,7 +584,7 @@ scenarios:
     expected_alerts:
       - alertname: ArenaFulfillmentGap
         severity: ticket
-        basis: increase(oa_orders_created_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
+        basis: increase(oa_orders_total[10m]) - increase(oa_fulfillments_started_total[10m]) > 10
         labels_frozen: {alertname: ArenaFulfillmentGap, service: order-arena, fault_type: F14}
     expected_evidence_checkpoints:
       - 对比上下游业务计数差（创建 vs 履约发起）
@@ -589,13 +592,13 @@ scenarios:
       - 估计丢失时间窗
     expected_behavior_note: >-
       counter 差值式告警——firing 需 10m 窗累积，评测编排应放长 max_firing_wait；
-      应引用 oa_orders_created_total / oa_fulfillments_started_total 两条 counter 曲线
+      应引用 oa_orders_total / oa_fulfillments_started_total 两条 counter 曲线
     recovery:
       criteria:
         - chaos off → 恢复面 F14 → 注入关闭即恢复（履约单重新成对落地）
         - increase 差值回落阈值（10）下——10m 窗稀释需 ~10min
         - 无残留 firing
-      restore_probe: oa_orders_created_total 与 oa_fulfillments_started_total 差值回落
+      restore_probe: oa_orders_total 与 oa_fulfillments_started_total 差值回落
     timing:
       preheat_seconds: 60
       hold_seconds: 600
@@ -684,7 +687,7 @@ scenarios:
     expected_alerts:
       - alertname: ArenaOrderSuccessRateLow
         severity: page
-        basis: sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_created_total[5m])) < 0.98 持续 5m
+        basis: sum(rate(oa_orders_success_total[5m])) / sum(rate(oa_orders_total[5m])) < 0.98 持续 5m
         labels_frozen: {alertname: ArenaOrderSuccessRateLow, service: order-arena, fault_type: COMPOSITE_LOW_DOSE}
     expected_evidence_checkpoints:
       - 从业务 KPI 反推技术贡献分解
@@ -698,7 +701,7 @@ scenarios:
         - 复合注入全部归零（F1 比例归零 + 延迟归零）→ 成功率回升 ≥0.98
         - 告警 resolved 无残留 firing
         - 无补偿台账残留
-      restore_probe: oa_orders_success_total / oa_orders_created_total 速率比回升 0.98 上
+      restore_probe: oa_orders_success_total / oa_orders_total 速率比回升 0.98 上
     timing:
       preheat_seconds: 60
       hold_seconds: 600
@@ -733,7 +736,7 @@ scenarios:
     expected_alerts:
       - alertname: ArenaOrderZeroFlow
         severity: page
-        basis: sum(rate(oa_orders_created_total[5m])) == 0 持续 5m
+        basis: sum(rate(oa_orders_total[5m])) == 0 持续 5m
         labels_frozen: {alertname: ArenaOrderZeroFlow, service: order-arena, fault_type: F16}
     expected_evidence_checkpoints:
       - 区分"真断流"与"指标采集断了"（查探针自证 oa_domain_probe_up——H6 教学前置）

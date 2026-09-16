@@ -71,7 +71,10 @@ public class DomainProbe {
         this.store = store;
         this.stuckThresholdSeconds = stuckThresholdSeconds;
         this.registry = registry;
-        this.ordersCreated = Counter.builder("oa_orders_created_total")
+        // 注册名 = Prometheus 渲染名（T7 真机校准）：Micrometer/OpenMetrics 对 counter 保留
+        // 后缀 _created_total 会剥成 _total、gauge 尾部 _total 会被剥——注册面直接用渲染名，
+        // 与 arena-business.yml 规则面严格一致（INV-AM2-5 探测面↔规则面冻结）
+        this.ordersCreated = Counter.builder("oa_orders_total")
                 .description("订单创建尝试数（探测增量累计，S24/S23 分母）").register(registry);
         this.ordersSuccess = Counter.builder("oa_orders_success_total")
                 .description("订单成功数（ENABLED，探测增量累计，S23 分子）").register(registry);
@@ -103,7 +106,7 @@ public class DomainProbe {
                 .description("重复扣款 episode 数（F11 症状：同单多笔 CAPTURE 成功）").register(registry);
         Gauge.builder("oa_recon_diff_current", () -> openCount(RECON_SKEW))
                 .description("三方对账差异数（F12 症状：DEDUCT 类型不全的 ENABLED 订单）").register(registry);
-        Gauge.builder("oa_inventory_negative_total", () -> openCount(INVENTORY_OVERSELL))
+        Gauge.builder("oa_inventory_negative", () -> openCount(INVENTORY_OVERSELL))
                 .description("库存超卖 episode 数（F13 症状：INVENTORY 超额扣减）").register(registry);
         Gauge.builder("oa_orders_vs_fulfillments_diff", () -> openCount(FULFILLMENT_GAP))
                 .description("履约缺口 episode 数（F14 症状：ENABLED 无履约记录）").register(registry);

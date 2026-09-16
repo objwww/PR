@@ -1,6 +1,7 @@
 # M-a 业务规则 promtool 单元测试（在 195 上执行：docker run --rm -v $PWD:/w -w /w
-#   quay.io/prometheus/prometheus:v3.13.1 promtool test rules prometheus/arena-business-rules-test.yml）
+#   quay.io/prometheus/prometheus:v3.13.1 --entrypoint promtool promtool test rules prometheus/arena-business-rules-test.yml）
 # 本文件位于 rules/ 目录之外——rule_files glob 只装载 rules/*.yml，测试文件不入生产加载面。
+# 序列名 = T7 真机校准后的渲染名（oa_orders_total / oa_inventory_negative，见规则文件头注）。
 rule_files:
   - rules/arena-business.yml
 
@@ -104,7 +105,7 @@ tests:
   # S20 库存超卖
   - interval: 1m
     input_series:
-      - series: 'oa_inventory_negative_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+      - series: 'oa_inventory_negative{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 4 4'
     alert_rule_test:
       - eval_time: 2m
@@ -122,7 +123,7 @@ tests:
   # S21 履约缺口（counter 差值）
   - interval: 1m
     input_series:
-      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+      - series: 'oa_orders_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 10 20 30 40 50 60 70 80 90 100 110 120 130'
       - series: 'oa_fulfillments_started_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 10 20 30 40 50 60 70 80 90 100 100 100 100'
@@ -163,7 +164,7 @@ tests:
       # 成功 96/分钟、尝试 100/分钟 → 成功率 96% < 98%
       - series: 'oa_orders_success_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 96 192 288 384 480 576 672'
-      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+      - series: 'oa_orders_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 100 200 300 400 500 600 700'
     alert_rule_test:
       - eval_time: 7m
@@ -180,7 +181,7 @@ tests:
   - interval: 1m
     input_series:
       # 前 2 分钟有流量、之后归零——归零满 5 分钟（for 5m）后触发
-      - series: 'oa_orders_created_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
+      - series: 'oa_orders_total{service="order-arena",job="order-arena",instance="order-arena:8080"}'
         values: '0 50 100 100 100 100 100 100 100 100 100 100 100 100 100 100'
     alert_rule_test:
       - eval_time: 5m
