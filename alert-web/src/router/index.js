@@ -30,6 +30,7 @@ const DrillsView = () => import('../views/DrillsView.vue')
 const DrillCreateView = () => import('../views/DrillCreateView.vue')
 const DrillDetailView = () => import('../views/DrillDetailView.vue')
 const VersionsView = () => import('../views/VersionsView.vue')
+const AuditView = () => import('../views/AuditView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -67,6 +68,8 @@ const routes = [
   { path: '/monitor', name: 'monitor', component: MonitorView, meta: { title: '监控' } },
   // EN-10 版本中心：发布资产/配置包只读清单 + 运行配置切换状态（发布/激活仍走机器线，不在页面）
   { path: '/versions', name: 'versions', component: VersionsView, meta: { title: '版本中心' } },
+  // 审计与变更历史（业界路线 v2 第1项）：auth_event + change_event 统一只读流
+  { path: '/audit', name: 'audit', component: AuditView, meta: { title: '审计与变更历史' } },
 ]
 
 const router = createRouter({ history: createWebHistory(), routes })
