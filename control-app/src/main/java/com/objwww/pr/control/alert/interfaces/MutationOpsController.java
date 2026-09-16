@@ -135,9 +135,15 @@ public class MutationOpsController {
         if (request.approverId() == null || request.approverId().startsWith("guardian:")) {
             return Map.of("status", "REJECTED", "reason", "INVALID_APPROVER");
         }
-        String state = decisionService.decide(request.requestId(), request.approverId(),
-                request.approverRole(), request.approved());
-        return Map.of("status", "OK", "approval_state", state);
+        try {
+            String state = decisionService.decide(request.requestId(), request.approverId(),
+                    request.approverRole(), request.approved());
+            return Map.of("status", "OK", "approval_state", state);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            // 显式拒绝面（终态拒新决策/同人重复/审批不存在）——不走 /error 重派发
+            // （异常穿透会被安全链 401 化，PA-BUG 登记见 PE-E2 台账）
+            return Map.of("status", "REJECTED", "reason", e.getMessage());
+        }
     }
 
     /** AM8 人工裁决：ESCALATED operation 的终裁（COMPLETED/FAILED_CONFIRMED），锁随裁决释放 */

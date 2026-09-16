@@ -184,10 +184,12 @@ public class PostgresAlertInboxRepository implements AlertInboxRepository {
 
     @Override
     public boolean releaseQuarantined(UUID id, String releasedBy, Instant now) {
+        // PA-BUG（195 实证）：原 jsonb_set 打在标量 last_error 上抛 "cannot set path
+        // in scalar"——改为整体重建对象，旧值收进 previous_error（任意形状都安全）
         return jdbc.sql("""
                 UPDATE alert_inbox SET state = 'RECEIVED', updated_at = :now,
-                    last_error = jsonb_set(COALESCE(last_error, '{}'::jsonb),
-                        '{released_by}', to_jsonb(:releasedBy::text))
+                    last_error = jsonb_build_object('released_by', :releasedBy::text,
+                        'previous_error', COALESCE(last_error, 'null'::jsonb))
                  WHERE id = :id AND state = 'QUARANTINED'
                 """)
                 .param("now", Timestamp.from(now))
