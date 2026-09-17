@@ -50,17 +50,20 @@ class ReplayScenarioDriverTest {
 
     private static final class FrozenScript
             implements ReplayScenarioDriver.FrozenPayloadReader {
-        private Optional<FrozenPayload> next = Optional.empty();
+        private final java.util.List<FrozenPayload> pool = new java.util.ArrayList<>();
 
         void offer(byte[] body) {
-            next = Optional.of(new FrozenPayload(body,
+            pool.add(new FrozenPayload(body,
                     com.objwww.pr.shared.Digest.sha256Of(
                             new String(body, StandardCharsets.UTF_8)).value()));
         }
 
         @Override
-        public Optional<FrozenPayload> latestFiring(String alertname) {
-            return next;
+        public Optional<FrozenPayload> firingFor(String alertname, int roundNo) {
+            if (roundNo < 1 || roundNo > pool.size()) {
+                return Optional.empty();
+            }
+            return Optional.of(pool.get(pool.size() - roundNo));
         }
     }
 
@@ -78,7 +81,7 @@ class ReplayScenarioDriverTest {
         assertThat(posted.bodies).hasSize(1);
         assertThat(posted.bodies.get(0)).isEqualTo(FIRING_PAYLOAD);
         assertThat(receipt.expectedAlertIdentity()).isEqualTo("op-smoke-x");
-        assertThat(receipt.actionDigest()).startsWith("replay:").doesNotContain(" ");
+        assertThat(receipt.actionDigest()).startsWith("replay-r1:").doesNotContain(" ");
 
         ScenarioDriver.RecoveryReceipt recovery =
                 driver.deactivate(replayCase(), receipt);

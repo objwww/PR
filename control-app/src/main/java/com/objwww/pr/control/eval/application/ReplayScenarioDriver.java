@@ -46,14 +46,19 @@ public class ReplayScenarioDriver implements ScenarioDriver {
         this.clock = Objects.requireNonNull(clock);
     }
 
-    /** 冻结载荷读面（Postgres 实现：alert_inbox 最新含 alertname 的 firing 组载荷） */
+    /** 冻结载荷读面（Postgres 实现：alert_inbox 按 round 取第 N 个不同历史 firing 组载荷） */
     public interface FrozenPayloadReader {
 
         record FrozenPayload(byte[] body, String sha256Hex) {
         }
 
-        /** 最新含该 alertname 且 status=firing 的组载荷原文；无 → empty（不猜） */
-        java.util.Optional<FrozenPayload> latestFiring(String alertname);
+        /**
+         * 含该 alertname 且 status=firing 的历史组载荷，按 received_at 倒序取第
+         * roundNo 个**不同 digest** 的载荷（round 1 = 最新；不同轮次必须携带不同
+         * 材料——同载荷重投的事故材料哈希相同，管线按"无新证据不重查"正确拒绝，
+         * 多轮回放因此必须轮换历史载荷）。不足 → empty（不猜）。
+         */
+        java.util.Optional<FrozenPayload> firingFor(String alertname, int roundNo);
     }
 
     /** webhook 重投面（bearer env 注入；blank = fail-closed 拒绝发信） */
@@ -63,13 +68,27 @@ public class ReplayScenarioDriver implements ScenarioDriver {
         int post(byte[] body) throws Exception;
     }
 
+    /** 跨轮 resolved 落定等待（195 E2E 实证：rN 的 resolved 与 rN+1 的 firing
+     *  同秒到达管线时序不定，firing episode 被迟到的 resolved 秒杀——
+     *  round>1 时先等 resolved 落定再重投） */
+    private static final long CROSS_ROUND_SETTLE_MILLIS = 10_000;
+
     @Override
     public ActivationReceipt activate(GoldenCase golden, int roundNo) {
         String alertname = alertnameOf(golden);
-        FrozenPayloadReader.FrozenPayload payload = payloadReader.latestFiring(alertname)
+        if (roundNo > 1) {
+            try {
+                Thread.sleep(CROSS_ROUND_SETTLE_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("回放轮间落定等待被中断", e);
+            }
+        }
+        FrozenPayloadReader.FrozenPayload payload = payloadReader
+                .firingFor(alertname, roundNo)
                 .orElseThrow(() -> new IllegalStateException(
-                        "回放锚缺失：alert_inbox 无含 alertname=" + alertname
-                                + " 的历史 firing 载荷（零伪造，不现编载荷）"));
+                        "回放锚缺失：alert_inbox 无第 " + roundNo + " 个含 alertname="
+                                + alertname + " 的不同历史 firing 载荷（零伪造，不现编载荷）"));
         int status;
         try {
             status = postWithRetry(payload.body());
@@ -86,7 +105,13 @@ public class ReplayScenarioDriver implements ScenarioDriver {
                     "回放重投被拒（http=" + status + "，AM 整组语义 2xx 才算受理）");
         }
         return new ActivationReceipt(golden.scenarioId(),
-                "replay:" + payload.sha256Hex(), 0, alertname);
+                "replay-r" + roundNo + ":" + payload.sha256Hex(), 0, alertname);
+    }
+
+    /** 从回执 actionDigest 解析轮次（replay-r<N>:<sha256>） */
+    private static int roundOf(ActivationReceipt receipt) {
+        String head = receipt.actionDigest().split(":")[0];
+        return Integer.parseInt(head.replace("replay-r", ""));
     }
 
     /**
@@ -132,10 +157,12 @@ public class ReplayScenarioDriver implements ScenarioDriver {
     @Override
     public RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt) {
         String alertname = alertnameOf(golden);
-        FrozenPayloadReader.FrozenPayload payload = payloadReader.latestFiring(alertname)
+        int roundNo = roundOf(receipt);
+        FrozenPayloadReader.FrozenPayload payload = payloadReader
+                .firingFor(alertname, roundNo)
                 .orElseThrow(() -> new IllegalStateException(
                         "回放清理失败：alert_inbox 已无 alertname=" + alertname
-                                + " 的 firing 载荷（激活后数据面漂移）"));
+                                + " 第 " + roundNo + " 个 firing 载荷（激活后数据面漂移）"));
         byte[] resolvedBody = buildResolvedVariant(payload.body(), clock.get());
         boolean ok;
         try {
