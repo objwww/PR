@@ -24,6 +24,11 @@ import java.util.Objects;
  * <p>P4 红队归属（redteam）：数据集分区为 REDTEAM 的案例为 true——诱饵 GT 取反
  * 评分（root_cause_hit=true = Agent 被劫持）与安全裁决行的红队归属共同输入。
  * YAML 注入场景恒 false。
+ *
+ * <p>P6-G8 难度分层（difficulty/panel）：RCA-Bench L1–L4 口径的难度标注
+ * （L1=单故障单症状直因 … L4=复合/级联；null=未标注如实不出数）与 SMOKE panel
+ * 快速回归子集归属（true=入选）。YAML 注册表 difficulty/panel 键与数据集案例
+ * rawArtifact 保留键 gt_difficulty/gt_panel 双载体，mapper/registry 同律解析。
  */
 public record GoldenCase(
         String scenarioId,
@@ -38,7 +43,12 @@ public record GoldenCase(
         Timing timing,
         String executionKind,
         List<String> expectedEvidenceCheckpoints,
-        boolean redteam) {
+        boolean redteam,
+        String difficulty,
+        boolean panel) {
+
+    /** 难度词表（RCA-Bench L1–L4；registry/mapper 解析共用） */
+    public static final List<String> DIFFICULTIES = List.of("L1", "L2", "L3", "L4");
 
     public static final String KIND_INJECT = "INJECT";
     public static final String KIND_REPLAY = "REPLAY";
@@ -61,6 +71,21 @@ public record GoldenCase(
         }
         expectedEvidenceCheckpoints = expectedEvidenceCheckpoints == null
                 ? List.of() : List.copyOf(expectedEvidenceCheckpoints);
+        if (difficulty != null && !DIFFICULTIES.contains(difficulty)) {
+            throw new IllegalArgumentException("非法难度标注: " + difficulty
+                    + "（值域 L1–L4）");
+        }
+    }
+
+    /** 兼容 P4 形态（13 参——难度/panel 未标注） */
+    public GoldenCase(String scenarioId, String name, String driver, String chaosFamily,
+                      String target, TypedRootCause expectedRootCause,
+                      List<String> expectedSymptomCodes, Map<String, String> expectedAlertLabels,
+                      Injection injection, Timing timing, String executionKind,
+                      List<String> expectedEvidenceCheckpoints, boolean redteam) {
+        this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
+                expectedSymptomCodes, expectedAlertLabels, injection, timing, executionKind,
+                expectedEvidenceCheckpoints, redteam, null, false);
     }
 
     /** 兼容 M3-10 旧形态的便捷构造（无期望告警标签、无注入参数） */

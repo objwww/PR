@@ -59,7 +59,8 @@ public class EvalCommandController {
                     longValue(body.get("budgetMaxTokens")),
                     intValue(body.get("maxConcurrency")),
                     longValue(body.get("deadlineSeconds")),
-                    intValue(body.get("roundsPerScenario")));
+                    intValue(body.get("roundsPerScenario")),
+                    text(body.get("panel")));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }

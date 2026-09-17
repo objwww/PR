@@ -298,6 +298,12 @@
                 <span v-else class="muted">未统计</span>
               </template>
             </el-table-column>
+            <el-table-column label="难度" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.difficulty" size="small" disable-transitions>{{ row.difficulty }}</el-tag>
+                <span v-else class="muted">未标注</span>
+              </template>
+            </el-table-column>
             <el-table-column label="三维评分（P3）" min-width="200">
               <template #default="{ row }">
                 <div class="cell-main">

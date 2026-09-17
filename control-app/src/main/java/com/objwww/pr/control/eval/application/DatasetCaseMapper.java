@@ -58,10 +58,23 @@ public final class DatasetCaseMapper {
         }
         List<String> checkpoints = evidenceCheckpoints(content.rawArtifact());
         boolean redteam = "REDTEAM".equals(row.partitionClass());
+        // P6-G8 难度分层：rawArtifact 保留键 gt_difficulty/gt_panel（materialize/
+        // 种子时人工显式提供——缺省 = 未标注/null 如实不出数；非法值由 GoldenCase
+        // canonical 构造拒绝）
+        String difficulty = stringArtifactKey(content.rawArtifact(), "gt_difficulty");
+        boolean panel = Boolean.parseBoolean(
+                stringArtifactKey(content.rawArtifact(), "gt_panel"));
         return new GoldenCase(row.caseKey(), "回放·" + row.datasetName() + ":" + row.datasetVersion(),
                 ReplayScenarioDriver.DRIVER_NAME, null, content.scenarioFamilyId(),
                 content.expectedRootCause(), content.expectedSymptomCodes(),
-                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY, checkpoints, redteam);
+                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY, checkpoints, redteam,
+                difficulty, panel);
+    }
+
+    /** rawArtifact 字符串保留键（缺键/非字符串/blank = null） */
+    private static String stringArtifactKey(Map<String, Object> rawArtifact, String key) {
+        Object raw = rawArtifact.get(key);
+        return raw instanceof String s && !s.isBlank() ? s : null;
     }
 
     /**

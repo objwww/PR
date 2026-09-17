@@ -150,7 +150,8 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                                cause_component_hit, cause_fault_hit, cause_reason_hit,
                                checkpoints_total, checkpoints_covered,
                                checkpoint_matches::text as checkpoint_matches_json,
-                               conclusion_grounded, tool_calls_total, tool_calls_unique
+                               conclusion_grounded, tool_calls_total, tool_calls_unique,
+                               difficulty
                         from eval_case_result
                         """ + where + " order by scenario_id asc, round_no asc limit :lim")
                 .params(params)
@@ -170,7 +171,8 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("checkpoint_matches_json"),
                         rs.getString("conclusion_grounded"),
                         (Integer) rs.getObject("tool_calls_total"),
-                        (Integer) rs.getObject("tool_calls_unique")))
+                        (Integer) rs.getObject("tool_calls_unique"),
+                        rs.getString("difficulty")))
                 .list());
         boolean hasMore = rows.size() > limit;
         if (hasMore) {

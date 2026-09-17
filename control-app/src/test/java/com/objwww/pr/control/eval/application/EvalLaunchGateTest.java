@@ -60,6 +60,25 @@ class EvalLaunchGateTest {
     }
 
     @Test
+    @DisplayName("P6-G8 panel 值域：SMOKE 放行；未知 panel 拒绝且 supported 同源透出")
+    void panelValueDomainEnforced() {
+        EvalLaunchGate gate = EvalLaunchGate.closed(Set.of("L"), "eval-ds-1", 1, 10);
+        EvalLaunchPlan smoke = new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                null, null, null, null, "SMOKE");
+        EvalLaunchPlan unknown = new EvalLaunchPlan("n", "L", "eval-ds-1", null, null,
+                null, null, null, null, "NIGHTLY");
+
+        assertThatCode(() -> gate.check(smoke)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> gate.check(unknown))
+                .isInstanceOf(EvalLaunchGate.EvalLaunchUnsupportedException.class)
+                .hasMessageContaining("NIGHTLY")
+                .hasMessageContaining("SMOKE")
+                .satisfies(e -> assertThat(
+                        ((EvalLaunchGate.EvalLaunchUnsupportedException) e).code())
+                        .isEqualTo("PANEL_NOT_SUPPORTED"));
+    }
+
+    @Test
     @DisplayName("全支持面闸门：E/B/覆盖项/预算/截止/高并发按构造参数放行")
     void permissiveGateAcceptsConfiguredScope() {
         EvalLaunchGate gate = new EvalLaunchGate(Set.of("E", "B", "L"), Set.of("ds-1", "ds-2"),

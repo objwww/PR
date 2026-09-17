@@ -37,6 +37,11 @@ import java.util.UUID;
  *   <li>评分对象 = {@link SingleCaseScorer}（final-validated-report-v1，禁挑最优）；</li>
  *   <li>终局：原始计数聚合 + 三指标 + {@link BaselineReportGenerator} 基线报告 +
  *       EvalRun 终态一次性 CAS 回填。</li>
+ *   <li><b>回放单次测量边界</b>（2026-09-17 北极星三批六连 TIMEOUT_OR_ABSENT 定谳）：
+ *       冻结载荷重放对同一 incident_key 撞上管线三道正确性闸（alert_event 去重 /
+ *       迟到 firing 不复活 / 材料哈希去重），第 2 轮起结构上不可能铸新 run——
+ *       replay 案例轮次裁剪为 1（{@link #effectiveRounds}），不再烧
+ *       maxFiringWait+hold 预算报假红；多轮测量走故障注入造新材料，不走载荷重放。</li>
  *   <li><b>EV-04 生命周期</b>：{@link RunLifecycle} 挂点承载 worker 形态的发起身份
  *       回填、eval_phase_event 阶段事件、案例边界取消检查点与 L 模式恢复核验；
  *       {@link #runBatch()}（noop 挂点）保持 M3 一次性跑批语义不变。</li>
@@ -180,7 +185,8 @@ public class EvalBatchRunner {
                     throw new IllegalStateException(
                             "未装配的驱动器: " + golden.driver() + "（场景 " + golden.scenarioId() + "）");
                 }
-                for (int round = 1; round <= roundsPerScenario; round++) {
+                int effectiveRounds = effectiveRounds(golden);
+                for (int round = 1; round <= effectiveRounds; round++) {
                     // EV-04 取消检查点：案例边界生效——在跑轮次走完后不再推进新案例
                     if (lifecycle.cancelRequested(evalRunId)) {
                         cancelled = true;
@@ -235,6 +241,21 @@ public class EvalBatchRunner {
 
     private record RoundOutcome(EvalCaseResult result, boolean gateOpen,
                                 List<BaselineReportGenerator.CaseFailure> failures) {
+    }
+
+    /**
+     * 回放案例单次测量边界：冻结载荷重投对同一 incident_key 撞上管线三道正确性闸
+     * （alert_event 去重 / 迟到 firing 不复活 / 材料哈希去重），第 2 轮起结构上不可能
+     * 铸新 run——裁剪为单轮，诚实落一档测量，不再烧 maxFiringWait+hold 预算报假红
+     * run_not_found。多轮/稳定性测量走故障注入造新材料（注入场景不受此限）。
+     */
+    private int effectiveRounds(GoldenCase golden) {
+        if (golden.replay() && roundsPerScenario > 1) {
+            log.info("场景 {} 为回放形态：单次测量边界生效，轮次 {} 裁剪为 1",
+                    golden.scenarioId(), roundsPerScenario);
+            return 1;
+        }
+        return roundsPerScenario;
     }
 
     /**
@@ -440,7 +461,8 @@ public class EvalBatchRunner {
                 golden.expectedRootCause(), null,
                 golden.expectedSymptomCodes(), List.of(), 0, 0,
                 golden.expectedSymptomCodes().size(), null, false,
-                sampleJson);
+                sampleJson, null, null, null, null, null, null, null, null, null,
+                golden.difficulty());
     }
 
     private EvalCaseResult gateBlocked(UUID evalRunId, GoldenCase golden, int round) {

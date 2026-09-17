@@ -78,16 +78,20 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
     /**
      * 执行一条已领取的 LAUNCH 命令（run id = 命令预定身份）；异常上抛归 worker 收口。
      * 领取后先过能力闸门复验（PAGE-03：服务层校验不可信作唯一防线；不支持的
-     * 模式/配置在此拒绝，零驱动装配、零注入端口触达）。
+     * 模式/配置在此拒绝，零驱动装配、零注入端口触达）。P6-G8：panel 非空时执行
+     * 注册表先过滤（forPanel——SMOKE 只跑 panel=true 子集），registryDigest 承自
+     * 过滤后注册表，可复现元数据如实反映执行子集。
      */
     public EvalBatchRunner.BatchResult execute(EvalRunCommand command) {
         EvalLaunchPlan plan = parsePlan(command.payloadJson());
         gate.check(plan);
         EvalRunMetadata overlaid = overlay(baseMetadata, plan);
+        com.objwww.pr.control.eval.domain.GoldenScenarioRegistry effective =
+                registry.forPanel(plan.panel());
         EvalBatchRunner.RunLifecycle lifecycle = new EvalBatchRunner.RunLifecycle(
                 plan.mode(), plan.displayName(), command.payloadJson(), workerId,
                 phaseSink, commands::cancelAccepted);
-        return new EvalBatchRunner(registry, driversByRole, alertProbe, incidentProbe,
+        return new EvalBatchRunner(effective, driversByRole, alertProbe, incidentProbe,
                 rcaRunResolver, scorer, evalRuns, reportGenerator, overlaid,
                 plan.roundsPerScenario() == null ? defaultRounds : plan.roundsPerScenario(),
                 clock)
@@ -103,7 +107,8 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
                     text(node, "datasetVersion"), text(node, "model"),
                     text(node, "promptVersion"),
                     number(node, "budgetMaxTokens"), intNumber(node, "maxConcurrency"),
-                    number(node, "deadlineSeconds"), intNumber(node, "roundsPerScenario"));
+                    number(node, "deadlineSeconds"), intNumber(node, "roundsPerScenario"),
+                    text(node, "panel"));
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {

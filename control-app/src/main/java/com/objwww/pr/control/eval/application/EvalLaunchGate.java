@@ -64,6 +64,10 @@ public final class EvalLaunchGate {
     private final boolean deadlineSupported;
     private final boolean launchEnabled;
 
+    /** P6-G8 panel 值域（SMOKE 快速回归子集；过滤语义注册表驱动，值域全局唯一——
+     *  非法值入队前拒绝，防止"计划写 SMOKE、执行跑全量"的身份错位） */
+    public static final Set<String> SUPPORTED_PANELS = Set.of("SMOKE");
+
     /** 全支持面构造（测试对照用）；生产装配用 {@link #closed(Set, String, int, int)} */
     public EvalLaunchGate(Set<String> modes, Set<String> datasetVersions, int maxConcurrency,
                           int maxRounds, boolean modelOverrideSupported,
@@ -159,6 +163,12 @@ public final class EvalLaunchGate {
                     "重复次数 " + plan.roundsPerScenario() + " 超出上限 " + maxRounds,
                     describe());
         }
+        if (plan.panel() != null && !SUPPORTED_PANELS.contains(plan.panel())) {
+            throw new EvalLaunchUnsupportedException("PANEL_NOT_SUPPORTED",
+                    "panel " + plan.panel() + " 不在支持值域（支持："
+                            + String.join("/", SUPPORTED_PANELS)
+                            + "）；空 = 全量原表", describe());
+        }
     }
 
     /** SAFE-02/FUP-01 能力位读口（CLI once 入口与命令面/worker 同源闭面判定用） */
@@ -174,6 +184,7 @@ public final class EvalLaunchGate {
         out.put("datasetVersions", List.copyOf(datasetVersions));
         out.put("maxConcurrency", maxConcurrency);
         out.put("maxRoundsPerScenario", maxRounds);
+        out.put("panels", List.copyOf(SUPPORTED_PANELS));
         out.put("modelOverride", modelOverrideSupported);
         out.put("promptOverride", promptOverrideSupported);
         out.put("budgetMaxTokens", budgetSupported);

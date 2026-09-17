@@ -24,8 +24,11 @@ import java.util.UUID;
  *   <li>结论复核：conclusionGrounded ∈ GROUNDED/UNGROUNDED/NOT_APPLICABLE
  *       （TRUE 根因 claim 是否带证据引用——ungrounded diagnosis 探针）；</li>
  *   <li>过程：toolCallsTotal/toolCallsUnique（评分 attempt 的 tool_call 账本
- *       计数；total−unique=重复调用观测）。</li>
+ *       计数；total?unique=重复调用观测）。</li>
  * </ul>
+ *
+ * <p>P6-G8 难度分层：difficulty（RCA-Bench L1–L4，案例定义面标注随评分落档；
+ * null=未标注如实不出数）——读面按难度聚合（G8 分层报表）。
  */
 public record EvalCaseResult(UUID id,
                              UUID evalRunId,
@@ -55,7 +58,8 @@ public record EvalCaseResult(UUID id,
                              String checkpointMatchesJson,
                              String conclusionGrounded,
                              Integer toolCallsTotal,
-                             Integer toolCallsUnique) {
+                             Integer toolCallsUnique,
+                             String difficulty) {
 
     /** 结论有据性词表（conclusionGrounded 值域） */
     public static final String GROUNDED = "GROUNDED";
@@ -115,6 +119,6 @@ public record EvalCaseResult(UUID id,
                 scoredAttemptId, scoredReportId, verdict, rootCauseHit, expectedRootCause,
                 actualRootCause, expectedSymptomCodes, actualSymptomCodes, tpCount, fpCount,
                 fnCount, latencyMs, silencePenalty, failureSampleJson,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 }

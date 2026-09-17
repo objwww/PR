@@ -57,7 +57,8 @@ public interface EvalQueryReader {
     }
 
     /** eval_case_result 投影行（root cause/failureSample 为 jsonb 原文，摘要化归服务层；
-     *  P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0） */
+     *  P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0；
+     *  P6-G8：difficulty 难度标注可空直读——null=未标注） */
     record EvalCaseRow(UUID caseExecutionId, String scenarioId, int roundNo, String verdict,
                        boolean rootCauseHit, String expectedRootCauseJson,
                        String actualRootCauseJson, Long latencyMs, String failureSampleJson,
@@ -65,7 +66,7 @@ public interface EvalQueryReader {
                        Boolean causeComponentHit, Boolean causeFaultHit, Boolean causeReasonHit,
                        Integer checkpointsTotal, Integer checkpointsCovered,
                        String checkpointMatchesJson, String conclusionGrounded,
-                       Integer toolCallsTotal, Integer toolCallsUnique) {
+                       Integer toolCallsTotal, Integer toolCallsUnique, String difficulty) {
 
         /** P3 前兼容构造（11 参原形）：三维/过程计数 = 全 null */
         public EvalCaseRow(UUID caseExecutionId, String scenarioId, int roundNo, String verdict,
@@ -75,7 +76,7 @@ public interface EvalQueryReader {
             this(caseExecutionId, scenarioId, roundNo, verdict, rootCauseHit,
                     expectedRootCauseJson, actualRootCauseJson, latencyMs, failureSampleJson,
                     rcaRunId, scoredReportId, null, null, null, null, null, null, null,
-                    null, null);
+                    null, null, null);
         }
     }
 

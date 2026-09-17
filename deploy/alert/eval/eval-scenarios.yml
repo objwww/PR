@@ -26,7 +26,12 @@
 #   v3 校准（T7 真机 2026-09-18）：场景注记中指标名统一到 Prometheus 渲染真名——
 #   counter oa_orders_created_total 实渲染 oa_orders_total（OpenMetrics 保留字 _created 被剥）、
 #   gauge oa_inventory_negative_total 实渲染 oa_inventory_negative；alertname/标签/GT 不变。
-registry_version: 3
+# v4（2026-09-17）= P6-G8 难度分层：全 15 场景加 difficulty（L1=靶场单故障单症状直因
+#   S3/S4/S5；L2=单根因需定位/长窗判读 S1/S2/S16~S22/S24/S25；L4=复合低剂量级联 S23）
+#   + panel SMOKE 快刷子集（S3/S4/S5 三件套——秒级 resolved 最短路径）。装载器
+#   GoldenScenarioRegistry 解析两键（非法 difficulty 装载即拒）；LAUNCH 计划 panel=SMOKE
+#   只执行 panel:true 子集（forPanel 过滤，registryDigest 承自过滤后子集）。
+registry_version: 4
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
 lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 2)"
@@ -63,6 +68,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S1                        # [文档已定] §6.7 场景编号
+    difficulty: L2                        # P6-G8（单故障-双档规则长窗，需恢复窗判读）
+    panel: false                          # P6-G8 SMOKE panel 归属（长窗场景不入快刷子集）
     name: paymentFailure=50%
     fault_source: AM0 flagd                # [文档已定] §6.7 故障源
     scenario_type: 业务链路错误率           # [文档已定] §6.7 类型列
@@ -118,6 +125,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S2
+    difficulty: L2                        # P6-G8（依赖不可达-单故障单症状）
+    panel: false
     name: flagd paymentUnreachable
     fault_source: AM0 flagd
     scenario_type: 依赖不可达
@@ -165,6 +174,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S3
+    difficulty: L1                        # P6-G8（靶场 Gauge 单故障单症状直因，秒级 resolved）
+    panel: true                           # P6-G8 SMOKE panel（快刷子集：靶场秒级三件套）
     name: F1 幂等失效
     fault_source: AM2 靶场
     scenario_type: 业务完整性
@@ -207,6 +218,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S4
+    difficulty: L1                        # P6-G8
+    panel: true                           # P6-G8 SMOKE panel
     name: F2 状态回跳
     fault_source: AM2 靶场
     scenario_type: 状态机非法迁移
@@ -250,6 +263,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S5
+    difficulty: L1                        # P6-G8
+    panel: true                           # P6-G8 SMOKE panel
     name: F3 超时结果未知
     fault_source: AM2 靶场
     scenario_type: 中间态悬挂
@@ -303,6 +318,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S16                        # [文档已定] v2 设计 §3.1
+    difficulty: L2                        # P6-G8（业务对账型单根因-技术指标全绿）
+    panel: false
     name: F9 掉单（支付成功订单未推进）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-掉单
@@ -353,6 +370,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S17
+    difficulty: L2                        # P6-G8（与 S5 鉴别对-有痕超时 vs 沉默悬挂）
+    panel: false
     name: F10 支付悬挂（下单后支付未发起）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-支付悬挂
@@ -408,6 +427,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S18
+    difficulty: L2                        # P6-G8
+    panel: false
     name: F11 重复扣款（支付层幂等失效）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-重复扣款
@@ -458,6 +479,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S19
+    difficulty: L2                        # P6-G8
+    panel: false
     name: F12 三方对账不平（数量差）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-对账不平
@@ -509,6 +532,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S20
+    difficulty: L2                        # P6-G8
+    panel: false
     name: F13 库存超卖（预占竞态）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-库存超卖
@@ -559,6 +584,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S21
+    difficulty: L2                        # P6-G8（依赖不可达-单故障单症状）
+    panel: false
     name: F14 下单事件丢失（履约未触发）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-消息丢失
@@ -608,6 +635,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S22
+    difficulty: L2                        # P6-G8
+    panel: false
     name: F15 消息重复消费（重复履约）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-重复消费
@@ -659,6 +688,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S23
+    difficulty: L4                        # P6-G8（复合低剂量-多故障级联部分验证）
+    panel: false
     name: 下单成功率 KPI 下跌（多因素低剂量）
     fault_source: AM2 靶场                  # 复合低剂量（F1 低比例 + 下游小延迟）
     scenario_type: 业务交易链路-KPI 下跌
@@ -711,6 +742,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S24
+    difficulty: L2                        # P6-G8（教学-考试对教侧）
+    panel: false
     name: F16 断流（零订单）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-断流
@@ -760,6 +793,8 @@ scenarios:
 
   # ---------------------------------------------------------------------------------
   - scenario_id: S25
+    difficulty: L2                        # P6-G8（依赖不可达-单故障单症状）
+    panel: false
     name: F17 履约超时积压
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-履约积压

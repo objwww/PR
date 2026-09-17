@@ -87,10 +87,18 @@ public final class GoldenScenarioRegistry {
                 intField(t, "max_firing_wait_seconds"),
                 intField(t, "max_resolved_wait_seconds"),
                 intField(t, "cleanup_timeout_seconds"));
+        // P6-G8 难度分层：difficulty（L1–L4 枚举，非法即拒——期望面纪律同律）+panel
+        // （SMOKE 快速回归子集归属）；缺省 = 未标注/null（读面如实不出数）
+        String difficulty = strOrNull(s, "difficulty");
+        if (difficulty != null && !GoldenCase.DIFFICULTIES.contains(difficulty)) {
+            throw new IllegalArgumentException("场景 " + scenarioId + " 非法 difficulty: "
+                    + difficulty + "（值域 L1–L4）");
+        }
+        boolean panel = Boolean.TRUE.equals(s.get("panel"));
         return new GoldenCase(scenarioId, strOrNull(s, "name"), strOrNull(s, "driver"),
                 strOrNull(s, "chaos_family"), strOrNull(s, "target"),
                 rootCause, symptoms, alertLabels(s, scenarioId), injection(s), timing,
-                GoldenCase.KIND_INJECT, checkpoints);
+                GoldenCase.KIND_INJECT, checkpoints, false, difficulty, panel);
     }
 
     /** injection 块（S1/S2 flag 面；缺块/靶场场景 = null） */
@@ -192,6 +200,20 @@ public final class GoldenScenarioRegistry {
         merged.addAll(extraScenarios);
         return new GoldenScenarioRegistry(registryVersion, schemaVersion, lexiconBinding,
                 merged);
+    }
+
+    /**
+     * P6-G8 panel 过滤（SMOKE 快速回归子集）：panel 标记为 null = 全量原表（语义
+     * 不变）；非 null 只留 panel=true 场景（顺序与 digest 语义承自场景行——过滤后的
+     * digest 与全量不同，run 可复现元数据如实反映执行子集）。
+     */
+    public GoldenScenarioRegistry forPanel(String panel) {
+        if (panel == null || panel.isBlank()) {
+            return this;
+        }
+        List<GoldenCase> filtered = scenarios.stream().filter(GoldenCase::panel).toList();
+        return new GoldenScenarioRegistry(registryVersion, schemaVersion, lexiconBinding,
+                filtered);
     }
 
     /** 注册表内容摘要（canonical 行序化；EvalRun 可复现元数据的 dataset digest 来源） */

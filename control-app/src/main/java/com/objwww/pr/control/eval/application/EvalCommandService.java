@@ -196,6 +196,7 @@ public class EvalCommandService {
         map.put("maxConcurrency", plan.maxConcurrency());
         map.put("deadlineSeconds", plan.deadlineSeconds());
         map.put("roundsPerScenario", plan.roundsPerScenario());
+        map.put("panel", plan.panel());
         try {
             return mapper.writeValueAsString(map);
         } catch (Exception e) {

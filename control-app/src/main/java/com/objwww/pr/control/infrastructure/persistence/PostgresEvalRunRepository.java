@@ -80,7 +80,7 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 latency_ms, silence_penalty, failure_sample,
                 cause_component_hit, cause_fault_hit, cause_reason_hit,
                 checkpoints_total, checkpoints_covered, checkpoint_matches,
-                conclusion_grounded, tool_calls_total, tool_calls_unique
+                conclusion_grounded, tool_calls_total, tool_calls_unique, difficulty
             ) VALUES (
                 :id, :evalRunId, :scenarioId, :roundNo,
                 :selectionPolicyVersion, :rcaRunId, :scoredAttemptId, :scoredReportId,
@@ -91,7 +91,7 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 :latencyMs, :silencePenalty, CAST(:failureSample AS jsonb),
                 :causeComponentHit, :causeFaultHit, :causeReasonHit,
                 :checkpointsTotal, :checkpointsCovered, CAST(:checkpointMatches AS jsonb),
-                :conclusionGrounded, :toolCallsTotal, :toolCallsUnique
+                :conclusionGrounded, :toolCallsTotal, :toolCallsUnique, :difficulty
             )
             """;
 
@@ -227,6 +227,7 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                     .param("conclusionGrounded", result.conclusionGrounded())
                     .param("toolCallsTotal", result.toolCallsTotal())
                     .param("toolCallsUnique", result.toolCallsUnique())
+                    .param("difficulty", result.difficulty())
                     .update();
             return true;
         } catch (DuplicateKeyException e) {
@@ -337,7 +338,8 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
                 rs.getString("checkpoint_matches"),
                 rs.getString("conclusion_grounded"),
                 toolCallsTotal,
-                toolCallsUnique);
+                toolCallsUnique,
+                rs.getString("difficulty"));
     }
 
     // ------------------------------------------------------------------ jsonb 编解码

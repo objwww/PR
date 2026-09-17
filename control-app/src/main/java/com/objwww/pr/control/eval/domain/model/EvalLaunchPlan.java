@@ -17,6 +17,9 @@ import java.util.Objects;
  *   <li>roundsPerScenario 空 = worker 默认轮次（现有 5×2 编排的 2）。</li>
  * </ul>
  *
+ * <p>P6-G8 panel（可空）：SMOKE = 只执行注册表内 panel=true 的快速回归子集；
+ * 空 = 全量原表（语义不变）。能力闸门校验值域（EvalLaunchGate.panels）。
+ *
  * <p>{@link #canonical()} 固定字段序行序化（EvalRunMetadata.configDigest 同式）——
  * 同计划同 digest：幂等键冲突时 payload_hash 相等 = 重放，不等 = 409（EU09）。
  */
@@ -28,7 +31,8 @@ public record EvalLaunchPlan(String displayName,
                              Long budgetMaxTokens,
                              Integer maxConcurrency,
                              Long deadlineSeconds,
-                             Integer roundsPerScenario) {
+                             Integer roundsPerScenario,
+                             String panel) {
 
     public EvalLaunchPlan {
         if (displayName == null || displayName.isBlank()) {
@@ -55,6 +59,15 @@ public record EvalLaunchPlan(String displayName,
         }
     }
 
+    /** 兼容 P6 前形态（9 参——panel 空 = 全量原表） */
+    public EvalLaunchPlan(String displayName, String mode, String datasetVersion,
+                          String model, String promptVersion, Long budgetMaxTokens,
+                          Integer maxConcurrency, Long deadlineSeconds,
+                          Integer roundsPerScenario) {
+        this(displayName, mode, datasetVersion, model, promptVersion, budgetMaxTokens,
+                maxConcurrency, deadlineSeconds, roundsPerScenario, null);
+    }
+
     /** 固定字段序 canonical 行（空值以字面 null 参与——"未填"与"填 0"可区分） */
     public String canonical() {
         return "eval-launch/v1"
@@ -66,10 +79,11 @@ public record EvalLaunchPlan(String displayName,
                 + "|budgetMaxTokens=" + Objects.toString(budgetMaxTokens, "null")
                 + "|maxConcurrency=" + Objects.toString(maxConcurrency, "null")
                 + "|deadlineSeconds=" + Objects.toString(deadlineSeconds, "null")
-                + "|roundsPerScenario=" + Objects.toString(roundsPerScenario, "null");
+                + "|roundsPerScenario=" + Objects.toString(roundsPerScenario, "null")
+                + "|panel=" + Objects.toString(panel, "null");
     }
 
-    /** 幂等冲突判据（uq 撞键后：同 digest = 重放，异 digest = 409） */
+    /** 幂等冲突判据（uq 撞键后：同 digest = 重放，不等 = 409） */
     public Digest payloadHash() {
         return Digest.sha256Of(canonical());
     }

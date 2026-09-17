@@ -99,7 +99,9 @@ public class SingleCaseScorer {
                     golden.expectedRootCause(), null,
                     golden.expectedSymptomCodes(), List.of(), 0, 0,
                     golden.expectedSymptomCodes().size(), null, false,
-                    failureSample(structureRejected, investigations.findByRunId(rcaRunId))));
+                    failureSample(structureRejected, investigations.findByRunId(rcaRunId)),
+                    null, null, null, null, null, null, null, null, null,
+                    golden.difficulty()));
         }
 
         RcaReport report = selected.get();
@@ -113,7 +115,9 @@ public class SingleCaseScorer {
                     golden.expectedRootCause(), null,
                     golden.expectedSymptomCodes(), List.of(), 0, 0,
                     golden.expectedSymptomCodes().size(), null, false,
-                    "{\"reason\":\"package_reparse_failed\"}"));
+                    "{\"reason\":\"package_reparse_failed\"}",
+                    null, null, null, null, null, null, null, null, null,
+                    golden.difficulty()));
         }
 
         boolean toolCallsPresent = hasToolCalls(report.attemptId());
@@ -153,7 +157,7 @@ public class SingleCaseScorer {
                 ev.componentHit(), ev.faultHit(), ev.reasonHit(),
                 checkpointsTotal, checkpointsCovered, checkpointJson,
                 evaluator.conclusionGrounded(pkg),
-                (int) totalCalls, (int) uniqueCalls);
+                (int) totalCalls, (int) uniqueCalls, golden.difficulty());
         recordSafety(evalRunId, golden, roundNo, report.attemptId());
         return Optional.of(result);
     }

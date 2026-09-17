@@ -216,7 +216,7 @@ public class EvalQueryService {
                                Boolean causeReasonHit, Integer checkpointsTotal,
                                Integer checkpointsCovered, String checkpointMatches,
                                String conclusionGrounded, Integer toolCallsTotal,
-                               Integer toolCallsUnique) {
+                               Integer toolCallsUnique, String difficulty) {
     }
 
     public record EvalCaseListResponse(List<EvalCaseItem> items, String nextCursor) {
@@ -495,7 +495,8 @@ public class EvalQueryService {
                     failureSample(row.failureSampleJson()), row.rcaRunId(), row.scoredReportId(),
                     row.causeComponentHit(), row.causeFaultHit(), row.causeReasonHit(),
                     row.checkpointsTotal(), row.checkpointsCovered(), row.checkpointMatchesJson(),
-                    row.conclusionGrounded(), row.toolCallsTotal(), row.toolCallsUnique()));
+                    row.conclusionGrounded(), row.toolCallsTotal(), row.toolCallsUnique(),
+                    row.difficulty()));
         }
         if (page.hasMore() && !page.items().isEmpty()) {
             EvalCaseRow last = page.items().get(page.items().size() - 1);

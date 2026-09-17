@@ -104,6 +104,43 @@ class DatasetCaseMapperTest {
     }
 
     @Test
+    @DisplayName("P6-G8 难度分层：rawArtifact 保留键 gt_difficulty/gt_panel 映射；缺键=null 未标注")
+    void difficultyAndPanelArtifactKeys() {
+        String sourceRun = UUID.randomUUID().toString();
+        String annotated = "{\"caseKey\":\"" + CASE_KEY + "\","
+                + "\"scenarioFamilyId\":\"f\","
+                + "\"expectedRootCause\":{\"component\":\"payment\","
+                + "\"faultType\":\"BUSINESS_ERROR_RATE\",\"reasonCode\":\"PAYMENT_CHARGE_FAILURE\"},"
+                + "\"expectedSymptomCodes\":[\"PaymentChargeFailure\"],"
+                + "\"rawArtifact\":{\"source_run_id\":\"" + sourceRun + "\","
+                + "\"gt_difficulty\":\"L2\",\"gt_panel\":\"true\"}}";
+
+        GoldenCase golden = DatasetCaseMapper.toGoldenCase(row(annotated));
+        assertThat(golden.difficulty()).isEqualTo("L2");
+        assertThat(golden.panel()).isTrue();
+
+        GoldenCase plain = DatasetCaseMapper.toGoldenCase(
+                row(payload(sourceRun, List.of("PaymentChargeFailure"))));
+        assertThat(plain.difficulty()).isNull();
+        assertThat(plain.panel()).isFalse();
+    }
+
+    @Test
+    @DisplayName("P6-G8 非法难度标注 → 拒绝（值域 L1–L4，期望面纪律同律）")
+    void rejectsIllegalDifficulty() {
+        String bad = "{\"caseKey\":\"" + CASE_KEY + "\","
+                + "\"scenarioFamilyId\":\"f\","
+                + "\"expectedRootCause\":{\"component\":\"c\",\"faultType\":\"t\",\"reasonCode\":\"r\"},"
+                + "\"expectedSymptomCodes\":[\"x\"],"
+                + "\"rawArtifact\":{\"source_run_id\":\"" + UUID.randomUUID() + "\","
+                + "\"gt_difficulty\":\"L9\"}}";
+
+        assertThatThrownBy(() -> DatasetCaseMapper.toGoldenCase(row(bad)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("L9");
+    }
+
+    @Test
     @DisplayName("缺 source_run_id 回放锚 → 拒绝（来源不可溯不入评测）")
     void rejectsMissingSourceRun() {
         assertThatThrownBy(() -> DatasetCaseMapper.toGoldenCase(
