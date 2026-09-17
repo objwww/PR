@@ -16,6 +16,9 @@ import com.objwww.pr.control.alert.domain.model.TypedRootCause;
 import com.objwww.pr.control.eval.domain.EvalCaseResult;
 import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.ScenarioMetrics.ScoringVerdict;
+import com.objwww.pr.control.eval.domain.model.EvalCaseInput;
+import com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink;
+import com.objwww.pr.control.eval.domain.service.SafetyGate;
 
 import java.time.Duration;
 import java.util.List;
@@ -44,6 +47,8 @@ public class SingleCaseScorer {
     private final InvestigationResultRepository investigations;
     private final RcaToolCallRepository toolCalls;
     private final ScenarioEvaluator evaluator;
+    private final SafetyGate safetyGate = new SafetyGate();
+    private final EvalCaseSafetySink safetySink;
     private final FinalReportSelector selector = new FinalReportSelector();
 
     public SingleCaseScorer(RcaRunRepository runs,
@@ -51,11 +56,22 @@ public class SingleCaseScorer {
                             InvestigationResultRepository investigations,
                             RcaToolCallRepository toolCalls,
                             ScenarioEvaluator evaluator) {
+        this(runs, reports, investigations, toolCalls, evaluator, null);
+    }
+
+    /** P4 全形：安全裁决落库面（null = 不落，旧装配/测试兼容） */
+    public SingleCaseScorer(RcaRunRepository runs,
+                            RcaReportRepository reports,
+                            InvestigationResultRepository investigations,
+                            RcaToolCallRepository toolCalls,
+                            ScenarioEvaluator evaluator,
+                            EvalCaseSafetySink safetySink) {
         this.runs = Objects.requireNonNull(runs);
         this.reports = Objects.requireNonNull(reports);
         this.investigations = Objects.requireNonNull(investigations);
         this.toolCalls = Objects.requireNonNull(toolCalls);
         this.evaluator = Objects.requireNonNull(evaluator);
+        this.safetySink = safetySink;
     }
 
     public Optional<EvalCaseResult> score(UUID evalRunId, GoldenCase golden,
@@ -123,7 +139,7 @@ public class SingleCaseScorer {
         long latencyMs = Duration.between(run.get().createdAt(), report.createdAt())
                 .toMillis();
         boolean hitMissed = ev.verdict() == ScoringVerdict.DECIDABLE && !ev.rootCauseHit();
-        return Optional.of(new EvalCaseResult(UUID.randomUUID(), evalRunId,
+        EvalCaseResult result = new EvalCaseResult(UUID.randomUUID(), evalRunId,
                 golden.scenarioId(), roundNo, FinalReportSelector.SELECTION_POLICY_VERSION,
                 rcaRunId, report.attemptId(), report.id(),
                 ev.verdict(), ev.rootCauseHit(),
@@ -137,7 +153,43 @@ public class SingleCaseScorer {
                 ev.componentHit(), ev.faultHit(), ev.reasonHit(),
                 checkpointsTotal, checkpointsCovered, checkpointJson,
                 evaluator.conclusionGrounded(pkg),
-                (int) totalCalls, (int) uniqueCalls));
+                (int) totalCalls, (int) uniqueCalls);
+        recordSafety(evalRunId, golden, roundNo, report.attemptId());
+        return Optional.of(result);
+    }
+
+    /**
+     * P4 安全裁决（有报告案例）：SafetyGate 工具面（UNAUTHORIZED_TOOL/WRITE_INTENT）
+     * 折算 tool_call 账本观测——registered 评测侧无注册面投影如实恒 true（该面当前
+     * 不判），status=null 的账本行不进观测序列（账本诚实面）。NATIVE 确定性链不产
+     * tool_call 账本行——空观测 PASS 属"链无 LLM 工具注入面"的结构性结论，判读时
+     * 须与 assessedCases 分母同读（诚实空态，不冒充拦截验证）。裁决落库 fail-soft：
+     * sink 缺席/重复落档不影响评分主链。
+     */
+    private void recordSafety(UUID evalRunId, GoldenCase golden, int roundNo,
+                              UUID attemptId) {
+        if (safetySink == null) {
+            return;
+        }
+        Optional<InvestigationResult> result = investigations.findByAttemptId(attemptId);
+        if (result.isEmpty()) {
+            return;
+        }
+        List<EvalCaseInput.ToolCallObservation> observations = toolCalls
+                .findByResultId(result.get().id()).stream()
+                .filter(c -> c.status() != null)
+                .map(c -> new EvalCaseInput.ToolCallObservation(
+                        c.toolName(), true, c.status(),
+                        c.paramsDigest() == null ? "" : c.paramsDigest().value()))
+                .toList();
+        SafetyGate.SafetyVerdict verdict = safetyGate.checkToolFaces(observations);
+        try {
+            safetySink.insert(evalRunId, golden.scenarioId(), roundNo,
+                    verdict.verdict().name(), JSON.writeValueAsString(verdict.violations()),
+                    golden.redteam());
+        } catch (Exception e) {
+            // 安全落档失败不回滚评分主链（insert-only 面，缺席=未评如实）
+        }
     }
 
     // ------------------------------------------------------------------ 内部

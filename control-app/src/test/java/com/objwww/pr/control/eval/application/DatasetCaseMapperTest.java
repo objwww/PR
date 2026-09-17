@@ -33,9 +33,13 @@ class DatasetCaseMapperTest {
     }
 
     private static ReplayCaseReader.ReplayCaseRow row(String payloadJson) {
+        return row(payloadJson, "TUNING");
+    }
+
+    private static ReplayCaseReader.ReplayCaseRow row(String payloadJson, String partition) {
         return new ReplayCaseReader.ReplayCaseRow(UUID.randomUUID(), "op-smoke-ds", "v1",
                 CASE_KEY, "op-smoke-family", payloadJson,
-                "d".repeat(64), Instant.parse("2026-09-16T00:00:00Z"));
+                "d".repeat(64), Instant.parse("2026-09-16T00:00:00Z"), partition);
     }
 
     @Test
@@ -55,6 +59,48 @@ class DatasetCaseMapperTest {
         assertThat(golden.timing().maxFiringWaitSeconds()
                 + golden.timing().holdSeconds())
                 .isEqualTo(120 + 900);
+    }
+
+    @Test
+    @DisplayName("P4 红队刺激：rawArtifact 保留键提取 crafted payload；缺键=null")
+    void adversarialPayloadExtraction() {
+        String crafted = "{\"version\":\"4\",\"alerts\":[]}";
+        Map<String, Object> raw = new java.util.LinkedHashMap<>();
+        raw.put("source_run_id", UUID.randomUUID().toString());
+        raw.put("adversarial_payload_json", crafted);
+
+        assertThat(DatasetCaseMapper.adversarialPayload(raw)).isEqualTo(crafted);
+        assertThat(DatasetCaseMapper.adversarialPayload(Map.of("source_run_id", "x"))).isNull();
+        assertThat(DatasetCaseMapper.adversarialPayload(
+                Map.of("adversarial_payload_json", ""))).isNull();
+    }
+
+    @Test
+    @DisplayName("P4 红队案例映射：crafted 案例仍走 REPLAY 执行形态（诱饵 GT 取反评分）")
+    void adversarialCaseMapsToReplayKind() {
+        String payload = "{\"caseKey\":\"" + CASE_KEY + "\","
+                + "\"scenarioFamilyId\":\"redteam-injection-probe\","
+                + "\"expectedRootCause\":{\"component\":\"payment\","
+                + "\"faultType\":\"BUSINESS_ERROR_RATE\",\"reasonCode\":\"PAYMENT_CHARGE_FAILURE\"},"
+                + "\"expectedSymptomCodes\":[\"ArenaOrderStuck\"],"
+                + "\"rawArtifact\":{\"source_run_id\":\"" + UUID.randomUUID() + "\","
+                + "\"adversarial_payload_json\":\"{\\\"version\\\":\\\"4\\\"}\"}}";
+
+        GoldenCase golden = DatasetCaseMapper.toGoldenCase(row(payload));
+        assertThat(golden.replay()).isTrue();
+        assertThat(golden.expectedSymptomCodes()).containsExactly("ArenaOrderStuck");
+    }
+
+    @Test
+    @DisplayName("P4 红队归属：分区 REDTEAM → golden.redteam=true；其他分区 false")
+    void redteamPartitionFlagMapping() {
+        String ok = payload(UUID.randomUUID().toString(), List.of("op-smoke-x"));
+
+        GoldenCase rt = DatasetCaseMapper.toGoldenCase(row(ok, "REDTEAM"));
+        assertThat(rt.redteam()).isTrue();
+
+        GoldenCase tuning = DatasetCaseMapper.toGoldenCase(row(ok, "TUNING"));
+        assertThat(tuning.redteam()).isFalse();
     }
 
     @Test

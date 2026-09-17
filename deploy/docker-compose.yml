@@ -183,6 +183,15 @@ services:
       # 评测发射开关透传（演示工程 2026-09-15 增补）：缺省 false=闭面；演示期临时置
       # true 跑 L 模式评测，跑完收回（EvalRunnerMain 闭面纪律不变）
       APP_EVAL_LAUNCH_ENABLED: ${APP_EVAL_LAUNCH_ENABLED:-false}
+      # 评测已部署数据集版本白名单透传（P4 2026-09-17 增补）：逗号分隔多版本；
+      # 缺省 eval-ds-1=既有部署事实（命令面 gate 与 worker 领取复验同源）
+      APP_EVAL_LAUNCH_DATASET_VERSIONS: ${APP_EVAL_LAUNCH_DATASET_VERSIONS:-eval-ds-1}
+      # 演练启动能力位透传（联调审计修复 2026-09-17）：缺省 false=闭面（SAFE-04
+      # 停止/恢复推进链交付前的设计态）；DrillExecutionPolicy 启动时装配、非热更新，
+      # 翻转 = .env 置 true + compose up -d 重启。Spring 松绑定同名映射
+      # app.drill.launch-enabled / app.drill.target-envs
+      APP_DRILL_LAUNCH_ENABLED: ${APP_DRILL_LAUNCH_ENABLED:-false}
+      APP_DRILL_TARGET_ENVS: ${APP_DRILL_TARGET_ENVS:-arena-195}
       # 单工具 Agent 的 TOOL_CALL 预算透传（执行者 2026-09-12 增补）：缺省 4 与 8 步
       # 主预算错配（真窗实证 NO_DATA 重试 3 次即耗尽——上调至 12 留反馈环重试余量）
       APP_ALERT_AM4_BUDGET_TOOL_CALLS: ${APP_ALERT_AM4_BUDGET_TOOL_CALLS:-4}
@@ -251,6 +260,10 @@ services:
   web:
     build:
       context: ../alert-web
+      args:
+        # 环境徽章（联调审计修复 2026-09-17）：构建期注入 VITE_ENV_LABEL；
+        # 缺省空 = 前端如实显示「未标记」
+        VITE_ENV_LABEL: ${VITE_ENV_LABEL:-}
     image: pr-agent/alert-web:0.0.1-SNAPSHOT
     restart: unless-stopped
     user: nginx

@@ -34,7 +34,7 @@ public class PostgresReplayCaseReader implements ReplayCaseReader {
                         select dv.id as dataset_version_id, dv.name, dv.version,
                                cv.case_key, cv.scenario_family_id,
                                cv.payload::text as payload_json,
-                               cv.content_digest, cv.valid_from
+                               cv.content_digest, cv.valid_from, dv.partition_class
                           from dataset_version dv
                           join case_version cv on cv.dataset_version_id = dv.id
                          where dv.version = :version
@@ -52,7 +52,8 @@ public class PostgresReplayCaseReader implements ReplayCaseReader {
                         rs.getString("scenario_family_id"),
                         rs.getString("payload_json"),
                         rs.getString("content_digest"),
-                        rs.getTimestamp("valid_from").toInstant()))
+                        rs.getTimestamp("valid_from").toInstant(),
+                        rs.getString("partition_class")))
                 .list();
     }
 }

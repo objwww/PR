@@ -87,6 +87,19 @@ public class EvalQueryController {
                 .orElseGet(() -> acceptedOrNotFound(id));
     }
 
+    /** P4 安全汇总：红队诱饵采纳/SafetyGate REJECT/五面违规计数（拦截率出数面） */
+    @GetMapping("/runs/{runId}/safety")
+    public ResponseEntity<?> safety(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.safetySummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /**
      * PAGE-10：run 行未落时前探 LAUNCH 命令——已受理（202 到 worker 领取落库之间的
      * 等待窗口）返回 200 + acceptedOnly 投影（含命令状态），真正未知 id 才 404。

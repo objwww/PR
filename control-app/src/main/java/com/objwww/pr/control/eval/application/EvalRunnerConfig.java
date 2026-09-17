@@ -139,18 +139,46 @@ public class EvalRunnerConfig {
         return merged;
     }
 
-    /** P2 回放驱动器（冻结载荷读面 + webhook 重投面；bearer env 注入 fail-closed） */
+    /** P4 红队人造刺激面：case_key → crafted AM payload（rawArtifact 保留键直取） */
+    private static java.util.Map<String, String> craftedPayloadsOf(
+            com.objwww.pr.control.eval.domain.repository.ReplayCaseReader reader,
+            String datasetVersion) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (com.objwww.pr.control.eval.domain.repository.ReplayCaseReader.ReplayCaseRow row
+                : reader.listReplayCases(datasetVersion)) {
+            String crafted = DatasetCaseMapper
+                    .adversarialPayload(DatasetCaseMapper.rawArtifactOf(row));
+            if (crafted != null) {
+                out.put(row.caseKey(), crafted);
+            }
+        }
+        return out;
+    }
+
+    /** P2 回放驱动器（冻结载荷读面 + webhook 重投面；bearer env 注入 fail-closed）；
+     *  P4：crafted 刺激面注入——案例自带 payload 优先于冻结读面。案例读面走
+     *  ObjectProvider（装配测试=离线空桩零 SQL；生产=Postgres 回退），与
+     *  goldenScenarioRegistry 同律——装配隔离契约（装配期零 SQL）不被破坏 */
     @Bean
     public ReplayScenarioDriver replayScenarioDriver(
             JdbcClient jdbc,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.eval.domain.repository.ReplayCaseReader>
+                    replayCaseReader,
+            @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
             @Value("${app.alert.eval.webhook-url:http://control-app:8080/webhooks/alertmanager}")
             String webhookUrl,
             @Value("${app.alert.eval.webhook-bearer:}") String webhookBearer) {
+        com.objwww.pr.control.eval.domain.repository.ReplayCaseReader caseReader =
+                replayCaseReader.getIfAvailable(
+                        () -> new com.objwww.pr.control.infrastructure.persistence
+                                .PostgresReplayCaseReader(jdbc));
         return new ReplayScenarioDriver(
-                new com.objwww.pr.control.infrastructure.persistence.PostgresFrozenPayloadReader(
-                        jdbc),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresFrozenPayloadReader(jdbc),
                 new ReplayScenarioDriver.HttpWebhook(webhookUrl, webhookBearer),
-                java.time.Instant::now);
+                java.time.Instant::now,
+                craftedPayloadsOf(caseReader, datasetVersion));
     }
 
     @Bean
@@ -175,8 +203,12 @@ public class EvalRunnerConfig {
                                              RcaReportRepository reports,
                                              InvestigationResultRepository investigations,
                                              RcaToolCallRepository toolCalls,
-                                             ScenarioEvaluator evaluator) {
-        return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator);
+                                             ScenarioEvaluator evaluator,
+                                             JdbcClient jdbc) {
+        // P4：SafetyGate 裁决落库面（eval_case_safety，V141）接评分链
+        return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator,
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseSafetySink(jdbc));
     }
 
     // ---------------- 驱动器（M3-17；token/env 仅此入口注入） ----------------
@@ -291,14 +323,15 @@ public class EvalRunnerConfig {
                                            SingleCaseScorer scorer,
                                            EvalRunRepository evalRuns,
                                            BaselineReportGenerator generator,
-                                           EvalRunMetadata metadata) {
+                                           EvalRunMetadata metadata,
+                                           @Value("${app.eval.rounds:2}") int rounds) {
         return new EvalBatchRunner(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
                         "InfrastructureScenarioDriver", infra,
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator, metadata,
-                2, systemClock());
+                rounds, systemClock());
     }
 
     // ---------------- EV-04 持久化命令 + worker（eval_run_command 写面 = eval_app 列级授权） ----------------
@@ -350,14 +383,15 @@ public class EvalRunnerConfig {
             com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository commands,
             EvalRunMetadata metadata,
             EvalLaunchGate gate,
-            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId) {
+            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
+            @Value("${app.eval.rounds:2}") int defaultRounds) {
         return new EvalLaunchExecutor(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
                         "InfrastructureScenarioDriver", infra,
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
-                phaseSink, commands, metadata, 2, systemClock(), workerId, gate);
+                phaseSink, commands, metadata, defaultRounds, systemClock(), workerId, gate);
     }
 
     @Bean
@@ -366,12 +400,21 @@ public class EvalRunnerConfig {
             EvalRunRepository evalRuns,
             EvalLaunchExecutor executor,
             UsageLedgerService ledger,
+            WorkerSchemaFreshnessGuard freshness,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.alert.eval.worker.poll-seconds:5}") long pollSeconds,
             @Value("${app.alert.eval.worker.stale-claim-seconds:900}")
             long staleClaimSeconds) {
         return new EvalRunWorker(commands, evalRuns, executor, ledger, systemClock(),
-                workerId, pollSeconds, staleClaimSeconds);
+                workerId, pollSeconds, staleClaimSeconds, freshness);
+    }
+
+    /** 陈旧 worker 自拒护栏（2026-09-17 实证修复）：DB flyway 最大版本 vs 本进程
+     *  classpath 迁移面；eval_app 读面授权见 V143 */
+    @Bean
+    public WorkerSchemaFreshnessGuard workerSchemaFreshnessGuard(JdbcClient jdbc) {
+        return new com.objwww.pr.control.eval.infrastructure
+                .ClasspathFlywayFreshnessGuard(jdbc);
     }
 
     // ---------------- usage 对账（M3-25；未配置 litellm 时诚实降级 UNMATCHED/BEST_EFFORT） ----------------

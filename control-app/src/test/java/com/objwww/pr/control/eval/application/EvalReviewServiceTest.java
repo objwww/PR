@@ -261,6 +261,11 @@ class EvalReviewServiceTest {
                 Iterable<UUID> evalRunIds) {
             return List.of();
         }
+
+        @Override
+        public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+            return List.of();
+        }
     }
 
     private InMemoryAssignments assignments;

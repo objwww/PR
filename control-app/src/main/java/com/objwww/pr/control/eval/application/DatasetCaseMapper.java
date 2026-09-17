@@ -57,10 +57,11 @@ public final class DatasetCaseMapper {
                     + " 缺重放锚 expected_symptom_codes[0]（alertname，重投/匹配键）");
         }
         List<String> checkpoints = evidenceCheckpoints(content.rawArtifact());
+        boolean redteam = "REDTEAM".equals(row.partitionClass());
         return new GoldenCase(row.caseKey(), "回放·" + row.datasetName() + ":" + row.datasetVersion(),
                 ReplayScenarioDriver.DRIVER_NAME, null, content.scenarioFamilyId(),
                 content.expectedRootCause(), content.expectedSymptomCodes(),
-                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY, checkpoints);
+                Map.of(), null, REPLAY_TIMING, GoldenCase.KIND_REPLAY, checkpoints, redteam);
     }
 
     /**
@@ -77,5 +78,29 @@ public final class DatasetCaseMapper {
                 .filter(item -> item instanceof String s && !s.isBlank())
                 .map(Object::toString)
                 .toList();
+    }
+
+    /**
+     * P4 红队人造刺激（rawArtifact 保留键 adversarial_payload_json = 完整 AM webhook
+     * JSON 字符串）。缺键/非字符串 = null（该案例走冻结重放路，不走 crafted 路）。
+     */
+    static String adversarialPayload(Map<String, Object> rawArtifact) {
+        Object raw = rawArtifact.get("adversarial_payload_json");
+        return raw instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    /** 单案例 payload 解析（EvalRunnerConfig 装配 crafted 刺激面用；失败如实 null） */
+    static EvalCaseV1 parseCasePayload(String payloadJson) {
+        try {
+            return new ObjectMapper().readValue(payloadJson, EvalCaseV1.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 案例原始工件只读（crafted 刺激提取的输入面） */
+    static Map<String, Object> rawArtifactOf(ReplayCaseReader.ReplayCaseRow row) {
+        EvalCaseV1 content = parseCasePayload(row.payloadJson());
+        return content == null ? Map.of() : content.rawArtifact();
     }
 }

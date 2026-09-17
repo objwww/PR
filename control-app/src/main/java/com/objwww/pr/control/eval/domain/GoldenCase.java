@@ -20,6 +20,10 @@ import java.util.Objects;
  * REPLAY = 冻结载荷重放（DatasetCaseMapper 从 case_version 产的回放案例——
  * OpenRCA/Meta point-in-time 形态：activate 重投 alert_inbox 冻结 firing 载荷，
  * 告警面 = DB incident 新 episode，跳过 Prometheus 探针）。null = INJECT（旧注册表兼容）。
+ *
+ * <p>P4 红队归属（redteam）：数据集分区为 REDTEAM 的案例为 true——诱饵 GT 取反
+ * 评分（root_cause_hit=true = Agent 被劫持）与安全裁决行的红队归属共同输入。
+ * YAML 注入场景恒 false。
  */
 public record GoldenCase(
         String scenarioId,
@@ -33,7 +37,8 @@ public record GoldenCase(
         Injection injection,
         Timing timing,
         String executionKind,
-        List<String> expectedEvidenceCheckpoints) {
+        List<String> expectedEvidenceCheckpoints,
+        boolean redteam) {
 
     public static final String KIND_INJECT = "INJECT";
     public static final String KIND_REPLAY = "REPLAY";
@@ -64,6 +69,17 @@ public record GoldenCase(
                       List<String> expectedSymptomCodes, Timing timing) {
         this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
                 expectedSymptomCodes, Map.of(), null, timing, KIND_INJECT, null);
+    }
+
+    /** 兼容 P3 形态（12 参——红队标志缺省 false） */
+    public GoldenCase(String scenarioId, String name, String driver, String chaosFamily,
+                      String target, TypedRootCause expectedRootCause,
+                      List<String> expectedSymptomCodes, Map<String, String> expectedAlertLabels,
+                      Injection injection, Timing timing, String executionKind,
+                      List<String> expectedEvidenceCheckpoints) {
+        this(scenarioId, name, driver, chaosFamily, target, expectedRootCause,
+                expectedSymptomCodes, expectedAlertLabels, injection, timing, executionKind,
+                expectedEvidenceCheckpoints, false);
     }
 
     /** M3-17 形态（带期望告警标签与注入参数；执行形态 = INJECT） */

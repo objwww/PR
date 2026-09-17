@@ -436,5 +436,10 @@ class EvalQueryControllerTest {
         public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

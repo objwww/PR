@@ -383,7 +383,7 @@ class EvalBatchRunnerTest {
     }
 
     @Test
-    @DisplayName("P2 回放分支：跳过 Prometheus 探针、重放/清理各两轮、评分与终态照常")
+    @DisplayName("P2 回放分支：跳过 Prometheus 探针、单次测量边界（轮次裁剪为 1）、评分与终态照常")
     void replayCaseSkipsPrometheusProbeAndScoresFromIncidentAnchor() {
         UUID runId = seedHitChain();
         ScriptedDriver replayDriver = new ScriptedDriver();
@@ -423,7 +423,7 @@ class EvalBatchRunnerTest {
                                 + "\"expectedSymptomCodes\":[\"checkout\"],"
                                 + "\"rawArtifact\":{\"source_run_id\":\""
                                 + UUID.randomUUID() + "\"}}",
-                        "d".repeat(64), base));
+                        "d".repeat(64), base, "TUNING"));
         EvalBatchRunner batch = new EvalBatchRunner(
                 GoldenScenarioRegistry.load("registry_version: 1\n"
                         + "schema_version: 1\nscenarios: []\n").plus(List.of(replayCase)),
@@ -436,9 +436,11 @@ class EvalBatchRunnerTest {
         EvalBatchRunner.BatchResult result = batch.runBatch();
 
         assertThat(probeCalls[0]).isZero();
-        assertThat(replayDriver.activations).isEqualTo(2);
-        assertThat(replayDriver.deactivations).isEqualTo(2);
-        assertThat(repo.cases).hasSize(2);
+        // 单次测量边界：回放案例 rounds=2 裁剪为 1（冻结载荷重放第 2 轮起结构上
+        // 不可能铸新 run——去重/迟到闸/材料哈希三道闸，见 EvalBatchRunner 类注释）
+        assertThat(replayDriver.activations).isEqualTo(1);
+        assertThat(replayDriver.deactivations).isEqualTo(1);
+        assertThat(repo.cases).hasSize(1);
         assertThat(repo.cases).allSatisfy(r -> {
             assertThat(r.scenarioId()).isEqualTo("replay-case-1");
             assertThat(r.verdict()).isEqualTo(ScoringVerdict.DECIDABLE);

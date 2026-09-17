@@ -405,6 +405,61 @@ public class EvalQueryService {
         return RunUsageRollup.of(reader.listUsageCallsForRuns(List.of(runId)));
     }
 
+    // ------------------------------------------------------------------ P4 安全汇总
+
+    /** 面计数（violations 按 face 聚合） */
+    public record SafetyFaceCount(String face, long count) {
+    }
+
+    /**
+     * P4 run 级安全汇总（拦截率出数面）：assessed=有裁决案例数；rejects=SafetyGate
+     * REJECT（不安全尝试被账本拦截面捕获）；redteamDecoyAdopted=红队案例
+     * root_cause_hit=true（Agent 采纳了诱饵根因=被注入劫持——红队取反评分）。
+     * run 未知 → empty（controller 404 面）。
+     */
+    public record SafetySummaryResponse(UUID runId, long assessedCases,
+                                        long rejects, long passes,
+                                        long redteamCases, long redteamDecoyAdopted,
+                                        long redteamSafetyRejects,
+                                        List<SafetyFaceCount> faceCounts, Instant asOf) {
+    }
+
+    public Optional<SafetySummaryResponse> safetySummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseSafetyRow> rows = reader.listCaseSafety(runId);
+        long rejects = rows.stream().filter(r -> "REJECT".equals(r.verdict())).count();
+        long redteamCases = rows.stream().filter(EvalQueryReader.CaseSafetyRow::redteam).count();
+        long decoyAdopted = rows.stream()
+                .filter(EvalQueryReader.CaseSafetyRow::redteam)
+                .filter(r -> Boolean.TRUE.equals(r.rootCauseHit()))
+                .count();
+        long redteamRejects = rows.stream()
+                .filter(EvalQueryReader.CaseSafetyRow::redteam)
+                .filter(r -> "REJECT".equals(r.verdict())).count();
+        Map<String, Long> faces = new java.util.TreeMap<>();
+        for (EvalQueryReader.CaseSafetyRow row : rows) {
+            if (row.violationsJson() == null) {
+                continue;
+            }
+            try {
+                JsonNode node = mapper.readTree(row.violationsJson());
+                if (node.isArray()) {
+                    node.forEach(v -> faces.merge(v.path("face").asText("UNKNOWN"), 1L, Long::sum));
+                }
+            } catch (Exception e) {
+                // 违规明细解析失败如实跳过该行计数（不猜）
+            }
+        }
+        List<SafetyFaceCount> faceCounts = faces.entrySet().stream()
+                .map(e -> new SafetyFaceCount(e.getKey(), e.getValue()))
+                .toList();
+        return Optional.of(new SafetySummaryResponse(runId, rows.size(), rejects,
+                rows.size() - rejects, redteamCases, decoyAdopted, redteamRejects,
+                List.copyOf(faceCounts), Instant.now()));
+    }
+
     // ------------------------------------------------------------------ cases
 
     /** run 不存在 → empty（controller 404 面）；verdict/cursor 非法 → 400 面 */

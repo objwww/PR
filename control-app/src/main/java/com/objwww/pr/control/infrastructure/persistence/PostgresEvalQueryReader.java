@@ -574,6 +574,43 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    // ------------------------------------------------------------------ P4 安全裁决投影
+
+    /** run 全部安全裁决行（P4；红队归属=案例键解析到 REDTEAM 分区；禁 N+1）。
+     *  join 顺序必须先限定数据集版本再挂案例——v1/v2 数据集共用 case_key 时
+     *  （V142 退役 V141 种子），反向 join 会行倍增（195 实证 assessed 6=3×2） */
+    @Override
+    public List<CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+        return jdbc.sql("""
+                        select s.scenario_id, s.round_no, s.verdict,
+                               s.violations::text as violations_json,
+                               coalesce(dv.partition_class = 'REDTEAM', false) as redteam,
+                               ec.root_cause_hit
+                          from eval_case_safety s
+                          join eval_run r on r.id = s.eval_run_id
+                          left join dataset_version dv
+                                 on dv.version = r.dataset_version
+                          left join case_version cv
+                                 on cv.dataset_version_id = dv.id
+                                and cv.case_key = s.scenario_id
+                          left join eval_case_result ec
+                                 on ec.eval_run_id = s.eval_run_id
+                                and ec.scenario_id = s.scenario_id
+                                and ec.round_no = s.round_no
+                         where s.eval_run_id = :runId
+                         order by s.scenario_id asc, s.round_no asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> new CaseSafetyRow(
+                        rs.getString("scenario_id"),
+                        rs.getInt("round_no"),
+                        rs.getString("verdict"),
+                        rs.getString("violations_json"),
+                        rs.getBoolean("redteam"),
+                        (Boolean) rs.getObject("root_cause_hit")))
+                .list();
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；

@@ -817,7 +817,9 @@ public class PersistenceConfig {
         return new com.objwww.pr.control.eval.application.EvalLaunchGate(
                 java.util.Arrays.stream(modes.split(","))
                         .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
-                java.util.Set.of(datasetVersions), maxConcurrency, maxRounds,
+                java.util.Arrays.stream(datasetVersions.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
+                maxConcurrency, maxRounds,
                 false, false, false, false, launchEnabled);
     }
 

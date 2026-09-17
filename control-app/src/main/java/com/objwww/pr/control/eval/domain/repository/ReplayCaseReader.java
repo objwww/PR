@@ -15,10 +15,10 @@ import java.util.UUID;
  */
 public interface ReplayCaseReader {
 
-    /** 回放案例行（payload 原文 + 身份列；解析与校验归 DatasetCaseMapper） */
+    /** 回放案例行（payload 原文 + 身份列 + 分区归属；解析与校验归 DatasetCaseMapper） */
     record ReplayCaseRow(UUID datasetVersionId, String datasetName, String datasetVersion,
                          String caseKey, String scenarioFamilyId, String payloadJson,
-                         String contentDigest, Instant validFrom) {
+                         String contentDigest, Instant validFrom, String partitionClass) {
     }
 
     /** 指定数据集版本字符串的当前生效案例集（升序稳定序；无匹配 → 空表） */

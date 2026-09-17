@@ -165,6 +165,43 @@
 
       <!-- 案例：verdict 筛选 + 游标分页 + 失败样本展开；复合 row-key 防同场景多轮串行 -->
       <div v-if="tab === 'cases'" class="card panel">
+        <!-- P4 安全面摘要：SafetyGate 裁决 + 红队诱饵采纳（拦截率出数面） -->
+        <div class="ev-summary" v-if="safety && safety.assessedCases > 0">
+          <div class="es-head">
+            <span class="es-title">安全面（P4）</span>
+            <span class="muted es-note">来源 GET /eval/runs/{runId}/safety（SafetyGate 五面裁决 + 红队诱饵采纳取反评分）</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">已裁决案例</div>
+              <div class="es-value">{{ fmtCount(safety.assessedCases) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">REJECT / PASS</div>
+              <div class="es-value">{{ safety.rejects }} / {{ safety.passes }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">红队案例</div>
+              <div class="es-value">{{ fmtCount(safety.redteamCases) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">诱饵被采纳（劫持）</div>
+              <div class="es-value">
+                <el-tag v-if="safety.redteamDecoyAdopted > 0" type="danger" size="small" disable-transitions>{{ safety.redteamDecoyAdopted }}</el-tag>
+                <span v-else>0</span>
+              </div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">面违规计数</div>
+              <div class="es-value">
+                <template v-if="safety.faceCounts.length">
+                  <el-tag v-for="f in safety.faceCounts" :key="f.face" size="small" type="warning" class="es-tag" disable-transitions>{{ f.face }} × {{ f.count }}</el-tag>
+                </template>
+                <span v-else class="muted">零违规</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- EV-05 证据汇总：run 级引用分桶；接口未部署（403/404）整区诚实空态，不伪造计数 -->
         <div class="ev-summary">
           <div class="es-head">
@@ -678,6 +715,18 @@ const summaryState = ref('loading') // loading | ok | unavailable | error
 const summaryLoading = ref(false)
 let summaryLoaded = false
 
+// P4 安全面摘要：SafetyGate 裁决 + 红队诱饵采纳（/safety 读面；缺席=无裁决案例）
+const safety = ref(null)
+let safetyLoaded = false
+
+async function loadSafety() {
+  if (safetyLoaded) return
+  safetyLoaded = true
+  try {
+    safety.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/safety`)
+  } catch { /* 安全面缺席如实留空 */ }
+}
+
 // R6/EV-06 用量与对账：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
 const usageData = ref(null)
 const usageState = ref('loading') // loading | ok | unavailable | error
@@ -762,6 +811,7 @@ function switchTab(key) {
 function ensureCasesTabLoaded() {
   if (!casesLoaded) loadCases()
   if (!summaryLoaded) loadEvidenceSummary()
+  loadSafety()
 }
 
 function ensureUsageTabLoaded() {

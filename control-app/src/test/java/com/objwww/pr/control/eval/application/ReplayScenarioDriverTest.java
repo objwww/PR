@@ -32,7 +32,7 @@ class ReplayScenarioDriverTest {
                         + "\"reasonCode\":\"r\"},\"expectedSymptomCodes\":[\"op-smoke-x\"],"
                         + "\"rawArtifact\":{\"source_run_id\":\""
                         + java.util.UUID.randomUUID() + "\"}}",
-                "d".repeat(64), Instant.parse("2026-09-16T00:00:00Z")));
+                "d".repeat(64), Instant.parse("2026-09-16T00:00:00Z"), "TUNING"));
     }
 
     private static ReplayScenarioDriver driver(FrozenScript payloadScript,

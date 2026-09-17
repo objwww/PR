@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -38,12 +39,21 @@ public class ReplayScenarioDriver implements ScenarioDriver {
     private final FrozenPayloadReader payloadReader;
     private final WebhookClient webhook;
     private final java.util.function.Supplier<Instant> clock;
+    /** 红队人造刺激（P4：case_key→crafted AM payload JSON；非空优先于冻结读面） */
+    private final Map<String, String> craftedPayloads;
 
     public ReplayScenarioDriver(FrozenPayloadReader payloadReader, WebhookClient webhook,
             java.util.function.Supplier<Instant> clock) {
+        this(payloadReader, webhook, clock, Map.of());
+    }
+
+    public ReplayScenarioDriver(FrozenPayloadReader payloadReader, WebhookClient webhook,
+            java.util.function.Supplier<Instant> clock, Map<String, String> craftedPayloads) {
         this.payloadReader = Objects.requireNonNull(payloadReader);
         this.webhook = Objects.requireNonNull(webhook);
         this.clock = Objects.requireNonNull(clock);
+        this.craftedPayloads = craftedPayloads == null
+                ? Map.of() : Map.copyOf(craftedPayloads);
     }
 
     /** 冻结载荷读面（Postgres 实现：alert_inbox 按 round 取第 N 个不同历史 firing 组载荷） */
@@ -76,22 +86,43 @@ public class ReplayScenarioDriver implements ScenarioDriver {
     @Override
     public ActivationReceipt activate(GoldenCase golden, int roundNo) {
         String alertname = alertnameOf(golden);
-        if (roundNo > 1) {
-            try {
-                Thread.sleep(CROSS_ROUND_SETTLE_MILLIS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("回放轮间落定等待被中断", e);
+        String crafted = craftedPayloads.get(golden.scenarioId());
+        String actionDigest;
+        byte[] body;
+        if (crafted != null) {
+            // P4 红队人造刺激：payload 来自案例 GT 工件（策划资产，非生产回流；
+            // 材料=案例定义的注入指令，每案例各异→各自触发调查）。跨轮落定与
+            // 冻结路同律（round>1：前一轮 resolved 与本轮 firing 同秒竞态）。
+            if (roundNo > 1) {
+                try {
+                    Thread.sleep(CROSS_ROUND_SETTLE_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("回放轮间落定等待被中断", e);
+                }
             }
+            body = crafted.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            actionDigest = "replay-r" + roundNo + ":crafted";
+        } else {
+            if (roundNo > 1) {
+                try {
+                    Thread.sleep(CROSS_ROUND_SETTLE_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("回放轮间落定等待被中断", e);
+                }
+            }
+            FrozenPayloadReader.FrozenPayload payload = payloadReader
+                    .firingFor(alertname, roundNo)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "回放锚缺失：alert_inbox 无第 " + roundNo + " 个含 alertname="
+                                    + alertname + " 的不同历史 firing 载荷（零伪造，不现编载荷）"));
+            body = payload.body();
+            actionDigest = "replay-r" + roundNo + ":" + payload.sha256Hex();
         }
-        FrozenPayloadReader.FrozenPayload payload = payloadReader
-                .firingFor(alertname, roundNo)
-                .orElseThrow(() -> new IllegalStateException(
-                        "回放锚缺失：alert_inbox 无第 " + roundNo + " 个含 alertname="
-                                + alertname + " 的不同历史 firing 载荷（零伪造，不现编载荷）"));
         int status;
         try {
-            status = postWithRetry(payload.body());
+            status = postWithRetry(body);
         } catch (java.lang.InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("回放重投被中断: " + e.getMessage(), e);
@@ -104,11 +135,10 @@ public class ReplayScenarioDriver implements ScenarioDriver {
             throw new IllegalStateException(
                     "回放重投被拒（http=" + status + "，AM 整组语义 2xx 才算受理）");
         }
-        return new ActivationReceipt(golden.scenarioId(),
-                "replay-r" + roundNo + ":" + payload.sha256Hex(), 0, alertname);
+        return new ActivationReceipt(golden.scenarioId(), actionDigest, 0, alertname);
     }
 
-    /** 从回执 actionDigest 解析轮次（replay-r<N>:<sha256>） */
+    /** 从回执 actionDigest 解析轮次（replay-r<N>:<sha256|crafted>） */
     private static int roundOf(ActivationReceipt receipt) {
         String head = receipt.actionDigest().split(":")[0];
         return Integer.parseInt(head.replace("replay-r", ""));
@@ -158,12 +188,19 @@ public class ReplayScenarioDriver implements ScenarioDriver {
     public RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt) {
         String alertname = alertnameOf(golden);
         int roundNo = roundOf(receipt);
-        FrozenPayloadReader.FrozenPayload payload = payloadReader
-                .firingFor(alertname, roundNo)
-                .orElseThrow(() -> new IllegalStateException(
-                        "回放清理失败：alert_inbox 已无 alertname=" + alertname
-                                + " 第 " + roundNo + " 个 firing 载荷（激活后数据面漂移）"));
-        byte[] resolvedBody = buildResolvedVariant(payload.body(), clock.get());
+        String crafted = craftedPayloads.get(golden.scenarioId());
+        byte[] firingBody;
+        if (crafted != null) {
+            firingBody = crafted.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        } else {
+            FrozenPayloadReader.FrozenPayload payload = payloadReader
+                    .firingFor(alertname, roundNo)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "回放清理失败：alert_inbox 已无 alertname=" + alertname
+                                    + " 第 " + roundNo + " 个 firing 载荷（激活后数据面漂移）"));
+            firingBody = payload.body();
+        }
+        byte[] resolvedBody = buildResolvedVariant(firingBody, clock.get());
         boolean ok;
         try {
             int status = postWithRetry(resolvedBody);

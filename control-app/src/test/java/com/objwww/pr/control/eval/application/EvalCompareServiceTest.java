@@ -736,6 +736,11 @@ class EvalCompareServiceTest {
                 Iterable<UUID> evalRunIds) {
             return List.of();
         }
+
+        @Override
+        public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+            return List.of();
+        }
     }
 
     private static final class FakeComparisons implements EvalComparisonRepository {

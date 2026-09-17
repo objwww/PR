@@ -1149,5 +1149,10 @@ class EvalQueryServiceTest {
             }
             return out;
         }
+
+        @Override
+        public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+            return List.of();
+        }
     }
 }

@@ -270,6 +270,8 @@ public interface EvalQueryReader {
 
     // ------------------------------------------------------------------ EV-09 稳定性投影
 
+    // ------------------------------------------------------------------ P4 安全裁决投影
+
     /**
      * 场景轮次聚合行（EV-09 稳定性一级指标，对标 IBM ITBench run-to-run
      * consistency / RCAEval Avg@k）：逐 (run, scenario) 聚合——rounds = 已落档轮次，
@@ -282,6 +284,20 @@ public interface EvalQueryReader {
 
     /** 批量面（EV-09 列表接线，单查询禁 N+1）；evalRunIds 为空 → 空表（不拼 IN ()） */
     List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds);
+
+    // ------------------------------------------------------------------ P4 安全裁决投影
+
+    /**
+     * 案例安全裁决行（P4）：eval_case_safety 投影 + 红队归属（案例键经
+     * (dv.version=run.dataset_version, case_key) 精确键解析到的 REDTEAM 分区）
+     * + 该案例根因命中（诱饵采纳判定——红队案例 hit=true=被劫持）。
+     */
+    record CaseSafetyRow(String scenarioId, int roundNo, String verdict,
+                         String violationsJson, boolean redteam, Boolean rootCauseHit) {
+    }
+
+    /** run 全部安全裁决行（单查询 join，禁 N+1）；无裁决 → 空表 */
+    List<CaseSafetyRow> listCaseSafety(UUID evalRunId);
 
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 
