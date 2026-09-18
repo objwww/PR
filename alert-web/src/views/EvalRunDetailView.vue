@@ -273,6 +273,31 @@
             </div>
           </div>
         </div>
+        <!-- M-d T5 六要素摘要：结论六要素齐率（缺席=未评如实隐藏；文案 dict/mdZh） -->
+        <div class="ev-summary" v-if="sixParts && sixParts.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">{{ mdZh.sixParts.title }}</span>
+            <span class="muted es-note">{{ mdZh.sixParts.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.sixParts.assessed }}</div>
+              <div class="es-value">{{ fmtCount(sixParts.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.sixParts.complete }}</div>
+              <div class="es-value">{{ sixParts.complete }} / {{ fmtPct(sixParts.rate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.sixParts.levels }}</div>
+              <div class="es-value">
+                <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('HIGH') }} {{ sixParts.high }}</el-tag>
+                <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('MEDIUM') }} {{ sixParts.medium }}</el-tag>
+                <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('LOW') }} {{ sixParts.low }}</el-tag>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- EV-05 证据汇总：run 级引用分桶；接口未部署（403/404）整区诚实空态，不伪造计数 -->
         <div class="ev-summary">
           <div class="es-head">
@@ -686,6 +711,7 @@ import DetailDrawer from '../components/common/DetailDrawer.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import { scenarioZh } from '../dict/scenarioZh'
+import { mdSixPartsLevel, mdZh } from '../dict/mdZh'
 import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtNum, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -847,6 +873,18 @@ async function loadJudge() {
   } catch { /* judge 面缺席如实留空 */ }
 }
 
+// M-d T5 六要素摘要：conclusion_six_parts（/six-parts 读面；assessed=0 = 未评，整卡诚实隐藏）
+const sixParts = ref(null)
+let sixPartsLoaded = false
+
+async function loadSixParts() {
+  if (sixPartsLoaded) return
+  sixPartsLoaded = true
+  try {
+    sixParts.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/six-parts`)
+  } catch { /* 六要素面缺席如实留空 */ }
+}
+
 // R6/EV-06 用量与对账：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
 const usageData = ref(null)
 const usageState = ref('loading') // loading | ok | unavailable | error
@@ -933,6 +971,7 @@ function ensureCasesTabLoaded() {
   if (!summaryLoaded) loadEvidenceSummary()
   loadSafety()
   loadJudge()
+  loadSixParts()
 }
 
 function ensureUsageTabLoaded() {
