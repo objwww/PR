@@ -59,7 +59,7 @@ token/成本/耗时、最终答案和评分。
 | 工序 | 内容 | 冲突风险（主会话脏文件） | 状态 |
 |---|---|---|---|
 | T1 | 本方案+差距审计+六要素纪律文件落档 | 无（新文件） | ✅ 2026-09-19 |
-| T2 | Trace 展示补齐：RcaRunTraceReader 扩 args/result 摘要+证据引用下发；前端 spanKv 增"参数/返回/证据" | 后端无冲突；RunDetailView.vue 在脏集→后端先行，前端等脏集清理 | ⬜ |
+| T2 | Trace 展示补齐：RcaRunTraceReader 扩 args/result 摘要+证据引用下发；前端 spanKv 增"参数/返回/证据" | 后端无冲突；RunDetailView.vue 在脏集→后端先行，前端等脏集清理 | ◐ 2026-09-19 **后端半场 ✅**：改走零冲突平行端点方案——新建 RcaToolSpanDetailReader+Postgres 实现（rca_tool_invocation LEFT JOIN rca_evidence via result_ref，scope 截 300 字/payload 截 500 字，SQL 内截断）+TraceDetailController（GET /api/rca-runs/{runId}/trace-details，瀑布 span 18 字段契约零扰动，RunQueryService/既有测试不动）+TraceDetailWiring（独立装配，避触 PersistenceConfig 脏文件）；单测 8/8 绿（控制器投影 4+SQL 契约 3+字段锚）。**部署顺延**：工作区含主会话 85 个后端 WIP 文件，本轮打包会将其在途改动推上 195（打断其在跑批次）——随 T2 前端半场（RunDetailView 脏集清理后）一并部署 |
 | T3 | run 级指标补齐：EvalQueryService 增 tool_error_rate/repeated_action_rate/evidence_checkpoint_rate/conclusion_grounded_rate/recovery_rate/hallucination_proxy_rate/constraint_compliance_rate/unsafe_block_rate/human_escalation_rate/acceptance_rate/P50/P95/run 级成本合计；EvalRunDetailView 补展示（前端等脏集） | 后端无冲突；EvalRunDetailView.vue 在脏集 | ⬜ |
 | T4 | 案例类型字段+20 条四类套件：dataset_version/case_version 扩 case_type 迁移；registry v5 注册 10 正常+5 边界+3 工具失败+2 安全拒绝 | 无冲突（YAML+迁移） | ⬜ |
 | T5 | 六要素指标化：scorer 增 conclusion_six_parts（六段非空+confidence 在场）；eval_case_result 增列；run 级 six_parts_rate；主 prompt v8→v9 补 confidence 显式段 | 后端无冲突 | ⬜ |
