@@ -531,6 +531,49 @@ public class EvalQueryService {
                 List.copyOf(faceCounts), Instant.now()));
     }
 
+    // ------------------------------------------------------------------ M-d T3 过程面汇总
+
+    /**
+     * M-d T3 run 级过程面汇总（AgentGuide 工具与轨迹/证据事实性/成本性能维出数面）：
+     * 结构通过率=1-STRUCTURE_REJECTED/settled（约束依从）；重复动作率=1-unique/total
+     * （V140 过程计数）；工具错误率=FAILED/total（rca_tool_invocation 账本）；
+     * 检查点覆盖率=covered/total（V140 路径维）；结论有据率=GROUNDED/assessed；
+     * P50/P95=已结清案例延迟分位。分母为 0 → 对应率 null 如实（不冒充 0%）。
+     */
+    public record ProcessMetricsResponse(UUID runId, long settled, Double structurePassRate,
+                                         long toolCallTotal, long toolCallUnique,
+                                         Double repeatedActionRate,
+                                         long toolCallFailed, Double toolErrorRate,
+                                         Long checkpointsTotal, Long checkpointsCovered,
+                                         Double checkpointCoverageRate,
+                                         long groundedAssessed, long grounded,
+                                         Double conclusionGroundedRate,
+                                         Long p50LatencyMs, Long p95LatencyMs, Instant asOf) {
+    }
+
+    public Optional<ProcessMetricsResponse> processMetricsSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        EvalQueryReader.ProcessMetricsRow m = reader.processMetrics(runId);
+        Double structurePassRate = m.settled() == 0 ? null
+                : 1.0 - (double) m.structureRejected() / m.settled();
+        Double repeatedActionRate = m.toolCallsTotal() == 0 ? null
+                : 1.0 - (double) m.toolCallsUnique() / m.toolCallsTotal();
+        Double toolErrorRate = m.toolCallTotal() == 0 ? null
+                : (double) m.toolCallFailed() / m.toolCallTotal();
+        Double checkpointRate = m.checkpointsTotal() == 0 ? null
+                : (double) m.checkpointsCovered() / m.checkpointsTotal();
+        Double groundedRate = m.groundedAssessed() == 0 ? null
+                : (double) m.grounded() / m.groundedAssessed();
+        return Optional.of(new ProcessMetricsResponse(runId, m.settled(), structurePassRate,
+                m.toolCallsTotal(), m.toolCallsUnique(), repeatedActionRate,
+                m.toolCallFailed(), toolErrorRate,
+                m.checkpointsTotal(), m.checkpointsCovered(), checkpointRate,
+                m.groundedAssessed(), m.grounded(), groundedRate,
+                m.p50LatencyMs(), m.p95LatencyMs(), Instant.now()));
+    }
+
     // ------------------------------------------------------------------ P7 judge 汇总
 
     /** 逐题"是"计数（rubric 校准面：题粒度通过率——<0.7 的题触发 rubric 修订） */

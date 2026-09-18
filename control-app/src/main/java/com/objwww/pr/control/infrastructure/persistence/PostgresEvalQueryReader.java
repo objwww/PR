@@ -790,6 +790,58 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    // ------------------------------------------------------------------ M-d T3 过程面聚合
+
+    /** run 级过程面单查询现算（M-d T3）：eval_case_result V140 过程列 + 延迟分位 +
+     *  工具账本关联子查询（rca_tool_invocation 经 rca_run_id 集合，V15 授权面）；
+     *  无已结清案例 → 全 0/null 如实 */
+    @Override
+    public ProcessMetricsRow processMetrics(UUID runId) {
+        return jdbc.sql("""
+                        select count(*)                                                     as settled,
+                               count(*) filter (where verdict = 'STRUCTURE_REJECTED')       as structure_rejected,
+                               coalesce(sum(tool_calls_total), 0)                           as tool_calls_total,
+                               coalesce(sum(tool_calls_unique), 0)                          as tool_calls_unique,
+                               coalesce(sum(checkpoints_total), 0)                          as checkpoints_total,
+                               coalesce(sum(checkpoints_covered), 0)                        as checkpoints_covered,
+                               count(conclusion_grounded)                                   as grounded_assessed,
+                               count(*) filter (where conclusion_grounded = 'GROUNDED')     as grounded,
+                               percentile_cont(0.5) within group (order by latency_ms)
+                                   filter (where latency_ms is not null)                    as p50_latency_ms,
+                               percentile_cont(0.95) within group (order by latency_ms)
+                                   filter (where latency_ms is not null)                    as p95_latency_ms,
+                               (select count(*) from rca_tool_invocation ti
+                                 where ti.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))     as tool_call_total,
+                               (select count(*) from rca_tool_invocation ti
+                                 where ti.state = 'FAILED'
+                                   and ti.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))     as tool_call_failed
+                          from eval_case_result
+                         where eval_run_id = :runId
+                        """)
+                .param("runId", runId)
+                .query((rs, i) -> new ProcessMetricsRow(
+                        rs.getLong("settled"),
+                        rs.getLong("structure_rejected"),
+                        rs.getLong("tool_calls_total"),
+                        rs.getLong("tool_calls_unique"),
+                        rs.getLong("checkpoints_total"),
+                        rs.getLong("checkpoints_covered"),
+                        rs.getLong("grounded_assessed"),
+                        rs.getLong("grounded"),
+                        (Long) rs.getObject("p50_latency_ms", Long.class) != null
+                                ? rs.getLong("p50_latency_ms") : null,
+                        (Long) rs.getObject("p95_latency_ms", Long.class) != null
+                                ? rs.getLong("p95_latency_ms") : null,
+                        rs.getLong("tool_call_total"),
+                        rs.getLong("tool_call_failed")))
+                .list().stream().findFirst()
+                .orElse(new ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0));
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；

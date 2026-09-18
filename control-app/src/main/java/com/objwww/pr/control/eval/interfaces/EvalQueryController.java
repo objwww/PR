@@ -127,6 +127,20 @@ public class EvalQueryController {
                         .body(Map.of("error", "eval run 不存在")));
     }
 
+    /** M-d T3 过程面汇总：重复动作率/工具错误率/检查点覆盖/结构通过/结论有据/P50·P95
+     *  出数面（分母为 0 → 对应率 null 如实，不冒充 0%） */
+    @GetMapping("/runs/{runId}/process-metrics")
+    public ResponseEntity<?> processMetrics(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.processMetricsSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /**
      * PAGE-10：run 行未落时前探 LAUNCH 命令——已受理（202 到 worker 领取落库之间的
      * 等待窗口）返回 200 + acceptedOnly 投影（含命令状态），真正未知 id 才 404。

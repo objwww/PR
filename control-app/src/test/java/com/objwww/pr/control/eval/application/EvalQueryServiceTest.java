@@ -1287,12 +1287,67 @@ class EvalQueryServiceTest {
         assertThat(service.sixPartsSummary(UUID.randomUUID())).isEmpty();
     }
 
+    // ------------------------------------------------------------------ M-d T3 过程面汇总
+
+    @Test
+    void processMetricsAssembleRatesFromRawCounters() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.processMetrics = new EvalQueryReader.ProcessMetricsRow(
+                10, 2,                          // settled=10, 结构拒 2 → 通过率 0.8
+                50, 40,                         // total=50, unique=40 → 重复率 0.2
+                20, 15,                         // checkpoints → 覆盖 0.75
+                8, 6,                           // grounded assessed=8, GROUNDED=6 → 0.75
+                1000L, 4000L,                   // P50/P95
+                60, 3);                         // 工具账本 total=60, FAILED=3 → 0.05
+
+        EvalQueryService.ProcessMetricsResponse out =
+                service.processMetricsSummary(runId).orElseThrow();
+
+        assertThat(out.settled()).isEqualTo(10);
+        assertThat(out.structurePassRate()).isCloseTo(0.8, within(1e-9));
+        assertThat(out.repeatedActionRate()).isCloseTo(0.2, within(1e-9));
+        assertThat(out.toolErrorRate()).isEqualTo(3.0 / 60);
+        assertThat(out.checkpointCoverageRate()).isEqualTo(0.75);
+        assertThat(out.conclusionGroundedRate()).isEqualTo(0.75);
+        assertThat(out.p50LatencyMs()).isEqualTo(1000L);
+        assertThat(out.p95LatencyMs()).isEqualTo(4000L);
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void processMetricsZeroDenominatorsYieldNullRatesHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "RUNNING");
+        reader.processMetrics = new EvalQueryReader.ProcessMetricsRow(
+                0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0);
+
+        EvalQueryService.ProcessMetricsResponse out =
+                service.processMetricsSummary(runId).orElseThrow();
+
+        assertThat(out.settled()).isZero();
+        assertThat(out.structurePassRate()).isNull();
+        assertThat(out.repeatedActionRate()).isNull();
+        assertThat(out.toolErrorRate()).isNull();
+        assertThat(out.checkpointCoverageRate()).isNull();
+        assertThat(out.conclusionGroundedRate()).isNull();
+        assertThat(out.p50LatencyMs()).isNull();
+    }
+
+    @Test
+    void processMetricsUnknownRunIsEmpty() {
+        assertThat(service.processMetricsSummary(UUID.randomUUID())).isEmpty();
+    }
+
     private static final class FakeReader implements EvalQueryReader {
         EvalRunPage runPage = new EvalRunPage(List.of(), false);
         EvalRunRow run;
         EvalCasePage casePage = new EvalCasePage(List.of(), false);
         List<EvalQueryReader.CaseSafetyRow> safetyRows = List.of();
         List<EvalQueryReader.SixPartsRow> sixPartsRows = List.of();
+        EvalQueryReader.ProcessMetricsRow processMetrics =
+                new EvalQueryReader.ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0,
+                        null, null, 0, 0);
         EvalQueryReader.LiveMetricRow liveMetrics;
         List<DatasetRow> datasets = List.of();
         List<PartitionCountRow> partitionCounts = List.of();
@@ -1336,6 +1391,11 @@ class EvalQueryServiceTest {
         @Override
         public List<EvalQueryReader.SixPartsRow> listSixParts(UUID evalRunId) {
             return sixPartsRows;
+        }
+
+        @Override
+        public EvalQueryReader.ProcessMetricsRow processMetrics(UUID runId) {
+            return processMetrics;
         }
 
         @Override

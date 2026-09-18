@@ -408,6 +408,28 @@ public interface EvalQueryReader {
         return List.of();
     }
 
+    // ------------------------------------------------------------------ M-d T3 过程面聚合
+
+    /**
+     * run 级过程面聚合行（M-d T3，eval_case_result 单查询现算 + 工具账本关联子查询）：
+     * 结构通过原料（settled/structureRejected）、过程计数原料（V140 列 total/unique、
+     * checkpoints）、结论有据原料（conclusion_grounded text 域 GROUNDED 计数）、
+     * 延迟分位（percentile_cont）、工具账本（rca_tool_invocation 经 rca_run_id 关联，
+     * FAILED 计数）。比率装配归应用服务；无已结清案例 → 全 0/null 如实。
+     */
+    record ProcessMetricsRow(long settled, long structureRejected,
+                             long toolCallsTotal, long toolCallsUnique,
+                             long checkpointsTotal, long checkpointsCovered,
+                             long groundedAssessed, long grounded,
+                             Long p50LatencyMs, Long p95LatencyMs,
+                             long toolCallTotal, long toolCallFailed) {
+    }
+
+    /** 生产实现按库现算；测试桩默认全 0/null（等效"无已结清案例"） */
+    default ProcessMetricsRow processMetrics(UUID runId) {
+        return new ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0);
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 
     /** eval_phase_event 投影行（V80 全列减去 created_at；detail 为 jsonb ::text 原文
