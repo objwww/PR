@@ -58,7 +58,16 @@ public class HttpEvalReportJudge implements EvalReportJudge {
             return Optional.empty();
         }
         try {
-            String content = callModel(truncate(reportText));
+            String content = callModel(truncate(reportText), 2048);
+            // deepseek 推理段预算偶发吃光 → content 空串（195 实测约 1/6）：预算翻倍
+            // 有界重试一次——机械性成因重试，非语义性重试
+            if (content.isBlank()) {
+                content = callModel(truncate(reportText), 4096);
+            }
+            if (content.isBlank()) {
+                throw new IllegalStateException(
+                        "judge 输出为空（推理预算两次耗尽，max_tokens=4096）");
+            }
             return Optional.of(parse(content));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -70,8 +79,9 @@ public class HttpEvalReportJudge implements EvalReportJudge {
 
     /** 单次 chat 补全（temperature=0 裁决确定性面；max_tokens 须覆盖 reasoning 消耗——
      *  deepseek 系端点先产 reasoning_content 再产 content，300 会被推理段吃光导致
-     *  content 空串（195 实测 63/63 全灭根因），2048 对三题 JSON 有余） */
-    private String callModel(String reportText) throws Exception {
+     *  content 空串（195 实测 63/63 全灭根因），2048 对三题 JSON 有余；空串返回由
+     *  调用方决定重试面） */
+    private String callModel(String reportText, int maxTokens) throws Exception {
         String system = "你是告警根因报告的评测裁判。只依据给定的报告原文回答三道是否题，"
                 + "不引入报告之外的知识。只输出 JSON："
                 + "{\"answers\":[{\"id\":\"Q1\",\"yes\":true|false},"
@@ -87,7 +97,7 @@ public class HttpEvalReportJudge implements EvalReportJudge {
                         java.util.Map.of("role", "system", "content", system),
                         java.util.Map.of("role", "user", "content", user.toString())),
                 "temperature", 0,
-                "max_tokens", 2048));
+                "max_tokens", maxTokens));
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + "/v1/chat/completions"))
                 .timeout(Duration.ofSeconds(30))
