@@ -298,6 +298,40 @@
             </div>
           </div>
         </div>
+        <!-- M-d T3 过程面指标：重复动作/工具错误/检查点覆盖/结构通过/结论有据/分位延迟
+             （settled=0 整卡诚实隐藏；率分母 0 → — 如实；文案 dict/mdZh） -->
+        <div class="ev-summary" v-if="processMetrics && processMetrics.settled > 0">
+          <div class="es-head">
+            <span class="es-title">{{ mdZh.processMetrics.title }}</span>
+            <span class="muted es-note">{{ mdZh.processMetrics.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.structurePass }}</div>
+              <div class="es-value">{{ fmtPct(processMetrics.structurePassRate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.repeatedAction }}</div>
+              <div class="es-value">{{ fmtPct(processMetrics.repeatedActionRate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.toolError }}</div>
+              <div class="es-value">{{ fmtPct(processMetrics.toolErrorRate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.checkpointCoverage }}</div>
+              <div class="es-value">{{ fmtPct(processMetrics.checkpointCoverageRate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.grounded }}</div>
+              <div class="es-value">{{ fmtPct(processMetrics.conclusionGroundedRate) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ mdZh.processMetrics.latency }}</div>
+              <div class="es-value">{{ fmtMsOrNull(processMetrics.p50LatencyMs) }} / {{ fmtMsOrNull(processMetrics.p95LatencyMs) }}</div>
+            </div>
+          </div>
+        </div>
         <!-- EV-05 证据汇总：run 级引用分桶；接口未部署（403/404）整区诚实空态，不伪造计数 -->
         <div class="ev-summary">
           <div class="es-head">
@@ -885,6 +919,24 @@ async function loadSixParts() {
   } catch { /* 六要素面缺席如实留空 */ }
 }
 
+// M-d T3 过程面指标：/process-metrics 读面；settled=0 = 无已结清案例，整卡诚实隐藏
+const processMetrics = ref(null)
+let processMetricsLoaded = false
+
+async function loadProcessMetrics() {
+  if (processMetricsLoaded) return
+  processMetricsLoaded = true
+  try {
+    processMetrics.value =
+        await api(`/eval/runs/${encodeURIComponent(runId.value)}/process-metrics`)
+  } catch { /* 过程面缺席如实留空 */ }
+}
+
+/** 分位延迟展示：null → '—'（无已结清案例如实，不冒充 0） */
+function fmtMsOrNull(ms) {
+  return ms === null || ms === undefined ? mdZh.processMetrics.noData : fmtDuration(ms)
+}
+
 // R6/EV-06 用量与对账：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
 const usageData = ref(null)
 const usageState = ref('loading') // loading | ok | unavailable | error
@@ -972,6 +1024,7 @@ function ensureCasesTabLoaded() {
   loadSafety()
   loadJudge()
   loadSixParts()
+  loadProcessMetrics()
 }
 
 function ensureUsageTabLoaded() {

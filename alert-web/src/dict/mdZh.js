@@ -15,6 +15,17 @@ export const mdZh = {
     levelLow: '低把握',
     noData: '未评',
   },
+  processMetrics: {
+    title: '过程面指标（M-d）',
+    source: '来源 GET /eval/runs/{runId}/process-metrics（率=真实计数比；分母为 0 → — 如实）',
+    structurePass: '结构通过率',
+    repeatedAction: '重复动作率',
+    toolError: '工具错误率',
+    checkpointCoverage: '检查点覆盖率',
+    grounded: '结论有据率',
+    latency: '延迟 P50 / P95',
+    noData: '—',
+  },
 }
 
 /** 把握档位中文映射（未知值原样透传——不冒充已知枚举） */
