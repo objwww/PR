@@ -100,6 +100,20 @@ public class EvalQueryController {
                         .body(Map.of("error", "eval run 不存在")));
     }
 
+    /** P7 judge 汇总：rubric 二元裁决出数面（assessed/pass/fail/error+逐题通过计数；
+     *  judge 未启用 → assessed=0 如实缺席，不冒充） */
+    @GetMapping("/runs/{runId}/judge")
+    public ResponseEntity<?> judge(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.judgeSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /**
      * PAGE-10：run 行未落时前探 LAUNCH 命令——已受理（202 到 worker 领取落库之间的
      * 等待窗口）返回 200 + acceptedOnly 投影（含命令状态），真正未知 id 才 404。
@@ -178,6 +192,16 @@ public class EvalQueryController {
     public ResponseEntity<?> datasetDetail(@PathVariable String name,
                                            @PathVariable String version) {
         return query.datasetDetail(name, version)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "数据集版本不存在")));
+    }
+
+    /** 数据集案例清单（drill-down 读面；name+version 精确键，未知 → 404） */
+    @GetMapping("/datasets/{name}/{version}/cases")
+    public ResponseEntity<?> datasetCases(@PathVariable String name,
+                                          @PathVariable String version) {
+        return query.datasetCases(name, version)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(404)
                         .body(Map.of("error", "数据集版本不存在")));

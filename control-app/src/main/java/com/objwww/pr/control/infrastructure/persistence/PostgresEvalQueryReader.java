@@ -291,8 +291,16 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
     @Override
     public Optional<CaseIdentityRow> findCaseIdentity(String datasetVersion, String scenarioId) {
         // 精确键匹配；version 跨 name 不唯一（uq 是 (name,version)）——多命中 = 归属歧义，
-        // 不取"最新"冒充，如实 unresolved（取 2 行判歧义即可）
-        List<CaseIdentityRow> rows = jdbc.sql("""
+        // 不取"最新"冒充，如实 unresolved
+        List<CaseIdentityRow> rows = findCaseIdentityMatches(datasetVersion, scenarioId);
+        return rows.size() == 1 ? Optional.of(rows.get(0)) : Optional.empty();
+    }
+
+    @Override
+    public List<CaseIdentityRow> findCaseIdentityMatches(String datasetVersion,
+                                                         String scenarioId) {
+        // BA-169：透出真实匹配列表供服务层区分未解析成因（取 2 行判歧义即可）
+        return jdbc.sql("""
                         select cv.case_key, cv.scenario_family_id, cv.content_digest,
                                cv.valid_from, cv.valid_to, dv.partition_class,
                                dv.name as dataset_name, dv.version as dataset_version,
@@ -312,7 +320,6 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("partition_class"), rs.getString("dataset_name"),
                         rs.getString("dataset_version"), rs.getString("source_class")))
                 .list();
-        return rows.size() == 1 ? Optional.of(rows.get(0)) : Optional.empty();
     }
 
     @Override
@@ -440,6 +447,27 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .optional();
     }
 
+    /** EV-07 自动落档 baseline（终态钩子）：同 dataset_version + 同 panel 的上一个
+     *  终态 run；panel 取 launch_plan 快照原文键（无快照/未填同视 null=全量原表） */
+    @Override
+    public Optional<UUID> findAutoCompareBaseline(UUID candidateRunId) {
+        return jdbc.sql("""
+                        select r.id
+                        from eval_run r, eval_run c
+                        where c.id = :candidateId
+                          and r.id <> c.id
+                          and r.dataset_version = c.dataset_version
+                          and r.state in ('SUCCEEDED','FAILED')
+                          and coalesce(r.launch_plan->>'panel', '')
+                              = coalesce(c.launch_plan->>'panel', '')
+                        order by r.finished_at desc, r.id desc
+                        limit 1
+                        """)
+                .param("candidateId", candidateRunId)
+                .query((rs, i) -> rs.getObject("id", UUID.class))
+                .optional();
+    }
+
     @Override
     public List<String> listPlanCaseKeys(String datasetVersion) {
         // FUP-02：与 listCasesForCompare 身份解析同口径（dv.version 精确键；
@@ -453,6 +481,32 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         """)
                 .param("version", datasetVersion)
                 .query((rs, i) -> rs.getString("case_key"))
+                .list();
+    }
+
+    @Override
+    public List<DatasetCaseRow> listDatasetCases(String name, String version) {
+        // dv(name,version) uq 精确键；payload 投影小字段（note/期望三元组/症状码），
+        // rawArtifact 大文本不 SELECT；HOLDOUT RLS 不可见行天然缺席
+        return jdbc.sql("""
+                        select cv.case_key, cv.scenario_family_id, dv.partition_class,
+                               cv.payload->'rawArtifact'->>'note' as note,
+                               cv.payload->'expectedRootCause'->>'component' as exp_component,
+                               cv.payload->'expectedRootCause'->>'faultType' as exp_fault_type,
+                               cv.payload->'expectedRootCause'->>'reasonCode' as exp_reason_code,
+                               cv.payload->'expectedSymptomCodes'::text as exp_symptoms_json
+                        from case_version cv
+                        join dataset_version dv on dv.id = cv.dataset_version_id
+                        where dv.name = :name and dv.version = :version
+                        order by cv.case_key
+                        """)
+                .param("name", name)
+                .param("version", version)
+                .query((rs, i) -> new DatasetCaseRow(
+                        rs.getString("case_key"), rs.getString("scenario_family_id"),
+                        rs.getString("partition_class"), rs.getString("note"),
+                        rs.getString("exp_component"), rs.getString("exp_fault_type"),
+                        rs.getString("exp_reason_code"), rs.getString("exp_symptoms_json")))
                 .list();
     }
 
@@ -544,6 +598,34 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    /** BA-176：失败账批量面（版本解读数据面，单查询禁 N+1）；空集直返不拼 IN () */
+    @Override
+    public List<ModelCallFailureRow> listModelCallFailuresForRuns(Iterable<UUID> evalRunIds) {
+        List<UUID> ids = new ArrayList<>();
+        for (UUID id : evalRunIds) {
+            ids.add(Objects.requireNonNull(id));
+        }
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        select c.eval_run_id, coalesce(m.error_code, 'UNKNOWN') as error_code,
+                               count(*) as cnt
+                          from eval_case_result c
+                          join rca_model_call m on m.run_id = c.rca_run_id
+                         where c.eval_run_id in (:ids)
+                           and c.rca_run_id is not null
+                           and m.state = 'FAILED'
+                         group by c.eval_run_id, coalesce(m.error_code, 'UNKNOWN')
+                         order by c.eval_run_id, cnt desc, error_code
+                        """)
+                .param("ids", ids)
+                .query((rs, i) -> new ModelCallFailureRow(
+                        rs.getObject("eval_run_id", UUID.class),
+                        rs.getString("error_code"), rs.getLong("cnt")))
+                .list();
+    }
+
     /** EV-09：场景轮次聚合（actual_root_cause 以 jsonb 原文文本计 distinct，null 记一值） */
     @Override
     public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {
@@ -576,6 +658,59 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    /** RUNNING 期实时聚合：已结清案例的命中/判定/症状计数单行直出 */
+    @Override
+    public LiveMetricRow liveMetrics(UUID runId) {
+        return jdbc.sql("""
+                        select count(*) as settled,
+                               count(*) filter (where verdict = 'DECIDABLE') as decidable,
+                               count(*) filter (where verdict = 'DECIDABLE' and root_cause_hit) as hits,
+                               count(*) filter (where verdict = 'UNRESOLVED') as unresolved,
+                               coalesce(sum(tp_count), 0) as tp,
+                               coalesce(sum(fp_count), 0) as fp,
+                               coalesce(sum(fn_count), 0) as fn
+                          from eval_case_result
+                         where eval_run_id = :id
+                        """)
+                .param("id", runId)
+                .query((rs, i) -> new LiveMetricRow(
+                        rs.getLong("settled"), rs.getLong("decidable"), rs.getLong("hits"),
+                        rs.getLong("unresolved"),
+                        rs.getLong("tp"), rs.getLong("fp"), rs.getLong("fn")))
+                .single();
+    }
+
+    /** 每案 token 聚合（cases 列表批量面，禁 N+1）。口径：scored_attempt_id 在场
+     *  即按被评分 attempt 聚合（多 attempt run 只计被评那一次的调用消耗），缺席则
+     *  整 rca_run 聚合；只计已结算行；token 列全 null → 该列和 null 如实（不猜零） */
+    @Override
+    public List<CaseTokenRow> listCaseTokenTotals(UUID evalRunId, List<UUID> caseExecutionIds) {
+        if (caseExecutionIds == null || caseExecutionIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        select c.id as case_execution_id,
+                               sum((m.usage->>'prompt_tokens')::int)::bigint as prompt_tokens,
+                               sum((m.usage->>'completion_tokens')::int)::bigint as completion_tokens,
+                               sum((m.usage->>'total_tokens')::int)::bigint as total_tokens
+                        from eval_case_result c
+                        join rca_model_call m on m.run_id = c.rca_run_id
+                            and (c.scored_attempt_id is null
+                                 or m.attempt_id = c.scored_attempt_id)
+                            and m.state <> 'PENDING'
+                        where c.eval_run_id = :runId and c.id in (:ids)
+                        group by c.id
+                        """)
+                .param("runId", evalRunId)
+                .param("ids", caseExecutionIds)
+                .query((rs, i) -> new CaseTokenRow(
+                        rs.getObject("case_execution_id", UUID.class),
+                        (Long) rs.getObject("prompt_tokens"),
+                        (Long) rs.getObject("completion_tokens"),
+                        (Long) rs.getObject("total_tokens")))
+                .list();
+    }
+
     // ------------------------------------------------------------------ P4 安全裁决投影
 
     /** run 全部安全裁决行（P4；红队归属=案例键解析到 REDTEAM 分区；禁 N+1）。
@@ -586,15 +721,9 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
         return jdbc.sql("""
                         select s.scenario_id, s.round_no, s.verdict,
                                s.violations::text as violations_json,
-                               coalesce(dv.partition_class = 'REDTEAM', false) as redteam,
+                               s.redteam,
                                ec.root_cause_hit
                           from eval_case_safety s
-                          join eval_run r on r.id = s.eval_run_id
-                          left join dataset_version dv
-                                 on dv.version = r.dataset_version
-                          left join case_version cv
-                                 on cv.dataset_version_id = dv.id
-                                and cv.case_key = s.scenario_id
                           left join eval_case_result ec
                                  on ec.eval_run_id = s.eval_run_id
                                 and ec.scenario_id = s.scenario_id
@@ -610,6 +739,33 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("violations_json"),
                         rs.getBoolean("redteam"),
                         (Boolean) rs.getObject("root_cause_hit")))
+                .list();
+    }
+
+    // ------------------------------------------------------------------ P7 judge 裁决投影
+
+    /** run 全部 judge 裁决行（P6-G7；单查询禁 N+1；judge 未启用 → 空表如实缺席） */
+    @Override
+    public List<CaseJudgeRow> listJudge(UUID evalRunId) {
+        return jdbc.sql("""
+                        select scenario_id, round_no, rubric_version, model,
+                               answers::text as answers_json,
+                               passed, total, verdict, error
+                          from eval_case_judge
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> new CaseJudgeRow(
+                        rs.getString("scenario_id"),
+                        rs.getInt("round_no"),
+                        rs.getString("rubric_version"),
+                        rs.getString("model"),
+                        rs.getString("answers_json"),
+                        (Integer) rs.getObject("passed"),
+                        (Integer) rs.getObject("total"),
+                        rs.getString("verdict"),
+                        rs.getString("error")))
                 .list();
     }
 

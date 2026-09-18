@@ -741,6 +741,22 @@ class EvalCompareServiceTest {
         public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
             return List.of();
         }
+
+        @Override
+        public List<EvalQueryReader.CaseJudgeRow> listJudge(UUID evalRunId) {
+            return List.of();
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseTokenRow> listCaseTokenTotals(UUID evalRunId,
+                List<UUID> caseExecutionIds) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<UUID> findAutoCompareBaseline(UUID candidateRunId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static final class FakeComparisons implements EvalComparisonRepository {
@@ -757,6 +773,13 @@ class EvalCompareServiceTest {
             return inserted.stream()
                     .filter(r -> r.baselineRunId().equals(baselineRunId)
                             && r.candidateRunId().equals(candidateRunId))
+                    .reduce((a, b) -> b);
+        }
+
+        @Override
+        public Optional<EvalComparisonRecord> findLatestByCandidate(UUID candidateRunId) {
+            return inserted.stream()
+                    .filter(r -> r.candidateRunId().equals(candidateRunId))
                     .reduce((a, b) -> b);
         }
     }

@@ -204,11 +204,50 @@ public class EvalRunnerConfig {
                                              InvestigationResultRepository investigations,
                                              RcaToolCallRepository toolCalls,
                                              ScenarioEvaluator evaluator,
-                                             JdbcClient jdbc) {
-        // P4：SafetyGate 裁决落库面（eval_case_safety，V141）接评分链
+                                             JdbcClient jdbc,
+                                             com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
+                                             com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidence) {
+        // P4：SafetyGate 裁决落库面（eval_case_safety，V141）接评分链；
+        // P7：LLM-judge 第三判定式（eval_case_judge，V145）——judge 未配置 =
+        // fail-closed 不落行（HttpEvalReportJudge 内部 empty），缺席=未评如实；
+        // 证据回退：NATIVE 链过程计数回退 rca_evidence 面（不恒 0）
         return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator,
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresEvalCaseSafetySink(jdbc));
+                        .PostgresEvalCaseSafetySink(jdbc),
+                judge,
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseJudgeSink(jdbc),
+                evidence);
+    }
+
+    /** P7 LLM-judge（OpenAI 兼容面；195=litellm-am3 代理）。base-url/api-key 缺席 =
+     *  fail-closed 未启用（judge() 返回 empty，零落行零外呼） */
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalReportJudge evalReportJudge(
+            @Value("${app.alert.eval.judge.base-url:}") String baseUrl,
+            @Value("${app.alert.eval.judge.api-key:}") String apiKey,
+            @Value("${app.alert.eval.judge.model:qwen3-max}") String model) {
+        return new com.objwww.pr.control.infrastructure.model.HttpEvalReportJudge(
+                baseUrl, apiKey, model);
+    }
+
+    /** BA-172：eval profile 自持事务管理器（PersistenceConfig 与本品互斥不装载；
+     *  DataSourceTransactionManager 构造不建连，装配隔离纪律保持） */
+    @Bean
+    public org.springframework.transaction.PlatformTransactionManager evalTransactionManager(
+            javax.sql.DataSource dataSource) {
+        return new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource);
+    }
+
+    /** BA-172：SingleCaseScorer 证据回退读面（rca_evidence）自持装配——曾漏配导致
+     *  eval profile 启动即炸，装配隔离测试用 Mockito 桩掩盖了该缺口（桩已撤） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository(
+            JdbcClient jdbc,
+            org.springframework.transaction.PlatformTransactionManager txManager) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresEvidenceRepository(
+                jdbc, new org.springframework.transaction.support.TransactionTemplate(txManager),
+                new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     // ---------------- 驱动器（M3-17；token/env 仅此入口注入） ----------------
@@ -358,7 +397,7 @@ public class EvalRunnerConfig {
             @Value("${app.alert.eval.dataset-version:eval-ds-1}") String datasetVersion,
             @Value("${app.eval.launch.modes:L}") String modes,
             @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
-            @Value("${app.eval.launch.max-rounds:10}") int maxRounds,
+            @Value("${app.eval.launch.max-rounds:30}") int maxRounds,
             @Value("${app.eval.launch.enabled:false}") boolean launchEnabled) {
         return new EvalLaunchGate(java.util.Arrays.stream(modes.split(","))
                 .map(String::trim).filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toSet()),
@@ -383,6 +422,7 @@ public class EvalRunnerConfig {
             com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository commands,
             EvalRunMetadata metadata,
             EvalLaunchGate gate,
+            EvalComparisonAutoRecorder evalComparisonAutoRecorder,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.eval.rounds:2}") int defaultRounds) {
         return new EvalLaunchExecutor(registry, Map.of(
@@ -391,7 +431,47 @@ public class EvalRunnerConfig {
                         "InfrastructureScenarioDriver", infra,
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
-                phaseSink, commands, metadata, defaultRounds, systemClock(), workerId, gate);
+                phaseSink, commands, metadata, defaultRounds, systemClock(), workerId, gate,
+                evalComparisonAutoRecorder);
+    }
+
+    // ---------------- EV-07 终态自动落档（eval_comparison；eval_app 授权面 V149） ----------------
+
+    /** worker 侧对比读面（与 docker profile 的 PostgresEvalQueryReader 同实现，
+     *  本 profile 自持装配——EvalRunnerConfig 与 PersistenceConfig 互斥） */
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader(
+            JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalQueryReader(jdbc);
+    }
+
+    @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+            evalComparisonRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalComparisonRepository(jdbc);
+    }
+
+    @Bean
+    public EvalCompareService evalCompareService(
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+                    evalComparisonRepository) {
+        return new EvalCompareService(evalQueryReader, evalComparisonRepository,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+    }
+
+    /** 终态自动落档钩子（幂等 + 无 baseline 诚实跳过 + 失败不拖垮 finalize，语义见类注释） */
+    @Bean
+    public EvalComparisonAutoRecorder evalComparisonAutoRecorder(
+            com.objwww.pr.control.eval.domain.repository.EvalQueryReader evalQueryReader,
+            com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository
+                    evalComparisonRepository,
+            EvalCompareService evalCompareService,
+            @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId) {
+        return new EvalComparisonAutoRecorder(evalQueryReader, evalComparisonRepository,
+                evalCompareService, "auto-terminal:" + workerId);
     }
 
     @Bean
@@ -496,8 +576,9 @@ public class EvalRunnerConfig {
     }
 
     // ---------------- DR 演练 worker（§7.3：由已有评测执行身份所在的 worker 领取；
-    //   eval_app 授权面 V86/V95；DR-A 批接线交付：复合注入端口（DR-03）+ 恢复台账/
-    //   sweeper（DR-05）+ 关联回填（DR-06）） ----------------
+    //   eval_app 授权面 V86/V95/V150；DR-A 批接线交付：复合注入端口（DR-03）+ 恢复台账/
+    //   sweeper（DR-05）+ 关联回填（DR-06）；DR-04 批：复合恢复/核验端口接线，
+    //   OBSERVING→RECOVERING→VERIFYING→CLOSED 全链由 worker 相位驱动） ----------------
 
     @Bean
     public com.objwww.pr.control.drill.application.DrillTemplateCatalog
@@ -574,6 +655,44 @@ public class EvalRunnerConfig {
                 flagdScenarioDriver);
     }
 
+    /** DR-04 flagd 恢复适配（与 driver/sweeper 共用台账与传输面，三面 CAS 恰一方收口） */
+    @Bean
+    public com.objwww.pr.control.drill.application.FlagdDrillRecovery
+            flagdDrillRecovery(
+            FlagdScenarioDriver.FlagAdminClient flagAdminClient,
+            com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger
+                    flagdRestoreLedger) {
+        return new com.objwww.pr.control.drill.application.FlagdDrillRecovery(
+                flagAdminClient.asAdminPort(), flagdRestoreLedger,
+                java.time.Instant::now);
+    }
+
+    /** DR-04 arena-chaos 恢复适配（与注入面共用 ChaosAdminClient；off CAS + status 读面） */
+    @Bean
+    public com.objwww.pr.control.drill.application.ArenaChaosDrillRecovery
+            arenaChaosDrillRecovery(ChaosAdminClient chaosAdminClient) {
+        return new com.objwww.pr.control.drill.application.ArenaChaosDrillRecovery(
+                chaosAdminClient);
+    }
+
+    /** DR-04 复合恢复/核验端口：按模板 driver 分派 kind 适配器 + 共享告警面核验
+     *  （恢复是收场方向，不经 launch 能力位把守） */
+    @Bean
+    public com.objwww.pr.control.drill.application.DrillRecoveryPort
+            drillRecoveryPort(
+            com.objwww.pr.control.drill.application.DrillTemplateCatalog
+                    drillTemplateCatalog,
+            GoldenScenarioRegistry goldenScenarioRegistry,
+            com.objwww.pr.control.drill.application.ArenaChaosDrillRecovery
+                    arenaChaosDrillRecovery,
+            com.objwww.pr.control.drill.application.FlagdDrillRecovery
+                    flagdDrillRecovery,
+            AlertProbe alertProbe) {
+        return new com.objwww.pr.control.drill.application.CompositeDrillRecovery(
+                drillTemplateCatalog, goldenScenarioRegistry,
+                arenaChaosDrillRecovery, flagdDrillRecovery, alertProbe);
+    }
+
     /** DR-03 复合注入端口（DR-A 批接线交付）：FUP-01 同源执行政策最终边界 +
      *  公共闸门（ready/白名单/参数…）+ 按模板 driver 分派；NotImplemented 保留为
      *  fail-closed 兜底与测试对照，不再装配 */
@@ -606,6 +725,8 @@ public class EvalRunnerConfig {
                     drillTemplateCatalog,
             com.objwww.pr.control.drill.application.DrillInjectionPort
                     drillInjectionPort,
+            com.objwww.pr.control.drill.application.DrillRecoveryPort
+                    drillRecoveryPort,
             com.objwww.pr.control.drill.application.DrillCorrelationPort
                     drillCorrelationPort,
             com.objwww.pr.control.drill.application.FlagdRestoreSweeper
@@ -619,7 +740,8 @@ public class EvalRunnerConfig {
             long staleClaimSeconds) {
         return new com.objwww.pr.control.drill.application.DrillWorker(
                 drillJobRepository, drillEventRepository, drillTemplateCatalog,
-                drillInjectionPort, drillClock(), splitTargetEnvs(targetEnvs),
+                drillInjectionPort, drillRecoveryPort, drillClock(),
+                splitTargetEnvs(targetEnvs),
                 workerId + "-drill", pollSeconds, staleClaimSeconds,
                 drillCorrelationPort, flagdRestoreSweeper, drillExecutionPolicy);
     }

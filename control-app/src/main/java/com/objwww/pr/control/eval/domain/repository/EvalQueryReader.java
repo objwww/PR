@@ -184,8 +184,18 @@ public interface EvalQueryReader {
     /** 案例详情（runId + caseExecutionId 双键定位，防跨 run 直读）；未知 → empty */
     Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId);
 
-    /** 场景身份精确键解析（见 CaseIdentityRow 注释）；无匹配 → empty */
+    /** 场景身份精确键解析（见 CaseIdentityRow 注释）；无匹配/歧义 → empty */
     Optional<CaseIdentityRow> findCaseIdentity(String datasetVersion, String scenarioId);
+
+    /**
+     * 场景身份匹配列表（BA-169：区分未解析成因——0 命中=无匹配或 HOLDOUT 不可见，
+     * ≥2 命中=归属歧义）。默认实现兼容既有实现/测试桩：基于 findCaseIdentity 推导，
+     * 永远拿不到歧义信号；Postgres 实现覆写返回 limit 2 的真实列表。
+     */
+    default List<CaseIdentityRow> findCaseIdentityMatches(String datasetVersion,
+                                                          String scenarioId) {
+        return findCaseIdentity(datasetVersion, scenarioId).map(List::of).orElse(List.of());
+    }
 
     /** run 全案例的证据引用扁平行（单查询，不 N+1）；run 无案例 → 空表 */
     List<CaseEvidenceRefRow> listCaseEvidenceRefs(UUID runId);
@@ -233,6 +243,14 @@ public interface EvalQueryReader {
     Optional<CompareRunMeta> findCompareMeta(UUID runId);
 
     /**
+     * EV-07 自动落档 baseline 解析（终态钩子用）：同一 dataset_version + 同 panel
+     * （launch_plan->>'panel'，缺省/无快照同视 = 全量原表面）的上一个终态 run
+     * （finished_at DESC, id DESC 最新者）；候选自身排除。无 → empty
+     * （首跑诚实不落档，调用方不编造 baseline）。
+     */
+    Optional<UUID> findAutoCompareBaseline(UUID candidateRunId);
+
+    /**
      * run 全量对比案例行（scenario_id ASC, round_no ASC 稳定序；limit 为硬扫描闸——
      * 调用方传上限+1 判 truncated，超出行不得进入统计）。run 无案例 → 空表。
      */
@@ -245,6 +263,24 @@ public interface EvalQueryReader {
      * 不冒充全量计划）。版本无可见案例 → 空表（调用方按"计划不可解析"降级）。
      */
     List<String> listPlanCaseKeys(String datasetVersion);
+
+    /**
+     * 数据集案例清单行（案例浏览器读面）：dv(name,version) 精确键定位（uq 天然唯一）；
+     * payload 投影只取身份/策划 note/期望根因三元组/期望症状码——rawArtifact 原文
+     * 大字段不上抛；HOLDOUT RLS 不可见行天然缺席（与执行面同视界）。
+     * 期望根因为 case_version payload 的 camelCase 三元组（component/faultType/
+     * reasonCode），与 eval_case_result 的 snake_case 快照不同源，组装归应用服务。
+     */
+    record DatasetCaseRow(String caseKey, String scenarioFamilyId, String partitionClass,
+                          String note, String expectedComponent, String expectedFaultType,
+                          String expectedReasonCode, String expectedSymptomCodesJson) {
+    }
+
+    /** 数据集案例清单（name+version 精确键；case_key 升序）。未知版本 → 空表。
+     *  default 空表供测试桩免改。 */
+    default List<DatasetCaseRow> listDatasetCases(String name, String version) {
+        return List.of();
+    }
 
     // ------------------------------------------------------------------ R6/EV-06 usage 投影
 
@@ -261,6 +297,21 @@ public interface EvalQueryReader {
      */
     List<UsageCallRow> listUsageCallsForRuns(Iterable<UUID> evalRunIds);
 
+    /**
+     * BA-176：多 run 的模型调用失败账批量面（版本指标对比"为什么退步"解读数据面，
+     * 禁 N+1）——按 (eval_run_id, error_code) 聚合 FAILED 行计数（error_code 缺席
+     * 记 UNKNOWN 兜底，与 RcaModelCallUsageReader.failuresByRun 同律）。身份链同
+     * usage 面（eval_case_result.rca_run_id 显式映射）。default 空表供测试桩免改
+     * （渐进采纳，既有桩零漂移）。
+     */
+    default List<ModelCallFailureRow> listModelCallFailuresForRuns(Iterable<UUID> evalRunIds) {
+        return List.of();
+    }
+
+    /** 失败码计数行（errorCode 账面原值，UNKNOWN=行无码兜底） */
+    record ModelCallFailureRow(UUID evalRunId, String errorCode, long count) {
+    }
+
     /** usage 调用行（usage/cost 仅 SUCCESS 带回报行可能在场；pricingVersion 含
      * 'unpriced' 显式态——R4 契约，与 usage 缺失可区分） */
     record UsageCallRow(UUID evalRunId, UUID rcaRunId, UUID attemptId, String roleId,
@@ -268,6 +319,24 @@ public interface EvalQueryReader {
                         Integer totalTokens, Long costMicros, String pricingVersion,
                         String currency, boolean usageMissing) {
     }
+
+    /**
+     * 每案 token 聚合行（EV 读面补强）：关联键 = eval_case_result.rca_run_id →
+     * rca_model_call.run_id 身份链（RV08 同律，不碰 PR 域账本）；scored_attempt_id
+     * 在场即收窄到被评分 attempt 的调用（多 attempt run 只计被评那一次的 token 消耗），
+     * 缺席（null）则按整 rca_run 聚合。只计已结算行（state ≠ PENDING）；某列全 null
+     * （供应商未回报 usage）→ 该列和为 null 如实，不猜零。无调用行的案例不出行
+     * （调用方映射 null）。
+     */
+    record CaseTokenRow(UUID caseExecutionId, Long promptTokens, Long completionTokens,
+                        Long totalTokens) {
+    }
+
+    /**
+     * 页内案例的 token 聚合批量面（cases 列表接线，单查询禁 N+1）；
+     * caseExecutionIds 为空 → 空表（不拼 IN ()）。
+     */
+    List<CaseTokenRow> listCaseTokenTotals(UUID evalRunId, List<UUID> caseExecutionIds);
 
     // ------------------------------------------------------------------ EV-09 稳定性投影
 
@@ -286,6 +355,19 @@ public interface EvalQueryReader {
     /** 批量面（EV-09 列表接线，单查询禁 N+1）；evalRunIds 为空 → 空表（不拼 IN ()） */
     List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds);
 
+    /**
+     * RUNNING 期实时指标聚合（eval_case_result 单行现算）：终态汇总列只在收官时回填，
+     * 执行中详情页靠本面出"截至目前"真值；无已结清案例时各计数为 0（调用方判空不冒充）。
+     */
+    record LiveMetricRow(long settled, long decidable, long hits, long unresolved,
+                         long tp, long fp, long fn) {
+    }
+
+    /** 生产实现按库现算；测试桩默认全 0（等效"无已结清案例"，详情面保持 null 不冒充） */
+    default LiveMetricRow liveMetrics(UUID runId) {
+        return new LiveMetricRow(0, 0, 0, 0, 0, 0, 0);
+    }
+
     // ------------------------------------------------------------------ P4 安全裁决投影
 
     /**
@@ -299,6 +381,18 @@ public interface EvalQueryReader {
 
     /** run 全部安全裁决行（单查询 join，禁 N+1）；无裁决 → 空表 */
     List<CaseSafetyRow> listCaseSafety(UUID evalRunId);
+
+    /**
+     * LLM-judge 裁决投影行（P6-G7）：answers 为 jsonb ::text 原文（逐题二元答案），
+     * 汇总/校准聚合归应用服务。无裁决（judge 未启用）→ 空表（缺席=未评如实）。
+     */
+    record CaseJudgeRow(String scenarioId, int roundNo, String rubricVersion, String model,
+                        String answersJson, Integer passed, Integer total,
+                        String verdict, String error) {
+    }
+
+    /** run 全部 judge 裁决行（单查询，禁 N+1）；无 → 空表 */
+    List<CaseJudgeRow> listJudge(UUID evalRunId);
 
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 

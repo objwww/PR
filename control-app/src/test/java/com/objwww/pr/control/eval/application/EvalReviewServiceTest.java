@@ -266,6 +266,22 @@ class EvalReviewServiceTest {
         public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
             return List.of();
         }
+
+        @Override
+        public List<EvalQueryReader.CaseJudgeRow> listJudge(UUID evalRunId) {
+            return List.of();
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseTokenRow> listCaseTokenTotals(UUID evalRunId,
+                List<UUID> caseExecutionIds) {
+            return List.of();
+        }
+
+        @Override
+        public Optional<UUID> findAutoCompareBaseline(UUID candidateRunId) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private InMemoryAssignments assignments;

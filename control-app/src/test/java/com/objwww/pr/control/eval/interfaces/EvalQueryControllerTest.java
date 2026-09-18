@@ -441,5 +441,21 @@ class EvalQueryControllerTest {
         public List<CaseSafetyRow> listCaseSafety(UUID evalRunId) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<CaseJudgeRow> listJudge(UUID evalRunId) {
+            return List.of();
+        }
+
+        @Override
+        public List<CaseTokenRow> listCaseTokenTotals(UUID evalRunId,
+                                                      List<UUID> caseExecutionIds) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Optional<UUID> findAutoCompareBaseline(UUID candidateRunId) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

@@ -71,6 +71,18 @@
             <div class="qs-value">{{ fmtRatioStat(run.quality?.falseConfirmation) }}</div>
           </div>
           <div class="qs-item">
+            <div class="qs-label">F1</div>
+            <div class="qs-value">{{ fmtPct(run.f1) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">精确率（precision）</div>
+            <div class="qs-value">{{ fmtPct(run.precision) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">召回率（recall）</div>
+            <div class="qs-value">{{ fmtPct(run.recall) }}</div>
+          </div>
+          <div class="qs-item">
             <div class="qs-label">pass@1（逐轮）</div>
             <div class="qs-value">{{ fmtRatioStat(run.stability?.passAt1) }}</div>
           </div>
@@ -84,8 +96,37 @@
           </div>
         </div>
 
-        <!-- EV-03 六状态分面：各面独立表达互不顶替；UNKNOWN/字段缺席一律“未统计”，tooltip 注明数据来源归属 -->
-        <el-descriptions class="facets" :column="3" border size="small">
+        <!-- 验收口径说明：批次构成 + 每个指标怎么算的，让人能复核数字 -->
+        <el-collapse class="caliber">
+          <el-collapse-item name="caliber">
+            <template #title>
+              <span class="caliber-title">验收口径：本批跑了多少、每个指标怎么算</span>
+            </template>
+            <div class="caliber-body">
+              <p>
+                <b>批次构成</b>：本实验 = 数据集 {{ run.datasetVersion ?? '—' }} 的
+                {{ run.totalScenarios ?? '—' }} 个场景 × 每场景多轮重复（已结清
+                {{ fmtPair(run.caseCount, run.totalScenarios) }} 案）。
+                同一场景重复多轮是为了度量 Agent 非确定性——单轮命中可能是运气，看 pass@1（逐轮命中率）与 pass@k（全轮都命中）才稳。
+              </p>
+              <p><b>根因判定</b>：每个案例的期望根因是一个三元组（组件 / 故障类型 / 原因码），Agent 报告的三元组逐项与期望比对：</p>
+              <ul>
+                <li><b>根因可判定覆盖率</b> = 拿到有效报告的案例 ÷ 总案例（没跑出报告的案例不算分母，不冤判）；</li>
+                <li><b>端到端命中率</b> = 三维全中的案例 ÷ 可判定案例（最严格的北极星指标）；</li>
+                <li><b>条件准确率</b> = 在给出确定结论的案例里判对的比例（未决的案例不进分母）；</li>
+                <li><b>未决率</b> = 诚实回答"确定不了"的案例占比（系统被设计成拿不准就老实说，不猜）；</li>
+                <li><b>错误确认率</b> = 明明判错却言之凿凿确认的案例占比（越低越好，幻觉红线）。</li>
+              </ul>
+              <p>
+                <b>F1 / 精确率 / 召回率</b>：按症状码集合逐案比对——每个案例有期望症状码与 Agent 实际报告的症状码，
+                报对记 tp、多报（期望里没有却报了）记 fp、漏报（期望里有却没报）记 fn。{{ f1Narrative(run) }}
+                指标全部由后端从案例账本逐案聚合现算，页面不估算不补零。
+              </p>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+
+        <!-- EV-03 六状态分面：各面独立表达互不顶替；UNKNOWN/字段缺席一律“未统计”，tooltip 注明数据来源归属 --><el-descriptions class="facets" :column="3" border size="small">
           <el-descriptions-item label="执行状态（executionState）">
             <StatusBadge :status="badgeState(run.facets?.executionState ?? run.state)" />
           </el-descriptions-item>
@@ -95,7 +136,7 @@
           <el-descriptions-item>
             <template #label>
               质量门（qualityVerdict）
-              <el-tooltip content="数据来源归 EV-07（质量门持久化）；当前后端未接线，恒 UNKNOWN" placement="top">
+              <el-tooltip content="质量门来自 eval_comparison 落档对比（EV-07）；未配对落档时为「未评估」" placement="top">
                 <span class="facet-tip">?</span>
               </el-tooltip>
             </template>
@@ -202,6 +243,36 @@
             </div>
           </div>
         </div>
+        <!-- P7 LLM 裁判摘要：rubric 二元化三题质量维（主指标零接触；缺席=未启用如实隐藏） -->
+        <div class="ev-summary" v-if="judge && judge.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">LLM 裁判（P7）</span>
+            <span class="muted es-note">来源 GET /eval/runs/{runId}/judge（rubric {{ judge.rubricVersion }} · {{ judge.model }} · 只判报告质量维，主指标零接触）</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">已裁决案例</div>
+              <div class="es-value">{{ fmtCount(judge.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">PASS / FAIL</div>
+              <div class="es-value">{{ judge.passes }} / {{ judge.failures }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">ERROR（调用面）</div>
+              <div class="es-value">{{ judge.errors }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">逐题通过</div>
+              <div class="es-value">
+                <template v-if="judge.perQuestion.length">
+                  <el-tag v-for="q in judge.perQuestion" :key="q.id" size="small" class="es-tag" disable-transitions>{{ q.id }} {{ q.yes }}/{{ q.assessed }}</el-tag>
+                </template>
+                <span v-else class="muted">未统计</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- EV-05 证据汇总：run 级引用分桶；接口未部署（403/404）整区诚实空态，不伪造计数 -->
         <div class="ev-summary">
           <div class="es-head">
@@ -234,7 +305,12 @@
               </div>
             </div>
             <el-table :data="summary?.cases ?? []" size="small" class="es-table">
-              <el-table-column prop="scenarioId" label="场景" min-width="140" show-overflow-tooltip />
+              <el-table-column label="场景" min-width="180">
+                <template #default="{ row }">
+                  <div>{{ scenarioZh(row.scenarioId).name }}</div>
+                  <div class="muted mono" :title="scenarioZh(row.scenarioId).desc || undefined">{{ row.scenarioId }}</div>
+                </template>
+              </el-table-column>
               <el-table-column prop="roundNo" label="轮次" width="60" align="right" />
               <el-table-column label="判定" width="130">
                 <template #default="{ row }"><StatusBadge :status="row.verdict" /></template>
@@ -284,7 +360,12 @@
                 <div v-else class="fs-none">无失败样本</div>
               </template>
             </el-table-column>
-            <el-table-column prop="scenarioId" label="场景 ID（scenarioId）" min-width="160" show-overflow-tooltip />
+            <el-table-column label="场景" min-width="180">
+              <template #default="{ row }">
+                <div>{{ scenarioZh(row.scenarioId).name }}</div>
+                <div class="muted mono" :title="scenarioZh(row.scenarioId).desc || undefined">{{ row.scenarioId }}</div>
+              </template>
+            </el-table-column>
             <el-table-column prop="roundNo" label="轮次" width="70" align="right" />
             <el-table-column label="判定" width="130">
               <template #default="{ row }">
@@ -324,6 +405,11 @@
             </el-table-column>
             <el-table-column label="耗时" width="110" align="right">
               <template #default="{ row }">{{ row.latencyMs == null ? '未统计' : `${row.latencyMs} ms` }}</template>
+            </el-table-column>
+            <el-table-column label="Token" width="100" align="right">
+              <template #default="{ row }">
+                <span :title="row.promptTokens != null || row.completionTokens != null ? `输入 ${fmtNum(row.promptTokens)} / 输出 ${fmtNum(row.completionTokens)}` : undefined">{{ fmtNum(row.totalTokens) }}</span>
+              </template>
             </el-table-column>
             <el-table-column label="操作" width="80" fixed="right">
               <template #default="{ row }">
@@ -460,9 +546,11 @@
         <div class="cd-head">
           <div class="cd-title">
             <StatusBadge :status="detail.verdict" />
-            <span class="mono break">{{ detail.scenarioId ?? '未统计' }}</span>
+            <span>{{ scenarioZh(detail.scenarioId).name }}</span>
+            <span class="mono break muted">{{ detail.scenarioId ?? '未统计' }}</span>
             <span class="muted">第 {{ detail.roundNo }} 轮</span>
           </div>
+          <div v-if="scenarioZh(detail.scenarioId).desc" class="muted" style="margin-bottom: 8px">{{ scenarioZh(detail.scenarioId).desc }}</div>
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="根因命中">
               <el-tag v-if="detail.rootCauseHit === false" type="danger" disable-transitions>未命中</el-tag>
@@ -470,6 +558,12 @@
               <span v-else class="muted">未统计</span>
             </el-descriptions-item>
             <el-descriptions-item label="耗时">{{ detail.latencyMs == null ? '未统计' : `${detail.latencyMs} ms` }}</el-descriptions-item>
+            <el-descriptions-item label="Token 用量">
+              <template v-if="detail.totalTokens != null || detail.promptTokens != null || detail.completionTokens != null">
+                输入 {{ fmtNum(detail.promptTokens) }} / 输出 {{ fmtNum(detail.completionTokens) }} / 合计 {{ fmtNum(detail.totalTokens) }}
+              </template>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
             <el-descriptions-item label="期望根因">{{ detail.expectedRootCause ?? '未统计' }}</el-descriptions-item>
             <el-descriptions-item label="实际根因">{{ detail.actualRootCause ?? '未统计' }}</el-descriptions-item>
             <el-descriptions-item label="症状 TP / FP / FN">{{ fmtTff(detail) }}</el-descriptions-item>
@@ -477,7 +571,8 @@
           </el-descriptions>
         </div>
 
-        <!-- 场景身份：resolved=false 三路（无匹配/歧义/HOLDOUT 不可见）接口不区分具体成因，如实并列说明 -->
+        <!-- 场景身份：unresolvedReason 区分成因（AMBIGUOUS/NO_MATCH_OR_HOLDOUT）；
+             旧后端字段缺席时回退三路并列笼统文案 -->
         <div class="cd-section">
           <div class="cd-sec-title">场景身份</div>
           <el-descriptions v-if="detail.scenarioIdentity?.resolved" :column="1" border size="small">
@@ -499,7 +594,13 @@
             </el-descriptions-item>
           </el-descriptions>
           <template v-else>
-            <el-alert type="warning" :closable="false" show-icon
+            <el-alert v-if="detail.scenarioIdentity?.unresolvedReason === 'AMBIGUOUS'"
+              type="warning" :closable="false" show-icon
+              :title="`场景身份未解析（归属歧义）：案例键在该版本下匹配到多个数据集（${(detail.scenarioIdentity.matchedDatasets ?? []).join('、')}），归属歧义——按纪律不猜测取其一；根源是同名数据集版本跨数据集并存。`" />
+            <el-alert v-else-if="detail.scenarioIdentity?.unresolvedReason === 'NO_MATCH_OR_HOLDOUT'"
+              type="warning" :closable="false" show-icon
+              title="场景身份未解析（无可见匹配）：该版本下无此案例键的可见匹配——案例未在此版本登记，或属 HOLDOUT 封存分区对本读面不可见（安全纪律不区分两者，不泄露封存集存在性）。" />
+            <el-alert v-else type="warning" :closable="false" show-icon
               title="场景身份未解析：可能为精确键无匹配、归属存在歧义或 HOLDOUT 不可见（接口不区分具体成因）；身份字段一律不展示，不做猜测。" />
             <div class="si-dv muted">数据集版本（run 直读）：{{ detail.scenarioIdentity?.datasetVersion ?? '未统计' }}</div>
           </template>
@@ -584,7 +685,8 @@ import { api } from '../api/client'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
+import { scenarioZh } from '../dict/scenarioZh'
+import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtNum, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -733,6 +835,18 @@ async function loadSafety() {
   } catch { /* 安全面缺席如实留空 */ }
 }
 
+// P7 LLM 裁判摘要：rubric 二元裁决（/judge 读面；assessed=0 = judge 未启用，卡隐藏）
+const judge = ref(null)
+let judgeLoaded = false
+
+async function loadJudge() {
+  if (judgeLoaded) return
+  judgeLoaded = true
+  try {
+    judge.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/judge`)
+  } catch { /* judge 面缺席如实留空 */ }
+}
+
 // R6/EV-06 用量与对账：独立状态机；403/404 = 接口未部署 → unavailable 诚实空态
 const usageData = ref(null)
 const usageState = ref('loading') // loading | ok | unavailable | error
@@ -818,6 +932,7 @@ function ensureCasesTabLoaded() {
   if (!casesLoaded) loadCases()
   if (!summaryLoaded) loadEvidenceSummary()
   loadSafety()
+  loadJudge()
 }
 
 function ensureUsageTabLoaded() {
@@ -957,6 +1072,21 @@ function fmtTff(r) {
   return `${fmtCount(r.tp)} / ${fmtCount(r.fp)} / ${fmtCount(r.fn)}`
 }
 
+// 验收口径 F1 段叙述式：真值（tp/fp/fn 与 P/R/F1）直接代入计算过程写成人话——
+// 数据全来自后端 run 聚合（r.tp/fp/fn、r.precision/recall/f1），真值未结清时如实说明，不硬编码不估算
+function f1Narrative(r) {
+  if (r.tp == null || r.fp == null || r.fn == null) {
+    return '本批症状码真值尚未结清统计（tp/fp/fn 未出），结清后此处直接给出代入真值的计算过程。'
+  }
+  const tp = fmtCount(r.tp)
+  const fp = fmtCount(r.fp)
+  const fn = fmtCount(r.fn)
+  return `本批逐案比对结果：判定命中 ${tp} 个（tp=${tp}）、误报 ${fp} 个（fp=${fp}）、漏判 ${fn} 个（fn=${fn}）。`
+    + `精确率 P = tp/(tp+fp) = ${tp}/(${tp}+${fp}) = ${fmtPct(r.precision)}；`
+    + `召回率 R = tp/(tp+fn) = ${tp}/(${tp}+${fn}) = ${fmtPct(r.recall)}；`
+    + `F1 = 2×P×R/(P+R) = ${fmtPct(r.f1)}。`
+}
+
 function copyText(text, tip) {
   navigator.clipboard?.writeText(text).then(
     () => ElMessage.success(tip),
@@ -1086,6 +1216,11 @@ onUnmounted(stopAcceptedPoll)
 .head-versions .sep { margin: 0 8px; color: var(--line-strong); }
 
 .quality-strip { display: flex; gap: 24px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
+.caliber { margin-top: 10px; border-top: 1px solid var(--line); }
+.caliber-title { font-size: var(--fs-aux); color: var(--ink-2); }
+.caliber-body { font-size: var(--fs-aux); color: var(--ink); line-height: 1.8; }
+.caliber-body p { margin: 6px 0; }
+.caliber-body ul { margin: 4px 0 8px; padding-left: 20px; }
 .qs-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .qs-value { font-size: 18px; font-weight: 600; color: var(--head); }
 

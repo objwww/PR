@@ -13,6 +13,8 @@ import com.objwww.pr.control.alert.domain.repository.RcaReportRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
 import com.objwww.pr.control.alert.domain.repository.RcaToolCallRepository;
 import com.objwww.pr.control.alert.domain.model.TypedRootCause;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope;
+import com.objwww.pr.control.alert.domain.evidence.EvidenceRepository;
 import com.objwww.pr.control.eval.domain.EvalCaseResult;
 import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.ScenarioMetrics.ScoringVerdict;
@@ -49,6 +51,9 @@ public class SingleCaseScorer {
     private final ScenarioEvaluator evaluator;
     private final SafetyGate safetyGate = new SafetyGate();
     private final EvalCaseSafetySink safetySink;
+    private final com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge;
+    private final com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink;
+    private final EvidenceRepository evidence;
     private final FinalReportSelector selector = new FinalReportSelector();
 
     public SingleCaseScorer(RcaRunRepository runs,
@@ -66,12 +71,42 @@ public class SingleCaseScorer {
                             RcaToolCallRepository toolCalls,
                             ScenarioEvaluator evaluator,
                             EvalCaseSafetySink safetySink) {
+        this(runs, reports, investigations, toolCalls, evaluator, safetySink, null, null);
+    }
+
+    /** P7 全形：LLM-judge 第三判定式（null judge = 未启用，fail-closed 不落行） */
+    public SingleCaseScorer(RcaRunRepository runs,
+                            RcaReportRepository reports,
+                            InvestigationResultRepository investigations,
+                            RcaToolCallRepository toolCalls,
+                            ScenarioEvaluator evaluator,
+                            EvalCaseSafetySink safetySink,
+                            com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
+                            com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink) {
+        this(runs, reports, investigations, toolCalls, evaluator, safetySink, judge,
+                judgeSink, null);
+    }
+
+    /** 证据回退全形：evidence 非 null 时，NATIVE 链（不产 tool_call 账本行）的过程计数
+     *  回退到 rca_evidence 面（每次工具调用一行证据），不再恒 0 冒充无调用 */
+    public SingleCaseScorer(RcaRunRepository runs,
+                            RcaReportRepository reports,
+                            InvestigationResultRepository investigations,
+                            RcaToolCallRepository toolCalls,
+                            ScenarioEvaluator evaluator,
+                            EvalCaseSafetySink safetySink,
+                            com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
+                            com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink,
+                            EvidenceRepository evidence) {
         this.runs = Objects.requireNonNull(runs);
         this.reports = Objects.requireNonNull(reports);
         this.investigations = Objects.requireNonNull(investigations);
         this.toolCalls = Objects.requireNonNull(toolCalls);
         this.evaluator = Objects.requireNonNull(evaluator);
         this.safetySink = safetySink;
+        this.judge = judge;
+        this.judgeSink = judgeSink;
+        this.evidence = evidence;
     }
 
     public Optional<EvalCaseResult> score(UUID evalRunId, GoldenCase golden,
@@ -131,6 +166,21 @@ public class SingleCaseScorer {
                         ? "" : c.paramsDigest().value()))
                 .distinct()
                 .count();
+        if (totalCalls == 0 && evidence != null) {
+            // NATIVE 确定性链不产 tool_call 账本行——每次工具调用以 rca_evidence 落库。
+            // 过程计数回退证据面：total=证据行数、unique=证据类型×来源去重，
+            // 否则前端工具调用列恒 0 冒充无调用（假面）。silence_penalty 语义不动。
+            try {
+                List<EvidenceEnvelope> runEvidence = evidence.findByRunId(rcaRunId);
+                totalCalls = runEvidence.size();
+                uniqueCalls = runEvidence.stream()
+                        .map(e -> e.evidenceType() + "|" + e.source())
+                        .distinct()
+                        .count();
+            } catch (Exception e) {
+                // 证据面读失败（含 digest 校验拒绝）：维持账本计数 0，不伪造
+            }
+        }
         // P3 路径维 + 结论复核维（确定性纯函数；无检查点 → total=null 如实未评）
         List<ScenarioEvaluator.CheckpointMatch> checkpoints =
                 evaluator.checkpointMatches(golden, pkg);
@@ -159,6 +209,7 @@ public class SingleCaseScorer {
                 evaluator.conclusionGrounded(pkg),
                 (int) totalCalls, (int) uniqueCalls, golden.difficulty());
         recordSafety(evalRunId, golden, roundNo, report.attemptId());
+        judgeReport(evalRunId, golden, roundNo, report);
         return Optional.of(result);
     }
 
@@ -197,6 +248,45 @@ public class SingleCaseScorer {
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /**
+     * P7 LLM-judge 第三判定式（有报告案例）：rubric 二元化只判报告自然语言质量维
+     * （结论明确性/自洽性/可操作性）——四率主指标零接触，verdict 与根因正确性解耦。
+     * judge 未启用 = 不落行（缺席=未评如实）；调用/解析失败落 ERROR 行（尝试面审计）；
+     * 裁决失败不回滚评分主链（与安全落档同律 fail-soft）。
+     */
+    private void judgeReport(UUID evalRunId, GoldenCase golden, int roundNo, RcaReport report) {
+        if (judge == null || judgeSink == null) {
+            return;
+        }
+        try {
+            Optional<com.objwww.pr.control.eval.domain.repository.EvalReportJudge.JudgeOutcome>
+                    outcome = judge.judge(report.rawText());
+            if (outcome.isEmpty()) {
+                return;
+            }
+            var o = outcome.get();
+            String answersJson = JSON.writeValueAsString(o.answers().stream()
+                    .map(a -> java.util.Map.of("id", a.id(), "question", a.question(),
+                            "yes", a.yes()))
+                    .toList());
+            String verdict = o.passed() == o.total() ? "PASS" : "FAIL";
+            judgeSink.insert(evalRunId, golden.scenarioId(), roundNo,
+                    o.rubricVersion(), o.model(), answersJson,
+                    o.passed(), o.total(), verdict, null);
+        } catch (Exception e) {
+            try {
+                judgeSink.insert(evalRunId, golden.scenarioId(), roundNo,
+                        com.objwww.pr.control.infrastructure.model.HttpEvalReportJudge
+                                .RUBRIC_VERSION,
+                        "unknown", "[]", null, null, "ERROR",
+                        e.getMessage() == null ? e.getClass().getSimpleName()
+                                : e.getMessage());
+            } catch (Exception ignored) {
+                // 落行也失败：judge 面整体缺席，不回滚评分主链
+            }
+        }
+    }
 
     private EvalCaseResult absent(UUID evalRunId, GoldenCase golden, int roundNo, UUID rcaRunId) {
         return new EvalCaseResult(UUID.randomUUID(), evalRunId, golden.scenarioId(),

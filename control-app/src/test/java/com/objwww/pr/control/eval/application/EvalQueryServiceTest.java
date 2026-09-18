@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * EvalQueryService 单测（UI-5/EV-03；IncidentQueryServiceTest 同模式——假端口纯函数段）：
@@ -121,6 +122,33 @@ class EvalQueryServiceTest {
         assertThat(stability.passAt1().status()).isEqualTo("UNKNOWN");
         assertThat(stability.passAllRounds().status()).isEqualTo("UNKNOWN");
         assertThat(stability.scenarioConsistency().status()).isEqualTo("UNKNOWN");
+    }
+
+    /** BA-176：模型调用失败账聚合进列表项——总数 + 主因码（计数最高，并列取码序小者） */
+    @Test
+    void listRunsAggregatesModelCallFailuresWithDominantCode() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRow(runId, NOW, "SUCCEEDED")), false);
+        reader.modelCallFailures = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ModelCallFailureRow(runId, "BILLING_OR_ACTIVATION", 5),
+                new EvalQueryReader.ModelCallFailureRow(runId, "DEFERRED", 2)));
+
+        EvalQueryService.EvalRunListItem item = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(item.modelCallFailures()).isEqualTo(7L);
+        assertThat(item.modelCallFailureCode()).isEqualTo("BILLING_OR_ACTIVATION");
+    }
+
+    /** BA-176：零失败账 → 计数 0、主因码 null（不冒充有码） */
+    @Test
+    void listRunsWithoutFailuresReportsZeroAndNullCode() {
+        reader.runPage = new EvalRunPage(List.of(runRow(UUID.randomUUID(), NOW, "SUCCEEDED")),
+                false);
+
+        EvalQueryService.EvalRunListItem item = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(item.modelCallFailures()).isZero();
+        assertThat(item.modelCallFailureCode()).isNull();
     }
 
     @Test
@@ -297,6 +325,39 @@ class EvalQueryServiceTest {
     }
 
     @Test
+    void runningDetailComputesLiveMetricsFromSettledCases() {
+        UUID id = UUID.randomUUID();
+        reader.run = runRow(id, NOW, "RUNNING");
+        reader.liveMetrics = new EvalQueryReader.LiveMetricRow(45, 40, 37, 5, 80, 2, 6);
+
+        EvalQueryService.EvalRunDetailResponse out = service.detail(id).orElseThrow();
+
+        assertThat(out.endToEndHitRate()).isCloseTo(37.0 / 45, within(1e-9));
+        assertThat(out.conditionalAccuracy()).isCloseTo(37.0 / 40, within(1e-9));
+        assertThat(out.coverage()).isCloseTo(40.0 / 45, within(1e-9));
+        assertThat(out.unresolvedRate()).isCloseTo(5.0 / 45, within(1e-9));
+        assertThat(out.precision()).isCloseTo(80.0 / 82, within(1e-9));
+        assertThat(out.recall()).isCloseTo(80.0 / 86, within(1e-9));
+        assertThat(out.f1()).isNotNull();
+        assertThat(out.tp()).isEqualTo(80);
+        assertThat(out.quality().endToEndHitRate().numerator()).isEqualTo(37);
+        assertThat(out.quality().endToEndHitRate().denominator()).isEqualTo(45);
+        assertThat(out.quality().falseConfirmation().numerator()).isEqualTo(3);
+    }
+
+    @Test
+    void runningDetailWithoutSettledCasesKeepsHonestNulls() {
+        UUID id = UUID.randomUUID();
+        reader.run = runRow(id, NOW, "RUNNING");
+
+        EvalQueryService.EvalRunDetailResponse out = service.detail(id).orElseThrow();
+
+        assertThat(out.endToEndHitRate()).isNull();
+        assertThat(out.f1()).isNull();
+        assertThat(out.tp()).isNull();
+    }
+
+    @Test
     void detailOfUnknownRunIsEmpty() {
         reader.run = null;
         assertThat(service.detail(UUID.randomUUID())).isEmpty();
@@ -414,6 +475,126 @@ class EvalQueryServiceTest {
         assertThat(detail.get().dataset().name()).isEqualTo("rca100");
         assertThat(detail.get().knownRubricVersions())
                 .containsExactly("eval-review-rubric-v1");
+    }
+
+    /** 案例清单 drill-down：name+version 精确键，未知 404 面；
+     *  期望根因三元组 "/" 拼接，症状码 jsonb 解析 */
+    @Test
+    void datasetCasesByNameAndVersion() {
+        UUID dvId = UUID.randomUUID();
+        reader.datasets = List.of(new DatasetRow(dvId, "rca100", "v1.1", "rca100",
+                "PRIVATE", "TUNING", 2, List.of(), NOW));
+        reader.datasetCaseRows = List.of(
+                new EvalQueryReader.DatasetCaseRow("case-a", "op-smoke-family", "TUNING",
+                        "订单服务超时故障注入", "order-arena", "LATENCY", "SLOW_QUERY",
+                        "[\"OrderTimeout\",\"LatencySpike\"]"),
+                new EvalQueryReader.DatasetCaseRow("case-b", "op-smoke-family", "TUNING",
+                        null, null, null, null, null));
+        assertThat(service.datasetCases("rca100", "v9.9")).isEmpty();
+        var resp = service.datasetCases("rca100", "v1.1");
+        assertThat(resp).isPresent();
+        assertThat(resp.get().items()).hasSize(2);
+        var first = resp.get().items().get(0);
+        assertThat(first.expectedRootCause()).isEqualTo("order-arena/LATENCY/SLOW_QUERY");
+        assertThat(first.expectedSymptomCodes())
+                .containsExactly("OrderTimeout", "LatencySpike");
+        var second = resp.get().items().get(1);
+        assertThat(second.expectedRootCause()).isNull();
+        assertThat(second.expectedSymptomCodes()).isNull();
+    }
+
+    // ------------------------------------------------------------------ F1 派生字段（读面现算）
+
+    /** 指定 tp/fp/fn 的终态行（其余列沿 runRow 形状） */
+    private static EvalRunRow runRowWithSymptoms(UUID id, Instant startedAt,
+                                                 Integer tp, Integer fp, Integer fn) {
+        return new EvalRunRow(id, "rca100-v1", "a".repeat(64), "gpt-5", "p3",
+                "b".repeat(64), "SUCCEEDED", startedAt, startedAt.plusSeconds(600),
+                0.0, 0.0, 0.0, 0.0, tp, fp, fn,
+                null, null, 10, 9, 8, 1, 10, startedAt.plusSeconds(590),
+                null, null, null, null, null, null, null);
+    }
+
+    @Test
+    void precisionRecallF1DerivedFromSymptomCounts() {
+        // tp=18, fp=2, fn=2 → P=18/20=0.9，R=18/20=0.9，F1=2·0.9·0.9/1.8=0.9
+        UUID id = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRowWithSymptoms(id, NOW, 18, 2, 2)), false);
+
+        EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(out.precision()).isEqualTo(0.9);
+        assertThat(out.recall()).isEqualTo(0.9);
+        assertThat(out.f1()).isEqualTo(0.9);
+        // 详情面同口径
+        reader.run = runRowWithSymptoms(id, NOW, 18, 2, 2);
+        EvalQueryService.EvalRunDetailResponse detail = service.detail(id).orElseThrow();
+        assertThat(detail.precision()).isEqualTo(0.9);
+        assertThat(detail.recall()).isEqualTo(0.9);
+        assertThat(detail.f1()).isEqualTo(0.9);
+    }
+
+    @Test
+    void zeroDenominatorSymptomCountsYieldNullRatesNotZero() {
+        // tp=fp=0 → precision 分母 0 → null；fn=2 → recall=0/2=0.0（真实零，保留）；
+        // P null → f1 null（不硬塞 0）
+        UUID id = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRowWithSymptoms(id, NOW, 0, 0, 2)), false);
+
+        EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(out.precision()).isNull();
+        assertThat(out.recall()).isEqualTo(0.0);
+        assertThat(out.f1()).isNull();
+        // tp=fp=fn=0：三值分母全 0 → 全 null
+        reader.runPage = new EvalRunPage(List.of(runRowWithSymptoms(id, NOW, 0, 0, 0)), false);
+        EvalQueryService.EvalRunListItem bare = service.listRuns(null, null, 50).items().get(0);
+        assertThat(bare.precision()).isNull();
+        assertThat(bare.recall()).isNull();
+        assertThat(bare.f1()).isNull();
+    }
+
+    @Test
+    void runningRunKeepsNullDerivedRates() {
+        // 计数未回填（RUNNING）→ 派生三率 null（不填 0 冒充）
+        reader.runPage = new EvalRunPage(List.of(runRow(UUID.randomUUID(), NOW, "RUNNING")), false);
+
+        EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(out.precision()).isNull();
+        assertThat(out.recall()).isNull();
+        assertThat(out.f1()).isNull();
+    }
+
+    // ------------------------------------------------------------------ 每案 token 投影
+
+    @Test
+    void listCasesCarriesPerCaseTokenTotals() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId1 = UUID.randomUUID();
+        UUID caseId2 = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.casePage = new EvalCasePage(List.of(
+                new EvalCaseRow(caseId1, "s1", 1, "DECIDABLE", true,
+                        "{\"component\":\"redis\"}", "{\"component\":\"redis\"}",
+                        4200L, null, UUID.randomUUID(), null),
+                new EvalCaseRow(caseId2, "s2", 1, "TIMEOUT_OR_ABSENT", false,
+                        "{\"component\":\"db\"}", null, null, null, null, null)), false);
+        reader.tokenTotalsByCase = java.util.Map.of(caseId1,
+                new EvalQueryReader.CaseTokenRow(caseId1, 1200L, 340L, 1540L));
+
+        EvalQueryService.EvalCaseListResponse out =
+                service.listCases(runId, null, null, 50).orElseThrow();
+
+        EvalQueryService.EvalCaseItem withCalls = out.items().get(0);
+        assertThat(withCalls.promptTokens()).isEqualTo(1200L);
+        assertThat(withCalls.completionTokens()).isEqualTo(340L);
+        assertThat(withCalls.totalTokens()).isEqualTo(1540L);
+        // 无模型调用记录的案例 → 三值 null 如实（不填 0）
+        EvalQueryService.EvalCaseItem noCalls = out.items().get(1);
+        assertThat(noCalls.promptTokens()).isNull();
+        assertThat(noCalls.completionTokens()).isNull();
+        assertThat(noCalls.totalTokens()).isNull();
     }
 
     // ------------------------------------------------------------------ EV-04 生命周期分面
@@ -603,6 +784,8 @@ class EvalQueryServiceTest {
         assertThat(out.scenarioIdentity().resolved()).isTrue();
         assertThat(out.scenarioIdentity().caseKey()).isEqualTo("infra/redis-oom");
         assertThat(out.scenarioIdentity().partitionClass()).isEqualTo("VALIDATION");
+        assertThat(out.scenarioIdentity().unresolvedReason()).isNull();
+        assertThat(out.scenarioIdentity().matchedDatasets()).isEmpty();
         assertThat(reader.lastIdentityDataset).isEqualTo("rca100-v1.1");
         assertThat(reader.lastIdentityScenario).isEqualTo("infra/redis-oom");
         // 关联链
@@ -650,6 +833,33 @@ class EvalQueryServiceTest {
         assertThat(out.scenarioIdentity().resolved()).isFalse();
         assertThat(out.scenarioIdentity().caseKey()).isNull();
         assertThat(out.scenarioIdentity().datasetVersion()).isEqualTo("rca100-v1.1");
+        // BA-169：0 命中 = 无匹配或 HOLDOUT 不可见（安全纪律不区分两者）
+        assertThat(out.scenarioIdentity().unresolvedReason()).isEqualTo("NO_MATCH_OR_HOLDOUT");
+        assertThat(out.scenarioIdentity().matchedDatasets()).isEmpty();
+    }
+
+    @Test
+    void caseDetailAmbiguousIdentityReportsMatchedDatasets() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        // BA-169：同名数据集版本跨数据集并存（195 实证 eval-ds-1 同时存在于两个数据集）
+        reader.caseIdentityMatches = List.of(
+                new CaseIdentityRow("infra/redis-oom", "redis-oom", "c".repeat(64),
+                        NOW.minusSeconds(3600), null, "TUNING",
+                        "arena-replay-ds", "eval-ds-1", "INTERNAL_SYNTHETIC"),
+                new CaseIdentityRow("infra/redis-oom", "redis-oom", "d".repeat(64),
+                        NOW.minusSeconds(1800), null, "REDTEAM",
+                        "redteam-ds", "eval-ds-1", "INTERNAL_SYNTHETIC"));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.scenarioIdentity().resolved()).isFalse();
+        assertThat(out.scenarioIdentity().caseKey()).isNull();
+        assertThat(out.scenarioIdentity().unresolvedReason()).isEqualTo("AMBIGUOUS");
+        assertThat(out.scenarioIdentity().matchedDatasets())
+                .containsExactly("arena-replay-ds", "redteam-ds");
     }
 
     @Test
@@ -1003,12 +1213,47 @@ class EvalQueryServiceTest {
         assertThat(out.rounds().get(0).diff()).isNotNull();
     }
 
+    // ------------------------------------------------------------------ P4 安全汇总
+
+    @Test
+    void safetySummaryCountsDecoyAdoptedOnlyForRedteamHits() {
+        // BA-162 回归钉死：redteam 归属取评分期冻结的 case 行标志（s.redteam），
+        // 非红队案例命中根因绝不算"诱饵被采纳"（195 曾因 dataset_version 同名
+        // version 扇出 join 把 TUNING 批幻影成红队劫持 72/74）
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.safetyRows = List.of(
+                new EvalQueryReader.CaseSafetyRow("S3", 1, "PASS", null, false, true),
+                new EvalQueryReader.CaseSafetyRow("S3", 2, "PASS", null, false, true),
+                new EvalQueryReader.CaseSafetyRow("RT1", 1, "PASS", null, true, true),
+                new EvalQueryReader.CaseSafetyRow("RT1", 2, "PASS", null, true, false),
+                new EvalQueryReader.CaseSafetyRow("RT2", 1, "REJECT",
+                        "[{\"face\":\"UNAUTHORIZED_TOOL\"}]", true, null));
+
+        EvalQueryService.SafetySummaryResponse out = service.safetySummary(runId).orElseThrow();
+        assertThat(out.assessedCases()).isEqualTo(5);
+        assertThat(out.rejects()).isEqualTo(1);
+        assertThat(out.redteamCases()).isEqualTo(3);
+        assertThat(out.redteamDecoyAdopted()).isEqualTo(1);
+        assertThat(out.redteamSafetyRejects()).isEqualTo(1);
+        assertThat(out.faceCounts()).containsExactly(
+                new EvalQueryService.SafetyFaceCount("UNAUTHORIZED_TOOL", 1));
+    }
+
+    @Test
+    void safetySummaryUnknownRunIsEmpty() {
+        assertThat(service.safetySummary(UUID.randomUUID())).isEmpty();
+    }
+
     private static final class FakeReader implements EvalQueryReader {
         EvalRunPage runPage = new EvalRunPage(List.of(), false);
         EvalRunRow run;
         EvalCasePage casePage = new EvalCasePage(List.of(), false);
+        List<EvalQueryReader.CaseSafetyRow> safetyRows = List.of();
+        EvalQueryReader.LiveMetricRow liveMetrics;
         List<DatasetRow> datasets = List.of();
         List<PartitionCountRow> partitionCounts = List.of();
+        List<EvalQueryReader.DatasetCaseRow> datasetCaseRows = List.of();
         String lastState;
         KeysetCursor lastRunCursor;
         int lastRunLimit;
@@ -1017,6 +1262,8 @@ class EvalQueryServiceTest {
         Integer lastAfterRound;
         EvalCaseDetailRow caseDetail;
         CaseIdentityRow caseIdentity;
+        /** BA-169：显式设置的匹配列表（歧义场景用）；null = 由 findCaseIdentity 推导 */
+        List<CaseIdentityRow> caseIdentityMatches;
         List<CaseEvidenceRefRow> evidenceRefRows = List.of();
         List<EvidenceMetaRow> evidenceMeta = List.of();
         Map<UUID, List<CaseLogEvidenceRow>> logEvidenceByRun = new LinkedHashMap<>();
@@ -1063,6 +1310,12 @@ class EvalQueryServiceTest {
         }
 
         @Override
+        public List<EvalQueryReader.DatasetCaseRow> listDatasetCases(String name,
+                                                                     String version) {
+            return datasetCaseRows;
+        }
+
+        @Override
         public Optional<EvalCaseDetailRow> findCaseDetail(UUID runId, UUID caseExecutionId) {
             this.lastDetailRunId = runId;
             this.lastDetailCaseId = caseExecutionId;
@@ -1075,6 +1328,17 @@ class EvalQueryServiceTest {
             this.lastIdentityDataset = datasetVersion;
             this.lastIdentityScenario = scenarioId;
             return Optional.ofNullable(caseIdentity);
+        }
+
+        @Override
+        public List<CaseIdentityRow> findCaseIdentityMatches(String datasetVersion,
+                                                             String scenarioId) {
+            this.lastIdentityDataset = datasetVersion;
+            this.lastIdentityScenario = scenarioId;
+            if (caseIdentityMatches != null) {
+                return caseIdentityMatches;
+            }
+            return Optional.ofNullable(caseIdentity).map(List::of).orElse(List.of());
         }
 
         @Override
@@ -1150,9 +1414,53 @@ class EvalQueryServiceTest {
             return out;
         }
 
+        java.util.Map<UUID, List<EvalQueryReader.ModelCallFailureRow>> modelCallFailures =
+                java.util.Map.of();
+
+        @Override
+        public List<EvalQueryReader.ModelCallFailureRow> listModelCallFailuresForRuns(
+                Iterable<UUID> evalRunIds) {
+            List<EvalQueryReader.ModelCallFailureRow> out = new ArrayList<>();
+            for (UUID id : evalRunIds) {
+                out.addAll(modelCallFailures.getOrDefault(id, List.of()));
+            }
+            return out;
+        }
+
+        @Override
+        public EvalQueryReader.LiveMetricRow liveMetrics(UUID runId) {
+            return liveMetrics != null ? liveMetrics : EvalQueryReader.super.liveMetrics(runId);
+        }
+
         @Override
         public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
+            return safetyRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseJudgeRow> listJudge(UUID evalRunId) {
             return List.of();
+        }
+
+        java.util.Map<UUID, EvalQueryReader.CaseTokenRow> tokenTotalsByCase =
+                java.util.Map.of();
+
+        @Override
+        public List<EvalQueryReader.CaseTokenRow> listCaseTokenTotals(UUID evalRunId,
+                List<UUID> caseExecutionIds) {
+            List<EvalQueryReader.CaseTokenRow> out = new ArrayList<>();
+            for (UUID id : caseExecutionIds) {
+                EvalQueryReader.CaseTokenRow row = tokenTotalsByCase.get(id);
+                if (row != null) {
+                    out.add(row);
+                }
+            }
+            return out;
+        }
+
+        @Override
+        public Optional<UUID> findAutoCompareBaseline(UUID candidateRunId) {
+            throw new UnsupportedOperationException();
         }
     }
 }

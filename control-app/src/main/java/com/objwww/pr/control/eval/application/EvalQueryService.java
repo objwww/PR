@@ -185,10 +185,12 @@ public class EvalQueryService {
                                   Double coverage, Double conditionalAccuracy,
                                   Double endToEndHitRate, Double unresolvedRate,
                                   Integer tp, Integer fp, Integer fn,
+                                  Double precision, Double recall, Double f1,
                                   String displayName, String mode,
                                   long caseCount, Integer totalScenarios,
                                   QualityFacet quality, StabilityFacet stability,
-                                  RunFacets facets) {
+                                  RunFacets facets,
+                                  long modelCallFailures, String modelCallFailureCode) {
     }
 
     public record EvalRunListResponse(List<EvalRunListItem> items, String nextCursor,
@@ -200,14 +202,19 @@ public class EvalQueryService {
                                         String state, Instant startedAt, Instant finishedAt,
                                         Double coverage, Double conditionalAccuracy,
                                         Double endToEndHitRate, Double unresolvedRate,
-                                        Integer tp, Integer fp, Integer fn, long caseCount,
+                                        Integer tp, Integer fp, Integer fn,
+                                        Double precision, Double recall, Double f1,
+                                        long caseCount,
                                         String displayName, String mode, Integer totalScenarios,
                                         QualityFacet quality, StabilityFacet stability,
                                         RunFacets facets, Instant asOf,
                                         String terminalReason, JsonNode launchPlan) {
     }
 
-    /** 案例列表项（P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0） */
+    /** 案例列表项（P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0；
+     *  promptTokens/completionTokens/totalTokens = 本案例模型调用 token 聚合
+     *  （rca_model_call 经 rca_run_id 身份链，scored_attempt_id 在场即按被评分 attempt
+     *  聚合）；无模型调用记录 → 三值 null 如实） */
     public record EvalCaseItem(UUID caseExecutionId, String scenarioId, int roundNo,
                                String verdict, Boolean rootCauseHit, String expectedRootCause,
                                String actualRootCause, Long latencyMs, String failureSample,
@@ -216,7 +223,8 @@ public class EvalQueryService {
                                Boolean causeReasonHit, Integer checkpointsTotal,
                                Integer checkpointsCovered, String checkpointMatches,
                                String conclusionGrounded, Integer toolCallsTotal,
-                               Integer toolCallsUnique, String difficulty) {
+                               Integer toolCallsUnique, String difficulty,
+                               Long promptTokens, Long completionTokens, Long totalTokens) {
     }
 
     public record EvalCaseListResponse(List<EvalCaseItem> items, String nextCursor) {
@@ -258,6 +266,18 @@ public class EvalQueryService {
                                         List<String> knownRubricVersions, Instant asOf) {
     }
 
+    /** 数据集案例清单项（案例浏览器读面）：身份 + 策划中文描述 + 期望根因摘要 +
+     *  期望症状码；payload 原文大字段不上抛 */
+    public record DatasetCaseItem(String caseKey, String scenarioFamilyId,
+                                  String partitionClass, String note,
+                                  String expectedRootCause,
+                                  List<String> expectedSymptomCodes) {
+    }
+
+    public record DatasetCaseListResponse(String name, String version,
+                                          List<DatasetCaseItem> items, Instant asOf) {
+    }
+
     // ------------------------------------------------------------------ EV-05 DTO（案例详情 / Run 证据汇总 / 受限日志比较）
 
     /** 证据引用解析项（EV-05 §3.4）：ref 原文 + 解析面。resolved=false = 非 UUID 形态
@@ -289,11 +309,15 @@ public class EvalQueryService {
     }
 
     /** 场景身份（EV-05 §3.4）：resolved=false = 精确键无匹配/歧义/HOLDOUT RLS 不可见，
-     *  身份字段全 null 如实（datasetVersion 恒为 run 直读值，不依赖解析） */
+     *  身份字段全 null 如实（datasetVersion 恒为 run 直读值，不依赖解析）；
+     *  unresolvedReason（BA-169）：resolved=true → null；否则 AMBIGUOUS（归属歧义）
+     *  或 NO_MATCH_OR_HOLDOUT（无可见匹配，安全纪律不区分两者）；
+     *  matchedDatasets：歧义时 = 匹配到的 datasetName 列表，否则空表 */
     public record ScenarioIdentity(String scenarioId, String datasetVersion, boolean resolved,
                                    String caseKey, String scenarioFamilyId, String contentDigest,
                                    String partitionClass, String datasetName, String sourceClass,
-                                   Instant validFrom, Instant validTo) {
+                                   Instant validFrom, Instant validTo,
+                                   String unresolvedReason, List<String> matchedDatasets) {
     }
 
     /** 关联链块（EV-03 关联链的详情展开；环节缺席如实 null） */
@@ -378,26 +402,73 @@ public class EvalQueryService {
                 reader.listScenarioRoundStatsForRuns(runIds)) {
             statsByRun.computeIfAbsent(statRow.evalRunId(), k -> new ArrayList<>()).add(statRow);
         }
+        // BA-176：页内 run 的模型调用失败账一次批量取回（禁 N+1）——版本指标对比
+        // "为什么退步"解读面（欠费/限流窗的低分要能与真实判错区分）
+        Map<UUID, List<EvalQueryReader.ModelCallFailureRow>> failuresByRun = new LinkedHashMap<>();
+        for (EvalQueryReader.ModelCallFailureRow failureRow :
+                reader.listModelCallFailuresForRuns(runIds)) {
+            failuresByRun.computeIfAbsent(failureRow.evalRunId(), k -> new ArrayList<>())
+                    .add(failureRow);
+        }
         List<EvalRunListItem> items = new ArrayList<>(page.items().size());
         for (EvalRunRow row : page.items()) {
             items.add(toListItem(row,
                     usageByRun.getOrDefault(row.runId(), List.of()),
-                    statsByRun.getOrDefault(row.runId(), List.of())));
+                    statsByRun.getOrDefault(row.runId(), List.of()),
+                    failuresByRun.getOrDefault(row.runId(), List.of())));
         }
         return new EvalRunListResponse(List.copyOf(items), nextCursor, Instant.now());
     }
 
     public Optional<EvalRunDetailResponse> detail(UUID runId) {
-        return reader.findRun(runId).map(row -> new EvalRunDetailResponse(
-                row.runId(), row.datasetVersion(), row.registryDigest(), row.model(),
-                row.promptVersion(), row.configDigest(), row.state(), row.startedAt(),
-                row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
-                row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
-                row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
-                qualityFacet(row),
-                stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId))),
-                facets(row, usageRollup(runId)), Instant.now(),
-                row.terminalReason(), parseLaunchPlan(row.launchPlanJson())));
+        return reader.findRun(runId).map(row -> {
+            // 终态汇总列只在收官回填；RUNNING 期从 eval_case_result 现算"截至目前"真值，
+            // 前端不再显示"未统计"（settled=0 时保持 null——一个案例都没结清不冒充 0%）
+            Double coverage = row.coverage();
+            Double condAcc = row.conditionalAccuracy();
+            Double e2e = row.endToEndHitRate();
+            Double unresolved = row.unresolvedRate();
+            Integer tp = row.tp();
+            Integer fp = row.fp();
+            Integer fn = row.fn();
+            QualityFacet quality = qualityFacet(row);
+            if (e2e == null) {
+                EvalQueryReader.LiveMetricRow live = reader.liveMetrics(runId);
+                if (live.settled() > 0) {
+                    coverage = divideOrNull(live.decidable(), live.settled());
+                    condAcc = live.decidable() > 0 ? divideOrNull(live.hits(), live.decidable()) : null;
+                    e2e = divideOrNull(live.hits(), live.settled());
+                    unresolved = divideOrNull(live.unresolved(), live.settled());
+                    tp = Math.toIntExact(live.tp());
+                    fp = Math.toIntExact(live.fp());
+                    fn = Math.toIntExact(live.fn());
+                    // 质量五件套同步现算（分母=已结清案例数，与"截至目前"口径一致）
+                    quality = new QualityFacet(
+                            ratio(live.decidable(), live.settled()),
+                            live.decidable() > 0 ? ratio(live.hits(), live.decidable()) : unknownRatio(),
+                            ratio(live.hits(), live.settled()),
+                            ratio(live.unresolved(), live.settled()),
+                            live.decidable() > 0
+                                    ? ratio(live.decidable() - live.hits(), live.decidable())
+                                    : unknownRatio());
+                }
+            }
+            Double precision = tp == null || fp == null ? null : divideOrNull(tp, tp + fp);
+            Double recall = tp == null || fn == null ? null : divideOrNull(tp, tp + fn);
+            Double f1 = precision == null || recall == null || precision + recall == 0.0
+                    ? null : 2 * precision * recall / (precision + recall);
+            return new EvalRunDetailResponse(
+                    row.runId(), row.datasetVersion(), row.registryDigest(), row.model(),
+                    row.promptVersion(), row.configDigest(), row.state(), row.startedAt(),
+                    row.finishedAt(), coverage, condAcc,
+                    e2e, unresolved, tp, fp, fn,
+                    precision, recall, f1,
+                    row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
+                    quality,
+                    stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId))),
+                    facets(row, usageRollup(runId)), Instant.now(),
+                    row.terminalReason(), parseLaunchPlan(row.launchPlanJson()));
+        });
     }
 
     /** 单 run rollup（详情面；与列表同一条批量 SQL 路径，口径一致） */
@@ -460,6 +531,66 @@ public class EvalQueryService {
                 List.copyOf(faceCounts), Instant.now()));
     }
 
+    // ------------------------------------------------------------------ P7 judge 汇总
+
+    /** 逐题"是"计数（rubric 校准面：题粒度通过率——<0.7 的题触发 rubric 修订） */
+    public record JudgeQuestionStat(String id, long yes, long assessed) {
+    }
+
+    /**
+     * P7 run 级 judge 汇总（第三判定式出数面）：assessed=有裁决行案例数（judge 未
+     * 启用 → 0 如实缺席）；perQuestion=逐题"是"计数（rubric v1 三题二元）；errors=
+     * 模型调用/解析失败行数（尝试面审计）。run 未知 → empty（controller 404 面）。
+     */
+    public record JudgeSummaryResponse(UUID runId, String rubricVersion, String model,
+                                       long assessed, long passes, long failures, long errors,
+                                       List<JudgeQuestionStat> perQuestion, Instant asOf) {
+    }
+
+    public Optional<JudgeSummaryResponse> judgeSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseJudgeRow> rows = reader.listJudge(runId);
+        String rubricVersion = rows.isEmpty() ? null
+                : rows.get(0).rubricVersion();
+        String model = rows.isEmpty() ? null : rows.get(0).model();
+        long passes = rows.stream().filter(r -> "PASS".equals(r.verdict())).count();
+        long failures = rows.stream().filter(r -> "FAIL".equals(r.verdict())).count();
+        long errors = rows.stream().filter(r -> "ERROR".equals(r.verdict())).count();
+        Map<String, long[]> perQuestion = new java.util.TreeMap<>();
+        for (EvalQueryReader.CaseJudgeRow row : rows) {
+            if (row.answersJson() == null) {
+                continue;
+            }
+            try {
+                JsonNode answers = mapper.readTree(row.answersJson());
+                if (!answers.isArray()) {
+                    continue;
+                }
+                for (JsonNode a : answers) {
+                    String id = a.path("id").asText();
+                    if (id.isBlank()) {
+                        continue;
+                    }
+                    long[] stat = perQuestion.computeIfAbsent(id, k -> new long[2]);
+                    stat[1]++;
+                    if (a.path("yes").asBoolean(false)) {
+                        stat[0]++;
+                    }
+                }
+            } catch (Exception e) {
+                // answers 解析失败如实跳过该行题粒度计数（不猜）
+            }
+        }
+        List<JudgeQuestionStat> stats = perQuestion.entrySet().stream()
+                .map(e -> new JudgeQuestionStat(e.getKey(), e.getValue()[0],
+                        e.getValue()[1]))
+                .toList();
+        return Optional.of(new JudgeSummaryResponse(runId, rubricVersion, model,
+                rows.size(), passes, failures, errors, List.copyOf(stats), Instant.now()));
+    }
+
     // ------------------------------------------------------------------ cases
 
     /** run 不存在 → empty（controller 404 面）；verdict/cursor 非法 → 400 面 */
@@ -487,8 +618,15 @@ public class EvalQueryService {
         }
         EvalCasePage page = reader.listCases(runId, verdict, afterScenario, afterRound, limit);
         String nextCursor = null;
+        // 每案 token 聚合批量取回（页内案例 id 一次查询，禁 N+1）；无调用行 → null 如实
+        List<UUID> caseIds = page.items().stream().map(EvalCaseRow::caseExecutionId).toList();
+        Map<UUID, EvalQueryReader.CaseTokenRow> tokensByCase = new LinkedHashMap<>();
+        for (EvalQueryReader.CaseTokenRow tokenRow : reader.listCaseTokenTotals(runId, caseIds)) {
+            tokensByCase.put(tokenRow.caseExecutionId(), tokenRow);
+        }
         List<EvalCaseItem> items = new ArrayList<>(page.items().size());
         for (EvalCaseRow row : page.items()) {
+            EvalQueryReader.CaseTokenRow tokens = tokensByCase.get(row.caseExecutionId());
             items.add(new EvalCaseItem(row.caseExecutionId(), row.scenarioId(), row.roundNo(),
                     row.verdict(), row.rootCauseHit(), summarizeRootCause(mapper, row.expectedRootCauseJson()),
                     summarizeRootCause(mapper, row.actualRootCauseJson()), row.latencyMs(),
@@ -496,7 +634,10 @@ public class EvalQueryService {
                     row.causeComponentHit(), row.causeFaultHit(), row.causeReasonHit(),
                     row.checkpointsTotal(), row.checkpointsCovered(), row.checkpointMatchesJson(),
                     row.conclusionGrounded(), row.toolCallsTotal(), row.toolCallsUnique(),
-                    row.difficulty()));
+                    row.difficulty(),
+                    tokens == null ? null : tokens.promptTokens(),
+                    tokens == null ? null : tokens.completionTokens(),
+                    tokens == null ? null : tokens.totalTokens()));
         }
         if (page.hasMore() && !page.items().isEmpty()) {
             EvalCaseRow last = page.items().get(page.items().size() - 1);
@@ -566,6 +707,32 @@ public class EvalQueryService {
         return out;
     }
 
+    /** 数据集案例清单（name+version 精确键——未知数据集版本 → empty 走 404 面；
+     *  期望根因三元组非空段 "/" 拼接，全空如实 null） */
+    public Optional<DatasetCaseListResponse> datasetCases(String name, String version) {
+        boolean exists = reader.listDatasets().stream()
+                .anyMatch(row -> row.name().equals(name) && row.version().equals(version));
+        if (!exists) {
+            return Optional.empty();
+        }
+        List<DatasetCaseItem> items = new ArrayList<>();
+        for (EvalQueryReader.DatasetCaseRow row : reader.listDatasetCases(name, version)) {
+            List<String> parts = new ArrayList<>(3);
+            for (String part : new String[]{row.expectedComponent(), row.expectedFaultType(),
+                    row.expectedReasonCode()}) {
+                if (part != null && !part.isBlank()) {
+                    parts.add(part);
+                }
+            }
+            items.add(new DatasetCaseItem(row.caseKey(), row.scenarioFamilyId(),
+                    row.partitionClass(), row.note(),
+                    parts.isEmpty() ? null : String.join("/", parts),
+                    parseStringArray(row.expectedSymptomCodesJson())));
+        }
+        return Optional.of(new DatasetCaseListResponse(name, version,
+                List.copyOf(items), Instant.now()));
+    }
+
     private DatasetItem datasetItem(DatasetRow row, Map<UUID, Map<String, Long>> counts) {
         return new DatasetItem(row.name(), row.version(), row.source(), row.sourceClass(),
                 row.partitionClass(), row.caseCount(),
@@ -601,18 +768,31 @@ public class EvalQueryService {
         });
     }
 
-    /** 场景身份：case_version 精确键解析（无匹配/歧义/HOLDOUT 不可见 → resolved=false） */
+    /**
+     * 场景身份：case_version 精确键解析走匹配列表（BA-169）——单命中 resolved；
+     * ≥2 命中 = 归属歧义（unresolvedReason=AMBIGUOUS + matchedDatasets，按纪律不猜其一）；
+     * 0 命中 = 无匹配或 HOLDOUT 不可见（NO_MATCH_OR_HOLDOUT，安全纪律不区分两者）。
+     */
     private ScenarioIdentity scenarioIdentity(EvalCaseDetailRow row) {
-        Optional<CaseIdentityRow> found =
-                reader.findCaseIdentity(row.datasetVersion(), row.scenarioId());
-        if (found.isEmpty()) {
-            return new ScenarioIdentity(row.scenarioId(), row.datasetVersion(), false,
-                    null, null, null, null, null, null, null, null);
+        List<CaseIdentityRow> matches =
+                reader.findCaseIdentityMatches(row.datasetVersion(), row.scenarioId());
+        if (matches.size() == 1) {
+            CaseIdentityRow id = matches.get(0);
+            return new ScenarioIdentity(row.scenarioId(), row.datasetVersion(), true,
+                    id.caseKey(), id.scenarioFamilyId(), id.contentDigest(), id.partitionClass(),
+                    id.datasetName(), id.sourceClass(), id.validFrom(), id.validTo(),
+                    null, List.of());
         }
-        CaseIdentityRow id = found.get();
-        return new ScenarioIdentity(row.scenarioId(), row.datasetVersion(), true,
-                id.caseKey(), id.scenarioFamilyId(), id.contentDigest(), id.partitionClass(),
-                id.datasetName(), id.sourceClass(), id.validFrom(), id.validTo());
+        if (matches.size() >= 2) {
+            List<String> datasets = matches.stream()
+                    .map(CaseIdentityRow::datasetName).distinct().toList();
+            return new ScenarioIdentity(row.scenarioId(), row.datasetVersion(), false,
+                    null, null, null, null, null, null, null, null,
+                    "AMBIGUOUS", datasets);
+        }
+        return new ScenarioIdentity(row.scenarioId(), row.datasetVersion(), false,
+                null, null, null, null, null, null, null, null,
+                "NO_MATCH_OR_HOLDOUT", List.of());
     }
 
     /** 报告人读摘要（v2 包形状校验失败/非 v2 → null 如实；claims 面在 evidenceBlock） */
@@ -1006,14 +1186,62 @@ public class EvalQueryService {
 
     private EvalRunListItem toListItem(EvalRunRow row,
             List<EvalQueryReader.UsageCallRow> usageRows,
-            List<EvalQueryReader.ScenarioRoundStatRow> statRows) {
+            List<EvalQueryReader.ScenarioRoundStatRow> statRows,
+            List<EvalQueryReader.ModelCallFailureRow> failureRows) {
+        // BA-176：失败账聚合——总数 + 主因码（计数最高；并列取码序小者，确定性）
+        long failedTotal = 0;
+        String dominantCode = null;
+        long dominantCount = -1;
+        for (EvalQueryReader.ModelCallFailureRow f : failureRows) {
+            failedTotal += f.count();
+            if (f.count() > dominantCount
+                    || (f.count() == dominantCount && dominantCode != null
+                            && f.errorCode().compareTo(dominantCode) < 0)) {
+                dominantCount = f.count();
+                dominantCode = f.errorCode();
+            }
+        }
         return new EvalRunListItem(row.runId(), row.datasetVersion(), row.registryDigest(),
                 row.model(), row.promptVersion(), row.configDigest(), row.state(),
                 row.startedAt(), row.finishedAt(), row.coverage(), row.conditionalAccuracy(),
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
+                precision(row), recall(row), f1(row),
                 row.displayName(), row.mode(), row.caseCount(), row.totalScenarios(),
                 qualityFacet(row), stabilityFacet(statRows),
-                facets(row, RunUsageRollup.of(usageRows)));
+                facets(row, RunUsageRollup.of(usageRows)),
+                failedTotal, failedTotal > 0 ? dominantCode : null);
+    }
+
+    // ------------------------------------------------------------------ F1 派生（读面现算，零迁移）
+
+    /** 症状级 precision = tp/(tp+fp)；计数未回填或分母 0 → null（诚实，不硬塞 0） */
+    private static Double precision(EvalRunRow row) {
+        if (row.tp() == null || row.fp() == null) {
+            return null;
+        }
+        return divideOrNull(row.tp(), row.tp() + row.fp());
+    }
+
+    /** 症状级 recall = tp/(tp+fn)；同 precision 空值纪律 */
+    private static Double recall(EvalRunRow row) {
+        if (row.tp() == null || row.fn() == null) {
+            return null;
+        }
+        return divideOrNull(row.tp(), row.tp() + row.fn());
+    }
+
+    /** f1 = 2PR/(P+R)；任一分量 null 或 P+R=0（tp=0 导致 P=R=0）→ null */
+    private static Double f1(EvalRunRow row) {
+        Double p = precision(row);
+        Double r = recall(row);
+        if (p == null || r == null || p + r == 0.0) {
+            return null;
+        }
+        return 2 * p * r / (p + r);
+    }
+
+    private static Double divideOrNull(long numerator, long denominator) {
+        return denominator == 0 ? null : (double) numerator / denominator;
     }
 
     /** EV-09：场景轮次聚合行 → 稳定性三件套（无案例落档 → UNKNOWN；分母全用
