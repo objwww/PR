@@ -3,6 +3,7 @@ package com.objwww.pr.control.eval.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.EvalRunMetadata;
+import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.model.EvalLaunchPlan;
 import com.objwww.pr.control.eval.domain.model.EvalRunCommand;
@@ -42,6 +43,8 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
     private final EvalBatchRunner.EvalClock clock;
     private final String workerId;
     private final EvalLaunchGate gate;
+    /** EV-07 终态自动落档钩子（可空 = 不装配自动落档，测试对照面） */
+    private final EvalComparisonAutoRecorder autoRecorder;
 
     public EvalLaunchExecutor(GoldenScenarioRegistry registry,
                               Map<String, ScenarioDriver> driversByRole,
@@ -57,7 +60,8 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
                               int defaultRounds,
                               EvalBatchRunner.EvalClock clock,
                               String workerId,
-                              EvalLaunchGate gate) {
+                              EvalLaunchGate gate,
+                              EvalComparisonAutoRecorder autoRecorder) {
         this.registry = Objects.requireNonNull(registry);
         this.driversByRole = Objects.requireNonNull(driversByRole);
         this.alertProbe = Objects.requireNonNull(alertProbe);
@@ -73,6 +77,7 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
         this.clock = Objects.requireNonNull(clock);
         this.workerId = Objects.requireNonNull(workerId);
         this.gate = Objects.requireNonNull(gate);
+        this.autoRecorder = autoRecorder;
     }
 
     /**
@@ -80,7 +85,9 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
      * 领取后先过能力闸门复验（PAGE-03：服务层校验不可信作唯一防线；不支持的
      * 模式/配置在此拒绝，零驱动装配、零注入端口触达）。P6-G8：panel 非空时执行
      * 注册表先过滤（forPanel——SMOKE 只跑 panel=true 子集），registryDigest 承自
-     * 过滤后注册表，可复现元数据如实反映执行子集。
+     * 过滤后注册表，可复现元数据如实反映执行子集。FUP-03：launch_plan 快照注入
+     * caseKeys（panel 展开后的有效场景键集）——EV-07 对比门的冻结计划分母由此
+     * 获得注入场景真分母（数据集案例键集不含 YAML 场景）。
      */
     public EvalBatchRunner.BatchResult execute(EvalRunCommand command) {
         EvalLaunchPlan plan = parsePlan(command.payloadJson());
@@ -88,14 +95,36 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
         EvalRunMetadata overlaid = overlay(baseMetadata, plan);
         com.objwww.pr.control.eval.domain.GoldenScenarioRegistry effective =
                 registry.forPanel(plan.panel());
+        java.util.List<String> caseKeys = effective.scenarios().stream()
+                .map(GoldenCase::scenarioId).sorted().toList();
         EvalBatchRunner.RunLifecycle lifecycle = new EvalBatchRunner.RunLifecycle(
-                plan.mode(), plan.displayName(), command.payloadJson(), workerId,
-                phaseSink, commands::cancelAccepted);
+                plan.mode(), plan.displayName(),
+                withCaseKeys(command.payloadJson(), caseKeys), workerId,
+                phaseSink, commands::cancelAccepted,
+                autoRecorder == null ? null : autoRecorder::onTerminal);
         return new EvalBatchRunner(effective, driversByRole, alertProbe, incidentProbe,
                 rcaRunResolver, scorer, evalRuns, reportGenerator, overlaid,
                 plan.roundsPerScenario() == null ? defaultRounds : plan.roundsPerScenario(),
                 clock)
                 .runBatch(command.evalRunId(), lifecycle);
+    }
+
+    /**
+     * FUP-03：launch_plan 快照注入 caseKeys（有序去重场景键集）。payload 解析失败
+     * 原样返回（快照增强失败不阻断跑批——门降级回数据集键集，行为与旧版一致）。
+     */
+    static String withCaseKeys(String payloadJson, java.util.List<String> caseKeys) {
+        try {
+            JsonNode node = JSON.readTree(payloadJson);
+            if (node instanceof com.fasterxml.jackson.databind.node.ObjectNode obj) {
+                obj.set("caseKeys", JSON.valueToTree(caseKeys.stream().distinct().sorted()
+                        .toList()));
+                return JSON.writeValueAsString(obj);
+            }
+            return payloadJson;
+        } catch (Exception e) {
+            return payloadJson;
+        }
     }
 
     /** 命令 payload → 计划（worker 侧复验：落库前的服务层校验不可信作唯一防线） */

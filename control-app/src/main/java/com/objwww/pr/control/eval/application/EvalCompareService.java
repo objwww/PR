@@ -56,6 +56,10 @@ public class EvalCompareService {
     /** unpaired 列表输出上限（计数仍按全集如实） */
     static final int MAX_UNPAIRED_LISTED = 500;
 
+    /** FUP-03 快照键集解析（静态只读面；与注入 mapper 同为标准 Jackson 配置） */
+    private static final com.fasterxml.jackson.databind.ObjectMapper KEYS_JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     private static final Set<String> GROUPS = Set.of("ALL", EvalCompare.GROUP_IMPROVED,
             EvalCompare.GROUP_REGRESSED, EvalCompare.GROUP_FLAT);
 
@@ -388,10 +392,14 @@ public class EvalCompareService {
     private static final int DEFAULT_ROUNDS_PER_SCENARIO = 2;
 
     /**
-     * FUP-02 冻结计划装配：双侧 launch_plan 快照均在且数据集案例键集非空 →
+     * FUP-02 冻结计划装配：双侧 launch_plan 快照均在且计划键集非空 →
      * LAUNCH_PLAN 分母（键集 × 各侧轮次）；任一缺失（旧 CLI 跑批 launch_plan 为
-     * NULL、快照解析失败、版本无可见案例）→ null 如实降级 UNAVAILABLE（不猜轮次、
+     * NULL、快照解析失败、键集不可用）→ null 如实降级 UNAVAILABLE（不猜轮次、
      * 不拿双侧并集冒充计划完整）。
+     *
+     * <p>FUP-03 键集来源优先级：双侧快照 caseKeys 全等 → 用冻结有效键集（panel
+     * 展开后的真分母——数据集案例键集不含 YAML 场景）；任一侧缺席/不全等 →
+     * 回退数据集案例键集（旧行为如实保留）。
      */
     private EvalCompare.FrozenPlan frozenPlan(CompareRunMeta baseline,
                                               CompareRunMeta candidate) {
@@ -400,12 +408,44 @@ public class EvalCompareService {
         if (baselineRounds == null || candidateRounds == null) {
             return null;
         }
-        // 可比性已过 = 双侧 datasetVersion 全等，任取一侧
-        List<String> keys = reader.listPlanCaseKeys(baseline.datasetVersion());
-        if (keys.isEmpty()) {
+        List<String> keys = snapshotCaseKeys(baseline.launchPlanJson(),
+                candidate.launchPlanJson());
+        if (keys == null) {
+            keys = reader.listPlanCaseKeys(baseline.datasetVersion());
+        }
+        if (keys == null || keys.isEmpty()) {
             return null;
         }
         return new EvalCompare.FrozenPlan(Set.copyOf(keys), baselineRounds, candidateRounds);
+    }
+
+    /** FUP-03：双侧快照 caseKeys 全等 → 冻结键集；任一侧缺席/解析失败/不全等 → null */
+    static List<String> snapshotCaseKeys(String baselineJson, String candidateJson) {
+        List<String> baseline = caseKeysOf(baselineJson);
+        List<String> candidate = caseKeysOf(candidateJson);
+        if (baseline == null || candidate == null || baseline.isEmpty()
+                || candidate.isEmpty() || !baseline.equals(candidate)) {
+            return null;
+        }
+        return baseline;
+    }
+
+    /** launch_plan 快照 → caseKeys（数组原序；无键/非数组/空 → null） */
+    private static List<String> caseKeysOf(String launchPlanJson) {
+        if (launchPlanJson == null) {
+            return null;
+        }
+        try {
+            JsonNode keys = KEYS_JSON.readTree(launchPlanJson).path("caseKeys");
+            if (!keys.isArray() || keys.isEmpty()) {
+                return null;
+            }
+            List<String> out = new java.util.ArrayList<>();
+            keys.forEach(k -> out.add(k.asText()));
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** launch_plan 快照 → roundsPerScenario（空值 = worker 默认 2，EvalLaunchPlan 契约
