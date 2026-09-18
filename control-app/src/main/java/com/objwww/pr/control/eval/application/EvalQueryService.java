@@ -537,6 +537,31 @@ public class EvalQueryService {
     public record JudgeQuestionStat(String id, long yes, long assessed) {
     }
 
+    // ------------------------------------------------------------------ M-d T5 六要素汇总
+
+    /**
+     * M-d T5 run 级六要素汇总出数面：assessed=有检出行案例数（V152 缺席=无行=未评
+     * 如实，不冒充）；rate=complete 占比（无检出行 → null 如实）；high/medium/low=
+     * 把握短语档位分布。run 未知 → empty（controller 404 面）。
+     */
+    public record SixPartsSummaryResponse(UUID runId, long assessed, long complete, Double rate,
+                                          long high, long medium, long low, Instant asOf) {
+    }
+
+    public Optional<SixPartsSummaryResponse> sixPartsSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.SixPartsRow> rows = reader.listSixParts(runId);
+        long complete = rows.stream().filter(EvalQueryReader.SixPartsRow::complete).count();
+        Double rate = rows.isEmpty() ? null : (double) complete / rows.size();
+        return Optional.of(new SixPartsSummaryResponse(runId, rows.size(), complete, rate,
+                rows.stream().filter(r -> "HIGH".equals(r.confidenceLevel())).count(),
+                rows.stream().filter(r -> "MEDIUM".equals(r.confidenceLevel())).count(),
+                rows.stream().filter(r -> "LOW".equals(r.confidenceLevel())).count(),
+                Instant.now()));
+    }
+
     /**
      * P7 run 级 judge 汇总（第三判定式出数面）：assessed=有裁决行案例数（judge 未
      * 启用 → 0 如实缺席）；perQuestion=逐题"是"计数（rubric v1 三题二元）；errors=

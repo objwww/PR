@@ -394,6 +394,20 @@ public interface EvalQueryReader {
     /** run 全部 judge 裁决行（单查询，禁 N+1）；无 → 空表 */
     List<CaseJudgeRow> listJudge(UUID evalRunId);
 
+    // ------------------------------------------------------------------ M-d T5 六要素投影
+
+    /** 六要素检出行（M-d T5/V152）：complete=六要素齐；confidenceLevel 可空=把握短语
+     *  未检出（如实不猜） */
+    record SixPartsRow(String scenarioId, int roundNo, boolean complete,
+                       String confidenceLevel) {
+    }
+
+    /** run 全部六要素检出行（单查询禁 N+1）；无检出 → 空表（缺席=未评如实）。
+     *  default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<SixPartsRow> listSixParts(UUID evalRunId) {
+        return List.of();
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 
     /** eval_phase_event 投影行（V80 全列减去 created_at；detail 为 jsonb ::text 原文

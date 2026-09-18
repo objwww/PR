@@ -1245,11 +1245,54 @@ class EvalQueryServiceTest {
         assertThat(service.safetySummary(UUID.randomUUID())).isEmpty();
     }
 
+    // ------------------------------------------------------------------ M-d T5 六要素汇总
+
+    @Test
+    void sixPartsSummaryAggregatesRateAndLevelCounts() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.sixPartsRows = List.of(
+                new EvalQueryReader.SixPartsRow("S3", 1, true, "HIGH"),
+                new EvalQueryReader.SixPartsRow("S3", 2, true, "MEDIUM"),
+                new EvalQueryReader.SixPartsRow("S4", 1, false, null));
+
+        EvalQueryService.SixPartsSummaryResponse out =
+                service.sixPartsSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isEqualTo(3);
+        assertThat(out.complete()).isEqualTo(2);
+        assertThat(out.rate()).isEqualTo(2.0 / 3);
+        assertThat(out.high()).isEqualTo(1);
+        assertThat(out.medium()).isEqualTo(1);
+        assertThat(out.low()).isZero();
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void sixPartsSummaryWithNoRowsYieldsNullRateHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.sixPartsRows = List.of();
+
+        EvalQueryService.SixPartsSummaryResponse out =
+                service.sixPartsSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isZero();
+        assertThat(out.complete()).isZero();
+        assertThat(out.rate()).isNull();
+    }
+
+    @Test
+    void sixPartsSummaryUnknownRunIsEmpty() {
+        assertThat(service.sixPartsSummary(UUID.randomUUID())).isEmpty();
+    }
+
     private static final class FakeReader implements EvalQueryReader {
         EvalRunPage runPage = new EvalRunPage(List.of(), false);
         EvalRunRow run;
         EvalCasePage casePage = new EvalCasePage(List.of(), false);
         List<EvalQueryReader.CaseSafetyRow> safetyRows = List.of();
+        List<EvalQueryReader.SixPartsRow> sixPartsRows = List.of();
         EvalQueryReader.LiveMetricRow liveMetrics;
         List<DatasetRow> datasets = List.of();
         List<PartitionCountRow> partitionCounts = List.of();
@@ -1288,6 +1331,11 @@ class EvalQueryServiceTest {
         @Override
         public Optional<EvalRunRow> findRun(UUID runId) {
             return Optional.ofNullable(run);
+        }
+
+        @Override
+        public List<EvalQueryReader.SixPartsRow> listSixParts(UUID evalRunId) {
+            return sixPartsRows;
         }
 
         @Override

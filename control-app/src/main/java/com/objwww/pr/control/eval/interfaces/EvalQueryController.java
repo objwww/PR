@@ -114,6 +114,19 @@ public class EvalQueryController {
                         .body(Map.of("error", "eval run 不存在")));
     }
 
+    /** M-d T5 六要素汇总：conclusion_six_parts 出数面（未评 run → assessed=0 如实缺席） */
+    @GetMapping("/runs/{runId}/six-parts")
+    public ResponseEntity<?> sixParts(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.sixPartsSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /**
      * PAGE-10：run 行未落时前探 LAUNCH 命令——已受理（202 到 worker 领取落库之间的
      * 等待窗口）返回 200 + acceptedOnly 投影（含命令状态），真正未知 id 才 404。

@@ -769,6 +769,27 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    // ------------------------------------------------------------------ M-d T5 六要素投影
+
+    /** run 全部六要素检出行（V152 eval_case_six_parts；单查询禁 N+1；
+     *  无检出 → 空表如实缺席） */
+    @Override
+    public List<SixPartsRow> listSixParts(UUID evalRunId) {
+        return jdbc.sql("""
+                        select scenario_id, round_no, complete, confidence_level
+                          from eval_case_six_parts
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> new SixPartsRow(
+                        rs.getString("scenario_id"),
+                        rs.getInt("round_no"),
+                        rs.getBoolean("complete"),
+                        rs.getString("confidence_level")))
+                .list();
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；
