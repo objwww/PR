@@ -54,6 +54,7 @@ public class SingleCaseScorer {
     private final com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge;
     private final com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink;
     private final EvidenceRepository evidence;
+    private final com.objwww.pr.control.eval.domain.repository.EvalCaseSixPartsSink sixPartsSink;
     private final FinalReportSelector selector = new FinalReportSelector();
 
     public SingleCaseScorer(RcaRunRepository runs,
@@ -98,6 +99,22 @@ public class SingleCaseScorer {
                             com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
                             com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink,
                             EvidenceRepository evidence) {
+        this(runs, reports, investigations, toolCalls, evaluator, safetySink, judge,
+                judgeSink, evidence, null);
+    }
+
+    /** M-d T5 全形：六要素检出版库面（V152 eval_case_six_parts；null = 不落，
+     *  旧装配/测试兼容） */
+    public SingleCaseScorer(RcaRunRepository runs,
+                            RcaReportRepository reports,
+                            InvestigationResultRepository investigations,
+                            RcaToolCallRepository toolCalls,
+                            ScenarioEvaluator evaluator,
+                            EvalCaseSafetySink safetySink,
+                            com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
+                            com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink,
+                            EvidenceRepository evidence,
+                            com.objwww.pr.control.eval.domain.repository.EvalCaseSixPartsSink sixPartsSink) {
         this.runs = Objects.requireNonNull(runs);
         this.reports = Objects.requireNonNull(reports);
         this.investigations = Objects.requireNonNull(investigations);
@@ -107,6 +124,7 @@ public class SingleCaseScorer {
         this.judge = judge;
         this.judgeSink = judgeSink;
         this.evidence = evidence;
+        this.sixPartsSink = sixPartsSink;
     }
 
     public Optional<EvalCaseResult> score(UUID evalRunId, GoldenCase golden,
@@ -210,7 +228,30 @@ public class SingleCaseScorer {
                 (int) totalCalls, (int) uniqueCalls, golden.difficulty());
         recordSafety(evalRunId, golden, roundNo, report.attemptId());
         judgeReport(evalRunId, golden, roundNo, report);
+        recordSixParts(evalRunId, golden, roundNo, pkg, report);
         return Optional.of(result);
+    }
+
+    /**
+     * M-d T5 六要素检出落库（V152 eval_case_six_parts）：结构面五要素
+     * （EvidencePackageV2 冻结契约）+ 文本面把握短语（primary v9 写作要求增量锚）。
+     * fail-soft 同 recordSafety——落库失败不回滚评分主链（insert-only，缺席=未评如实）。
+     */
+    private void recordSixParts(UUID evalRunId, GoldenCase golden, int roundNo,
+                                EvidencePackageV2 pkg, RcaReport report) {
+        if (sixPartsSink == null) {
+            return;
+        }
+        try {
+            var r = com.objwww.pr.control.eval.domain.SixElementsChecker
+                    .check(pkg, report.rawText());
+            sixPartsSink.insert(evalRunId, golden.scenarioId(), roundNo,
+                    r.whatHappened(), r.rootCause(), r.evidenceBasis(),
+                    r.impact(), r.confidence(), r.recommendation(),
+                    r.confidenceLevel().orElse(null), r.complete());
+        } catch (Exception e) {
+            // 六要素落档失败不回滚评分主链（缺席=未评如实，不冒充）
+        }
     }
 
     /**
