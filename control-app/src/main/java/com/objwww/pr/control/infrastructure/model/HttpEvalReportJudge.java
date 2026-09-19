@@ -28,13 +28,18 @@ import java.util.Optional;
  */
 public class HttpEvalReportJudge implements EvalReportJudge {
 
-    public static final String RUBRIC_VERSION = "judge-rubric-v1";
+    public static final String RUBRIC_VERSION = "judge-rubric-v2";
 
-    /** rubric v1 题面（二元；版本冻结——改题面必须升版本号，校准一致率才有锚） */
+    /** rubric v2 题面（二元；v1 三题保留原文 + M-d 新增 Q4 六要素完整度——版本冻结
+     *  纪律：改题面必须升版本号，校准一致率才有锚。草案与应用路径见
+     *  deploy/alert/prompts/draft-judge-rubric-v2.md） */
     private static final List<String> QUESTIONS = List.of(
             "Q1 结论明确性：报告是否明确陈述了结论，或在无法定因时明确说明了原因？（是/否）",
             "Q2 自洽性：报告的结论与其正文/证据陈述是否自洽、无互相矛盾？（是/否）",
-            "Q3 可操作性：报告是否给出下一步排查方向或修复建议？（是/否）");
+            "Q3 可操作性：报告是否给出下一步排查方向或修复建议？（是/否）",
+            "Q4 六要素完整度：报告是否交代全六件事——发生了什么、根因是什么、凭什么判断、"
+                    + "影响多大、有多大把握、建议怎么办？缺任何一件=否；无法定因的报告，"
+                    + "根因位如实写「无法定因，缺什么证据」也算交代。（是/否）");
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -82,10 +87,12 @@ public class HttpEvalReportJudge implements EvalReportJudge {
      *  content 空串（195 实测 63/63 全灭根因），2048 对三题 JSON 有余；空串返回由
      *  调用方决定重试面） */
     private String callModel(String reportText, int maxTokens) throws Exception {
-        String system = "你是告警根因报告的评测裁判。只依据给定的报告原文回答三道是否题，"
-                + "不引入报告之外的知识。只输出 JSON："
+        String system = "你是告警根因报告的评测裁判。只依据给定的报告原文判四道是否题："
+                + "不引入报告之外的知识，不猜测报告没写的内容，逐题独立判断——一题过不了"
+                + "就是过不了，不因其他题做得好而放水。只输出 JSON："
                 + "{\"answers\":[{\"id\":\"Q1\",\"yes\":true|false},"
-                + "{\"id\":\"Q2\",\"yes\":true|false},{\"id\":\"Q3\",\"yes\":true|false}]}";
+                + "{\"id\":\"Q2\",\"yes\":true|false},{\"id\":\"Q3\",\"yes\":true|false},"
+                + "{\"id\":\"Q4\",\"yes\":true|false}]}";
         StringBuilder user = new StringBuilder("报告原文：\n").append(reportText)
                 .append("\n\n题目：\n");
         for (String q : QUESTIONS) {

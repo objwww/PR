@@ -1,9 +1,10 @@
 # judge rubric v2 草案（M-d T6 草案半场；2026-09-19）
 
-状态：**草案**——未投产。应用路径：HttpEvalReportJudge 的 QUESTIONS 与 system 文案
-替换为本文件内容，RUBRIC_VERSION 升 "judge-rubric-v2"；该 Java 文件当前属主会话
-在途改动面，等可写窗口再动。改题面必须升版本号（rubric 版本冻结纪律，校准一致率才有锚）。
-跑批验证门：DeepSeek 充值后随 judge 重跑批一起校准（欠费期间只冻结口径）。
+状态：**✅ 已应用（2026-09-19）**——Q4 六要素完整度题+人话 system 落
+`HttpEvalReportJudge`（窗口转净后应用），RUBRIC_VERSION 升 "judge-rubric-v2"，
+测试 73/73 绿（EvalReportJudgeTest 四题面/题序/题数/非布尔/围栏全过）。
+跑批校准门：DeepSeek 充值后随 judge 重跑批回填一致率（欠费期间不冒充校准结论）。
+原草案内容存档如下。
 
 ---
 

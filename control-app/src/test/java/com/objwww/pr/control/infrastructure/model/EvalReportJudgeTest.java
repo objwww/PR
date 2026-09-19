@@ -43,18 +43,18 @@ class EvalReportJudgeTest {
     @DisplayName("严格解析：全是=PASS 全题；含否=passed 计数；题序错位拒绝")
     void parseStrictAnswers() throws Exception {
         EvalReportJudge.JudgeOutcome allYes = parse(
-                "{\"answers\":[{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true}]}");
-        assertThat(allYes.passed()).isEqualTo(3);
-        assertThat(allYes.total()).isEqualTo(3);
-        assertThat(allYes.rubricVersion()).isEqualTo("judge-rubric-v1");
+                "{\"answers\":[{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true},{\"id\":\"Q4\",\"yes\":true}]}");
+        assertThat(allYes.passed()).isEqualTo(4);
+        assertThat(allYes.total()).isEqualTo(4);
+        assertThat(allYes.rubricVersion()).isEqualTo("judge-rubric-v2");
         assertThat(allYes.model()).isEqualTo("qwen3-max");
 
         EvalReportJudge.JudgeOutcome partial = parse(
-                "{\"answers\":[{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q2\",\"yes\":false},{\"id\":\"Q3\",\"yes\":true}]}");
-        assertThat(partial.passed()).isEqualTo(2);
+                "{\"answers\":[{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q2\",\"yes\":false},{\"id\":\"Q3\",\"yes\":true},{\"id\":\"Q4\",\"yes\":true}]}");
+        assertThat(partial.passed()).isEqualTo(3);
 
         assertThatThrownBy(() -> parse(
-                "{\"answers\":[{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true}]}"))
+                "{\"answers\":[{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q1\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true},{\"id\":\"Q4\",\"yes\":true}]}"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("题序错位");
 
@@ -64,7 +64,7 @@ class EvalReportJudgeTest {
                 .hasMessageContaining("题数不符");
 
         assertThatThrownBy(() -> parse(
-                "{\"answers\":[{\"id\":\"Q1\",\"yes\":\"是\"},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true}]}"))
+                "{\"answers\":[{\"id\":\"Q1\",\"yes\":\"是\"},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":true},{\"id\":\"Q4\",\"yes\":true}]}"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("非布尔");
 
@@ -77,7 +77,7 @@ class EvalReportJudgeTest {
     @DisplayName("围栏：带前后噪声的 JSON 仍可解析（模型输出宽容裁剪面）")
     void parsesWithSurroundingNoise() throws Exception {
         EvalReportJudge.JudgeOutcome outcome = parse(
-                "好的，以下是结果：{\"answers\":[{\"id\":\"Q1\",\"yes\":false},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":false}]} 完毕");
+                "好的，以下是结果：{\"answers\":[{\"id\":\"Q1\",\"yes\":false},{\"id\":\"Q2\",\"yes\":true},{\"id\":\"Q3\",\"yes\":false},{\"id\":\"Q4\",\"yes\":false}]} 完毕");
         assertThat(outcome.passed()).isEqualTo(1);
     }
 }
