@@ -3,6 +3,7 @@ package com.objwww.pr.control.eval.application;
 import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.shared.Digest;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
@@ -30,7 +31,12 @@ public final class PrometheusAlertProbe implements AlertProbe {
     public PrometheusAlertProbe(String baseUrl, GoldenScenarioRegistry registry,
                                 Sleeper sleeper) {
         this.baseUrl = Objects.requireNonNull(baseUrl);
-        this.rest = RestClient.builder().baseUrl(baseUrl).build();
+        // FUP-04：显式超时——无超时 RestClient 在 Prometheus/chaos-admin 慢响应时
+        // 无限挂起（195 实测 deactivate SCORING 卡 51 分钟），批线程无声阻塞
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(30_000);
+        this.rest = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
         this.registry = Objects.requireNonNull(registry);
         this.sleeper = Objects.requireNonNull(sleeper);
     }
