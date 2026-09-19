@@ -100,6 +100,13 @@
           </div>
         </div>
 
+        <!-- BA-190 W4：FAILED 批终态卡因中文解读（worker_lost 族经 zh.js 字典；
+             cancelled_by_operator/batch_error/零注入全灭等后端已写可读文本，原样展示） -->
+        <el-alert
+          v-if="run.state === 'FAILED' && run.terminalReason"
+          class="terminal-reason" type="error" :closable="false" show-icon
+          :title="evalTerminalReasonZh(run.terminalReason)" />
+
         <!-- 验收口径说明：批次构成 + 每个指标怎么算的，让人能复核数字 -->
         <el-collapse class="caliber">
           <el-collapse-item name="caliber">
@@ -473,15 +480,13 @@
                 <span v-else class="muted">未标注</span>
               </template>
             </el-table-column>
-            <el-table-column label="三维评分（P3）" min-width="200">
+            <el-table-column label="根因定位" min-width="200">
               <template #default="{ row }">
                 <div class="cell-main">
-                  定因 {{ fmtDim(row.causeComponentHit, row.causeFaultHit, row.causeReasonHit) }}
+                  根因匹配 {{ fmtDim(row.causeComponentHit, row.causeFaultHit, row.causeReasonHit) }}
                 </div>
                 <div class="cell-sub">
-                  路径 {{ row.checkpointsTotal == null ? '未评' : `${row.checkpointsCovered}/${row.checkpointsTotal}` }}
-                  · 结论 {{ fmtGrounded(row.conclusionGrounded) }}
-                  <template v-if="row.toolCallsTotal != null"> · 工具 {{ row.toolCallsTotal }}（重 {{ row.toolCallsTotal - row.toolCallsUnique }}）</template>
+                  <template v-if="row.checkpointsTotal != null">证据覆盖 {{ row.checkpointsCovered }}/{{ row.checkpointsTotal }} · </template>结论有据 {{ fmtGrounded(row.conclusionGrounded) }}<template v-if="row.toolCallsTotal != null && row.toolCallsTotal > 0"> · 调查 {{ row.toolCallsTotal }} 步</template>
                 </div>
               </template>
             </el-table-column>
@@ -805,6 +810,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import { scenarioZh } from '../dict/scenarioZh'
 import { mdSixPartsLevel, mdZh } from '../dict/mdZh'
+import { evalTerminalReasonZh } from '../dict/zh.js'
 import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtNum, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -1407,6 +1413,7 @@ onUnmounted(stopAcceptedPoll)
 .head-versions .sep { margin: 0 8px; color: var(--line-strong); }
 
 .quality-strip { display: flex; gap: 24px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
+.terminal-reason { margin-top: 10px; }
 .caliber { margin-top: 10px; border-top: 1px solid var(--line); }
 .caliber-title { font-size: var(--fs-aux); color: var(--ink-2); }
 .caliber-body { font-size: var(--fs-aux); color: var(--ink); line-height: 1.8; }
