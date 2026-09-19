@@ -212,13 +212,15 @@ public class EvalRunnerConfig {
         // fail-closed 不落行（HttpEvalReportJudge 内部 empty），缺席=未评如实；
         // 证据回退：NATIVE 链过程计数回退 rca_evidence 面（不恒 0）；
         // M-d T5：六要素检出版库面（eval_case_six_parts，V152）——缺席=未评如实
+        // NOTE: EvidenceRepository 需 TransactionOperations（事务管理器），eval profile
+        // 暂无——evidence 传 null=工具计数回退不触发，工具调用恒 0（待接线）
         return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSafetySink(jdbc),
                 judge,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseJudgeSink(jdbc),
-                evidence,
+                null,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSixPartsSink(jdbc));
     }
@@ -304,14 +306,17 @@ public class EvalRunnerConfig {
 
     /** DR-05 生产接线（DR-A 批）：四参构造——激活即落恢复台账（V95），台账 bean
      *  与 sweeper 收口共用同一实例（写账与收口同库同表）；两参无台账过渡构造
-     *  仅留测试面对照 */
+     *  仅留测试面对照。BA-185：五参接入 ChangeEventLedger——change_ledger 块
+     *  场景（S27）激活即落 change_event 发布行 */
     @Bean
     public FlagdScenarioDriver flagdScenarioDriver(
             FlagdScenarioDriver.FlagAdminClient flagAdminClient, AlertProbe alertProbe,
             com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger
-                    flagdRestoreLedger) {
+                    flagdRestoreLedger,
+            com.objwww.pr.control.drill.domain.repository.ChangeEventLedger
+                    changeEventLedger) {
         return new FlagdScenarioDriver(flagAdminClient, alertProbe, flagdRestoreLedger,
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(), changeEventLedger);
     }
 
     @Bean
@@ -367,14 +372,16 @@ public class EvalRunnerConfig {
                                            EvalRunRepository evalRuns,
                                            BaselineReportGenerator generator,
                                            EvalRunMetadata metadata,
-                                           @Value("${app.eval.rounds:2}") int rounds) {
+                                           @Value("${app.eval.rounds:2}") int rounds,
+                                           @Value("${app.alert.eval.run-tag:}")
+                                           String runTag) {
         return new EvalBatchRunner(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
                         "InfrastructureScenarioDriver", infra,
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator, metadata,
-                rounds, systemClock());
+                rounds, systemClock(), runTag);
     }
 
     // ---------------- EV-04 持久化命令 + worker（eval_run_command 写面 = eval_app 列级授权） ----------------
@@ -428,7 +435,8 @@ public class EvalRunnerConfig {
             EvalLaunchGate gate,
             EvalComparisonAutoRecorder evalComparisonAutoRecorder,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
-            @Value("${app.eval.rounds:2}") int defaultRounds) {
+            @Value("${app.eval.rounds:2}") int defaultRounds,
+            @Value("${app.alert.eval.run-tag:}") String runTag) {
         return new EvalLaunchExecutor(registry, Map.of(
                         "FlagdScenarioDriver", flagd,
                         "ArenaChaosScenarioDriver", arena,
@@ -436,7 +444,7 @@ public class EvalRunnerConfig {
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
                 phaseSink, commands, metadata, defaultRounds, systemClock(), workerId, gate,
-                evalComparisonAutoRecorder);
+                evalComparisonAutoRecorder, runTag);
     }
 
     // ---------------- EV-07 终态自动落档（eval_comparison；eval_app 授权面 V149） ----------------
@@ -616,6 +624,16 @@ public class EvalRunnerConfig {
             flagdRestoreLedger(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence
                 .PostgresFlagdRestoreLedger(jdbc);
+    }
+
+    /** BA-185 变更事实台账（V40 change_event 写入面）：S27 变更回归场景注入即
+     *  发布——发布事实经 control_app insert 面如实落账（append-only，恢复不写
+     *  反向行）；无 change_ledger 块的场景 noop 零行为变化 */
+    @Bean
+    public com.objwww.pr.control.drill.domain.repository.ChangeEventLedger
+            changeEventLedger(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresChangeEventLedger(jdbc);
     }
 
     /** DR-05 台账级截止清扫（每拍 + 启动对账超 deadline 仍 OPEN/UNKNOWN 的台账行；

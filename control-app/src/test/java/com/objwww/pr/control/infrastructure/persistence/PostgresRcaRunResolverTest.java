@@ -30,4 +30,19 @@ class PostgresRcaRunResolverTest {
     void negativeSkewClampedToZero() {
         assertThat(PostgresRcaRunResolver.sinceFor(ANCHOR, -30)).isEqualTo(ANCHOR);
     }
+
+    @Test
+    @DisplayName("BA-190 withRunTag：返回带新 tag 的拷贝（jdbc/sleeper/skew 共享，原实例不改写）")
+    void withRunTagReturnsCopyWithReplacedTag() {
+        PostgresRcaRunResolver original = new PostgresRcaRunResolver(
+                org.mockito.Mockito.mock(
+                        org.springframework.jdbc.core.simple.JdbcClient.class),
+                millis -> { }, "", 60);
+
+        PostgresRcaRunResolver copy = original.withRunTag("refde9e17");
+
+        assertThat(copy).isNotSameAs(original);
+        // 拷贝后的 scenario_map 匹配面按新 tag 派生（同式 = ArenaChaosScenarioDriver）
+        assertThat(copy.withRunTag("other")).isNotSameAs(copy);
+    }
 }

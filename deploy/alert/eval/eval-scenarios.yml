@@ -47,7 +47,16 @@
 #   七工具调用链验收（metrics/logs/change.query/change.diff/rca_history/runbook/
 #   restart 建议→R2 审批五表全链）；S26 为套件外 L4 高级场景（md_suite 20 条账不动）。
 #   跑批门同 v5（充值；approval 链观测 reader 随落地批接通）。
-registry_version: 6
+# v7（2026-09-19）= BA-185 审批链真实触发场景：S27 变更回归注册——flagd
+#   paymentFailure off→50% 即"支付配置发布"（注入即变更），发布事实由注入侧
+#   经 change_ledger 扩展块如实落 change_event（source=deployment/action=DEPLOY，
+#   control_app insert 面；195 实证 flagd 翻转自身零账本行、payment 服务零行）；
+#   调查路径=症状→日志→change.query 发现发布→change.diff 因果核对→变更回归定因
+#   →处置=service.rollback 走 R3 审批链（与 S26"变更归因=FP 诱导面"对称互证：
+#   本场景变更归因=TP）。期望三元组复用 S1（机制级命名，词表零新增、
+#   lexicon_version 2 不动，S26 复用 S16 先例）；S27 为套件外场景（md_suite 账
+#   不动、order 不动），drill-templates.yml 同步 v7。
+registry_version: 7
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
 lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 2)"
@@ -335,7 +344,7 @@ scenarios:
   # ---------------------------------------------------------------------------------
   - scenario_id: S16                        # [文档已定] v2 设计 §3.1
     difficulty: L2                        # P6-G8（业务对账型单根因-技术指标全绿）
-    panel: true                           # P6-GATE 战役批：5 簇 >= MIN_CLUSTERS（S3/S4/S5+S16/S17）
+    panel: false                          # P6-GATE v7：让位 F9 演练同族冲突（S16=F9 掉单）
     name: F9 掉单（支付成功订单未推进）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-掉单
@@ -444,7 +453,7 @@ scenarios:
   # ---------------------------------------------------------------------------------
   - scenario_id: S18
     difficulty: L2                        # P6-G8
-    panel: false
+    panel: true                           # P6-GATE v7：补位第 5 簇（F11 重复扣款）
     name: F11 重复扣款（支付层幂等失效）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-重复扣款
@@ -1261,6 +1270,65 @@ scenarios:
       hold_seconds: 600
       max_firing_wait_seconds: 300
       max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  - scenario_id: S27                        # BA-185 变更回归+审批回滚（registry v7）
+    difficulty: L3
+    panel: false
+    case_type: NORMAL                       # 套件外场景（同 S26，md_suite 账不动）
+    name: 变更回归-支付配置发布致扣款失败（处置=回滚该发布）
+    fault_source: AM0 flagd + 真实变更账本（注入即发布，账本同步落行）
+    scenario_type: 变更回归-审批处置链
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment（flagd paymentFailure 配置推送面）
+    injection:
+      flag: paymentFailure
+      variant: "50%"
+      baseline_variant: "off"
+      change_ledger:                        # BA-185：flag 翻转=真实配置发布——发布事实
+        service: payment                    # 必须如实落 change_event（source=deployment/
+        actor: release-bot:s27              # action=DEPLOY，control_app insert 面）；195 实证
+                                            # flagd 翻转自身零账本行，不落=假联动（查无此发布）
+    expected_root_cause:
+      component: payment
+      fault_type: BUSINESS_ERROR_RATE
+      reason_code: PAYMENT_CHARGE_FAILURE
+    expected_symptom_codes:
+      - checkout
+    expected_alerts:
+      - alertname: checkout
+        severity: page
+        basis: 同 S1（50% 档双窗超阈）
+        labels_frozen: {alertname: checkout, service: checkout, sloth_severity: page, sloth_slo: availability, owner: am0}
+    expected_evidence_checkpoints:          # 变更回归鉴别+审批触发锚（路径维）
+      - prometheus 烧损曲线确认支付失败率抬升（checkout 双窗，同 S1 面）
+      - logs 定位 payment 扣款失败错误模式
+      - change.query(service=payment) 发现窗内配置发布（DEPLOY 行，deploy_id 可辨）
+      - change.diff 核对发布内容与故障机理对得上（paymentFailure off→50% 推送，
+        config_digest 前后可辨——因果核对点，非相关性猜测）
+      - 结论点名变更回归（deploy_id 指名道姓）+ 处置=调用 service.rollback 铸审批
+        意图（意图→铸单→裁决→授权→dry_run 计划 五表行齐），非文字建议
+    expected_behavior_note: >-
+      变更归因=TP（本场景窗内发布即根因，与 S26"变更归因=FP 诱导面"对称互证）；
+      ROOT_CAUSE 三元组同 S1（机制级命名：扣款按比例失败；变更回归是归因结论，
+      写进 statement 并指名 deploy_id）；处置必须实际调用 service.rollback 走 R3
+      审批链——只在报告写"建议回滚"=未触发审批链（链路硬指标不达）；
+      六要素纪律全文生效
+    recovery:
+      criteria:
+        - flag 归位 off（DR-05 条件恢复：他者改写 CONFLICT 不覆盖、UNKNOWN 不盲写）
+        - checkout 全档 resolved、烧损率回落
+        - 账本面：DEPLOY 行属历史事实保留（append-only）；审批链 dry_run 未真实
+          执行回滚，账本不虚构 ROLLBACK 行
+      restore_probe: 同 S1（flag 归位 + resolved + 烧损回落）
+      note: 审批 300s 有效期——演练脚本须在窗口内完成批准（过期重铸不重放，沿
+            ApprovalSweepLoop 纪律）
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 1500
+      max_resolved_wait_seconds: 2100
       cleanup_timeout_seconds: 120
 
 # -------------------------------------------------------------------------------------

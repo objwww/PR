@@ -61,6 +61,16 @@ public class PostgresRcaRunResolver implements RcaRunResolver {
         void sleep(long millis) throws InterruptedException;
     }
 
+    /**
+     * BA-190 run-tag 空值兜底：返回带本批有效 run-tag 的拷贝（jdbc/sleeper/skew
+     * 共享，仅 tag 替换）——与 ArenaChaosScenarioDriver.withRunTag 同式，runner
+     * 批开始时两面共用同一有效 tag。
+     */
+    @Override
+    public PostgresRcaRunResolver withRunTag(String effectiveRunTag) {
+        return new PostgresRcaRunResolver(jdbc, sleeper, effectiveRunTag, skewSeconds);
+    }
+
     @Override
     public Optional<UUID> resolve(GoldenCase golden, int roundNo, Instant activatedAt,
                                   int timeoutSeconds) {
