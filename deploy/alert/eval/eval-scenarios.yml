@@ -335,7 +335,7 @@ scenarios:
   # ---------------------------------------------------------------------------------
   - scenario_id: S16                        # [文档已定] v2 设计 §3.1
     difficulty: L2                        # P6-G8（业务对账型单根因-技术指标全绿）
-    panel: false
+    panel: true                           # P6-GATE 战役批：5 簇 >= MIN_CLUSTERS（S3/S4/S5+S16/S17）
     name: F9 掉单（支付成功订单未推进）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-掉单
@@ -387,7 +387,7 @@ scenarios:
   # ---------------------------------------------------------------------------------
   - scenario_id: S17
     difficulty: L2                        # P6-G8（与 S5 鉴别对-有痕超时 vs 沉默悬挂）
-    panel: false
+    panel: true                           # P6-GATE 战役批：5 簇 >= MIN_CLUSTERS
     name: F10 支付悬挂（下单后支付未发起）
     fault_source: AM2 靶场
     scenario_type: 业务交易链路-支付悬挂
