@@ -14,9 +14,39 @@
         <el-alert v-if="pending.length" type="warning" :closable="false" class="hint"
           title="待审批项有有效期倒计时，过期自动作废；批准前请核对参数与目标资源。" />
         <el-empty v-if="!pending.length && !loading" description="当前没有待审批的操作" />
-        <el-table v-if="pending.length" :data="pending" stripe>
+        <el-table v-if="pending.length" :data="pending" stripe :row-key="row => row.request_id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="approval-detail">
+                <div class="detail-grid">
+                  <div class="detail-item"><span class="dk">审批编号</span><span class="dv mono">{{ row.request_id?.slice(0, 8) }}</span></div>
+                  <div class="detail-item"><span class="dk">审批类型</span><span class="dv">{{ actionZh(row.action_id) }}</span></div>
+                  <div class="detail-item"><span class="dk">申请人</span><span class="dv">RCA Agent（自动诊断）</span></div>
+                  <div class="detail-item"><span class="dk">紧急程度</span><span class="dv">{{ riskLabel(row.risk) }}</span></div>
+                  <div class="detail-item"><span class="dk">目标资源</span><span class="dv mono">{{ row.resolved_resource_uid ?? '未透出' }}</span></div>
+                  <div class="detail-item"><span class="dk">策略版本</span><span class="dv">{{ row.policy_version ?? '未透出' }}</span></div>
+                  <div class="detail-item wide" v-if="incidentZh(row.incident_key)">
+                    <span class="dk">关联告警</span><span class="dv">{{ incidentZh(row.incident_key) }}</span>
+                  </div>
+                  <div class="detail-item wide">
+                    <span class="dk">申请事由</span>
+                    <span class="dv">{{ actionDesc(row.action_id) || '审批对象说明未透出' }}</span>
+                  </div>
+                  <div class="detail-item wide" v-if="prettyJson(row.args_json)">
+                    <span class="dk">关键参数</span><pre class="dv json">{{ prettyJson(row.args_json) }}</pre>
+                  </div>
+                  <div class="detail-item wide" v-if="prettyJson(row.scope_snapshot_json)">
+                    <span class="dk">范围快照</span><pre class="dv json">{{ prettyJson(row.scope_snapshot_json) }}</pre>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="操作" min-width="140">
-            <template #default="{ row }">{{ row.action_id }}</template>
+            <template #default="{ row }">
+              <div class="cell-name">{{ actionZh(row.action_id) }}</div>
+              <div v-if="actionZh(row.action_id) !== row.action_id" class="cell-sub mono">{{ row.action_id }}</div>
+            </template>
           </el-table-column>
           <el-table-column label="风险级" width="110">
             <template #default="{ row }">
@@ -84,7 +114,8 @@
         <el-table v-if="quarantined.length" :data="quarantined" stripe>
           <el-table-column label="告警名 / 服务" min-width="180">
             <template #default="{ row }">
-              <div class="cell-name">{{ row.alertname }}</div>
+              <div class="cell-name">{{ alertZh(row.alertname) }}</div>
+              <div v-if="row.alertname && alertZh(row.alertname) !== row.alertname" class="cell-sub mono">{{ row.alertname }}</div>
               <div class="cell-sub">{{ row.service }}（{{ row.severity }}）</div>
             </template>
           </el-table-column>
@@ -118,6 +149,8 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, http } from '../api/client'
 import { useSessionStore } from '../stores/session'
+import { alertZh } from '../dict/scenarioZh'
+import { actionZh, actionDesc } from '../dict/zh'
 
 // 审批处置页（前端产品化波次1）：三张列表 + 人工决策动作。
 // 全部数据来自真实账本（approval_request / rca_operation / alert_inbox），
@@ -234,6 +267,21 @@ function hitPatterns(lastError) {
   } catch { /* 非审计 JSON，原样兜底 */ }
   return String(lastError).slice(0, 80)
 }
+/** incident_key（告警名:服务:严重度::指纹）→ 中文可读行 */
+function incidentZh(key) {
+  if (!key) return ''
+  const [alertname, service, severity] = String(key).split(':')
+  const nameZh = alertZh(alertname)
+  return `${nameZh}${nameZh !== alertname ? `（${alertname}）` : ''} · ${service ?? '—'} · ${severity ?? '—'}`
+}
+/** jsonb 原文 → 缩进美化；空/非法如实空串 */
+function prettyJson(raw) {
+  if (!raw) return ''
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return JSON.stringify(parsed, null, 2)
+  } catch { return String(raw) }
+}
 function fmt(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('zh-CN', { hour12: false })
@@ -261,5 +309,13 @@ onMounted(refreshAll)
 .danger { color: #d93026; font-weight: 600; }
 .cell-name { font-weight: 600; line-height: 1.4; }
 .cell-sub { font-size: 12px; color: #5f6b7a; }
+.mono { font-family: var(--mono, monospace); }
 .groupkey-note { font-size: 12px; color: #5f6b7a; margin: 10px 2px 0; line-height: 1.7; }
+.approval-detail { padding: 8px 16px 12px 48px; }
+.detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 24px; }
+.detail-item { display: flex; gap: 8px; font-size: 13px; line-height: 1.6; }
+.detail-item.wide { grid-column: 1 / -1; }
+.dk { color: #5f6b7a; flex-shrink: 0; min-width: 60px; }
+.dv { color: #1f2329; word-break: break-all; }
+.dv.json { margin: 0; font-size: 12px; background: #f6f8fa; border-radius: 4px; padding: 6px 10px; white-space: pre-wrap; }
 </style>

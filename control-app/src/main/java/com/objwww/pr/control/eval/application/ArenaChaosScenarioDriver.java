@@ -57,6 +57,16 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
         this.settleMillis = settleMillis;
     }
 
+    /** 开跑前预检（防假绿门）：CHAOS_ADMIN_TOKEN 未注入时首案注入必全灭——
+     *  批件在开跑前 FAILED，不允许 60 案 TIMEOUT_OR_ABSENT 后零分"SUCCEEDED" */
+    @Override
+    public void preflight() {
+        if (!client.tokenPresent()) {
+            throw new IllegalStateException("preflight 拒绝开跑：CHAOS_ADMIN_TOKEN 未注入"
+                    + "（INV-AM3-3 fail-closed）——靶场注入链不可用，批件不允许假绿");
+        }
+    }
+
     /**
      * 每轮独立靶场场景 id（全局唯一约束面）；解析侧（RcaRunResolver）同式派生。
      * uq_chaos_scenario 是永存台账——重跑同批必须换 run-tag（启动方注入，逐批唯一），
@@ -141,7 +151,10 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
         }
     }
 
-    /** 按故障族注入 chaos 评测流量（AM2 E2E 驱动同款 recipe；F1 同 intent 三单） */
+    /** 按故障族注入 chaos 评测流量（配方=各 ma-drill/ma-t9 脚本 195 实测家法，各 case
+     *  行注出处；F1 同 intent 三单；F9（BA-178）3 单创+付——capture 成功事实落库后
+     *  故障点吞掉 markPaid 收口；F10~F17（BA-179）接线八族；未接线族如实抛错
+     *  （不静默降级成"只开故障不注流量"的空转）） */
     private void injectTraffic(GoldenCase golden, String sid) {
         switch (golden.chaosFamily()) {
             case "F1" -> {
@@ -154,8 +167,67 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
                 traffic.createOrder(sid + "-intent-1", sid + "-1", "sku-std");
                 traffic.createOrder(sid + "-intent-2", sid + "-2", "sku-x-latesuccess");
             }
+            case "F9" -> {
+                for (int i = 1; i <= 3; i++) {
+                    String orderId = traffic.createOrder(
+                            sid + "-intent-" + i, sid + "-" + i, "sku-std");
+                    if (orderId != null) {
+                        traffic.payOrder(orderId, sid + "-intent-" + i);
+                    }
+                }
+            }
+            // ma-drill-s17.sh：25 单仅创单不支付——AUTH 沉默 INITIATED、订单停 CREATED
+            // 积压（>20 持续 5m 触 ArenaPendingPaymentBacklog ticket）
+            case "F10" -> {
+                for (int i = 1; i <= 25; i++) {
+                    traffic.createOrder(sid + "-intent-" + i, sid + "-" + i, "sku-std");
+                }
+            }
+            // ma-drill-s18.sh：创单→支付→同单同 correlationId 再支付——故障点跳过
+            // 已支付闸放行重复 CAPTURE
+            case "F11" -> {
+                String orderId = traffic.createOrder(sid + "-intent-1", sid + "-1", "sku-std");
+                if (orderId != null) {
+                    traffic.payOrder(orderId, sid + "-intent-1");
+                    traffic.payOrder(orderId, sid + "-intent-1");
+                }
+            }
+            // ma-drill-s19.sh：1 单创+付——DISCOUNT 扣减行被吞，三方对账数量差
+            case "F12" -> createAndPayOnce(sid);
+            // ma-t9-s20.sh：1 单创+付——补插超额 INVENTORY DEDUCT 行，负库存超卖
+            case "F13" -> createAndPayOnce(sid);
+            // ma-t9-s21.sh：25 单仅创单——履约行被吞（orders 与 fulfillments_started
+            // counter 10m 差值 >10 触 ArenaFulfillmentGap ticket）
+            case "F14" -> {
+                for (int i = 1; i <= 25; i++) {
+                    traffic.createOrder(sid + "-intent-" + i, sid + "-" + i, "sku-std");
+                }
+            }
+            // ma-t9-s22.sh：1 单创+付——消费端对已履约单重复插 attempt 行
+            case "F15" -> createAndPayOnce(sid);
+            // ma-t9-s24.sh：25 次创单突发——入口静默 accepted 零落单（createOrder 返回
+            // null 即受理无单，不支付）；脚本 off 后 5 单补创属恢复验证面，非注入配方
+            case "F16" -> {
+                for (int i = 1; i <= 25; i++) {
+                    traffic.createOrder(sid + "-intent-" + i, sid + "-" + i, "sku-std");
+                }
+            }
+            // ma-t9-s25.sh：16 单仅创单——履约停 CONFIRMING 不推进，SLA 超时积压 >15
+            case "F17" -> {
+                for (int i = 1; i <= 16; i++) {
+                    traffic.createOrder(sid + "-intent-" + i, sid + "-" + i, "sku-std");
+                }
+            }
             default -> throw new IllegalArgumentException(
                     "未知靶场故障族: " + golden.chaosFamily());
+        }
+    }
+
+    /** 单创+付配方（F12/F13/F15 同构：故障点在记账/库存/消费侧，流量面同为 1 单创+付） */
+    private void createAndPayOnce(String sid) {
+        String orderId = traffic.createOrder(sid + "-intent-1", sid + "-1", "sku-std");
+        if (orderId != null) {
+            traffic.payOrder(orderId, sid + "-intent-1");
         }
     }
 

@@ -377,9 +377,38 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.application.approval.ApprovalStore store,
             com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
             org.springframework.transaction.support.TransactionOperations tx,
-            @Value("${app.alert.approval.grant-ttl:PT10M}") java.time.Duration grantTtl) {
-        return new com.objwww.pr.control.alert.application.approval.ApprovalDecisionService(
-                store, events, tx, grantTtl, java.time.Clock.systemUTC());
+            @Value("${app.alert.approval.grant-ttl:PT10M}") java.time.Duration grantTtl,
+            com.objwww.pr.control.alert.application.mutation.OperationPlanner
+                    operationPlanner) {
+        var service = new com.objwww.pr.control.alert.application.approval
+                .ApprovalDecisionService(store, events, tx, grantTtl,
+                java.time.Clock.systemUTC());
+        // BA-171：APPROVED 事务提交后自动 plan（grant 已铸，planner 自验 grant+配额+
+        // unlock 分流 prepareReal/prepare；被拒=显式失败由 decide 捕获记日志——
+        // intent 仍可手动 POST /api/mutation/plan 兜底）
+        service.setApprovedAutoPlanHook(intentId -> {
+            var outcome = operationPlanner.plan(intentId);
+            if (outcome.status() != com.objwww.pr.control.alert.application.mutation
+                    .OperationPlanner.Outcome.Status.PLANNED) {
+                throw new IllegalStateException("自动 plan 被拒: " + outcome.rejectReason());
+            }
+        });
+        return service;
+    }
+
+    /**
+     * BA-171：意图落账后自动进审批队列（ToolGateway VALIDATE_ONLY 路径的跟进回调）——
+     * resolve fail-closed（解析不出落事件、意图留 OPEN 未解析）→ 成功铸
+     * approval_request PENDING（R3 双人，TTL 300s）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.mutation.IntentFollowUp intentFollowUp(
+            com.objwww.pr.control.alert.application.mutation.IntentResourceResolver
+                    intentResourceResolver,
+            com.objwww.pr.control.alert.application.approval.ApprovalRequestService
+                    approvalRequestService) {
+        return new com.objwww.pr.control.alert.application.mutation.ApprovalQueueFollowUp(
+                intentResourceResolver, approvalRequestService);
     }
 
     @Bean

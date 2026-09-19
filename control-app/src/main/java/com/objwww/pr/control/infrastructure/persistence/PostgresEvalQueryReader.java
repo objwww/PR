@@ -626,6 +626,31 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
+    /** BA-177：六要素落档账批量面（six_parts_rate 出数面，单查询禁 N+1）；空集直返不拼 IN () */
+    @Override
+    public List<SixPartsStatRow> listSixPartsStatsForRuns(Iterable<UUID> evalRunIds) {
+        List<UUID> ids = new ArrayList<>();
+        for (UUID id : evalRunIds) {
+            ids.add(Objects.requireNonNull(id));
+        }
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        select eval_run_id, count(*) as total,
+                               count(*) filter (where complete) as complete
+                          from eval_case_six_parts
+                         where eval_run_id in (:ids)
+                         group by eval_run_id
+                         order by eval_run_id
+                        """)
+                .param("ids", ids)
+                .query((rs, i) -> new SixPartsStatRow(
+                        rs.getObject("eval_run_id", UUID.class),
+                        rs.getLong("total"), rs.getLong("complete")))
+                .list();
+    }
+
     /** EV-09：场景轮次聚合（actual_root_cause 以 jsonb 原文文本计 distinct，null 记一值） */
     @Override
     public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {

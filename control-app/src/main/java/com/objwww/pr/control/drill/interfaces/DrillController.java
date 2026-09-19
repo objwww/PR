@@ -41,6 +41,10 @@ import java.util.UUID;
  *       （state=CANCELLING/RECOVERING——受理只表示取消中/恢复中，核验完成才
  *       CLOSED）；同 stop 键重放 200；异键重复停止 200 幂等无新副作用；终态/
  *       恢复异常占位 409；未知 id 404。</li>
+ *   <li>POST /api/drills/{drillId}/retry-recovery（DR-04）——人工重试恢复
+ *       （RECOVERY_FAILED→RECOVERING，状态机边已备）；受理 202（受理≠已推进，
+ *       worker 消费意图列后推进）；重复重试 200 幂等；非恢复异常占位 409；
+ *       未知 id 404。</li>
  * </ul>
  * 验签归 SecurityFilterChain（/api/drills/** = ROLE_OPERATOR，读写在 HTTP 面同权；
  * DB 面 control_app 对 drill_job 状态机推进零开口——权限双因子收口）。
@@ -158,8 +162,8 @@ public class DrillController {
             case LAUNCH_DISABLED -> {
                 // SAFE-04/FUP-04：启动能力位关闭——零作业行落库，只读面不受影响；
                 // code 机器码供前端文案映射（与预检 LAUNCH_ENABLED FAIL 同码同源）
-                out.put("error", "演练启动面当前已关闭：停止/恢复推进链未交付（SAFE-04），"
-                        + "交付后经 app.drill.launch-enabled 显式重开");
+                out.put("error", "演练启动面当前已关闭（SAFE-04）；停止/恢复推进链已交付"
+                        + "（DR-04），经 app.drill.launch-enabled 显式重开并重启生效");
                 out.put("code", "LAUNCH_DISABLED");
                 yield ResponseEntity.status(409).body(out);
             }
@@ -231,6 +235,48 @@ public class DrillController {
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /**
+     * DR-04 人工重试恢复（§7.4 处理入口）：RECOVERY_FAILED→RECOVERING。受理 202
+     * （state=RECOVERING——受理只表示重试意图已落，worker 消费后才推进相位）；
+     * 重复重试 200 幂等无新副作用；非恢复异常占位 409；未知 id 404。body 可空
+     * （意图按行幂等，不要求幂等键）。
+     */
+    @PostMapping(path = "/{drillId}/retry-recovery",
+            consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> retryRecovery(@PathVariable String drillId,
+                                           @RequestBody(required = false)
+                                           Map<String, Object> body) {
+        UUID id = parseId(drillId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "drillId 非法"));
+        }
+        var maybe = service.retryRecovery(id, truncate(AuthenticatedActor.name()));
+        if (maybe.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("error", "演练作业不存在"));
+        }
+        DrillJobService.RetryResult result = maybe.get();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("drillId", id.toString());
+        return switch (result.status()) {
+            case ACCEPTED -> {
+                // 受理 ≠ 已推进：worker 消费意图后 RECOVERY_FAILED→RECOVERING（§7.4）
+                out.put("state", "RECOVERING");
+                out.put("replayed", false);
+                yield ResponseEntity.status(202).body(out);
+            }
+            case ALREADY_REQUESTED -> {
+                out.put("state", result.state().name());
+                out.put("alreadyRequested", true);
+                yield ResponseEntity.ok(out);
+            }
+            case CONFLICT_STATE -> {
+                out.put("error", "作业不在恢复异常占位（当前 " + result.state()
+                        + "），重试非法——仅 RECOVERY_FAILED 可重试恢复");
+                yield ResponseEntity.status(409).body(out);
+            }
+        };
+    }
 
     private static DrillLaunchPlan plan(Map<String, Object> body) {
         return new DrillLaunchPlan(

@@ -34,6 +34,10 @@ import java.util.UUID;
  *       受理 ≠ 恢复完成；注入前 = CANCELLING，注入可能发生起 = RECOVERING（核验完成
  *       才 CLOSED，归 worker）；同 stop 键重放 REPLAYED，异键重复停止幂等无新副作用，
  *       终态/恢复异常占位 409；</li>
+ *   <li><b>人工重试恢复</b>（DR-04，§7.4 处理入口）：受理只置 retry_requested_at
+ *       意图列 + RETRY_REQUESTED 审计事件——受理 ≠ 已推进，RECOVERY_FAILED→
+ *       RECOVERING 归 worker 消费；意图按行幂等（重复重试 200 无新副作用），
+ *       非恢复异常占位 409；</li>
  *   <li><b>actor</b> 唯一来源 = 认证主体（AuthenticatedActor），请求体不自报。</li>
  * </ul>
  */
@@ -76,6 +80,11 @@ public class DrillJobService {
     }
 
     public record StopResult(StopStatus status, DrillJob.State state) {
+    }
+
+    public enum RetryStatus {ACCEPTED, ALREADY_REQUESTED, CONFLICT_STATE}
+
+    public record RetryResult(RetryStatus status, DrillJob.State state) {
     }
 
     public record ListItem(String drillId, String scenarioId, String scenarioName,
@@ -169,7 +178,7 @@ public class DrillJobService {
         // SAFE-04：启动面关闭时目录如实呈现不可启动（卡片不可选），理由指向能力位而非模板自身
         execution.put("ready", t.execution().ready() && policy.launchEnabled());
         execution.put("reason", policy.launchEnabled() ? t.execution().reason()
-                : "演练启动面已关闭：停止/恢复推进链未交付（SAFE-04），交付后经 "
+                : "演练启动面已关闭（SAFE-04）；停止/恢复推进链已交付（DR-04），经 "
                         + "app.drill.launch-enabled 显式重开（启动时加载，需重启生效）");
         return new TemplateCard(t.scenarioId(), t.name(), t.scenarioType(), t.faultSource(),
                 t.driver(), t.chaosFamily(), t.target(), t.symptomCodes(),
@@ -290,6 +299,40 @@ public class DrillJobService {
         return Optional.of(new StopResult(path == DrillJob.State.CANCELLED
                 ? StopStatus.ACCEPTED_CANCELLING : StopStatus.ACCEPTED_RECOVERING,
                 job.state()));
+    }
+
+    // ------------------------------------------------------------------ 人工重试恢复
+
+    /**
+     * DR-04 人工重试受理（§7.4「RECOVERY_FAILED→RECOVERING 处理入口」；对称停止面的
+     * 意图列模式）：作业不存在 → empty（404 面）；非 RECOVERY_FAILED → CONFLICT_STATE
+     * （409）；合法 → 置 retry_requested_at 意图列 + RETRY_REQUESTED 审计事件——
+     * 受理 ≠ 已推进，RECOVERY_FAILED→RECOVERING 由 worker 消费意图后 CAS 推进
+     * （control_app 状态机推进零开口纪律不破）。意图按行幂等：重复重试只置位一次，
+     * 无跨行键占用面，故不要求幂等键。
+     */
+    public Optional<RetryResult> retryRecovery(UUID drillId, String actor) {
+        Optional<DrillJob> maybe = jobs.findById(drillId);
+        if (maybe.isEmpty()) {
+            return Optional.empty();
+        }
+        DrillJob job = maybe.get();
+        if (job.state() != DrillJob.State.RECOVERY_FAILED) {
+            return Optional.of(new RetryResult(RetryStatus.CONFLICT_STATE, job.state()));
+        }
+        Instant now = Instant.now();
+        if (!jobs.requestRetry(drillId, now)) {
+            // CAS 落空：状态被并发改写 → 以最新状态如实重答；仍 RECOVERY_FAILED =
+            // 意图列已置位（重复重试幂等，无新副作用）
+            DrillJob current = jobs.findById(drillId).orElse(job);
+            return Optional.of(new RetryResult(
+                    current.state() == DrillJob.State.RECOVERY_FAILED
+                            ? RetryStatus.ALREADY_REQUESTED : RetryStatus.CONFLICT_STATE,
+                    current.state()));
+        }
+        events.insert(DrillEvent.of(drillId, DrillEvent.EventType.RETRY_REQUESTED, actor,
+                "{\"requestedAtState\":\"" + job.state().name() + "\"}", now));
+        return Optional.of(new RetryResult(RetryStatus.ACCEPTED, job.state()));
     }
 
     // ------------------------------------------------------------------ 查询投影

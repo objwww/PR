@@ -149,12 +149,24 @@
       <dl class="preview-list">
         <div class="pv-row">
           <dt>关联告警</dt>
-          <dd v-if="detailState === 'ok'" class="mono">{{ drill?.related?.incidentId ?? '尚未关联（DR-06 事件投影未回填）' }}</dd>
+          <dd v-if="detailState === 'ok'">
+            <template v-if="drill?.related?.incidentId">
+              <span class="mono">{{ drill.related.incidentId }}</span>
+              <el-button size="small" text type="primary" @click="router.push(`/alerts/${drill.related.incidentId}`)">查看告警详情</el-button>
+            </template>
+            <span v-else class="mono">尚未关联（DR-06 事件投影未回填）</span>
+          </dd>
           <dd v-else>尚未关联（依赖 DR-06 事件投影）</dd>
         </div>
         <div class="pv-row">
           <dt>关联调查 Run</dt>
-          <dd v-if="detailState === 'ok'" class="mono">{{ drill?.related?.runId ?? '尚未关联（DR-06 事件投影未回填）' }}</dd>
+          <dd v-if="detailState === 'ok'">
+            <template v-if="drill?.related?.runId">
+              <span class="mono">{{ drill.related.runId }}</span>
+              <el-button size="small" text type="primary" @click="router.push(`/runs/${drill.related.runId}`)">查看根因分析</el-button>
+            </template>
+            <span v-else class="mono">尚未关联（DR-06 事件投影未回填）</span>
+          </dd>
           <dd v-else>尚未关联（依赖 DR-06 事件投影）</dd>
         </div>
         <div class="pv-row"><dt>关联报告</dt><dd>尚未关联（依赖 DR-06 事件投影）</dd></div>

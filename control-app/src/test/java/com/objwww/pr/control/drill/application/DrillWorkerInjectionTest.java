@@ -28,8 +28,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * DR-03 worker 集成面：DrillWorker 装配 {@link CompositeDrillInjection} 后，
  * arena 作业从 QUEUED 一路驱动到 OBSERVING——相位链完整、激活回执（含每作业
- * 固定有效实例 id）落 WORKER_NOTE 事件账，作业保持活动占位（停止/恢复推进归
- * DR-04 面）。假件全内存（DrillWorkerTest 同习语），settle 等待为生产固定 3s。
+ * 固定有效实例 id）落 WORKER_NOTE 事件账，作业保持活动占位（本用例走旧装配面，
+ * 恢复端口 = {@link DrillRecoveryPort.NotImplemented}；恢复/核验相位驱动的
+ * 接线面归 DrillWorkerRecoveryTest）。假件全内存（DrillWorkerTest 同习语），
+ * settle 等待为生产固定 3s。
  */
 class DrillWorkerInjectionTest {
 
@@ -88,6 +90,22 @@ class DrillWorkerInjectionTest {
         @Override
         public boolean requestStop(UUID id, String stopIdempotencyKey,
                                    Instant stopRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<DrillJob> findRetryRequests() {
+            return List.of();
+        }
+
+        @Override
+        public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                    Instant now) {
             throw new UnsupportedOperationException();
         }
 
@@ -235,8 +253,13 @@ class DrillWorkerInjectionTest {
         final List<String> orders = new ArrayList<>();
 
         @Override
-        public void createOrder(String intentId, String correlationId, String sku) {
+        public String createOrder(String intentId, String correlationId, String sku) {
             orders.add(intentId + "/" + correlationId);
+            return "order-" + orders.size();
+        }
+
+        @Override
+        public void payOrder(String orderId, String correlationId) {
         }
     }
 
@@ -321,7 +344,8 @@ class DrillWorkerInjectionTest {
                         new NoopFlagAdminClient(), probe)),
                 new DrillExecutionPolicy(true, ENVS));
         return new DrillWorker(jobs, events, catalog, injection, clock, ENVS,
-                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS));
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS),
+                sid -> List.of());
     }
 
     // ------------------------------------------------------------------ 用例

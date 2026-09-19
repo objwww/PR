@@ -260,6 +260,15 @@ public class MutationOpsController {
             item.put("expires_at", r.expiresAt().toString());
             item.put("approved_count", r.approvedCount());
             item.put("denied_count", r.deniedCount());
+            // 审批对象详情（波次2）：目标资源/关键参数/范围快照/关联告警——
+            // join 缺席环节如实 null，前端按 null 显示「未透出」
+            item.put("tool_name", r.toolName());
+            item.put("tool_version", r.toolVersion());
+            item.put("args_json", r.argsJson());
+            item.put("resolved_resource_uid", r.resolvedResourceUid());
+            item.put("scope_snapshot_json", r.scopeSnapshotJson());
+            item.put("incident_key", r.incidentKey());
+            item.put("policy_version", r.policyVersion());
             items.add(item);
         }
         body.put("status", "OK");

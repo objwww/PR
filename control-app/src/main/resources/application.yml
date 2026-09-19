@@ -88,7 +88,13 @@ app:
       backoff-max-ms: 60000
     # 单价表：app.model.price.<model>.{input,output}-micros-per-1k + pricing-version + currency；
     # 双单价均为 0（默认）= 不估算；改价必须升 pricing-version
-    price: {}
+    price:
+      # DeepSeek 官方定价（deepseek-chat/V3 标准时段，2026-09 在账）：输入 ¥2/百万 tokens、输出 ¥8/百万
+      deepseek-v3:
+        pricing-version: pricing-v1
+        currency: CNY
+        input-micros-per-1k: 2000
+        output-micros-per-1k: 8000
 
 # M3-28：actuator 最小暴露面——health/metrics 仅运维面（宿主端口本就 127.0.0.1 绑定，
 # INV-AM0-1）；env/heapdump 等敏感端点一律不开

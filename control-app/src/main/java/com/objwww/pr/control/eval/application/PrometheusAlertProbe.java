@@ -73,6 +73,13 @@ public final class PrometheusAlertProbe implements AlertProbe {
                 .orElseGet(() -> Digest.sha256Of("rule=" + alertname + "|not_found"));
     }
 
+    @Override
+    public List<String> firingNow(String scenarioId) {
+        return expectedAlertnames(scenarioId).stream()
+                .filter(this::isFiring)
+                .toList();
+    }
+
     /** 目标态：期望码全部 firing（true）或全部非 firing（false），轮询至超时 */
     private boolean awaitFiringState(String scenarioId, boolean expectFiring,
                                      int maxWaitSeconds) {

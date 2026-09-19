@@ -361,6 +361,11 @@ class EventQueryControllerTest {
         public Optional<RunUsage> summarizeByRun(UUID runId) {
             return Optional.empty();
         }
+
+        @Override
+        public List<CallFailure> failuresByRun(UUID runId) {
+            return List.of();
+        }
     }
 
     /** A4：无断言存根面——claims 键投影空列表 */

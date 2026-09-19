@@ -68,7 +68,9 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             + "\"kind\":\"ROOT_CAUSE|HYPOTHESIS|SYMPTOM|EXCLUSION\",\"statement\":\"...\","
             + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"],"
             + "\"evidence_roles\":[{\"ref\":\"<evidence_refs 之一>\","
-            + "\"role\":\"SUPPORTS|REFUTES|CONTEXT\"}]}],"
+            + "\"role\":\"SUPPORTS|REFUTES|CONTEXT\"}],"
+            + "\"root_cause\":{\"component\":\"...\",\"fault_type\":\"...\","
+            + "\"reason_code\":\"...\"},\"symptom_codes\":[\"<告警名>\"]}],"
             + "\"missing_information\":[\"...\"]}}\n"
             + "规则：args 形状严格遵守 tool_schemas 的 properties/required；evidence_refs"
             + " 只允许引用 valid_artifact_refs 中的 id，且每个 claim 的 evidence_refs"
@@ -77,6 +79,13 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             + "REFUTES=反驳该结论，CONTEXT=仅背景（宿主逐条校验，未声明的引用按"
             + " CONTEXT 处理、不计入支持来源；全量日志计数与累计计数器值不能作为"
             + " 错误/失败断言的支持证据，会被降为 CONTEXT）；"
+            + " root_cause 仅 ROOT_CAUSE claim 携带：三字段取值逐字取自信封"
+            + " root_cause_catalog 同一行的 canonical 码（禁止跨行混搭或自造词；"
+            + "信封无该键或无法确定取值时省略 root_cause 键，不拿服务名/claim_key"
+            + " 冒充）；"
+            + " symptom_codes 仅 SYMPTOM claim 携带：取值=告警名（信封"
+            + " alert.alertname 或 metrics.rules 查到的 firing 规则 alertname），"
+            + "禁止填 logs/prometheus/loki 等来源标签；其他 kind 省略该键；"
             + " 证据不足时用 HYPOTHESIS 并在 missing_information 写明缺口；"
             + " 每步只输出一个决策对象；"
             + "委派=按冻结时间窗+input_refs 的固定查询专家（确定性执行，不接受自由文本"
@@ -309,9 +318,29 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                                 + " 的 args 未通过校验：" + e.getMessage()
                                 + "。严格对照 tool_schemas 里该工具的"
                                 + " JSON Schema（字段名/类型/取值域）修正 args 后重发 tool_call。");
-                log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={}",
-                        request.task().id(), tool.toolId());
+                log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={} 拒因: {}",
+                        request.task().id(), tool.toolId(), e.getMessage());
                 return RoleRunner.RoleDriveResult.failed("TOOL_RETRYABLE:INVALID_ARGS");
+            }
+            // BA-181：熔断签名命中（DOOM_LOOP_TRIPPED）对模型驱动环同样=计步重驱——
+            // 熔断的是这一个查询签名，不是整个调查（195 实证 S26：同一 logs.query 同参
+            // 零数据 ×5 熔断后整任务 DEAD、run UNRESOLVED，模型其余 13 工具与剩余步数
+            // 全废）。反馈明说禁令与出路，模型仍同参重发则步数耗尽走确定性兜底 FINAL，
+            // 终止面不变（§四）。BUDGET_EXHAUSTED 等真终止族维持上抛 DEAD。
+            if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
+                    .DOOM_LOOP_TRIPPED) {
+                advanceStep(request, checkpoint, stableDigest, memory,
+                        "DOOM_LOOP_TRIPPED: 工具 " + tool.toolId()
+                                + " 的这组参数已连续多次查询零进展，宿主已熔断该查询签名——"
+                                + "禁止同参重发（重发只会再烧步数且零触网）。请改换取证方向："
+                                + "调整过滤条件（时间窗/service/指标名/日志级别），或换用"
+                                + " tool_allowlist 内其他工具（日志无异常的静默故障应改查"
+                                + " change.query/change.diff/alert.history/rca_history.search"
+                                + " 等多源佐证），或基于已有证据走 final"
+                                + "（缺口如实写 missing_information）。");
+                log.warn("TOOL_CALL 命中熔断签名（DOOM_LOOP_TRIPPED），计步重驱 task={} tool={}",
+                        request.task().id(), tool.toolId());
+                return RoleRunner.RoleDriveResult.failed("TOOL_RETRYABLE:DOOM_LOOP_TRIPPED");
             }
             throw e;
         }
@@ -380,6 +409,17 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                         return rv;
                     })
                     .toList());
+            if (claim.rootCause() != null) {
+                // 结构化根因三元组随提案落检查点（报告相位投影进 rca_claim 评分列）
+                row.put("root_cause", Map.of(
+                        "component", claim.rootCause().component(),
+                        "fault_type", claim.rootCause().faultType(),
+                        "reason_code", claim.rootCause().reasonCode()));
+            }
+            if (claim.symptomCodes() != null) {
+                // 症状码随提案落检查点（报告相位投影进 rca_claim symptom_codes 列）
+                row.put("symptom_codes", claim.symptomCodes());
+            }
             row.put("admission_note", claim.admissionNote());
             claimRows.add(row);
         }

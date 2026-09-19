@@ -88,6 +88,11 @@ public final class DrillTemplateCatalog {
         Map<String, Object> e = cast(s.get("execution"));
         DrillTemplate.Execution execution = new DrillTemplate.Execution(
                 Boolean.TRUE.equals(e.get("ready")), strOrNull(e, "reason"));
+        // DR-04 恢复参数块（可选；缺席 = 按 timing 取保守缺省；出现时两键必填，缺即抛）
+        Object rec = s.get("recovery");
+        DrillTemplate.Recovery recovery = rec == null
+                ? DrillTemplate.Recovery.defaulted(timing)
+                : recovery(cast(rec));
         Object symptoms = s.get("symptom_codes");
         List<String> symptomCodes = symptoms instanceof List<?> l
                 ? l.stream().map(Object::toString).toList() : List.of();
@@ -95,7 +100,12 @@ public final class DrillTemplateCatalog {
                 strOrNull(s, "fault_source"), strOrNull(s, "driver"),
                 strOrNull(s, "chaos_family"), strOrNull(s, "target"), symptomCodes,
                 strOrNull(s, "symptom_display"), strOrNull(s, "impact"),
-                timing, params, execution);
+                timing, params, execution, recovery);
+    }
+
+    private static DrillTemplate.Recovery recovery(Map<String, Object> r) {
+        return new DrillTemplate.Recovery(intField(r, "probe_seconds"),
+                intField(r, "deadline_seconds"));
     }
 
     private static String str(Map<String, Object> map, String key) {
@@ -150,7 +160,9 @@ public final class DrillTemplateCatalog {
                     .append(',').append(t.params().durationMinSeconds())
                     .append(',').append(t.params().durationMaxSeconds())
                     .append(',').append(String.join("+", t.params().trafficScales()))
-                    .append(',').append(t.execution().ready());
+                    .append(',').append(t.execution().ready())
+                    .append(',').append(t.recovery().probeSeconds())
+                    .append(',').append(t.recovery().deadlineSeconds());
         }
         return Digest.sha256Of(canonical.toString());
     }

@@ -19,7 +19,7 @@
           <el-option value="P2" label="P2" />
         </el-select>
         <el-select v-model="fReason" placeholder="全部原因" clearable class="w-ctl">
-          <el-option v-for="r in reasonOptions" :key="r" :value="r" :label="r" />
+          <el-option v-for="r in reasonOptions" :key="r" :value="r" :label="errorCodeZh(r) === r ? r : `${r}（${errorCodeZh(r).split('：')[0]}）`" />
         </el-select>
         <span class="flex-spacer" />
         <el-button :disabled="!filteredCases.some(c => !c.owner)" @click="batchClaim">批量认领</el-button>
@@ -83,6 +83,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import CaseDetailPanel from '../components/CaseDetailPanel.vue'
 import { mapSeverity } from '../utils/severity'
+import { errorCodeZh } from '../dict/zh.js'
 import { useSessionStore } from '../stores/session.js'
 
 const session = useSessionStore()

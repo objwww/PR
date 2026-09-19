@@ -2,7 +2,10 @@ package com.objwww.pr.control.release.interfaces;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.objwww.pr.control.alert.application.tool.ToolRegistry;
+import com.objwww.pr.control.alert.domain.tool.ToolRisk;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,9 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Prompt 工作台读面（前端产品化 3.16；Wave 5）。
@@ -32,9 +38,24 @@ public class PromptWorkbenchController {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JdbcClient jdbc;
+    private final ToolRegistry toolRegistry;
+    private final List<String> primaryAllowlist;
 
-    public PromptWorkbenchController(ObjectProvider<JdbcClient> jdbc) {
+    public PromptWorkbenchController(
+            ObjectProvider<JdbcClient> jdbc,
+            ObjectProvider<ToolRegistry> toolRegistry,
+            // 同源漂移风险（BA-171 起三处互指）：本默认值 = AlertAm4Config#am4PrimaryProfile
+            // 与 #am4PrimaryToolPort 的 app.alert.r7.primary.tool-allowlist 默认值——
+            // 放行面调整时三处同步改
+            @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
+                    + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
+                    + "prometheus.rules,logs.aggregate,service.restart,service.rollback,"
+                    + "alert.history,change.diff,change.query,rca_history.search}")
+            String primaryToolAllowlist) {
         this.jdbc = jdbc.getIfAvailable();
+        this.toolRegistry = toolRegistry.getIfAvailable();
+        this.primaryAllowlist = Arrays.stream(primaryToolAllowlist.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     /** PROMPT 版本列表（created_at 倒序）+ 投产用量（role_digest 在调用账本的聚合） */
@@ -144,6 +165,44 @@ public class PromptWorkbenchController {
             body.put("parseError", "激活包 plan 解析失败（如实透出）");
         }
         body.put("tasks", tasks);
+        return body;
+    }
+
+    /**
+     * 工具注册面透出（真实注册表 ToolRegistry，非前端造数）：每工具返回 name/version/risk
+     * （枚举名）/executable（risk.executable()）/approvalRequired（R2||R3）/
+     * inPrimaryAllowlist/descriptionZh（BA-176：一句话中文用途，词典未命中回退工具名）；
+     * 顶层 allowlist=主 Agent 实际生效放行清单，note=R2/R3 策略口径说明。
+     */
+    @GetMapping("/tools")
+    public Map<String, Object> tools() {
+        if (toolRegistry == null) {
+            return Map.of("status", "UNAVAILABLE", "reason", "TOOL_REGISTRY_NOT_ASSEMBLED");
+        }
+        Set<String> allowlist = new LinkedHashSet<>(primaryAllowlist);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (ToolRegistry.Registration r : toolRegistry.all()) {
+            ToolRisk risk = r.definition().risk();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", r.definition().name());
+            m.put("version", r.definition().version());
+            m.put("risk", risk.name());
+            m.put("executable", risk.executable());
+            m.put("approvalRequired", risk == ToolRisk.R2 || risk == ToolRisk.R3);
+            m.put("inPrimaryAllowlist", allowlist.contains(r.definition().name()));
+            m.put("descriptionZh",
+                    com.objwww.pr.control.alert.application.tool.ToolDescriptionZh
+                            .of(r.definition().name()));
+            items.add(m);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "OK");
+        body.put("items", items);
+        body.put("count", items.size());
+        body.put("allowlist", primaryAllowlist);
+        body.put("note", "R0/R1 只读工具可真实执行；R2/R3 写类工具不直接执行——调用即铸意图"
+                + "（VALIDATE_ONLY）并自动进审批队列（R3 需两人审批），批准后进入执行计划"
+                + "（无 unlock 白名单行 = dry_run 模拟执行）");
         return body;
     }
 

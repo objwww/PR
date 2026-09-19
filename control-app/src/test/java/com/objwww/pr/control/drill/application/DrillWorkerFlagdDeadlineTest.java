@@ -19,10 +19,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * DR-05 作业级截止恢复/重启清扫（§7.4 Flagd 段）：超「claimed_at + 冻结
- * totalEstimateSeconds」仍活动中的 flagd 作业 → 必先进 RECOVERING 再
- * RECOVERY_FAILED 保留占位（恢复接线未交付，不冒充现场干净）；arena 场景、
- * 未超期、截止读不出的作业一律不动（留孤儿清扫对账）。
+ * DR-05/DR-04 作业级截止恢复/重启清扫（§7.4；DR-04 接线后推广到全部驱动）：
+ * INJECTING/OBSERVING 超「claimed_at + 冻结 totalEstimateSeconds」仍活动中 → 必先进
+ * RECOVERING 再 RECOVERY_FAILED 保留占位（job_deadline_exceeded）；RECOVERING/
+ * VERIFYING 超恢复窗口（相位进入时刻 + recovery.deadlineSeconds）→ 直落
+ * RECOVERY_FAILED（recovery_deadline_exceeded，重试上限不许死循环）；未超期、
+ * 截止读不出的作业一律不动（留孤儿清扫对账）。
  */
 class DrillWorkerFlagdDeadlineTest {
 
@@ -78,6 +80,22 @@ class DrillWorkerFlagdDeadlineTest {
         @Override
         public boolean requestStop(UUID id, String stopIdempotencyKey,
                                    Instant stopRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<DrillJob> findRetryRequests() {
+            return List.of();
+        }
+
+        @Override
+        public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                    Instant now) {
             throw new UnsupportedOperationException();
         }
 
@@ -181,7 +199,8 @@ class DrillWorkerFlagdDeadlineTest {
     private DrillWorker worker(Instant now) {
         return new DrillWorker(jobs, events, catalog(),
                 new DrillInjectionPort.NotImplemented(), new FixedClock(now), ENVS,
-                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS));
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS),
+                sid -> List.of());
     }
 
     private static DrillTemplateCatalog catalog() {
@@ -244,11 +263,11 @@ class DrillWorkerFlagdDeadlineTest {
         DrillJob job = stage("F1", DrillJob.State.OBSERVING,
                 "{\"totalEstimateSeconds\":" + ESTIMATE + "}");
         int handled = worker(BASE.plusSeconds(ESTIMATE + 1))
-                .sweepFlagdRecoveryDeadlines();
+                .sweepRecoveryDeadlines();
         assertThat(handled).isEqualTo(1);
         DrillJob after = jobs.findById(job.id()).orElseThrow();
         assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
-        assertThat(after.terminalReason()).contains("flagd_recovery_deadline_exceeded");
+        assertThat(after.terminalReason()).contains("job_deadline_exceeded");
         assertThat(after.state().holdsEnvPlaceholder()).isTrue(); // 占位阻止下一场
         assertThat(transitionsOf(job.id())).containsExactly(
                 "OBSERVING→RECOVERING", "RECOVERING→RECOVERY_FAILED");
@@ -259,7 +278,7 @@ class DrillWorkerFlagdDeadlineTest {
     void flagdInjectingPastDeadlineEntersRecoveryPath() {
         DrillJob job = stage("F1", DrillJob.State.INJECTING,
                 "{\"totalEstimateSeconds\":" + ESTIMATE + "}");
-        worker(BASE.plusSeconds(ESTIMATE + 1)).sweepFlagdRecoveryDeadlines();
+        worker(BASE.plusSeconds(ESTIMATE + 1)).sweepRecoveryDeadlines();
         DrillJob after = jobs.findById(job.id()).orElseThrow();
         assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
         assertThat(transitionsOf(job.id())).containsExactly(
@@ -267,13 +286,14 @@ class DrillWorkerFlagdDeadlineTest {
     }
 
     @Test
-    @DisplayName("flagd RECOVERING 超截止（本在恢复路径）→ 直落 RECOVERY_FAILED，不越级回扫")
+    @DisplayName("flagd RECOVERING 超恢复窗口（本在恢复路径）→ 直落 RECOVERY_FAILED，不越级回扫")
     void flagdRecoveringPastDeadlineFinalizesDirectly() {
         DrillJob job = stage("F1", DrillJob.State.RECOVERING,
                 "{\"totalEstimateSeconds\":" + ESTIMATE + "}");
-        worker(BASE.plusSeconds(ESTIMATE + 1)).sweepFlagdRecoveryDeadlines();
+        worker(BASE.plusSeconds(ESTIMATE + 1)).sweepRecoveryDeadlines();
         DrillJob after = jobs.findById(job.id()).orElseThrow();
         assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
+        assertThat(after.terminalReason()).contains("recovery_deadline_exceeded");
         assertThat(transitionsOf(job.id()))
                 .containsExactly("RECOVERING→RECOVERY_FAILED");
     }
@@ -283,7 +303,7 @@ class DrillWorkerFlagdDeadlineTest {
     void flagdWithinDeadlineUntouched() {
         DrillJob job = stage("F1", DrillJob.State.OBSERVING,
                 "{\"totalEstimateSeconds\":" + ESTIMATE + "}");
-        int handled = worker(BASE.plusSeconds(100)).sweepFlagdRecoveryDeadlines();
+        int handled = worker(BASE.plusSeconds(100)).sweepRecoveryDeadlines();
         assertThat(handled).isEqualTo(0);
         assertThat(jobs.findById(job.id()).orElseThrow().state())
                 .isEqualTo(DrillJob.State.OBSERVING);
@@ -291,14 +311,18 @@ class DrillWorkerFlagdDeadlineTest {
     }
 
     @Test
-    @DisplayName("arena 场景超截止 → 不动（TTL 保障与恢复接线归 DR-04 面）")
-    void arenaPastDeadlineUntouched() {
+    @DisplayName("arena OBSERVING 超作业级截止（DR-04 起同律收口）→ 先进 RECOVERING "
+            + "再 RECOVERY_FAILED 保留占位")
+    void arenaPastDeadlineEntersRecoveryPath() {
         DrillJob job = stage("A1", DrillJob.State.OBSERVING,
                 "{\"totalEstimateSeconds\":1620}");
-        int handled = worker(BASE.plusSeconds(1621)).sweepFlagdRecoveryDeadlines();
-        assertThat(handled).isEqualTo(0);
-        assertThat(jobs.findById(job.id()).orElseThrow().state())
-                .isEqualTo(DrillJob.State.OBSERVING);
+        int handled = worker(BASE.plusSeconds(1621)).sweepRecoveryDeadlines();
+        assertThat(handled).isEqualTo(1);
+        DrillJob after = jobs.findById(job.id()).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.RECOVERY_FAILED);
+        assertThat(after.terminalReason()).contains("job_deadline_exceeded");
+        assertThat(transitionsOf(job.id())).containsExactly(
+                "OBSERVING→RECOVERING", "RECOVERING→RECOVERY_FAILED");
     }
 
     @Test
@@ -306,7 +330,7 @@ class DrillWorkerFlagdDeadlineTest {
     void unreadableDeadlineSkipped() {
         DrillJob job = stage("F1", DrillJob.State.OBSERVING, "{}");
         int handled = worker(BASE.plusSeconds(ESTIMATE + 1))
-                .sweepFlagdRecoveryDeadlines();
+                .sweepRecoveryDeadlines();
         assertThat(handled).isEqualTo(0);
         assertThat(jobs.findById(job.id()).orElseThrow().state())
                 .isEqualTo(DrillJob.State.OBSERVING);

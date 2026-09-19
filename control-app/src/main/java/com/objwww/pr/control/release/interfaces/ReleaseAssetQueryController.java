@@ -36,7 +36,8 @@ public class ReleaseAssetQueryController {
 
     /** 摘要投影消费的展示键（正文 text/messages_template/body 永不入列表） */
     private static final List<String> SUMMARY_KEYS =
-            List.of("runbook_id", "title", "description", "name", "tags");
+            List.of("runbook_id", "title", "description", "name", "tags",
+                    "role", "role_version", "envelope_version");
 
     private final ReleaseAssetRepository assets;
     private final ConfigBundleRepository bundles;

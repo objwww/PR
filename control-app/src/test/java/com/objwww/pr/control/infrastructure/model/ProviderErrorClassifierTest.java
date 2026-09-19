@@ -33,6 +33,13 @@ class ProviderErrorClassifierTest {
         assertThat(f.faultScope()).isEqualTo(FaultScope.ACCOUNT);
     }
 
+    @Test
+    void status402InsufficientBalanceIsBillingOrActivation() {
+        ModelCallFailure f = classifier.classify(402, "unknown_error", null);
+        assertThat(f).isInstanceOf(ModelCallFailure.BillingOrActivation.class);
+        assertThat(f.faultScope()).isEqualTo(FaultScope.ACCOUNT);
+    }
+
     // ------------------------------------------------------------------ 401 / 403
 
     @Test

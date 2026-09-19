@@ -1,14 +1,20 @@
 # =====================================================================================
 # DR-02 故障演练场景模板目录（发布展示 DTO 面；方案 §7.1"复用版本化场景模板；发布展示
 #   DTO，不把完整答案注册表交给调查 Agent"）
-# 派生自 deploy/alert/eval/eval-scenarios.yml（registry v2）：只含公开面——id/名称/
+# 派生自 deploy/alert/eval/eval-scenarios.yml（registry v6）：只含公开面——id/名称/
 #   类型/故障源/驱动/症状（可观测面）/影响范围/时间参数/参数白名单。
 # GT 纪律：expected_root_cause / 注入控制细节 / labels_frozen 指纹面不属于本文件，
 #   禁止回填（§7.3：GT 仅评测执行域可读；调查 Agent 不得经任何面拿到标准答案）。
 # 同步纪律：eval-scenarios.yml 升 registry_version 时本文件必须同步修订并更新上方
 #   绑定标注（registry_version 字段 = 派生锚，漂移可核对）。
+# BA-178：v2→v6 追平——S16/S26 入目录（F9 单族，3 单创+付流量配方随本批接入
+#   ArenaChaosScenarioDriver）；S17~S22/S24/S25 流量配方未接线不摆假模板，
+#   S23 复合激活依赖 M-b 未落地同不入。
+# BA-179：S17~S22/S24/S25 八场景入目录（F10~F17 流量配方同批接入
+#   ArenaChaosScenarioDriver，配方=各 ma-drill/ma-t9 脚本 195 实测家法，各模板
+#   reason 注明出处）；S23 复合激活依赖 M-b C3 未落地，维持不入。
 # =====================================================================================
-registry_version: 2
+registry_version: 6
 templates:
 
   - scenario_id: S1
@@ -113,3 +119,259 @@ templates:
     execution:
       ready: true
       reason: 同 S3（DR-03 接线已交付+chaos-admin 连通鉴权实测；真机验收归 DR03 工序 5）
+
+  - scenario_id: S16
+    name: F9 掉单（支付成功但订单未推进）
+    scenario_type: 业务交易链路-掉单
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F9
+    target: order-arena chaos- 前缀评测流量的支付收口路径
+    symptom_codes: [ArenaPaymentOrderMismatch]
+    symptom_display: ArenaPaymentOrderMismatch（page）
+    impact: >-
+      chaos- 前缀流量支付 CAPTURE 成功但订单停留未支付（掉单）——技术指标全绿、
+      业务账面不一致；故障点静默无错误日志；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F9 单族注入原语同 S3（chaos on 四约束+TTL）；3 单创+付流量配方随 BA-178
+        接入 ArenaChaosScenarioDriver（配方=ma-drill-s16.sh 195 实测家法：
+        capture 成功事实落库后故障点吞掉收口）；存量掉单收敛依赖既有 UNKNOWN
+        对账/补偿机制（M2-20 面）
+
+  - scenario_id: S17
+    name: F10 支付悬挂（下单后支付未发起）
+    scenario_type: 业务交易链路-支付悬挂
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F10
+    target: order-arena chaos- 前缀评测流量的支付发起路径
+    symptom_codes: [ArenaPendingPaymentBacklog]
+    symptom_display: ArenaPendingPaymentBacklog（ticket）
+    impact: >-
+      chaos- 前缀流量支付授权 INITIATED 出生后故障点沉默——不发起网关请求也不报错，
+      订单停"待支付"积压（>20 持续 5m 触 ticket）；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 900,
+             max_resolved_wait_seconds: 900, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F10 单族注入原语同 S3（chaos on 四约束+TTL）；流量配方随 BA-179 接入
+        ArenaChaosScenarioDriver（配方=ma-drill-s17.sh 195 实测家法：25 单仅创单
+        不支付，AUTH 沉默 INITIATED、订单停 CREATED 积压）；存量 INITIATED 挂单
+        恢复=AUTH 置 UNKNOWN 交 F3 对账机制收敛
+
+  - scenario_id: S18
+    name: F11 重复扣款（支付层幂等失效）
+    scenario_type: 业务交易链路-重复扣款
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F11
+    target: order-arena chaos- 前缀评测流量的支付重试路径
+    symptom_codes: [ArenaDuplicatePayments]
+    symptom_display: ArenaDuplicatePayments（page）
+    impact: >-
+      chaos- 前缀流量支付重试故障点跳过已支付闸——已 PAID 订单放行重复 CAPTURE，
+      同订单多笔支付成功；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F11 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-drill-s18.sh 195
+        实测家法：创单→支付→同单同 correlationId 再支付，跳过已支付闸→重复
+        CAPTURE）；恢复=off 后去重闸复位，重复扣款台账留作告警事实
+
+  - scenario_id: S19
+    name: F12 三方对账不平（数量差）
+    scenario_type: 业务交易链路-对账不平
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F12
+    target: order-arena chaos- 前缀评测流量的库存扣减记账路径
+    symptom_codes: [ArenaReconciliationDiff]
+    symptom_display: ArenaReconciliationDiff（page）
+    impact: >-
+      F12 命中订单跳过 DISCOUNT 扣减行——订单-支付-库存三方记账数量差，对账作业
+      检出差异（明细端点 /orders/recon/diffs）；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F12 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-drill-s19.sh 195
+        实测家法：1 单创+付，DISCOUNT 扣减行被吞→对账不平）；恢复=off 后记账行
+        成对回落、对账差归零
+
+  - scenario_id: S20
+    name: F13 库存超卖（预占竞态）
+    scenario_type: 业务交易链路-库存超卖
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F13
+    target: order-arena chaos- 前缀评测流量的库存预占路径
+    symptom_codes: [ArenaOversell]
+    symptom_display: ArenaOversell（page）
+    impact: >-
+      chaos- 前缀流量库存预占故障点在正常扣减行后补插超额 INVENTORY DEDUCT 行——
+      同订单多笔扣减=超卖事实、库存转负；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F13 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-t9-s20.sh 195
+        实测家法：1 单创+付，补插超额 INVENTORY DEDUCT 行→负库存）；恢复=off 后
+        超额行反向冲平、库存回正
+
+  - scenario_id: S21
+    name: F14 下单事件丢失（履约未触发）
+    scenario_type: 业务交易链路-消息丢失
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F14
+    target: order-arena chaos- 前缀评测流量的履约触发路径
+    symptom_codes: [ArenaFulfillmentGap]
+    symptom_display: ArenaFulfillmentGap（ticket）
+    impact: >-
+      chaos- 前缀流量收口故障点跳过履约单落地——订单已创建但履约下游零感知、无错误
+      日志；counter 差值式告警（10m 窗 orders−fulfillments_started >10）；live 流量
+      零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 900,
+             max_resolved_wait_seconds: 900, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F14 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-t9-s21.sh 195
+        实测家法：25 单仅创单，履约行被吞→counter 差值越阈）；恢复=off 即恢复
+        （履约单重新成对落地），差值经 10m 窗自然稀释回落
+
+  - scenario_id: S22
+    name: F15 消息重复消费（重复履约）
+    scenario_type: 业务交易链路-重复消费
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F15
+    target: order-arena chaos- 前缀评测流量的履约消费路径
+    symptom_codes: [ArenaDuplicateFulfillment]
+    symptom_display: ArenaDuplicateFulfillment（ticket）
+    impact: >-
+      chaos- 前缀流量消费端故障点对已履约单重复插 attempt 行——at-least-once 语义下
+      消费幂等缺失，重复履约/重复通知；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F15 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-t9-s22.sh 195
+        实测家法：1 单创+付，消费循环命中后再插 attempt2）；恢复=off 后重复 attempt
+        停插，残留 attempt 行由收口面清平
+
+  - scenario_id: S24
+    name: F16 断流（零订单）
+    scenario_type: 业务交易链路-断流
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F16
+    target: order-arena chaos- 前缀评测流量的创单入口
+    symptom_codes: [ArenaOrderZeroFlow]
+    symptom_display: ArenaOrderZeroFlow（page）
+    impact: >-
+      入口静默——create() 直接返回 accepted 零落单，订单创建计数归零（5m 零订单
+      持续 5m 即断流）；仅 chaos- 前缀命中，live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 900,
+             max_resolved_wait_seconds: 900, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F16 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-t9-s24.sh 195
+        实测家法：25 次创单突发全部被入口静默吞掉——accepted 但零落单、createOrder
+        返回 null 不支付）；恢复=off 后创单重新落库，5m 零窗稀释 resolved
+
+  - scenario_id: S25
+    name: F17 履约超时积压
+    scenario_type: 业务交易链路-履约积压
+    fault_source: AM2 靶场（Arena）
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F17
+    target: order-arena chaos- 前缀评测流量的履约收口路径
+    symptom_codes: [ArenaFulfillmentSlaBreach]
+    symptom_display: ArenaFulfillmentSlaBreach（ticket）
+    impact: >-
+      chaos- 前缀流量履约收口故障点 enableBookingOnly——履约单停 CONFIRMING 不再
+      推进，SLA 超时积压（>15 触 ticket）；下单链路完全正常；live 流量零污染
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 600,
+             max_resolved_wait_seconds: 900, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        F17 单族注入原语同 S3；流量配方随 BA-179 接入（配方=ma-t9-s25.sh 195
+        实测家法：16 单仅创单，履约停 CONFIRMING 积压）；恢复=off 后 CONFIRMING
+        存量单推进收口、积压归零
+
+  - scenario_id: S26
+    name: 全工具复合（F9 掉单 + 窗内真实发布变更 + 审批收口）
+    scenario_type: 复合-全工具链+审批收口
+    fault_source: AM2 靶场（Arena）+ 真实变更账本
+    driver: ArenaChaosScenarioDriver
+    chaos_family: F9
+    target: order-arena chaos- 前缀评测流量的支付收口路径
+    symptom_codes: [ArenaPaymentOrderMismatch]
+    symptom_display: ArenaPaymentOrderMismatch（page）
+    impact: >-
+      掉单故障同 S16；调查窗内含真实发布变更（change.query 可查近两日变更账本），
+      调查需鉴别"变更相关性≠因果性"并走全只读工具链取证（指标/日志/变更/历史/
+      同类先例）；处置建议（如重启服务）走人工审批链、零直接执行。
+      runbook 双工具为条件注册面（语料 digest 未配置即缺席），缺席时链路降级注记
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 300,
+             max_resolved_wait_seconds: 600, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        注入面同 S16（F9 单族原语+3 单创+付配方，BA-178 接线）；变更佐证面=窗内
+        真实变更账本（change.query 可查），无需注入侧制造；审批观测面=
+        GET /api/eval/runs/{id}/approval-chain 五表存在性（M-d T8 已上线）；
+        审批 300s 有效期——批准须在窗口内完成（过期重铸不重放）

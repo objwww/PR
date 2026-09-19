@@ -80,6 +80,22 @@ class EventQueryServiceTest {
     }
 
     @Test
+    void genesisSeq2InitialReadIsNotGap() {
+        // 创世约定（生产实测：204/204 runs min(seq)=2，run 创建占掉 seq=1）——
+        // 初始全量读 after_seq=0 不得误判 hole，否则事件流恒空（195 实测缺陷）
+        InMemoryEvents events = new InMemoryEvents(List.of(
+                row(2, "RUN_CREATED", "{\"run_id\":\"r\"}"),
+                row(3, "TASK_STATE_CHANGED", "{\"task_id\":\"t1\",\"summary\":\"s\"}")));
+        EventQueryService service = new EventQueryService(events, new EventPayloadSanitizer(200));
+
+        EventQueryService.EventPage page = service.events(UUID.randomUUID(), 0, 50);
+
+        assertThat(page.gap()).isFalse();
+        assertThat(page.events()).hasSize(2);
+        assertThat(page.events().get(0).seq()).isEqualTo(2);
+    }
+
+    @Test
     void clientAheadOfLatestIsGap() {
         InMemoryEvents events = new InMemoryEvents(List.of());
         EventQueryService service = new EventQueryService(events, new EventPayloadSanitizer(200));

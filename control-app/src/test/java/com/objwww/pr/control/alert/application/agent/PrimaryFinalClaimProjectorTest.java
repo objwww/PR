@@ -271,4 +271,84 @@ class PrimaryFinalClaimProjectorTest {
         assertThat(v.sources()).as("FALSE 的方向来源=REFUTES 引用")
                 .containsExactly("change_event");
     }
+
+    // ---------------------------------------------- 结构化根因三元组透传（V147）
+
+    @Test
+    @DisplayName("提案行携带 root_cause 三元组 → 投影进 ClaimVerdict.rootCause")
+    void rootCauseTripleProjected() {
+        UUID loki = UUID.randomUUID();
+        FakeEvidence evidence = new FakeEvidence();
+        evidence.insert(envelope(loki, "loki"));
+        CapturingClaims claims = new CapturingClaims();
+        PrimaryFinalClaimProjector projector =
+                new PrimaryFinalClaimProjector(claims, evidence);
+
+        Map<String, Object> row = row("ROOT_CAUSE", "payment 扣款按比例失败",
+                List.of(loki.toString()), List.of(role(loki.toString(), "SUPPORTS")));
+        row.put("root_cause", Map.of("component", "payment",
+                "fault_type", "BUSINESS_ERROR_RATE",
+                "reason_code", "PAYMENT_CHARGE_FAILURE"));
+
+        projector.project(RUN, checkpoint(List.of(row)), "snap", 1, "tr");
+
+        ClaimVerdict v = claims.appended.get(0);
+        assertThat(v.rootCause()).isNotNull();
+        assertThat(v.rootCause().component()).isEqualTo("payment");
+        assertThat(v.rootCause().faultType()).isEqualTo("BUSINESS_ERROR_RATE");
+        assertThat(v.rootCause().reasonCode()).isEqualTo("PAYMENT_CHARGE_FAILURE");
+    }
+
+    @Test
+    @DisplayName("无 root_cause 键/形状非法 → rootCause=null 诚实降级（不冒充评分面）")
+    void missingOrMalformedTripleDegradesToNull() {
+        UUID loki = UUID.randomUUID();
+        FakeEvidence evidence = new FakeEvidence();
+        evidence.insert(envelope(loki, "loki"));
+        CapturingClaims claims = new CapturingClaims();
+        PrimaryFinalClaimProjector projector =
+                new PrimaryFinalClaimProjector(claims, evidence);
+
+        // 无 root_cause 键（v1 旧行）
+        projector.project(RUN, checkpoint(List.of(
+                row("ROOT_CAUSE", "无三元组旧行", List.of(loki.toString()),
+                        List.of(role(loki.toString(), "SUPPORTS"))))),
+                "snap", 1, "tr");
+        assertThat(claims.appended.get(0).rootCause()).isNull();
+
+        // 形状非法（缺字段）→ null 诚实降级，不抛错打断整案投影
+        Map<String, Object> malformed = row("ROOT_CAUSE", "缺字段三元组",
+                List.of(loki.toString()), List.of(role(loki.toString(), "SUPPORTS")));
+        malformed.put("root_cause", Map.of("component", "payment"));
+        projector.project(RUN, checkpoint(List.of(malformed)), "snap", 2, "tr");
+        assertThat(claims.appended.get(1).rootCause()).isNull();
+    }
+
+    // ---------------------------------------------- 症状码透传（V151）
+
+    @Test
+    @DisplayName("提案行携带 symptom_codes → 投影进 ClaimVerdict.symptomCodes；缺席 → null 未声明")
+    void symptomCodesProjected() {
+        UUID loki = UUID.randomUUID();
+        FakeEvidence evidence = new FakeEvidence();
+        evidence.insert(envelope(loki, "loki"));
+        CapturingClaims claims = new CapturingClaims();
+        PrimaryFinalClaimProjector projector =
+                new PrimaryFinalClaimProjector(claims, evidence);
+
+        Map<String, Object> row = row("SYMPTOM", "ArenaDuplicateOrders firing",
+                List.of(loki.toString()), List.of(role(loki.toString(), "SUPPORTS")));
+        row.put("symptom_codes", List.of("ArenaDuplicateOrders"));
+
+        projector.project(RUN, checkpoint(List.of(row)), "snap", 1, "tr");
+        assertThat(claims.appended.get(0).symptomCodes())
+                .containsExactly("ArenaDuplicateOrders");
+
+        // 无 symptom_codes 键（旧行）→ null 未声明（报告面诚实空数组）
+        projector.project(RUN, checkpoint(List.of(
+                row("SYMPTOM", "无症状码旧行", List.of(loki.toString()),
+                        List.of(role(loki.toString(), "SUPPORTS"))))),
+                "snap", 2, "tr");
+        assertThat(claims.appended.get(1).symptomCodes()).isNull();
+    }
 }

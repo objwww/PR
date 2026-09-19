@@ -46,10 +46,15 @@ public interface ApprovalStore {
 
     /**
      * 待审批列表行（前端产品化波次1 审批处置页）：审批请求 + 已投票计数聚合。
+     * 波次2 补齐审批对象详情：目标资源/关键参数/工具版本/范围快照/关联告警/
+     * 策略版本——全部来自 action_intent 与 rca_run→incident 精确键 join，
+     * 环节缺席如实 null（不冒充）。
      */
     record PendingRequestView(UUID requestId, UUID intentId, UUID runId, String actionId,
             String risk, int requiredApprovers, Instant requestedAt, Instant expiresAt,
-            int approvedCount, int deniedCount) {
+            int approvedCount, int deniedCount, String toolName, String toolVersion,
+            String argsJson, String resolvedResourceUid, String scopeSnapshotJson,
+            String incidentKey, String policyVersion) {
     }
 
     /**

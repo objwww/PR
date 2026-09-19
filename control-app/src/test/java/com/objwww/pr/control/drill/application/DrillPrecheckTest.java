@@ -49,6 +49,7 @@ class DrillPrecheckTest {
         assertThat(statuses.get("TARGET_ENV_WHITELIST")).isEqualTo(DrillPrecheck.Status.OK);
         assertThat(statuses.get("ENV_OCCUPANCY")).isEqualTo(DrillPrecheck.Status.OK);
         assertThat(statuses.get("EXECUTION_READY")).isEqualTo(DrillPrecheck.Status.OK);
+        assertThat(statuses.get("SYMPTOM_CLEAN")).isEqualTo(DrillPrecheck.Status.UNKNOWN);
         assertThat(statuses.get("TARGET_HEALTH")).isEqualTo(DrillPrecheck.Status.UNKNOWN);
         assertThat(statuses.get("RESOURCE_HEADROOM")).isEqualTo(DrillPrecheck.Status.UNKNOWN);
         assertThat(statuses.get("RESIDUAL_FAULT")).isEqualTo(DrillPrecheck.Status.UNKNOWN);
@@ -59,14 +60,49 @@ class DrillPrecheckTest {
     }
 
     @Test
-    @DisplayName("UNKNOWN 不造假：五项 detail 明示无授权通路/未交付，不写成 OK")
+    @DisplayName("UNKNOWN 不造假：六项 detail 明示无授权通路/未交付，不写成 OK")
     void unknownItemsHonest() {
         DrillPrecheck.Result r = DrillPrecheck.run(template(true), "arena-195",
                 List.of("arena-195"), null);
         assertThat(r.checks())
                 .filteredOn(c -> c.status() == DrillPrecheck.Status.UNKNOWN)
                 .allSatisfy(c -> assertThat(c.detail()).isNotBlank())
-                .hasSize(5);
+                .hasSize(6);
+    }
+
+    @Test
+    @DisplayName("BA-180 环境洁净门：期望症状残留 firing = FAIL 中文人话原因且 "
+            + "canLaunch=false（拒绝注入）；空残留 = OK；无症状码模板 = OK 无判定面")
+    void symptomCleanGate() {
+        // 残留 firing：FAIL + 人话原因逐码列出
+        DrillPrecheck.Result dirty = DrillPrecheck.run(template(true), "arena-195",
+                List.of("arena-195"), null, true, List.of("ArenaDuplicateOrders"));
+        DrillPrecheck.Check gate = dirty.checks().stream()
+                .filter(c -> c.name().equals("SYMPTOM_CLEAN")).findFirst().orElseThrow();
+        assertThat(gate.status()).isEqualTo(DrillPrecheck.Status.FAIL);
+        assertThat(gate.detail()).contains("目标告警已在 firing 残留，环境不洁净")
+                .contains("ArenaDuplicateOrders");
+        assertThat(dirty.canLaunch()).isFalse();
+
+        // 空残留（worker 实测洁净）：OK 不阻塞
+        DrillPrecheck.Result clean = DrillPrecheck.run(template(true), "arena-195",
+                List.of("arena-195"), null, true, List.of());
+        assertThat(byName(clean).get("SYMPTOM_CLEAN")).isEqualTo(DrillPrecheck.Status.OK);
+        assertThat(clean.canLaunch()).isTrue();
+
+        // 无症状码模板：无判定面 OK（核验面同为空，不冒充有检查）
+        DrillTemplate noSymptom = new DrillTemplate("T9", "无症状", "类型", "源",
+                "FlagdScenarioDriver", null, "payment", List.of(), "",
+                "影响面", new DrillTemplate.Timing(60, 600, 300, 600, 120),
+                new DrillTemplate.ParamWhitelist(600, 60, 600, List.of("RECIPE"), true),
+                new DrillTemplate.Execution(true, null));
+        DrillPrecheck.Result noFace = DrillPrecheck.run(noSymptom, "arena-195",
+                List.of("arena-195"), null, true, null);
+        DrillPrecheck.Check skipped = noFace.checks().stream()
+                .filter(c -> c.name().equals("SYMPTOM_CLEAN")).findFirst().orElseThrow();
+        assertThat(skipped.status()).isEqualTo(DrillPrecheck.Status.OK);
+        assertThat(skipped.detail()).contains("无 firing 残留判定面");
+        assertThat(noFace.canLaunch()).isTrue();
     }
 
     @Test

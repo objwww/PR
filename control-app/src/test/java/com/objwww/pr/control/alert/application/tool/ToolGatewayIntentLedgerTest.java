@@ -61,9 +61,26 @@ class ToolGatewayIntentLedgerTest {
         return new ToolRegistry.Registration(definition, execution -> new byte[1]);
     }
 
+    /** BA-171：带 service 参数的 R3 写工具（资源键提取面） */
+    private static ToolRegistry.Registration r3ServiceTool() {
+        ToolDefinition definition = new ToolDefinition("service.restart", "1",
+                Map.of("type", "object", "properties",
+                        Map.of("service", Map.of("type", "string"),
+                                "reason", Map.of("type", "string")),
+                        "required", List.of("service")),
+                ToolRisk.R3, 1_000, 1024);
+        return new ToolRegistry.Registration(definition,
+                MutationToolCatalog.nonExecutablePlaceholder("service.restart"));
+    }
+
     private static ToolGateway.ToolInvocation invocation() {
         return new ToolGateway.ToolInvocation(RUN, TASK, ATTEMPT, 5, "write.tool", "1.0.0",
                 "2026-09-15T00:00:00Z/2026-09-15T01:00:00Z", Map.of("q", "x"), null);
+    }
+
+    private static ToolGateway.ToolInvocation r3Invocation(Map<String, Object> args) {
+        return new ToolGateway.ToolInvocation(RUN, TASK, ATTEMPT, 5, "service.restart", "1",
+                "2026-09-15T00:00:00Z/2026-09-15T01:00:00Z", args, null);
     }
 
     @Test
@@ -111,5 +128,62 @@ class ToolGatewayIntentLedgerTest {
                 new ToolPolicy(Set.of("write.tool")), POOL, FIXED, events);
         gateway.invoke(invocation());
         assertThat(eventTypes).containsExactly("TOOL_INTENT_VALIDATED");
+    }
+
+    @Test
+    void ba171_01_资源键随意图落账_跟进回调推进_反馈体含审批编号() {
+        CapturingLedger ledger = new CapturingLedger();
+        List<String> followUpCalls = new ArrayList<>();
+        ToolGateway gateway = new ToolGateway(new ToolRegistry(List.of(r3ServiceTool())),
+                new ToolPolicy(Set.of("service.restart")), POOL, FIXED, null, null, null,
+                ledger, (intentId, requestedKey) ->
+                        followUpCalls.add(intentId + "|" + requestedKey));
+        ToolGateway.ToolInvocationResult result = gateway.invoke(
+                r3Invocation(Map.of("service", "checkout", "reason", "r")));
+        assertThat(result.kind()).isEqualTo(ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY);
+        // 资源键 = args["service"] 原样（替代旧的恒 null）
+        assertThat(ledger.rows).hasSize(1);
+        ActionIntent intent = ledger.rows.get(0).intent();
+        assertThat(intent.requestedResourceKey()).isEqualTo("checkout");
+        assertThat(intent.risk()).isEqualTo(ToolRisk.R3);
+        // 跟进回调收到同 intentId + 资源键（审批队列推进入口）
+        assertThat(followUpCalls)
+                .containsExactly(intent.intentId() + "|checkout");
+        // 模型可见反馈体：待审批语义 + 审批编号（intentId 前 8 位）
+        String body = new String(result.body(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(body).contains("PENDING_APPROVAL")
+                .contains("已提交人工审批")
+                .contains(intent.intentId().toString().substring(0, 8))
+                .contains("请勿重试同一操作");
+    }
+
+    @Test
+    void ba171_02_跟进回调异常不炸调查_意图留账() {
+        CapturingLedger ledger = new CapturingLedger();
+        ToolGateway gateway = new ToolGateway(new ToolRegistry(List.of(r3ServiceTool())),
+                new ToolPolicy(Set.of("service.restart")), POOL, FIXED, null, null, null,
+                ledger, (intentId, requestedKey) -> {
+                    throw new IllegalStateException("resolver 炸了");
+                });
+        ToolGateway.ToolInvocationResult result = gateway.invoke(
+                r3Invocation(Map.of("service", "checkout")));
+        // 回调失败降级为日志：调用结局与意图落账不受影响（意图留 OPEN 未解析=诚实状态）
+        assertThat(result.kind()).isEqualTo(ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY);
+        assertThat(ledger.rows).hasSize(1);
+        assertThat(ledger.rows.get(0).intent().requestedResourceKey()).isEqualTo("checkout");
+    }
+
+    @Test
+    void ba171_03_无service参数_资源键null_跟进回调跳过() {
+        CapturingLedger ledger = new CapturingLedger();
+        List<String> followUpCalls = new ArrayList<>();
+        ToolGateway gateway = new ToolGateway(new ToolRegistry(List.of(writeTool())),
+                new ToolPolicy(Set.of("write.tool")), POOL, FIXED, null, null, null,
+                ledger, (intentId, requestedKey) ->
+                        followUpCalls.add(intentId + "|" + requestedKey));
+        ToolGateway.ToolInvocationResult result = gateway.invoke(invocation());
+        assertThat(result.kind()).isEqualTo(ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY);
+        assertThat(ledger.rows.get(0).intent().requestedResourceKey()).isNull();
+        assertThat(followUpCalls).isEmpty(); // 无资源键无法权威解析——跳过不猜
     }
 }

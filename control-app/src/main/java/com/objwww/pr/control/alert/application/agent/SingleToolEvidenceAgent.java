@@ -232,9 +232,24 @@ public class SingleToolEvidenceAgent {
                             com.objwww.pr.control.alert.application.RunBudgetGate.Usage.of(1L)),
                     e -> !(e instanceof ToolModelVisibleException));
             if (result.kind() == ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY) {
-                // R0 工具恒可执行；可达此分支说明注册面被改坏——终止族显式失败
-                throw new ToolControlPlaneException(ToolControlReason.POLICY_DENIED,
-                        "VALIDATE_ONLY 不可达: R0 工具必须可执行");
+                // BA-171：R2/R3 写类工具——意图已入账零执行，不再当终止族（旧行为
+                // "VALIDATE_ONLY 不可达"会把主 Agent step 打 DEAD）。Gateway 产的
+                // 待审批反馈体铸成证据行落库，模型经证据窗读到「已提交人工审批，
+                // 请勿重试」语义；账本记 SUCCESS（调用面事实=意图受理成功）。
+                // R0 路径字节级不变（R0 恒 executable，本分支对 R0 不可达）。
+                Map<String, Object> pending = result.body() == null
+                        ? Map.of("status", "PENDING_APPROVAL")
+                        : parsePayload(result.body());
+                EvidenceEnvelope envelope = EvidenceEnvelope.create(UUID.randomUUID(),
+                        ctx.runId(), ctx.taskId(), spec.evidenceType(),
+                        EvidenceEnvelope.SCHEMA_VERSION, ctx.observedGeneration(),
+                        spec.source(), scopeOf(ctx), null, null, pending);
+                evidence.insert(envelope);
+                ledger.markResultRef(operationId, envelope.evidenceId());
+                ledger.succeed(operationId);
+                doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, true);
+                return new AgentResult(AgentOutcome.EVIDENCE_PRODUCED,
+                        List.of(envelope.evidenceId()), null);
             }
 
             Map<String, Object> payload = parsePayload(result.body());

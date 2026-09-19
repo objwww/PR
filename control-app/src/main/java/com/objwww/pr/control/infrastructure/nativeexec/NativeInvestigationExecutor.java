@@ -782,6 +782,21 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         return new ClaimVerdict(row.claimKey(), row.scope(), row.timeRange(),
                 row.observedGeneration(), row.snapshotDigest(), row.status(),
                 row.evidenceBasis(), row.sources(), row.reason(), row.evidenceRefs(),
-                row.policyVersion());
+                row.policyVersion(),
+                row.kind() != null ? row.kind()
+                        : com.objwww.pr.control.alert.domain.claim.ClaimKind.HYPOTHESIS,
+                typedRootCauseOf(row), row.symptomCodes());
+    }
+
+    /** V147 读面三元组贯通：三列齐整才铸TypedRootCause，任一缺失如实 null
+     * （报告面落 unknown 诚实降级——不拿 scope/claimKey 冒充评分面） */
+    private static com.objwww.pr.control.alert.domain.model.TypedRootCause typedRootCauseOf(
+            ClaimStore.ClaimRow row) {
+        if (row.rootComponent() == null || row.rootFaultType() == null
+                || row.rootReasonCode() == null) {
+            return null;
+        }
+        return new com.objwww.pr.control.alert.domain.model.TypedRootCause(
+                row.rootComponent(), row.rootFaultType(), row.rootReasonCode());
     }
 }

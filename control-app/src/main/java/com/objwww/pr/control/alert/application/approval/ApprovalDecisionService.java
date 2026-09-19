@@ -19,11 +19,21 @@ import java.util.UUID;
  */
 public class ApprovalDecisionService {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ApprovalDecisionService.class);
+
     private final ApprovalStore store;
     private final RcaEventAppender events;
     private final TransactionOperations tx;
     private final Duration grantTtl;
     private final Clock clock;
+    /**
+     * BA-171：APPROVED 后的自动 plan 钩子（可空=不自动 plan，旧装配零漂移）。
+     * 在 decide 事务提交后调用（TransactionOperations.execute 返回即已提交——
+     * grant 已落库，planner 自验 grant+配额+unlock）；钩子异常捕获记日志，
+     * intent 仍可手动 POST /api/mutation/plan 兜底。
+     */
+    private volatile java.util.function.Consumer<UUID> approvedAutoPlanHook;
 
     public ApprovalDecisionService(ApprovalStore store, RcaEventAppender events,
             TransactionOperations tx, Duration grantTtl, Clock clock) {
@@ -37,6 +47,11 @@ public class ApprovalDecisionService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    /** BA-171：装配面挂载 APPROVED 自动 plan 钩子（如 AlertFlowConfig 接 OperationPlanner） */
+    public void setApprovedAutoPlanHook(java.util.function.Consumer<UUID> hook) {
+        this.approvedAutoPlanHook = hook;
+    }
+
     /** 记录一条决策并推进裁决；返回请求当前状态 */
     public String decide(UUID requestId, String approverId, String approverRole,
             boolean approved) {
@@ -44,7 +59,8 @@ public class ApprovalDecisionService {
                 || approverRole.isBlank()) {
             throw new IllegalArgumentException("决策人身份/角色不得为空");
         }
-        return tx.execute(status -> {
+        UUID[] approvedIntent = new UUID[1];
+        String state = tx.execute(status -> {
             ApprovalStore.RequestView request = store.findRequest(requestId)
                     .orElseThrow(() -> new IllegalArgumentException("审批不存在: " + requestId));
             if (!"PENDING".equals(request.state())) {
@@ -82,6 +98,7 @@ public class ApprovalDecisionService {
                             "action_digest", request.actionDigest(),
                             "snapshot_hash", request.scopeSnapshotHash(),
                             "policy_version", request.policyVersion()));
+                    approvedIntent[0] = request.intentId();
                 }
                 case PENDING -> {
                     // 等待更多 distinct principals——不加事件噪声
@@ -89,6 +106,17 @@ public class ApprovalDecisionService {
             }
             return outcome.name();
         });
+        // BA-171：APPROVED 事务提交后自动 plan（钩子自带事务；失败不翻裁决结果）
+        var hook = approvedAutoPlanHook;
+        if (approvedIntent[0] != null && hook != null) {
+            try {
+                hook.accept(approvedIntent[0]);
+            } catch (Exception e) {
+                log.warn("审批通过后的自动 plan 失败（intent 仍可手动 /plan 兜底） intent={}: {}",
+                        approvedIntent[0], e.toString());
+            }
+        }
+        return state;
     }
 
     private void emit(UUID requestId, String type, Map<String, String> extra) {

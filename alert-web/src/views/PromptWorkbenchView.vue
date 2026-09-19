@@ -43,6 +43,106 @@
       />
     </div>
 
+    <!-- 工具注册面（真实注册表 /v1/prompt-workbench/tools 直出，不编造） -->
+    <div class="card panel zone">
+      <div class="zone-head">
+        <h2 class="zone-title">工具注册面（真实注册表）</h2>
+        <span class="dim">
+          来源：后端 ToolRegistry 启动期装配清单；主 Agent 放行面
+          {{ toolFace?.allowlist?.length ?? '—' }} 个 / 注册 {{ toolFace?.items?.length ?? '—' }} 个
+        </span>
+      </div>
+      <el-table v-if="toolFace?.items?.length" :data="toolFace.items" size="small">
+        <el-table-column prop="name" label="工具名" min-width="170" />
+        <el-table-column label="用途" min-width="280">
+          <template #default="{ row }"><span class="dim">{{ row.descriptionZh || row.name }}</span></template>
+        </el-table-column>
+        <el-table-column prop="version" label="版本" width="70" />
+        <el-table-column label="风险等级" min-width="170">
+          <template #default="{ row }">
+            <el-tag size="small" :type="riskTone(row.risk)" disable-transitions>{{ row.risk }}</el-tag>
+            <span class="dim"> {{ riskZh(row.risk) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="真实执行" width="90" align="center">
+          <template #default="{ row }">{{ row.executable ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column label="主 Agent 可用" width="110" align="center">
+          <template #default="{ row }">{{ row.inPrimaryAllowlist ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column label="需审批" width="80" align="center">
+          <template #default="{ row }">{{ row.approvalRequired ? '是' : '否' }}</template>
+        </el-table-column>
+      </el-table>
+      <EmptyState
+        v-else-if="toolFaceError"
+        kind="error"
+        description="工具注册面加载失败——如实留空，不以模拟清单填充。"
+        @retry="loadTools"
+      />
+      <EmptyState
+        v-else
+        kind="empty"
+        description="工具注册表未装配或暂无注册项——如实留空。"
+      />
+      <div v-if="toolFace?.items?.length" class="cmp-hint">
+        R0/R1 只读工具可真实执行（「需审批」为否）；service.restart / service.rollback
+        两个 R3 写类工具调用不直接执行——铸意图后自动进人工审批队列（需两名审批人），
+        批准后进入执行计划（无 unlock 白名单行时为 dry_run 模拟执行，真执行是未开放的扩展点）。
+        「主 Agent 可用=否」的工具已注册但未进 tool-allowlist，放行需经评测验证后修改配置生效。
+      </div>
+    </div>
+
+    <!-- 版本指标对比（eval_run 终态行按 prompt_version 聚合，逐版本与上一版本对照） -->
+    <div class="card panel zone">
+      <div class="zone-head">
+        <h2 class="zone-title">版本指标对比（每次改版本 vs 上一版本）</h2>
+        <span class="dim">来源：评测实验账本终态行，按提示词版本聚合取最近一批；Δ = 与上一版本差值，绿色=改善，红色=退步</span>
+      </div>
+      <el-table v-if="versionMetrics.length" :data="versionMetrics" size="small">
+        <el-table-column label="提示词版本" min-width="170">
+          <template #default="{ row }">
+            <div class="ver-name">{{ row.version }}</div>
+            <div class="ver-sub">{{ row.runCount }} 批终态实验 · 最近 {{ fmtTime(row.latestAt) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="模型 / 数据集" min-width="150">
+          <template #default="{ row }">
+            <div>{{ row.latest.model ?? '—' }}</div>
+            <div class="ver-sub">{{ row.latest.datasetVersion ?? '—' }}</div>
+            <div v-if="caliberNote(row)" class="ver-sub caliber-warn">⚠ {{ caliberNote(row) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column v-for="m in METRICS" :key="m.key" :label="m.label" width="126" align="right">
+          <template #default="{ row }">
+            <div>{{ pct(row.latest[m.key]) }}</div>
+            <div
+              v-if="deltaOf(row, m.key) != null"
+              class="ver-sub" :class="deltaCls(deltaOf(row, m.key), m.invert)"
+            >
+              {{ deltaOf(row, m.key) > 0 ? '▲' : '▼' }} {{ Math.abs(deltaOf(row, m.key) * 100).toFixed(1) }}pt
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="质量门 / 状态" width="130">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.latest.facets?.qualityVerdict === 'OK' ? 'success' : row.latest.facets?.qualityVerdict === 'VIOLATED' ? 'danger' : 'info'" disable-transitions>
+              {{ qualityZh(row.latest.facets?.qualityVerdict) }}
+            </el-tag>
+            <div class="ver-sub">{{ row.latest.state === 'SUCCEEDED' ? '已完成' : '失败' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="解读（人话）" min-width="300">
+          <template #default="{ row }"><span class="dim">{{ versionInsight(row) }}</span></template>
+        </el-table-column>
+      </el-table>
+      <EmptyState
+        v-else
+        kind="empty"
+        description="暂无带提示词版本的终态实验——在评测中心发起实验后，此处自动出现相邻版本的指标对照。"
+      />
+    </div>
+
     <div class="wb-grid">
       <!-- 左：版本列表 -->
       <div class="card panel list-panel">
@@ -58,7 +158,10 @@
         >
           <el-table-column label="版本" min-width="190">
             <template #default="{ row }">
-              <div class="ver-name">{{ row.role }}@{{ row.roleVersion ?? '—' }}</div>
+              <div class="ver-name">
+                {{ row.role }}@{{ row.roleVersion ?? '—' }}
+                <el-tag v-if="isDeterministic(row)" size="small" type="info" effect="plain" disable-transitions>确定性执行器</el-tag>
+              </div>
               <div class="ver-sub">{{ row.digest.slice(0, 8) }} · {{ fmtTime(row.createdAt) }}</div>
             </template>
           </el-table-column>
@@ -78,6 +181,13 @@
           </el-table-column>
         </el-table>
         <div class="cmp-hint">勾选一个版本作为对比基准（A），再在右侧查看它与当前选中版本（B）的逐行差异。</div>
+        <div class="cmp-hint">
+          metrics / logs / change 是<b>确定性单工具执行器</b>：按冻结窗固定查询、不调用模型，
+          其"提示词"只是注册锚点，不存在可修改的提示词文本——因此修改/发布/diff 流程只对有
+          模型提示词的主调查 Agent（primary）有意义。提示词修订随代码/配置发布：启动时按内容寻址
+          登记为新版本，再经版本中心配置包受控激活后生效；本页提供版本列表、真实投产状态
+          （模型调用账本 role_digest 匹配）、正文与逐行 diff。
+        </div>
       </div>
 
       <!-- 右：正文查看 + 对比 -->
@@ -154,6 +264,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api } from '../api/client'
 import { fmtTime } from '../utils/format'
+import { ERROR_CODE_ZH } from '../dict/zh'
 import PageHeader from '../components/common/PageHeader.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 
@@ -172,6 +283,141 @@ const runIncident = ref(null)
 const runLoading = ref(false)
 const runMessage = ref('')
 const updatedAt = ref('—')
+const evalRuns = ref([])
+const toolFace = ref(null)
+const toolFaceError = ref(false)
+
+// 工具风险等级中文字典（ToolRisk 枚举口径）
+const RISK_ZH = {
+  R0: '只读·无副作用',
+  R1: '敏感读·无副作用',
+  R2: '写操作·仅记录不执行',
+  R3: '危险·需人工审批',
+}
+function riskZh(risk) { return RISK_ZH[risk] ?? risk }
+function riskTone(risk) {
+  return ({ R0: 'success', R1: 'warning', R2: 'danger', R3: 'danger' })[risk] ?? 'info'
+}
+async function loadTools() {
+  toolFaceError.value = false
+  try {
+    const res = await api('/v1/prompt-workbench/tools')
+    if (res?.status === 'OK') {
+      toolFace.value = res
+    } else {
+      toolFace.value = null
+      toolFaceError.value = true
+    }
+  } catch {
+    toolFace.value = null
+    toolFaceError.value = true
+  }
+}
+
+// 确定性单工具执行器（metrics/logs/change）：固定查询不调模型，登记的"提示词"
+// 只是 native-* 注册锚点——据实打标，避免被当成可编辑的模型提示词
+const isDeterministic = (row) =>
+  ['metrics', 'logs', 'change'].includes(row?.role) && /^native-/.test(row?.templateHead ?? '')
+
+// 版本指标对比：按 prompt_version 聚合终态实验，取每版本最近一批为代表行
+const METRICS = [
+  { key: 'f1', label: 'F1' },
+  { key: 'precision', label: '精确率' },
+  { key: 'recall', label: '召回率' },
+  { key: 'endToEndHitRate', label: '端到端命中率' },
+  { key: 'conditionalAccuracy', label: '条件准确率' },
+  { key: 'unresolvedRate', label: '未决率', invert: true },
+]
+const versionMetrics = computed(() => {
+  const byVer = new Map()
+  for (const r of evalRuns.value) {
+    if (!r.promptVersion) continue
+    if (!byVer.has(r.promptVersion)) byVer.set(r.promptVersion, [])
+    byVer.get(r.promptVersion).push(r)
+  }
+  const rows = []
+  for (const [version, runs] of byVer) {
+    const terminal = runs.filter(r => r.state === 'SUCCEEDED' || r.state === 'FAILED')
+    if (!terminal.length) continue
+    terminal.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+    rows.push({ version, runCount: terminal.length, latestAt: terminal[0].startedAt, latest: terminal[0] })
+  }
+  rows.sort((a, b) => Date.parse(b.latestAt) - Date.parse(a.latestAt))
+  rows.forEach((row, i) => { row.prev = rows[i + 1]?.latest ?? null })
+  return rows
+})
+function pct(v) { return v == null ? '—' : (v * 100).toFixed(1) + '%' }
+function deltaOf(row, key) {
+  const cur = row.latest?.[key]
+  const prev = row.prev?.[key]
+  if (cur == null || prev == null) return null
+  return cur - prev
+}
+function deltaCls(d, invert) {
+  if (d == null || Math.abs(d) < 1e-9) return 'delta-flat'
+  const good = invert ? d < 0 : d > 0
+  return good ? 'delta-up' : 'delta-down'
+}
+function qualityZh(v) {
+  return ({ OK: '通过', VIOLATED: '未通过', UNKNOWN: '无裁决' })[v] ?? '无裁决'
+}
+
+// BA-176 版本解读：可比性提示 + 进步/退步原因人话文案。
+// 数据全部来自 /eval/runs 列表项真实字段（model/datasetVersion/endToEndHitRate/
+// tp/fp/fn/modelCallFailures/modelCallFailureCode），失败码中文名读 ERROR_CODE_ZH
+// 共享字典——缺什么说什么，不估算不编造。
+function failureShortZh(code) {
+  const hit = ERROR_CODE_ZH[code]
+  return hit ? hit[0] : (code || '未分类')
+}
+
+/** 可比性提示：相邻版本的模型或数据集换了 → Δ 非同口径，仅供参考 */
+function caliberNote(row) {
+  const p = row.prev
+  if (!p) return ''
+  const changed = []
+  if ((row.latest.model ?? null) !== (p.model ?? null)) changed.push('模型')
+  if ((row.latest.datasetVersion ?? null) !== (p.datasetVersion ?? null)) changed.push('数据集')
+  return changed.length ? `${changed.join('与')}已更换，与上一版本非同口径，Δ 仅供参考` : ''
+}
+
+/** 版本行解读（人话）：欠费/限流窗的低分与真实判错必须区分开 */
+function versionInsight(row) {
+  const cur = row.latest
+  if (cur.state === 'FAILED') {
+    return '本批实验执行失败（未跑到终态评分），指标不反映提示词效果——请先在评测中心查看该批的失败原因'
+  }
+  const parts = []
+  const failed = cur.modelCallFailures ?? 0
+  const e2e = cur.endToEndHitRate
+  const prevE2e = row.prev?.endToEndHitRate
+  if (failed > 0) {
+    parts.push(`本批有 ${failed} 次模型调用被拒（主因：${failureShortZh(cur.modelCallFailureCode)}）`
+      + `——调查在模型不可用下按设计诚实降级为未决，命中率 ${pct(e2e)} 主要反映供应商可用性，不代表提示词退步`)
+  }
+  if (row.prev && e2e != null && prevE2e != null) {
+    const d = (e2e - prevE2e) * 100
+    if (Math.abs(d) < 0.05) {
+      parts.push(`与上一版本基本持平（端到端命中率 ${pct(prevE2e)}→${pct(e2e)}）`)
+    } else if (d > 0) {
+      parts.push(`较上一版本进步（端到端命中率 ${pct(prevE2e)}→${pct(e2e)}）`)
+    } else if (failed === 0) {
+      parts.push(`较上一版本退步（端到端命中率 ${pct(prevE2e)}→${pct(e2e)}）：`
+        + `本批症状判定漏报 ${cur.fn ?? '—'} 案、误报 ${cur.fp ?? '—'} 案，详见评测中心逐案账本`)
+    }
+  }
+  if (!parts.length) {
+    if (e2e == null) return '本批指标未回填（案例未全部结清），暂无终态数据可解读'
+    parts.push(`本批端到端命中率 ${pct(e2e)}，症状判定 tp=${cur.tp ?? '—'}、fp=${cur.fp ?? '—'}、fn=${cur.fn ?? '—'}`)
+  }
+  return parts.join('；')
+}
+async function loadEvalRuns() {
+  try {
+    const res = await api('/eval/runs', { params: { limit: 200 } })
+    evalRuns.value = res?.items ?? []
+  } catch { /* 实验面缺席如实留空 */ }
+}
 
 const summary = computed(() => {
   const inProd = assets.value.filter(a => a.calls > 0).length
@@ -291,7 +537,7 @@ async function runInvestigate() {
   } finally { runLoading.value = false }
 }
 
-onMounted(() => { loadAssets(); loadActivePlan(); loadIncidents(); updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false }) })
+onMounted(() => { loadAssets(); loadActivePlan(); loadTools(); loadIncidents(); loadEvalRuns(); updatedAt.value = new Date().toLocaleString('zh-CN', { hour12: false }) })
 </script>
 
 <script>
@@ -317,6 +563,7 @@ export default { name: 'PromptWorkbenchView' }
 .wb-grid { display: grid; grid-template-columns: 460px minmax(0, 1fr); gap: var(--section-gap); align-items: start; margin-bottom: var(--section-gap); }
 .ver-name { font-weight: 600; color: var(--ink); }
 .ver-sub { font-size: var(--fs-aux); color: var(--ink-2); }
+.caliber-warn { color: var(--el-color-warning); }
 .cmp-box { cursor: pointer; }
 .cmp-hint { margin-top: 8px; font-size: var(--fs-aux); color: var(--ink-2); }
 
@@ -338,4 +585,7 @@ export default { name: 'PromptWorkbenchView' }
 .d-add { background: var(--ok-bg); color: #1a7a34; display: block; }
 .d-del { background: var(--bad-bg); color: #b3261e; display: block; text-decoration: line-through; }
 .d-ctx { color: var(--ink); display: block; }
+.delta-up { color: #1a7a34; font-weight: 600; }
+.delta-down { color: #b3261e; font-weight: 600; }
+.delta-flat { color: var(--ink-2); }
 </style>

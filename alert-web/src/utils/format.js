@@ -59,6 +59,12 @@ export function fmtCount(v) {
   return v == null ? '未统计' : String(v)
 }
 
+// 纯数字（token 用量等）：null/非法 → '—'；真实 0 → '0'（千分位便于阅读）
+export function fmtNum(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—'
+  return Number(v).toLocaleString('zh-CN')
+}
+
 // EV-01 比率三态：null/非法 → '未统计'；真实 0 → '0%'（与 fmtPct 的 '—' 口径分离，评测页专用）
 export function fmtPctStat(v) {
   if (v == null || Number.isNaN(Number(v))) return '未统计'

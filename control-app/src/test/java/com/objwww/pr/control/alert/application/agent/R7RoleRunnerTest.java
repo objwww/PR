@@ -381,8 +381,10 @@ class R7RoleRunnerTest {
         assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().stepsUsed())
                 .isEqualTo(1);
         assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().lastError())
-                .as("V88 反馈环：INVALID_ARGS 修正指引落检查点，下步信封 last_error 面下发")
-                .isNotNull().contains("INVALID_ARGS").contains("tool_schemas");
+                .as("V88 反馈环：INVALID_ARGS 修正指引+执行器具体拒因落检查点，下步信封回喂"
+                        + "（BA-183：模型能从拒因学会修参，不是只见 INVALID_INPUT 码）")
+                .isNotNull().contains("INVALID_ARGS").contains("tool_schemas")
+                .contains("形状不符");
         toolPort.failWith = null;
     }
 
@@ -401,6 +403,72 @@ class R7RoleRunnerTest {
         assertThat(client.prompts.get(0))
                 .as("tool_schemas 钉版随信封下发（BA-112 模型取参依据）")
                 .contains("tool_schemas").contains("\"since\"");
+    }
+
+    @Test
+    void ba181工具用途描述随信封下发_schema形状逐字节不变() {
+        AgentProfile withSchemas = schemaProfile();
+        UUID taskId = seedBoundPrimaryTask(withSchemas);
+        seedCheckpoint(taskId, 0);
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"final\":{\"claims\":[],\"missing_information\":[\"x\"]}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-b5",
+                Duration.ofMillis(5)));
+
+        boundedRunner.drive(request(taskId, withSchemas));
+
+        assertThat(client.prompts.get(0))
+                .as("BA-181：逐工具中文用途描述入信封（模型选工具不再只有裸 schema）")
+                .contains("\"description\":\"查冻结窗内的服务日志")
+                .contains("\"properties\":{\"since\":{\"type\":\"string\"}}");
+    }
+
+    // ------------------------------------------------- BA-181 熔断签名单步化
+
+    @Test
+    void ba181熔断签名命中_计步重驱而非DEAD() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"service\":\"order-arena\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-d1",
+                Duration.ofMillis(5)));
+        toolPort.failWith = new com.objwww.pr.control.alert.domain.tool
+                .ToolControlPlaneException(com.objwww.pr.control.alert.domain.tool
+                        .ToolControlReason.DOOM_LOOP_TRIPPED,
+                        "DOOM_LOOP_TRIPPED: 重复同参调用熔断触发");
+
+        RoleRunner.RoleDriveResult result = boundedRunner.drive(
+                request(primaryId, primaryProfile()));
+
+        assertThat(result.outcome()).as("BA-181：熔断的是签名不是调查——计步重驱而非整任务 DEAD")
+                .isEqualTo(RoleRunner.RoleDriveOutcome.FAILED);
+        assertThat(result.reason()).isEqualTo("TOOL_RETRYABLE:DOOM_LOOP_TRIPPED");
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().stepsUsed())
+                .isEqualTo(1);
+        assertThat(stores.checkpoints.findByTask(primaryId).orElseThrow().lastError())
+                .as("V88 反馈环：熔断禁令与出路落检查点，下步信封 last_error 面下发")
+                .isNotNull().contains("DOOM_LOOP_TRIPPED").contains("禁止同参重发")
+                .contains("change.query");
+        toolPort.failWith = null;
+    }
+
+    @Test
+    void ba181真终止族预算耗尽_维持上抛DEAD() {
+        UUID primaryId = startPrimary();
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"service\":\"order-arena\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-d2",
+                Duration.ofMillis(5)));
+        toolPort.failWith = new com.objwww.pr.control.alert.domain.tool
+                .ToolControlPlaneException(com.objwww.pr.control.alert.domain.tool
+                        .ToolControlReason.BUDGET_EXHAUSTED,
+                        "BUDGET_EXHAUSTED: 本 Run 工具调用预算耗尽");
+
+        assertThatThrownBy(() -> boundedRunner.drive(request(primaryId, primaryProfile())))
+                .as("BA-181：BUDGET_EXHAUSTED 真终止族行为不变（上抛由执行器降级 DEAD）")
+                .isInstanceOf(com.objwww.pr.control.alert.domain.tool
+                        .ToolControlPlaneException.class);
+        toolPort.failWith = null;
     }
 
     // ------------------------------------------------- BA-119 委派全拒反馈环

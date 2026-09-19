@@ -29,6 +29,19 @@ import java.util.TreeSet;
  * 身份</b>，不进 fingerprint/contentHash 双哈希（回放比对稳定）；11 参 compat 构造
  * 默认 {@link ClaimKind#HYPOTHESIS}（无类型断言的保守形态，结构性禁止默认
  * ROOT_CAUSE）。类型准入/转换逻辑归 R7c 单一责任人（P1-01）。
+ *
+ * <p>rootCause（可空，{@link com.objwww.pr.control.alert.domain.model.TypedRootCause}）：
+ * ROOT_CAUSE 断言的<b>结构化评分面</b>（canonical component/fault_type/reason_code，
+ * 报告相位直填 EvidencePackage v2 root_cause——不再拿 scope/claimKey 冒充）；
+ * null = 模型未提供（诚实降级，报告面落 unknown 三元组）。三元组是内容面：计入
+ * {@link #contentHash()}（内容演化走 REVISED），不进 {@link #fingerprint()}
+ * （身份面不变——同断言补上/订正三元组是修订不是新身份）。
+ *
+ * <p>symptomCodes（可空）：SYMPTOM 断言的<b>症状码评分面</b>（EvidencePackage v2
+ * symptom_coverage 取此槽位，取值=告警名）；null/空表 = 模型未声明（诚实降级，
+ * 报告面 symptom_codes 落空数组——不拿证据来源标签冒充，BA-158 同族实证批
+ * aa7f25b4 tp=0/fp=99/fn=60）。与三元组同律：内容面计入 {@link #contentHash()}，
+ * 不进 {@link #fingerprint()}。
  */
 public record ClaimVerdict(
         String claimKey,
@@ -42,7 +55,29 @@ public record ClaimVerdict(
         String reason,
         List<String> evidenceRefs,
         String policyVersion,
-        ClaimKind kind) {
+        ClaimKind kind,
+        com.objwww.pr.control.alert.domain.model.TypedRootCause rootCause,
+        List<String> symptomCodes) {
+
+    /** 13 参 compat 构造（存量调用点零改动）：symptomCodes 缺省 = null（未声明） */
+    public ClaimVerdict(String claimKey, String scope, String timeRange,
+            long observedGeneration, String snapshotDigest, ClaimStatus status,
+            EvidenceBasis evidenceBasis, List<String> sources, String reason,
+            List<String> evidenceRefs, String policyVersion, ClaimKind kind,
+            com.objwww.pr.control.alert.domain.model.TypedRootCause rootCause) {
+        this(claimKey, scope, timeRange, observedGeneration, snapshotDigest, status,
+                evidenceBasis, sources, reason, evidenceRefs, policyVersion, kind,
+                rootCause, null);
+    }
+
+    /** 12 参 compat 构造（存量调用点零改动）：rootCause 缺省 = null（未提供） */
+    public ClaimVerdict(String claimKey, String scope, String timeRange,
+            long observedGeneration, String snapshotDigest, ClaimStatus status,
+            EvidenceBasis evidenceBasis, List<String> sources, String reason,
+            List<String> evidenceRefs, String policyVersion, ClaimKind kind) {
+        this(claimKey, scope, timeRange, observedGeneration, snapshotDigest, status,
+                evidenceBasis, sources, reason, evidenceRefs, policyVersion, kind, null);
+    }
 
     /** 11 参 compat 构造（存量调用点零改动）：kind 缺省 = HYPOTHESIS（保守形态） */
     public ClaimVerdict(String claimKey, String scope, String timeRange,
@@ -67,8 +102,13 @@ public record ClaimVerdict(
         Objects.requireNonNull(evidenceBasis, "evidenceBasis");
         Objects.requireNonNull(kind, "kind");
         // snapshotDigest 可为 null（无快照约束）；canonicalize 对 null 输出 "null"
+        // rootCause 可为 null（未提供结构化根因=诚实降级）；contentHash 对 null 输出 "null"
+        // symptomCodes 可为 null（未声明症状码=诚实降级）；同上只入内容哈希
         sources = sortedDistinct(sources, "sources");
         evidenceRefs = sortedDistinct(evidenceRefs, "evidenceRefs");
+        if (symptomCodes != null) {
+            symptomCodes = sortedDistinct(symptomCodes, "symptomCodes");
+        }
         if (evidenceRefs.isEmpty()) {
             throw new IllegalArgumentException("evidenceRefs 不得为空——无证据不成断言");
         }
@@ -85,7 +125,8 @@ public record ClaimVerdict(
         return identity().fingerprint();
     }
 
-    /** claim_hash：内容（状态+原因+证据引用+来源+策略版本）canonical 后 sha256（hex 64） */
+    /** claim_hash：内容（状态+原因+证据引用+来源+策略版本+结构化根因三元组+症状码）
+     *  canonical 后 sha256（hex 64）；rootCause/symptomCodes 可空（未提供=内容面无此维度） */
     public String contentHash() {
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("kind", "claim-hash");
@@ -94,6 +135,11 @@ public record ClaimVerdict(
         content.put("evidenceRefs", evidenceRefs);
         content.put("sources", sources);
         content.put("policyVersion", policyVersion);
+        content.put("rootCause", rootCause == null ? null : Map.of(
+                "component", rootCause.component(),
+                "faultType", rootCause.faultType(),
+                "reasonCode", rootCause.reasonCode()));
+        content.put("symptomCodes", symptomCodes);
         return InternalCanonicalJsonV1.sha256(content);
     }
 

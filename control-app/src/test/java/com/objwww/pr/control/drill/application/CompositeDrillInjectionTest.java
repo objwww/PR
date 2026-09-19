@@ -103,11 +103,16 @@ class CompositeDrillInjectionTest {
         int failOnCall = -1; // 1-based；-1 = 不失败
 
         @Override
-        public void createOrder(String intentId, String correlationId, String sku) {
+        public String createOrder(String intentId, String correlationId, String sku) {
             orders.add(intentId + "/" + correlationId);
             if (orders.size() == failOnCall) {
                 throw new ResourceAccessException("arena 创单超时");
             }
+            return "order-" + orders.size();
+        }
+
+        @Override
+        public void payOrder(String orderId, String correlationId) {
         }
     }
 

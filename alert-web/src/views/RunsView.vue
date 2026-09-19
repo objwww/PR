@@ -103,7 +103,7 @@
 </template>
 
 <script setup>
-// UI-3 调查队列（/runs）：el-table + 三分组 tab（进行中/待干预/已结束），计数来自真 buckets。
+// UI-3 调查队列（/runs）：el-table + 五桶直出 tab（进行中/卡住/失败/待审查/已结束），计数来自真 buckets。
 // 真端点契约（control-app RunQueryService.list）：
 //   summary.buckets.{mine,running,stuck,failed,review}（done 桶无计数，由 rows 推导）；
 //   summary.sla.{overSla:0|1, oldestReadyWait, projectionLag:null}；
@@ -130,18 +130,22 @@ const summary = ref(null)
 const rows = ref([])
 
 // 筛选状态经 URL query 持久化（tab/stage/q）
-const tab = ref(str(route.query.tab) || 'running')
+// 旧链接兼容：三分组时期的 tab=intervene 落到「待审查」（review 是旧待干预的主构成）
+const initTab = str(route.query.tab)
+const tab = ref(initTab === 'intervene' ? 'review' : initTab || 'running')
 const fStage = ref(str(route.query.stage))
 const kw = ref(str(route.query.q))
 const q = ref(str(route.query.q))
 
-const INTERVENE_BUCKETS = new Set(['mine', 'stuck', 'failed', 'review'])
-
+// 五桶直出（buckets 真计数）：进行中/卡住/失败/待审查/已结束——
+// 待审查=SUCCEEDED/PARTIAL 等待人工复核（复核动作未落码前如实累积）；已结束=CANCELLED/SUPERSEDED
 const tabs = computed(() => {
   const b = summary.value?.buckets ?? {}
   return [
     { key: 'running', label: '进行中', count: b.running ?? null },
-    { key: 'intervene', label: '待干预', count: (b.mine ?? 0) + (b.stuck ?? 0) + (b.failed ?? 0) + (b.review ?? 0) },
+    { key: 'stuck', label: '卡住', count: b.stuck ?? null },
+    { key: 'failed', label: '失败', count: b.failed ?? null },
+    { key: 'review', label: '待审查', count: b.review ?? null },
     { key: 'done', label: '已结束', count: summary.value ? rows.value.filter(r => r.bucket === 'done').length : null },
   ]
 })
@@ -150,7 +154,7 @@ const slaText = computed(() => {
   const sla = summary.value?.sla
   if (!sla) return ''
   const wait = sla.oldestReadyWait ? `，最老就绪任务已等待 ${sla.oldestReadyWait}` : ''
-  return `有调查任务超过 SLA${wait}，请优先处理「待干预」分组。`
+  return `有调查任务超过 SLA${wait}，请优先处理「卡住」与「失败」分组。`
 })
 
 const stageOptions = computed(() => {
@@ -162,10 +166,7 @@ const stageOptions = computed(() => {
 const hasFilter = computed(() => !!(fStage.value || q.value))
 
 const filteredRows = computed(() => rows.value.filter(r => {
-  const inTab = tab.value === 'intervene'
-    ? INTERVENE_BUCKETS.has(r.bucket)
-    : r.bucket === tab.value
-  if (!inTab) return false
+  if (r.bucket !== tab.value) return false
   if (fStage.value && r.stage !== fStage.value) return false
   const s = q.value.trim().toLowerCase()
   if (s && !r.id.toLowerCase().includes(s) && !(r.incident ?? '').toLowerCase().includes(s)) return false
@@ -216,7 +217,8 @@ function openRun(row) {
 
 // 浏览器前进/后退：query 变化回灌筛选
 watch(() => route.query, query => {
-  const next = { tab: str(query.tab) || 'running', stage: str(query.stage), q: str(query.q) }
+  const rawTab = str(query.tab)
+  const next = { tab: rawTab === 'intervene' ? 'review' : rawTab || 'running', stage: str(query.stage), q: str(query.q) }
   if (next.tab === tab.value && next.stage === fStage.value && next.q === q.value) return
   tab.value = next.tab
   fStage.value = next.stage

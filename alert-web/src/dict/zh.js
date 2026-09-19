@@ -192,3 +192,48 @@ export const WAITING_REASON_ZH = {
   WAITING_CAPABILITY: '等待路由放量',
   DEFERRED: '背压暂扣',
 }
+
+/**
+ * 模型调用/调查失败原因码 → 中文说明 + 处置建议（RCA 故障分类 §4.2 全族 +
+ * 确定性未决族）。value = [短名, 说明与建议]。页面只读本字典，不各自硬编码。
+ */
+export const ERROR_CODE_ZH = {
+  REQUEST_INVALID: ['请求无效', '模型服务端拒绝了请求（参数或模型名不被接受）。请检查模型配置与价目/路由设置'],
+  BILLING_OR_ACTIVATION: ['账户欠费或未开通', '模型服务商账户余额不足或能力未开通（HTTP 402/欠费码）。请前往服务商控制台充值或开通后重试，系统会自动恢复'],
+  AUTH_DENIED: ['凭证被拒', 'API 密钥无效或已吊销（HTTP 401）。请更新密钥配置'],
+  QUOTA_EXHAUSTED: ['配额耗尽', '账户配额或免费额度用尽（HTTP 429 配额族）。请升配或等待配额重置'],
+  RATE_LIMIT: ['限流', '触发服务商限流（HTTP 429），系统已按退避策略自动重试'],
+  TIMEOUT: ['调用超时', '模型响应超时。若为持续性超时请检查服务商状态'],
+  SERVER_ERROR: ['服务商故障', '模型服务端 5xx 故障，系统已自动重试；持续出现请查看服务商状态页'],
+  PROTOCOL_ERROR: ['协议错误', '响应协议异常（非预期报文），请保留现场联系开发'],
+  OUTPUT_BUDGET_EXHAUSTED: ['输出预算耗尽', '输出 token 预算被推理段吃光导致正文为空。已修预算配置，新调用不再出现'],
+  BUDGET_EXHAUSTED: ['调用预算耗尽', '本次调查的调用次数/token 预算用尽，调查按预算闸终止'],
+  DEADLINE_EXCEEDED: ['调查超时', '调查总时限耗尽，按截止闸终止'],
+  NO_CONFIRMED_ROOT_CAUSE: ['未确认根因', '调查未取到足够证据确认根因（双源佐证未满），系统如实给出未决结论而非猜测。可重新排查或人工介入'],
+  MODEL_FAILURE_REQUEST_INVALID: ['模型调用失败', '主任务模型调用连续失败（详见调用链错误码），系统按零模型确定性收尾'],
+}
+export function errorCodeZh(code) {
+  if (!code) return ''
+  const hit = ERROR_CODE_ZH[code]
+  if (hit) return `${hit[0]}：${hit[1]}`
+  if (code.startsWith('UNKNOWN_ERROR')) return `未知错误：${code}`
+  return code
+}
+
+/** 变更动作 action_id → 中文名 + 说明（审批处置页审批对象标题） */
+export const ACTION_ID_ZH = {
+  'chaos.resolve': ['故障恢复', '对故障演练注入的故障执行恢复动作，将目标对象恢复到正常状态'],
+  'scale.database': ['数据库扩容', '对目标数据库实例执行扩容（连接池/规格），影响数据面可用性'],
+  'scale.service': ['服务扩容', '对目标服务执行副本/规格扩容，影响业务面容量'],
+  'service.restart': ['重启服务', 'AI 调查建议重启目标服务以恢复服务。R3 高危写操作：调用不直接执行，需两名审批人批准后由系统进入执行计划（无 unlock 白名单时为模拟执行）'],
+  'service.rollback': ['回滚服务', 'AI 调查建议将目标服务回滚到上一版本。R3 高危写操作：调用不直接执行，需两名审批人批准后由系统进入执行计划（无 unlock 白名单时为模拟执行）'],
+}
+export function actionZh(actionId) {
+  if (!actionId) return '—'
+  const hit = ACTION_ID_ZH[actionId]
+  return hit ? hit[0] : actionId
+}
+export function actionDesc(actionId) {
+  const hit = ACTION_ID_ZH[actionId]
+  return hit ? hit[1] : ''
+}

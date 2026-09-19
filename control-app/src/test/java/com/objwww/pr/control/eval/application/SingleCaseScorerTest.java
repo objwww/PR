@@ -46,6 +46,7 @@ class SingleCaseScorerTest {
             new AlertInMemoryStores.ToolCalls();
 
     private SingleCaseScorer scorer;
+    private ScenarioEvaluator evaluator;
     private GoldenCase golden;
 
     @BeforeEach
@@ -63,8 +64,8 @@ class SingleCaseScorerTest {
                     fault_type: BUSINESS_ERROR_RATE
                     synonyms: [扣款失败]
                 """);
-        scorer = new SingleCaseScorer(runs, reports, investigations, toolCalls,
-                new ScenarioEvaluator(lexicon));
+        evaluator = new ScenarioEvaluator(lexicon);
+        scorer = new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator);
         golden = new GoldenCase("S1", "paymentFailure=50%", "FlagdScenarioDriver", null,
                 "payment", EXPECTED, List.of("checkout"),
                 new GoldenCase.Timing(1, 1, 1, 1, 1));
@@ -222,5 +223,84 @@ class SingleCaseScorerTest {
                 .orElseThrow();
         assertThat(result.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
         assertThat(result.failureSampleJson()).contains("run_absent");
+    }
+
+    @Test
+    @DisplayName("NATIVE 链无 tool_call 账本：过程计数回退 rca_evidence 面（total=行数、unique=类型×来源去重）")
+    void nativeChainToolCountsFallBackToEvidence() {
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+        UUID runId = seedRun(base);
+        seedReport(runId, UUID.randomUUID(), base.plusSeconds(30),
+                ValidationStatus.STRUCTURE_VALIDATED, hitPackage());
+        com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidence =
+                new com.objwww.pr.control.alert.domain.evidence.EvidenceRepository() {
+                    @Override
+                    public void insert(com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope e) {
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findById(UUID id) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public java.util.List<com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findByRunId(UUID rid) {
+                        return java.util.List.of(
+                                envelope(rid, "logs.query", "logs", base),
+                                envelope(rid, "logs.query", "logs", base.plusSeconds(1)),
+                                envelope(rid, "metrics.query_range", "prometheus", base.plusSeconds(2)));
+                    }
+
+                    private com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope envelope(
+                            UUID rid, String type, String source, Instant at) {
+                        String canonical = "{\"k\":1}";
+                        return new com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope(
+                                UUID.randomUUID(), rid, UUID.randomUUID(), type, "am4-evidence.v1",
+                                0, source, java.util.Map.of(), at, at, canonical,
+                                com.objwww.pr.shared.Digests.sha256Hex(canonical));
+                    }
+                };
+        SingleCaseScorer withEvidence = new SingleCaseScorer(runs, reports, investigations,
+                toolCalls, evaluator, null, null, null, evidence);
+
+        EvalCaseResult result = withEvidence.score(UUID.randomUUID(), golden, 1, runId)
+                .orElseThrow();
+        assertThat(result.verdict()).isEqualTo(ScoringVerdict.DECIDABLE);
+        assertThat(result.toolCallsTotal()).isEqualTo(3);
+        assertThat(result.toolCallsUnique()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("账本非空时不回退：tool_call 账本优先于证据面（语义冻结）")
+    void ledgerTakesPrecedenceOverEvidenceFallback() {
+        Instant base = Instant.parse("2026-01-01T00:00:00Z");
+        UUID runId = seedRun(base);
+        UUID attemptId = UUID.randomUUID();
+        seedInvestigationWithToolCalls(attemptId, runId);
+        seedReport(runId, attemptId, base.plusSeconds(30),
+                ValidationStatus.STRUCTURE_VALIDATED, hitPackage());
+        com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidence =
+                new com.objwww.pr.control.alert.domain.evidence.EvidenceRepository() {
+                    @Override
+                    public void insert(com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope e) {
+                    }
+
+                    @Override
+                    public Optional<com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findById(UUID id) {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public java.util.List<com.objwww.pr.control.alert.domain.evidence.EvidenceEnvelope> findByRunId(UUID rid) {
+                        throw new IllegalStateException("不应被调用");
+                    }
+                };
+        SingleCaseScorer withEvidence = new SingleCaseScorer(runs, reports, investigations,
+                toolCalls, evaluator, null, null, null, evidence);
+
+        EvalCaseResult result = withEvidence.score(UUID.randomUUID(), golden, 1, runId)
+                .orElseThrow();
+        assertThat(result.toolCallsTotal()).isEqualTo(1);
+        assertThat(result.toolCallsUnique()).isEqualTo(1);
     }
 }

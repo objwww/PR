@@ -951,4 +951,63 @@ class ContextAssemblerTest {
                 .isEqualTo(String.valueOf(ContextCompactionService.SCHEMA_VERSION));
         assertThat(asset.assetDigest().hex()).hasSize(64);
     }
+
+    // ------------------------------------------------------------- 根因码表面（评分贯通）
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("root_cause_catalog 入信封：码表非空即下发 canonical 清单+用法说明；空表/未接=零段落")
+    void rootCauseCatalogSection() throws Exception {
+        ContextAssembler.AlertMaterial alert =
+                new ContextAssembler.AlertMaterial("HighErrorRate", "checkout", "P1", "s");
+        var catalog = (com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort)
+                () -> List.of(new com.objwww.pr.control.alert.domain.agent
+                        .RootCauseCatalogPort.Entry("payment", "BUSINESS_ERROR_RATE",
+                        "PAYMENT_CHARGE_FAILURE", "扣款按比例失败"));
+        ContextAssembler withCatalog = new ContextAssembler(evidence, toolLedger,
+                delegations, run -> alert, null, null, null, null, null, catalog,
+                CLOCK, MAPPER);
+
+        JsonNode envelope = envelopeOf(withCatalog.assemble(request(), checkpoint(), 1)
+                .prompt());
+        JsonNode section = envelope.get("root_cause_catalog");
+        assertThat(section).isNotNull();
+        assertThat(section.get("usage").asText()).contains("canonical");
+        JsonNode entry = section.get("entries").get(0);
+        assertThat(entry.get("component").asText()).isEqualTo("payment");
+        assertThat(entry.get("fault_type").asText()).isEqualTo("BUSINESS_ERROR_RATE");
+        assertThat(entry.get("reason_code").asText()).isEqualTo("PAYMENT_CHARGE_FAILURE");
+        assertThat(entry.get("description").asText()).isEqualTo("扣款按比例失败");
+
+        // 空表/未接：零段落不造占位（诚实降级）
+        ContextAssembler empty = new ContextAssembler(evidence, toolLedger,
+                delegations, run -> alert, null, null, null, null, null,
+                com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort.EMPTY,
+                CLOCK, MAPPER);
+        assertThat(envelopeOf(empty.assemble(request(), checkpoint(), 1).prompt())
+                .has("root_cause_catalog")).isFalse();
+        assertThat(envelopeOf(assemblerWith(alert).assemble(request(), checkpoint(), 1)
+                .prompt()).has("root_cause_catalog")).isFalse();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("BA-157：Spring 行型投影为「级别+消息体」——前缀不吃满 ITEM_LIMIT；非 Spring 行型原样")
+    void springLogLineProjection() {
+        // 2026-09-17 实证：Spring 前缀 ~95 字符吃满 ITEM_LIMIT=100，根因证据正文结构性不可见
+        String spring = "2026-09-17T08:00:00.123Z  WARN 1 --- [nio-8080-exec-1]"
+                + " c.o.p.a.TwoStepOrderService : F1 幂等闸旁路：跳过幂等 claim，"
+                + "同 intent 可重复创单： intent=abc correlation=xyz";
+        String projected = ContextAssembler.logMessage(spring);
+        assertThat(projected).startsWith("WARN ");
+        assertThat(projected).contains("F1 幂等闸旁路").contains("intent=abc");
+        assertThat(projected).doesNotContain("TwoStepOrderService")
+                .doesNotContain("2026-09-17");
+        // 投影后消息体落在 ITEM_LIMIT 视窗内（前缀不再吃预算）
+        assertThat(projected.length()).isLessThanOrEqualTo(100);
+
+        // 非 Spring 行型原样返回（不丢信息、不臆造结构）
+        String plain = "ERR-5002 NullPointerException at PaymentGateway.charge";
+        assertThat(ContextAssembler.logMessage(plain)).isEqualTo(plain);
+        String empty = "";
+        assertThat(ContextAssembler.logMessage(empty)).isEqualTo("");
+    }
 }

@@ -49,7 +49,7 @@ public final class DrillExecutionPolicy {
     /** 关闭期拒绝文案（worker 终态卡因 / 预检 FAIL detail / 注入边界卡因 同源） */
     public String disabledReason() {
         return REASON_CODE + ": 演练启动面已关闭（app.drill.launch-enabled=false，"
-                + "SAFE-04/FUP-01：停止/恢复推进链未交付）——重开需改配置并重启生效"
-                + "（启动时加载，非即时急停），policyVersion=" + POLICY_VERSION;
+                + "SAFE-04/FUP-01）——DR-03/04 停止/恢复推进链已交付，重开需改配置并"
+                + "重启生效（启动时加载，非即时急停），policyVersion=" + POLICY_VERSION;
     }
 }

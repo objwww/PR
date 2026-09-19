@@ -2,7 +2,37 @@
   <div class="datasets-page">
     <div class="table-zone card">
       <template v-if="listState === 'ok'">
-        <el-table :data="items" v-loading="loading">
+        <el-table :data="items" v-loading="loading" :row-key="rowKey" @expand-change="onExpand">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="case-zone" v-loading="caseLoading[rowKey(row)]">
+                <template v-if="caseRows(rowKey(row)).length">
+                  <div v-for="c in caseRows(rowKey(row))" :key="c.caseKey" class="case-item">
+                    <div class="case-head">
+                      <span class="case-key">{{ c.caseKey }}</span>
+                      <el-tag size="small" effect="plain" disable-transitions>{{ c.scenarioFamilyId ?? '—' }}</el-tag>
+                      <el-tag v-if="c.partitionClass" size="small" type="info" effect="plain" disable-transitions>{{ c.partitionClass }}</el-tag>
+                    </div>
+                    <div v-if="c.note" class="case-note">{{ c.note }}</div>
+                    <div class="case-meta">
+                      <span>期望根因：<b>{{ c.expectedRootCause ?? '未标注' }}</b></span>
+                      <span v-if="c.expectedSymptomCodes?.length">
+                        期望症状：
+                        <el-tag
+                          v-for="s in c.expectedSymptomCodes" :key="s"
+                          size="small" effect="plain" class="fam-chip" disable-transitions
+                        >{{ s }}</el-tag>
+                      </span>
+                    </div>
+                  </div>
+                </template>
+                <el-empty
+                  v-else-if="caseLoaded[rowKey(row)]" description="该版本暂无可展示案例"
+                  :image-size="48"
+                />
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="version" label="版本" min-width="150" show-overflow-tooltip />
           <el-table-column label="分层（冒烟/回归/探索/红队）" width="200">
             <template #default="{ row }">
@@ -65,6 +95,28 @@ const items = ref([])
 const tiers = ref({}) // name|version -> tier
 const listState = ref('loading') // loading | ok | error | forbidden
 const loading = ref(false)
+const caseMap = ref({}) // rowKey -> 案例清单
+const caseLoaded = ref({}) // rowKey -> 是否已请求过（含空表）
+const caseLoading = ref({}) // rowKey -> loading
+
+function rowKey(row) { return row.name + '|' + row.version }
+function caseRows(key) { return caseMap.value[key] ?? [] }
+async function onExpand(row, expanded) {
+  const open = Array.isArray(expanded) ? expanded.includes(row) : expanded === row
+  const key = rowKey(row)
+  if (!open || caseLoaded.value[key]) return
+  caseLoading.value = { ...caseLoading.value, [key]: true }
+  try {
+    const res = await api(`/eval/datasets/${encodeURIComponent(row.name)}/${encodeURIComponent(row.version)}/cases`)
+    caseMap.value = { ...caseMap.value, [key]: res?.items ?? [] }
+  } catch {
+    caseMap.value = { ...caseMap.value, [key]: [] }
+    ElMessage.error('案例清单加载失败，请重试')
+  } finally {
+    caseLoaded.value = { ...caseLoaded.value, [key]: true }
+    caseLoading.value = { ...caseLoading.value, [key]: false }
+  }
+}
 
 function tierOf(row) { return tiers.value[row.name + '|' + row.version] ?? null }
 async function setTier(row, tier) {
@@ -113,4 +165,10 @@ onMounted(() => { loadList(); loadTiers() })
 .table-zone { padding: 8px var(--card-pad) 12px; }
 .fam-chip { margin: 2px 4px 2px 0; }
 .loading-box { height: 320px; }
+.case-zone { padding: 8px 16px 12px 48px; display: flex; flex-direction: column; gap: 10px; }
+.case-item { border: 1px solid var(--el-border-color-lighter); border-radius: 6px; padding: 8px 12px; }
+.case-head { display: flex; align-items: center; gap: 8px; }
+.case-key { font-weight: 600; font-family: var(--mono-font, monospace); }
+.case-note { color: var(--el-text-color-regular); font-size: 13px; margin-top: 4px; }
+.case-meta { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; display: flex; gap: 16px; flex-wrap: wrap; }
 </style>

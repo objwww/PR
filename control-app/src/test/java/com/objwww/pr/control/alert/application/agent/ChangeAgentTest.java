@@ -75,7 +75,9 @@ class ChangeAgentTest {
                 Map.of("change_id", "CHG-2026-0901-04"), null));
 
         assertThat(result.kind().name()).isEqualTo("VALIDATE_ONLY");
-        assertThat(result.body()).isNull();
+        // BA-171：VALIDATE_ONLY 带待审批模型可见反馈体（夹具网关未装配意图台账→降级文案）
+        assertThat(new String(result.body(), java.nio.charset.StandardCharsets.UTF_8))
+                .contains("PENDING_APPROVAL").contains("意图台账未装配");
     }
 
     @Test

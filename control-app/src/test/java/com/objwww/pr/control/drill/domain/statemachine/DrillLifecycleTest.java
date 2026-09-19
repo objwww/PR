@@ -86,6 +86,29 @@ class DrillLifecycleTest {
     }
 
     @Test
+    @DisplayName("DR-04 人工重试边：RECOVERY_FAILED→RECOVERING 合法（处理入口）；"
+            + "RECOVERY_FAILED 无其他出口（不越级 CLOSED/FAILED）")
+    void recoveryFailedRetryEdge() {
+        assertThat(DrillLifecycle.transitionLegal(DrillJob.State.RECOVERY_FAILED,
+                DrillJob.State.RECOVERING)).isTrue();
+        for (DrillJob.State to : DrillJob.State.values()) {
+            if (to != DrillJob.State.RECOVERING) {
+                assertThat(DrillLifecycle.transitionLegal(DrillJob.State.RECOVERY_FAILED,
+                        to)).as("RECOVERY_FAILED→%s", to).isFalse();
+            }
+        }
+        // 恢复链全链合法：RECOVERING→VERIFYING→CLOSED / 各环节的诚实失败边
+        assertThat(DrillLifecycle.transitionLegal(DrillJob.State.RECOVERING,
+                DrillJob.State.VERIFYING)).isTrue();
+        assertThat(DrillLifecycle.transitionLegal(DrillJob.State.RECOVERING,
+                DrillJob.State.RECOVERY_FAILED)).isTrue();
+        assertThat(DrillLifecycle.transitionLegal(DrillJob.State.VERIFYING,
+                DrillJob.State.CLOSED)).isTrue();
+        assertThat(DrillLifecycle.transitionLegal(DrillJob.State.VERIFYING,
+                DrillJob.State.RECOVERY_FAILED)).isTrue();
+    }
+
+    @Test
     @DisplayName("占位语义：RECOVERY_FAILED 非终态且持有靶场占位（DU15）")
     void placeholderSemantics() {
         assertThat(DrillJob.State.RECOVERY_FAILED.isTerminal()).isFalse();

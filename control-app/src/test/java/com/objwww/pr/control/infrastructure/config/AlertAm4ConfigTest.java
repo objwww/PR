@@ -118,6 +118,29 @@ class AlertAm4ConfigTest {
                 DirectReadToolCatalog.VERSION)).isEmpty();
         assertThat(registry.find(DirectReadToolCatalog.TOOL_CODE_READ,
                 DirectReadToolCatalog.VERSION)).isEmpty();
+
+        // BA-171：两 R3 写类审批工具无条件注册——显式 R3、schema 必填 service、
+        // 占位执行器触达即炸（VALIDATE_ONLY 短路之外触达 = 装配缺陷，永不触网）
+        var restart = registry.find(
+                com.objwww.pr.control.alert.application.tool.MutationToolCatalog
+                        .TOOL_SERVICE_RESTART,
+                com.objwww.pr.control.alert.application.tool.MutationToolCatalog.VERSION)
+                .orElseThrow();
+        assertThat(restart.definition().risk())
+                .isEqualTo(com.objwww.pr.control.alert.domain.tool.ToolRisk.R3);
+        assertThat(restart.definition().schema().get("required"))
+                .isEqualTo(java.util.List.of("service"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> restart.executor()
+                        .execute(new com.objwww.pr.control.alert.application.tool.ToolExecutor
+                                .ToolExecution(java.util.Map.of("service", "checkout"),
+                                        0L, 1024L)))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(registry.find(
+                com.objwww.pr.control.alert.application.tool.MutationToolCatalog
+                        .TOOL_SERVICE_ROLLBACK,
+                com.objwww.pr.control.alert.application.tool.MutationToolCatalog.VERSION)
+                .orElseThrow().definition().risk())
+                .isEqualTo(com.objwww.pr.control.alert.domain.tool.ToolRisk.R3);
     }
 
     /** docker + EN-07 条件注册正向钉：配置齐 → 双工具注册（runbook 双工具挂真语料执行器） */

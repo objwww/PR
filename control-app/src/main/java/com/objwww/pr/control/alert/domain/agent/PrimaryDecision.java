@@ -1,5 +1,7 @@
 package com.objwww.pr.control.alert.domain.agent;
 
+import com.objwww.pr.control.alert.domain.model.TypedRootCause;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -56,13 +58,41 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
      * evidenceRoles 为每条引用对本断言的作用提案（SUPPORTS/REFUTES/CONTEXT，
      * A0 补充方案 §2——模型只可提议作用，最终可信状态由准入/投影确定性授予；
      * 未声明作用的引用按 CONTEXT 处理，不计入支持来源）。
+     *
+     * <p>rootCause 为可选的结构化根因三元组（root_cause{component,fault_type,
+     * reason_code}，ROOT_CAUSE 断言的结构化评分面）：存在时三字段必须全非空且
+     * 长度上限复用 {@link TypedRootCause}；kind=ROOT_CAUSE 而缺 root_cause 不报错
+     * （向后兼容旧协议形状），由下游诚实降级（unknown 三元组），不拿 scope/claimKey
+     * 冒充评分面。
+     *
+     * <p>symptomCodes 为可选的症状码数组（symptom_codes，SYMPTOM 断言的评分契约面
+     * ——EvidencePackage v2 symptom_coverage 取此槽位，取值=告警名）：null=未声明
+     * （缺席不报错，下游诚实空数组）；非空时条数上限复用
+     * {@link com.objwww.pr.control.alert.domain.model.ReportClaim#MAX_SYMPTOM_CODES}、
+     * 条目长度上限复用 MAX_CODE_CHARS。本面只做结构裁决，不做词表过滤——
+     * 取值规训归 prompt 协议（禁止填 logs/prometheus 等来源标签，BA-158 同族实证：
+     * 批 aa7f25b4 来源标签冒充症状码槽位 → tp=0/fp=99/fn=60 结构性恒 miss）。
      */
     public record FinalClaim(String claimKey, String kind, String statement,
-            List<String> evidenceRefs, List<EvidenceRole> evidenceRoles) {
+            List<String> evidenceRefs, List<EvidenceRole> evidenceRoles,
+            TypedRootCause rootCause, List<String> symptomCodes) {
+        /** 兼容构造：无结构化根因面（旧协议形状 → rootCause=null 诚实降级） */
+        public FinalClaim(String claimKey, String kind, String statement,
+                List<String> evidenceRefs, List<EvidenceRole> evidenceRoles) {
+            this(claimKey, kind, statement, evidenceRefs, evidenceRoles, null, null);
+        }
+
+        /** 兼容构造：无结构化根因面（rootCause=null），症状码面按声明携带 */
+        public FinalClaim(String claimKey, String kind, String statement,
+                List<String> evidenceRefs, List<EvidenceRole> evidenceRoles,
+                TypedRootCause rootCause) {
+            this(claimKey, kind, statement, evidenceRefs, evidenceRoles, rootCause, null);
+        }
+
         /** 兼容构造：未声明作用面（旧协议形状 → 全部按未确认处理） */
         public FinalClaim(String claimKey, String kind, String statement,
                 List<String> evidenceRefs) {
-            this(claimKey, kind, statement, evidenceRefs, List.of());
+            this(claimKey, kind, statement, evidenceRefs, List.of(), null, null);
         }
 
         public FinalClaim {
@@ -75,6 +105,29 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
             evidenceRefs = List.copyOf(Objects.requireNonNull(evidenceRefs, "evidenceRefs"));
             evidenceRoles = List.copyOf(Objects.requireNonNull(evidenceRoles,
                     "evidenceRoles"));
+            // rootCause 可空=未提供（诚实降级）；非空时三字段非空/上限由
+            // TypedRootCause 构造期钉死
+            // symptomCodes 可空=未声明（诚实降级）；非空时条数/条目长度上限钉死
+            if (symptomCodes != null) {
+                if (symptomCodes.size()
+                        > com.objwww.pr.control.alert.domain.model.ReportClaim
+                                .MAX_SYMPTOM_CODES) {
+                    throw new IllegalArgumentException("symptom_codes 条数超上限: "
+                            + symptomCodes.size());
+                }
+                for (String code : symptomCodes) {
+                    if (code == null || code.isBlank()) {
+                        throw new IllegalArgumentException("symptom_codes 条目不得为空/blank");
+                    }
+                    if (code.length()
+                            > com.objwww.pr.control.alert.domain.model.ReportClaim
+                                    .MAX_CODE_CHARS) {
+                        throw new IllegalArgumentException("symptom_codes 条目超长: "
+                                + code.length());
+                    }
+                }
+                symptomCodes = List.copyOf(symptomCodes);
+            }
         }
     }
 
@@ -189,12 +242,15 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
             for (Object item : rawClaims) {
                 Map<String, Object> c = asStringMap(requireMap(item, "claim"));
                 requireAllowedKeys(c, Set.of("claim_key", "kind", "statement",
-                        "evidence_refs", "evidence_roles"), "claim");
+                        "evidence_refs", "evidence_roles", "root_cause",
+                        "symptom_codes"), "claim");
                 claims.add(new FinalClaim(requireString(c, "claim_key"),
                         c.get("kind") == null ? null : requireString(c, "kind"),
                         requireString(c, "statement"),
                         stringsOf(c.get("evidence_refs"), "evidence_refs"),
-                        rolesOf(c.get("evidence_roles"))));
+                        rolesOf(c.get("evidence_roles")),
+                        rootCauseOf(c.get("root_cause")),
+                        symptomCodesOf(c.get("symptom_codes"))));
             }
         }
         List<String> missing = fin.get("missing_information") == null
@@ -247,6 +303,34 @@ public record PrimaryDecision(Branch branch, ToolCall toolCall, List<DelegateReq
                     r.get("locator") == null ? null : requireString(r, "locator")));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * root_cause 解析：缺省=null（诚实降级面，kind=ROOT_CAUSE 缺三元组不报错）；
+     * 存在时必须是 {component,fault_type,reason_code} 三字段全非空的对象，长度上限
+     * 与非空由 {@link TypedRootCause} 构造期钉死（128/64/128）。
+     */
+    private static TypedRootCause rootCauseOf(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        Map<String, Object> rc = asStringMap(requireMap(raw, "root_cause"));
+        requireAllowedKeys(rc, Set.of("component", "fault_type", "reason_code"),
+                "root_cause");
+        return new TypedRootCause(requireString(rc, "component"),
+                requireString(rc, "fault_type"),
+                requireString(rc, "reason_code"));
+    }
+
+    /**
+     * symptom_codes 解析：缺省=null（未声明=诚实空数组降级面，不报错）；存在时必须
+     * 是字符串数组（有界上限由 FinalClaim 构造期钉死，本面不做词表过滤——诚实透传）。
+     */
+    private static List<String> symptomCodesOf(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        return stringsOf(raw, "symptom_codes");
     }
 
     private static List<String> stringsOf(Object raw, String field) {

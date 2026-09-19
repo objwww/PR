@@ -107,7 +107,10 @@ class ToolGatewayTest {
         ToolGateway.ToolInvocationResult result =
                 gateway.invoke(invocation("write.tool", Map.of("q", "x")));
         assertThat(result.kind()).isEqualTo(ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY);
-        assertThat(result.body()).isNull();
+        // BA-171：VALIDATE_ONLY 不再零反馈——模型可见的待审批反馈体（台账未装配时
+        // 如实降级文案，不冒充已进审批链）
+        assertThat(new String(result.body(), java.nio.charset.StandardCharsets.UTF_8))
+                .contains("PENDING_APPROVAL").contains("意图台账未装配");
         assertThat(result.actionDigest()).hasSize(64);
         assertThat(remoteCalls.get()).isZero();
     }

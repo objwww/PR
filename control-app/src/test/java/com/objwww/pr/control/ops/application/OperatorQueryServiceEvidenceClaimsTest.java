@@ -211,6 +211,45 @@ class OperatorQueryServiceEvidenceClaimsTest {
         assertThat(body).contains("\"evidence\":[{").contains("\"claims\":[{");
     }
 
+    // ------------------------------------------------------------------ situation 直接原因富化
+
+    @Test
+    void situationCardPrependsModelFailureCauseWhenLedgerHasFailures() {
+        UUID runId = UUID.randomUUID();
+        UUID id = service.openOrMerge(new CaseDraft("tenant-1", "fp-" + UUID.randomUUID(),
+                "调查未决", "P2", "NO_CONFIRMED_ROOT_CAUSE", runId, "root-cause",
+                "order-arena", Digest.sha256Of("snapshot"), 13, List.of("evidence#81"),
+                CLOCK.get().plusSeconds(600), CLOCK.get().plusSeconds(3600),
+                "idem-" + UUID.randomUUID())).caseId();
+        var failureReader = new com.objwww.pr.control.alert.domain.repository
+                .RcaModelCallUsageReader() {
+            @Override
+            public Optional<RunUsage> summarizeByRun(UUID r) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<CallFailure> failuresByRun(UUID r) {
+                return List.of(new CallFailure("BILLING_OR_ACTIVATION", 2));
+            }
+        };
+        OperatorQueryService q = new OperatorQueryService(repo, CLOCK, evidenceRepository,
+                claimStore, failureReader);
+
+        Map<String, Object> out = q.detail(id).orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> situation = (Map<String, Object>) out.get("situation");
+        assertThat((String) situation.get("currentState"))
+                .contains("直接原因").contains("欠费").contains("×2");
+        assertThat((String) situation.get("suggestion")).contains("充值");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> codes =
+                (List<Map<String, Object>>) situation.get("modelFailures");
+        assertThat(codes).hasSize(1);
+        assertThat(codes.get(0)).containsEntry("code", "BILLING_OR_ACTIVATION");
+    }
+
     // ------------------------------------------------------------------ 种子
 
     private UUID seed(UUID runId) {

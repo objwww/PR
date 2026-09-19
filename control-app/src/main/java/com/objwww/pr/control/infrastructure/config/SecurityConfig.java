@@ -110,6 +110,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/logout", "/api/auth/csrf")
                         .permitAll()
+                        // PA-BUG 修复：/error 必须可达——ERROR dispatch 重过安全链时被
+                        // denyAll 拦截会把 controller 真实异常伪装成 403/401（取证多次）
+                        .requestMatchers("/error").permitAll()
                         // UI-1：当前登录名——任何已认证身份（会话/机器线）可用
                         .requestMatchers("/api/auth/me").authenticated()
                         // AUTH-1：平台账号管理面归 operator（浏览器会话与 machine:operator-line 同权）
@@ -166,8 +169,16 @@ public class SecurityConfig {
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint((req, res, exception) ->
                                 writeJson(res, 401, "{\"error\":\"unauthorized\"}"))
-                        .accessDeniedHandler((req, res, exception) ->
-                                writeJson(res, 403, "{\"error\":\"forbidden\"}")))
+                        .accessDeniedHandler((req, res, exception) -> {
+                                // 403 归因日志（临时诊断面）：CSRF/角色/规则命中一目了然
+                                org.slf4j.LoggerFactory.getLogger(SecurityConfig.class)
+                                        .warn("403 forbidden: {} {} principal={} reason={}",
+                                                req.getMethod(), req.getRequestURI(),
+                                                String.valueOf(req.getRemoteUser()),
+                                                exception == null ? "null" : exception.getClass().getSimpleName()
+                                                        + ":" + exception.getMessage());
+                                writeJson(res, 403, "{\"error\":\"forbidden\"}");
+                        }))
                 .httpBasic(AbstractHttpConfigurer::disable);
         return http.build();
     }

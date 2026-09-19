@@ -80,6 +80,22 @@ class DrillWorkerCorrelationTest {
         }
 
         @Override
+        public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<DrillJob> findRetryRequests() {
+            return List.of();
+        }
+
+        @Override
+        public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                    Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<DrillJob> claimNext(String workerId, Instant claimedAt) {
             return Optional.empty(); // 本测试无 QUEUED 作业
         }
@@ -202,8 +218,10 @@ class DrillWorkerCorrelationTest {
 
     private DrillWorker worker() {
         return new DrillWorker(jobs, events, catalog(),
-                new DrillInjectionPort.NotImplemented(), clock, ENVS, "drill-worker-1",
-                5, 900, correlation, null, new DrillExecutionPolicy(true, ENVS));
+                new DrillInjectionPort.NotImplemented(),
+                new DrillRecoveryPort.NotImplemented(), clock, ENVS, "drill-worker-1",
+                5, 900, correlation, null, new DrillExecutionPolicy(true, ENVS),
+                sid -> List.of());
     }
 
     private static DrillTemplateCatalog catalog() {

@@ -331,4 +331,43 @@ class PrimaryClaimAdmissionTest {
                 .isEqualTo(PrimaryClaimAdmission.RefRole.CONTEXT);
         assertThat(legacy.hasSupport()).isFalse();
     }
+
+    @Test
+    @DisplayName("root_cause 三元组透传（准入语义不变，不进支持判定）")
+    void rootCauseTriplePassesThrough() {
+        UUID ref = UUID.randomUUID();
+        var triple = new com.objwww.pr.control.alert.domain.model.TypedRootCause(
+                "payment", "BUSINESS_ERROR_RATE", "PAYMENT_CHARGE_FAILURE");
+        var proposal = new PrimaryDecision.FinalClaim("c1", "ROOT_CAUSE",
+                "payment 扣款按比例失败", List.of(ref.toString()),
+                List.of(new PrimaryDecision.EvidenceRole(ref.toString(), "SUPPORTS", null)),
+                triple);
+
+        var r = PrimaryClaimAdmission.admit(List.of(proposal), Set.of(ref.toString()));
+
+        assertThat(r.claims().get(0).rootCause()).isEqualTo(triple);
+        assertThat(r.claims().get(0).kind()).isEqualTo("ROOT_CAUSE");
+        // 兼容构造缺省 null（未提供=诚实降级）
+        var legacy = new PrimaryClaimAdmission.AdmittedClaim("c1", "ROOT_CAUSE", "s",
+                List.of("ref-x"), "");
+        assertThat(legacy.rootCause()).isNull();
+    }
+
+    @Test
+    @DisplayName("symptom_codes 透传（准入语义不变，不进支持判定；来源标签值照传不做词表过滤）")
+    void symptomCodesPassThrough() {
+        UUID ref = UUID.randomUUID();
+        var proposal = new PrimaryDecision.FinalClaim("c1", "SYMPTOM",
+                "ArenaDuplicateOrders firing", List.of(ref.toString()),
+                List.of(new PrimaryDecision.EvidenceRole(ref.toString(), "SUPPORTS", null)),
+                null, List.of("ArenaDuplicateOrders"));
+
+        var r = PrimaryClaimAdmission.admit(List.of(proposal), Set.of(ref.toString()));
+
+        assertThat(r.claims().get(0).symptomCodes())
+                .containsExactly("ArenaDuplicateOrders");
+        // 缺席 → null（未声明=诚实降级）；兼容构造同律
+        assertThat(new PrimaryClaimAdmission.AdmittedClaim("c1", "SYMPTOM", "s",
+                List.of("ref-x"), "").symptomCodes()).isNull();
+    }
 }

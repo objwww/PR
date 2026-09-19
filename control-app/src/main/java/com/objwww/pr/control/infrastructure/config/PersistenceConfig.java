@@ -671,9 +671,11 @@ public class PersistenceConfig {
     public com.objwww.pr.control.ops.application.OperatorQueryService operatorQueryService(
             com.objwww.pr.control.ops.domain.repository.OperatorCaseRepository repository,
             com.objwww.pr.control.alert.domain.evidence.EvidenceRepository evidenceRepository,
-            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore) {
+            com.objwww.pr.control.alert.domain.claim.ClaimStore claimStore,
+            com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+                    rcaModelCallUsageReader) {
         return new com.objwww.pr.control.ops.application.OperatorQueryService(repository,
-                java.time.Instant::now, evidenceRepository, claimStore);
+                java.time.Instant::now, evidenceRepository, claimStore, rcaModelCallUsageReader);
     }
 
     // ---------------- AM5 观测域（M5-13 装配；HTTP 面 = alert/interfaces EventQueryController） ----------------
@@ -812,7 +814,7 @@ public class PersistenceConfig {
             @Value("${app.eval.launch.modes:L}") String modes,
             @Value("${app.eval.launch.dataset-versions:eval-ds-1}") String datasetVersions,
             @Value("${app.eval.launch.max-concurrency:1}") int maxConcurrency,
-            @Value("${app.eval.launch.max-rounds:10}") int maxRounds,
+            @Value("${app.eval.launch.max-rounds:30}") int maxRounds,
             @Value("${app.eval.launch.enabled:false}") boolean launchEnabled) {
         return new com.objwww.pr.control.eval.application.EvalLaunchGate(
                 java.util.Arrays.stream(modes.split(","))

@@ -89,6 +89,9 @@ public class ContextAssembler {
     private final SkillPort skillPort;
     /** CL-08 消费面读缝（可空=null 零漂移）：按检查点 current_summary_id 读已验证摘要 */
     private final SummaryMaterialPort summaryMaterials;
+    /** 根因码表面（可空=null/空表 零漂移）：canonical 码清单随信封入模（评分贯通） */
+    private final com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort
+            rootCauseCatalog;
     private final Clock clock;
     private final ObjectMapper mapper;
 
@@ -143,6 +146,21 @@ public class ContextAssembler {
             OperatorMaterialPort operatorMaterials,
             SkillPort skillPort, SummaryMaterialPort summaryMaterials,
             Clock clock, ObjectMapper mapper) {
+        this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
+                delegationReceipts, operatorMaterials, skillPort, summaryMaterials,
+                null, clock, mapper);
+    }
+
+    /** 全参构造 + 根因码表面（root_cause_catalog 键；可空=信封省略该键） */
+    public ContextAssembler(EvidenceRepository evidence,
+            RcaToolInvocationLedger toolLedger,
+            DelegationDecisionRepository delegations,
+            AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
+            DelegationReceiptRepository delegationReceipts,
+            OperatorMaterialPort operatorMaterials,
+            SkillPort skillPort, SummaryMaterialPort summaryMaterials,
+            com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort rootCauseCatalog,
+            Clock clock, ObjectMapper mapper) {
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
         this.delegations = Objects.requireNonNull(delegations, "delegations");
@@ -152,6 +170,7 @@ public class ContextAssembler {
         this.operatorMaterials = operatorMaterials;
         this.skillPort = skillPort;
         this.summaryMaterials = summaryMaterials;
+        this.rootCauseCatalog = rootCauseCatalog;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
@@ -303,6 +322,10 @@ public class ContextAssembler {
         if (skill != null) {
             envelope.put("skill", skill);
         }
+        Map<String, Object> catalog = rootCauseCatalogOf();
+        if (catalog != null) {
+            envelope.put("root_cause_catalog", catalog);
+        }
         MemoryCommit memory = candidateMemory(request, checkpoint, receiptSection);
         envelope.put("working_memory", memory.slots());
         envelope.put("trajectory", trajectoryOf(request));
@@ -310,7 +333,11 @@ public class ContextAssembler {
         envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
                 .sorted().toList());
         // BA-112：args JSON Schema 钉版下发（Profile inputSchema 进 digest）
-        envelope.put("tool_schemas", request.profile().inputSchema());
+        // BA-181：逐工具叠中文用途描述（ToolDescriptionZh，与人读面同源）——裸
+        // JSON Schema 只有参数形状没有"干什么/什么时候用"，195 实证模型只认
+        // logs/prometheus 族、change/alert.history/rca_history 零调用。description
+        // 是 JSON Schema 标准关键字，properties/required 逐字节不变（取参契约不破）。
+        envelope.put("tool_schemas", toolSchemasOf(request.profile()));
         envelope.put("valid_artifact_refs",
                 validRefsOf(request, evidenceRows).stream().sorted().toList());
 
@@ -332,6 +359,34 @@ public class ContextAssembler {
 
     private static String roleOf(AgentProfile profile) {
         return profile.name() + "@" + profile.version();
+    }
+
+    /**
+     * BA-181：tool_schemas 信封面逐工具补 description（ToolDescriptionZh 一句话用途，
+     * 未命中回退工具名——词典只增不改纪律同 BA-176）。钉版身份面（Profile inputSchema
+     * digest）不动，描述只存在于信封呈现层。
+     */
+    private static Map<String, Object> toolSchemasOf(AgentProfile profile) {
+        Map<String, Object> schemas = profile.inputSchema();
+        if (schemas == null) {
+            return null;
+        }
+        Map<String, Object> enriched = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : schemas.entrySet()) {
+            if (entry.getValue() instanceof Map<?, ?> schema) {
+                Map<String, Object> copy = new LinkedHashMap<>();
+                copy.put("description",
+                        com.objwww.pr.control.alert.application.tool.ToolDescriptionZh
+                                .of(entry.getKey()));
+                for (Map.Entry<?, ?> field : schema.entrySet()) {
+                    copy.put(String.valueOf(field.getKey()), field.getValue());
+                }
+                enriched.put(entry.getKey(), copy);
+            } else {
+                enriched.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return enriched;
     }
 
     /** 告警材料 + 冻结窗（§19.1：身份/窗为模型可读事实，非 UUID 串） */
@@ -511,7 +566,8 @@ public class ContextAssembler {
             Map<String, Object> observation = new LinkedHashMap<>();
             observation.put("at", rep.path("ts").asText(null));
             observation.put("service", rep.path("service").asText(null));
-            observation.put("message", clip(rep.path("line").asText(""), ITEM_LIMIT).text());
+            observation.put("message", clip(logMessage(rep.path("line").asText("")),
+                    ITEM_LIMIT).text());
             if (rowsOfGroup.size() > 1) {
                 observation.put("count", rowsOfGroup.size());
                 observation.put("first_at", firstAt);
@@ -535,6 +591,24 @@ public class ContextAssembler {
         return lower.contains("error") || lower.contains("fatal")
                 || lower.contains("panic") || lower.contains("exception")
                 || lower.contains("critical");
+    }
+
+    /**
+     * 日志行投影抽取（2026-09-17 实证：Spring 行前缀（时间戳+级别+线程+logger ~95
+     * 字符）吃满 ITEM_LIMIT=100，模型只见 "…TwoStepOrd…" 截断、永远读不到消息正文
+     * ——根因证据结构性不可见）：识别 Spring Boot 标准行型，投影为「级别 + 消息体」；
+     * 不匹配的行型原样返回（不丢信息，不臆造结构）。
+     */
+    private static final java.util.regex.Pattern SPRING_LOG_LINE = java.util.regex.Pattern
+            .compile("^\\d{4}-\\d{2}-\\d{2}T\\S+\\s+(TRACE|DEBUG|INFO|WARN|ERROR)"
+                    + "\\s+\\d+\\s+---\\s+\\[[^]]*]\\s+\\S+\\s+:\\s?(.*)$");
+
+    static String logMessage(String line) {
+        java.util.regex.Matcher m = SPRING_LOG_LINE.matcher(line);
+        if (m.matches()) {
+            return m.group(1) + " " + m.group(2);
+        }
+        return line;
     }
 
     /** 日志签名：uuid/hex/数字 归一化（确定性——同错误模板同签名） */
@@ -924,6 +998,34 @@ public class ContextAssembler {
                 + "有来源数据输入，不是独立证据，不得单独支撑 ROOT_CAUSE；"
                 + "与当前证据矛盾时保留反证");
         return skill;
+    }
+
+    /**
+     * 根因码表槽（root_cause_hit 评分贯通面）：canonical 三元组清单入模——
+     * ROOT_CAUSE claim 的 root_cause 取值只能来自本表（模型输出 canonical 码即
+     * 命中词表等值判定；synonyms 是评分侧容差不下发）。码表未接/空表 → 槽省略
+     * （不造占位，模型按协议诚实降级：ROOT_CAUSE 缺 root_cause 不报错）。
+     */
+    private Map<String, Object> rootCauseCatalogOf() {
+        if (rootCauseCatalog == null || rootCauseCatalog.entries().isEmpty()) {
+            return null;
+        }
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort.Entry entry
+                : rootCauseCatalog.entries()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("component", entry.component());
+            row.put("fault_type", entry.faultType());
+            row.put("reason_code", entry.reasonCode());
+            row.put("description", clip(entry.description(), ITEM_LIMIT).text());
+            entries.add(row);
+        }
+        Map<String, Object> catalog = new LinkedHashMap<>();
+        catalog.put("usage", "ROOT_CAUSE claim 必须携带 root_cause"
+                + "{component,fault_type,reason_code}，三字段取值逐字取自本表任一行"
+                + "（同一行的三个 canonical 码，跨行混搭不算命中）；其他 kind 不携带");
+        catalog.put("entries", entries);
+        return catalog;
     }
 
     /** 人工材料投影（MC31 区分面）：与实测证据分槽；JUDGMENT 带不构成引用标注 */

@@ -37,7 +37,9 @@ public class AuditController {
         }
         int cap = Math.min(Math.max(limit, 1), 300);
         List<Map<String, Object>> items = new ArrayList<>();
-        jdbc.sql("select actor, event_type, remote_addr, coalesce(detail,'') as detail, occurred_at"
+        // JdbcClient.query(RowMapper) 返回惰性 MappedQuerySpec——必须挂终端操作（.list()）
+        // 才真正发 SQL；裸调用零执行、items 恒空（195 实测审计页恒空根因）
+        items.addAll(jdbc.sql("select actor, event_type, remote_addr, coalesce(detail,'') as detail, occurred_at"
                         + " from auth_event order by occurred_at desc limit " + cap)
                 .query((rs, i) -> {
                     Map<String, Object> m = new LinkedHashMap<>();
@@ -47,10 +49,10 @@ public class AuditController {
                     m.put("detail", rs.getString("detail"));
                     m.put("extra", rs.getString("remote_addr"));
                     m.put("occurredAt", rs.getTimestamp("occurred_at").toInstant().toString());
-                    items.add(m);
                     return m;
-                });
-        jdbc.sql("select actor, action, coalesce(service,'') as service, coalesce(config_digest,'') as config_digest,"
+                })
+                .list());
+        items.addAll(jdbc.sql("select actor, action, coalesce(service,'') as service, coalesce(config_digest,'') as config_digest,"
                         + " coalesce(status,'') as status, coalesce(rollback_of::text,'') as rollback_of, created_at"
                         + " from change_event order by created_at desc limit " + cap)
                 .query((rs, i) -> {
@@ -65,9 +67,9 @@ public class AuditController {
                             : " 回滚自=" + rs.getString("rollback_of").substring(0, 12)));
                     m.put("extra", rs.getString("status"));
                     m.put("occurredAt", rs.getTimestamp("created_at").toInstant().toString());
-                    items.add(m);
                     return m;
-                });
+                })
+                .list());
         items.sort((a, b) -> String.valueOf(b.get("occurredAt")).compareTo(String.valueOf(a.get("occurredAt"))));
         if (items.size() > cap) {
             items.subList(cap, items.size()).clear();

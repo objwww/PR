@@ -124,6 +124,31 @@ class DrillJobServiceTest {
             return true;
         }
 
+        /** DR-04 重试意图列（对称 stop 两列的夹具面） */
+        final java.util.Set<UUID> retryRequested = new java.util.LinkedHashSet<>();
+
+        @Override
+        public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+            DrillJob job = byId.get(id);
+            if (job == null || job.state() != DrillJob.State.RECOVERY_FAILED
+                    || retryRequested.contains(id)) {
+                return false;
+            }
+            retryRequested.add(id);
+            return true;
+        }
+
+        @Override
+        public List<DrillJob> findRetryRequests() {
+            throw new UnsupportedOperationException("worker 面");
+        }
+
+        @Override
+        public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                    Instant now) {
+            throw new UnsupportedOperationException("worker 面");
+        }
+
         @Override
         public Optional<DrillJob> claimNext(String workerId, Instant claimedAt) {
             throw new UnsupportedOperationException("worker 面");
@@ -463,6 +488,54 @@ class DrillJobServiceTest {
                 .isEqualTo(DrillJobService.StopStatus.CONFLICT_KEY);
 
         assertThat(readyService.stop(UUID.randomUUID(), "s-9", "op")).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ 人工重试恢复
+
+    private DrillJob recoveryFailedJob(String key) {
+        DrillJob job = activeJob(DrillJob.State.QUEUED, key)
+                .advanced(DrillJob.State.PRECHECK, null, null, null, BASE)
+                .advanced(DrillJob.State.RECOVERY_FAILED, "worker_lost", null, null, BASE);
+        jobs.byId.put(job.id(), job);
+        return job;
+    }
+
+    @Test
+    @DisplayName("DR-04 人工重试受理：RECOVERY_FAILED → 意图列置位 + RETRY_REQUESTED "
+            + "审计（受理≠已推进，推进归 worker）")
+    void retryRecoveryAccepted() {
+        DrillJob job = recoveryFailedJob("k1");
+        DrillJobService.RetryResult result =
+                readyService.retryRecovery(job.id(), "operator").orElseThrow();
+        assertThat(result.status()).isEqualTo(DrillJobService.RetryStatus.ACCEPTED);
+        assertThat(jobs.retryRequested).contains(job.id());
+        // HTTP 面状态机零开口：相位保持 RECOVERY_FAILED，推进归 worker 消费
+        assertThat(jobs.findById(job.id()).orElseThrow().state())
+                .isEqualTo(DrillJob.State.RECOVERY_FAILED);
+        assertThat(events.stored).anySatisfy(e -> {
+            assertThat(e.eventType()).isEqualTo(DrillEvent.EventType.RETRY_REQUESTED);
+            assertThat(e.actor()).isEqualTo("operator");
+        });
+    }
+
+    @Test
+    @DisplayName("DR-04 重试幂等与非法面：重复重试 ALREADY_REQUESTED 零新副作用；"
+            + "非恢复异常占位 409；未知作业 404")
+    void retryRecoveryConflicts() {
+        DrillJob job = recoveryFailedJob("k1");
+        readyService.retryRecovery(job.id(), "operator");
+        DrillJobService.RetryResult again =
+                readyService.retryRecovery(job.id(), "operator").orElseThrow();
+        assertThat(again.status())
+                .isEqualTo(DrillJobService.RetryStatus.ALREADY_REQUESTED);
+        assertThat(events.stored).filteredOn(e -> e.eventType()
+                == DrillEvent.EventType.RETRY_REQUESTED).hasSize(1);
+
+        DrillJob observing = activeJob(DrillJob.State.OBSERVING, "k2");
+        assertThat(readyService.retryRecovery(observing.id(), "operator")
+                .orElseThrow().status())
+                .isEqualTo(DrillJobService.RetryStatus.CONFLICT_STATE);
+        assertThat(readyService.retryRecovery(UUID.randomUUID(), "operator")).isEmpty();
     }
 
     // ------------------------------------------------------------------ 查询投影

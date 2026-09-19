@@ -25,8 +25,10 @@ import java.util.Objects;
  */
 public final class IncidentClassifier {
 
-    /** 规则表版本（Git 审查演进；落 incident.category_rule_version，重分类可追溯） */
-    public static final String RULE_VERSION = "ux01-rules-v1";
+    /** 规则表版本（Git 审查演进；落 incident.category_rule_version，重分类可追溯）
+     *  v2（BA-180）：BUSINESS-ALERTNAME 补 Arena 业务交易链路症状组（M-a 批 S16~S25
+     *  九个业务 alertname + 既有靶场三件套）——这些告警此前零命中恒 UNCLASSIFIED */
+    public static final String RULE_VERSION = "ux01-rules-v2";
 
     public static final String FALLBACK_RULE_ID = "FALLBACK-UNCLASSIFIED";
 
@@ -72,9 +74,16 @@ public final class IncidentClassifier {
             new Rule("BUSINESS-LABEL", IncidentCategory.BUSINESS, Target.DOMAIN_LABEL,
                     List.of("business"), "label domain/category=business"),
             new Rule("BUSINESS-ALERTNAME", IncidentCategory.BUSINESS, Target.ALERTNAME_CONTAINS,
-                    // "slo" 裸词会误中 "dnslookup" 等子串——只用可辨识复合词
+                    // "slo" 裸词会误中 "dnslookup" 等子串——只用可辨识复合词；
+                    // BA-180：Arena 业务交易链路症状组（arena-business.yml 业务埋点告警，
+                    // 归一化后子串）全量入 BUSINESS——M-a 批九码 + 靶场三件套
                     List.of("orderfail", "paymentfail", "checkoutfail", "sloburn",
-                            "conversion", "businessloss"),
+                            "conversion", "businessloss",
+                            "paymentordermismatch", "pendingpaymentbacklog",
+                            "duplicatepayments", "reconciliationdiff", "oversell",
+                            "fulfillmentgap", "duplicatefulfillment", "orderzeroflow",
+                            "fulfillmentslabreach", "orderstuck", "duplicateorders",
+                            "illegaltransitions"),
                     "alertname 含业务指标关键词"),
             new Rule("DATA-LABEL", IncidentCategory.DATA, Target.DOMAIN_LABEL,
                     List.of("data"), "label domain/category=data"),

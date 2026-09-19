@@ -169,16 +169,22 @@ public class HistoryRcaSearchExecutor implements ToolExecutor {
         return text.isBlank() ? null : text;
     }
 
+    /** ISO-8601/epoch 秒双收（BA-183 对齐 LogQueryExecutor：信封冻结窗以 epoch 秒下发，
+     *  LLM 时区换算不可靠，epoch 无歧义） */
     private static Instant parseInstant(Object value, String field) {
         if (value == null) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant）");
+                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant 或 epoch 秒）");
+        }
+        String text = String.valueOf(value).trim();
+        if (text.matches("\\d{9,11}")) {
+            return Instant.ofEpochSecond(Long.parseLong(text));
         }
         try {
-            return Instant.parse(String.valueOf(value));
+            return Instant.parse(text);
         } catch (Exception e) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant");
+                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant 或 epoch 秒");
         }
     }
 }

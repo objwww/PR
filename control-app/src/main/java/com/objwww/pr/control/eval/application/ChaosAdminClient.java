@@ -22,6 +22,11 @@ public interface ChaosAdminClient {
     /** GET /chaos/status?scenarioId= → {session:{state, generation, ...}}；404 = 未知场景 */
     SessionStatus status(String scenarioId);
 
+    /** 管理 token 是否已注入（INV-AM3-3 预检面；默认 true=假件/免凭证实现） */
+    default boolean tokenPresent() {
+        return true;
+    }
+
     record Activation(String sessionId, String scenarioId, long generation,
                       String alertFingerprint) {
     }
@@ -39,6 +44,11 @@ public interface ChaosAdminClient {
             Objects.requireNonNull(baseUrl);
             this.adminToken = adminToken == null ? "" : adminToken.trim();
             this.rest = RestClient.builder().baseUrl(baseUrl).build();
+        }
+
+        @Override
+        public boolean tokenPresent() {
+            return !adminToken.isEmpty();
         }
 
         @Override

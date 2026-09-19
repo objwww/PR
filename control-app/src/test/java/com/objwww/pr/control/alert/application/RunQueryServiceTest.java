@@ -146,8 +146,31 @@ class RunQueryServiceTest {
     }
 
     @Test
-    void detailIsEmptyForUnknownRun() {
-        assertThat(service.detail(UUID.randomUUID())).isEmpty();
+    void detailFailureBlockFromModelCallLedger() {
+        UUID runId = run(RcaRunState.SUCCEEDED);
+        usage.failuresByRun.put(runId, List.of(
+                new RcaModelCallUsageReader.CallFailure("BILLING_OR_ACTIVATION", 2)));
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> failure = (Map<String, Object>) detail.get("failure");
+        assertThat(failure.get("totalFailed")).isEqualTo(2L);
+        assertThat((String) failure.get("reasonZh")).contains("欠费").contains("×2");
+        assertThat((String) failure.get("guidanceZh")).contains("充值");
+    }
+
+    @Test
+    void detailFailureBlockIsNullWhenNoFailedCalls() {
+        UUID runId = run(RcaRunState.SUCCEEDED);
+
+        Map<String, Object> detail = service.detail(runId).orElseThrow();
+
+        assertThat(detail.get("failure")).as("零失败账 → null（证据问题不找借口）").isNull();
+    }
+
+    @Test
+    void detailIsEmptyForUnknownRun() {        assertThat(service.detail(UUID.randomUUID())).isEmpty();
     }
 
     // ------------------------------------------------ A4：claims 投影 + task name
@@ -574,10 +597,16 @@ class RunQueryServiceTest {
 
     static final class FakeUsage implements RcaModelCallUsageReader {
         final Map<UUID, RunUsage> byRun = new LinkedHashMap<>();
+        final Map<UUID, List<CallFailure>> failuresByRun = new LinkedHashMap<>();
 
         @Override
         public Optional<RunUsage> summarizeByRun(UUID runId) {
             return Optional.ofNullable(byRun.get(runId));
+        }
+
+        @Override
+        public List<CallFailure> failuresByRun(UUID runId) {
+            return failuresByRun.getOrDefault(runId, List.of());
         }
     }
 

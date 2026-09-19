@@ -131,6 +131,9 @@ public class SingleCaseScorer {
                                           int roundNo, UUID rcaRunId) {
         Optional<RcaRun> run = runs.findById(rcaRunId);
         if (run.isEmpty()) {
+            // 六要素口径（BA-177 注释冻结）：调查不存在=无报告可检，本案例不进
+            // eval_case_six_parts——六要素完整率分母只含"有报告且落档"的案例，
+            // 缺席案例由 verdict=TIMEOUT_OR_ABSENT 在症状/根因口径单独记账
             return Optional.of(absent(evalRunId, golden, roundNo, rcaRunId));
         }
         List<RcaReport> runReports = reports.findByRunId(rcaRunId);
@@ -146,6 +149,8 @@ public class SingleCaseScorer {
             ScoringVerdict verdict = structureRejected
                     ? ScoringVerdict.STRUCTURE_REJECTED
                     : ScoringVerdict.TIMEOUT_OR_ABSENT;
+            // 六要素口径（BA-177 注释冻结）：无通过校验的报告=六要素不可检，不落
+            // eval_case_six_parts、不计入完整率分母（分母口径见 recordSixParts 头注）
             return Optional.of(new EvalCaseResult(UUID.randomUUID(), evalRunId,
                     golden.scenarioId(), roundNo, FinalReportSelector.SELECTION_POLICY_VERSION,
                     rcaRunId, null, null, verdict, false,
@@ -160,7 +165,8 @@ public class SingleCaseScorer {
         RcaReport report = selected.get();
         EvidencePackageV2 pkg = parse(report.packageJson());
         if (pkg == null) {
-            // 选定报告结构异形（防御面：validator 放行后被评分侧复检拒绝）
+            // 选定报告结构异形（防御面：validator 放行后被评分侧复检拒绝）——
+            // 六要素口径同上：包解析失败=不可检，不落档不计入分母
             return Optional.of(new EvalCaseResult(UUID.randomUUID(), evalRunId,
                     golden.scenarioId(), roundNo, FinalReportSelector.SELECTION_POLICY_VERSION,
                     rcaRunId, report.attemptId(), report.id(),
@@ -234,7 +240,11 @@ public class SingleCaseScorer {
 
     /**
      * M-d T5 六要素检出落库（V152 eval_case_six_parts）：结构面五要素
-     * （EvidencePackageV2 冻结契约）+ 文本面把握短语（primary v9 写作要求增量锚）。
+     * （EvidencePackageV2 冻结契约）+ 文本面把握检出（共享规约
+     * {@link com.objwww.pr.control.alert.application.ReportWritingRubric}，prompt 与
+     * 评分同源）。分母口径（BA-177 冻结）：只有"报告被选定且包解析成功"的主路径落档——
+     * 无报告案例（调查缺席/超时/结构拒绝/包异形）六要素不可检，不进表也不进完整率
+     * 分母；因此六要素完整率读作"有报告案例中写全六件事的比例"，不是全部案例的完成率。
      * fail-soft 同 recordSafety——落库失败不回滚评分主链（insert-only，缺席=未评如实）。
      */
     private void recordSixParts(UUID evalRunId, GoldenCase golden, int roundNo,

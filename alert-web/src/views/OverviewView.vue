@@ -204,13 +204,13 @@ const trendOption = computed(() => ({
 }))
 
 async function loadSummary() {
-  summaryState.value = 'loading'
+  if (summaryState.value !== 'ok') summaryState.value = 'loading' // 后台轮询不重置：旧内容保持显示，避免每 30s 骨架闪屏
   try {
     summary.value = await api('/v1/overview/summary')
     updatedAt.value = new Date().toISOString()
     summaryState.value = 'ok'
   } catch (e) {
-    summaryState.value = e?.response?.status === 403 ? 'forbidden' : 'error'
+    if (!summary.value) summaryState.value = e?.response?.status === 403 ? 'forbidden' : 'error' // 已有数据时失败保留旧数据
   }
 }
 
@@ -223,14 +223,14 @@ const healthItems = ref([])
 const healthState = ref('loading')
 const healthAsOf = ref('')
 async function loadHealth() {
-  healthState.value = 'loading'
+  if (healthState.value !== 'ok') healthState.value = 'loading' // 后台轮询不重置，避免闪屏
   try {
     const res = await api('/v1/system/health')
     healthItems.value = res?.items ?? []
     healthAsOf.value = res?.checkedAt ? fmtTime(res.checkedAt) : ''
     healthState.value = 'ok'
   } catch {
-    healthState.value = 'error'
+    if (!healthItems.value.length) healthState.value = 'error' // 已有数据时失败保留旧数据
   }
 }
 

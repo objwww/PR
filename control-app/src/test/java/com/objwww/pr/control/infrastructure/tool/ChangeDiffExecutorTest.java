@@ -63,6 +63,15 @@ class ChangeDiffExecutorTest {
     }
 
     @Test
+    @DisplayName("BA-183：epoch 秒直收（与 ChangeQueryExecutor/logs 族同律双收）")
+    void parseArgsAcceptsEpochSeconds() {
+        ChangeDiffExecutor.Query q = ChangeDiffExecutor.parseArgs(
+                args("1757481600", "1757481900", null), ALLOWLIST);
+        assertThat(q.since()).isEqualTo(Instant.ofEpochSecond(1_757_481_600L));
+        assertThat(q.until()).isEqualTo(Instant.ofEpochSecond(1_757_481_900L));
+    }
+
+    @Test
     @DisplayName("违约面：窗幅 >900s / 负窗 / 非 ISO / 缺参 / 越权 service → INVALID_ARGS")
     void parseArgsRejectsSemanticsViolations() {
         String base = "2026-09-10T00:00:00Z";

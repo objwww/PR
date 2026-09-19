@@ -355,4 +355,36 @@ class ApprovalFlowTest {
         assertThat(store.findAuthorization(authzId).orElseThrow().operationId())
                 .isEqualTo(operationId);
     }
+
+    @Test
+    void pcF07_批准事务提交后_自动plan钩子触发_钩子异常不翻裁决() {
+        FakeApprovalStore store = new FakeApprovalStore();
+        FakeEvents events = new FakeEvents();
+        UUID requestId = requestService(resolvedIntents("R3"), store, events).request(INTENT);
+        var decisions = decisionService(store, events);
+        List<UUID> hooked = new ArrayList<>();
+        decisions.setApprovedAutoPlanHook(hooked::add);
+        decisions.decide(requestId, "oncall-a", "ONCALL", true);
+        assertThat(hooked).as("未达法定人数不触发自动 plan").isEmpty();
+        assertThat(decisions.decide(requestId, "sec-b", "SECURITY", true))
+                .isEqualTo("APPROVED");
+        // BA-171：APPROVED 事务提交后以 intentId 触发自动 plan 入口
+        assertThat(hooked).containsExactly(INTENT);
+
+        // 钩子异常（plan 被拒/ planner 故障）不翻裁决——手动 /plan 兜底语义
+        decisions.setApprovedAutoPlanHook(id -> {
+            throw new IllegalStateException("plan 炸了");
+        });
+        UUID intent2 = UUID.randomUUID();
+        FakeIntents intents2 = resolvedIntents("R3");
+        intents2.rows.put(intent2, new ActionIntentStore.IntentView(intent2, RUN, null,
+                "b".repeat(64), "service.restart", "R3", "res://demo/checkout",
+                "h".repeat(64), "{}"));
+        UUID requestId2 = requestService(intents2, store, events).request(intent2);
+        decisions.decide(requestId2, "oncall-a", "ONCALL", true);
+        assertThat(decisions.decide(requestId2, "sec-b", "SECURITY", true))
+                .as("钩子炸毁不影响裁决返回").isEqualTo("APPROVED");
+        assertThat(store.findRequest(requestId2).orElseThrow().state())
+                .isEqualTo("APPROVED");
+    }
 }

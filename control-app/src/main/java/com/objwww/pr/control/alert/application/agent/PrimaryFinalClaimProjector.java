@@ -183,8 +183,50 @@ public final class PrimaryFinalClaimProjector {
         }
         claims.append(runId, new ClaimVerdict(claimKey, SCOPE, timeRange, generation,
                 snapshotHex, status, basis, supportSources,
-                reason, List.copyOf(refs), POLICY_VERSION, kinds.iterator().next()));
+                reason, List.copyOf(refs), POLICY_VERSION, kinds.iterator().next(),
+                rootCauseOf(runId, claimKey, rows), symptomCodesOf(rows)));
         return true;
+    }
+
+    /**
+     * 症状码投影（V151）：取组内首个声明 symptom_codes 的提案行（与 root_cause/
+     * kind 取首行同律——确定性，投影序=提案序）；组内全缺该键 → null 未声明
+     * （报告面 symptom_codes 诚实空数组，不拿证据来源标签冒充——BA-158 同族实证
+     * 批 aa7f25b4 tp=0/fp=99/fn=60）。本面诚实透传不做词表过滤（规训归协议面）。
+     */
+    private static List<String> symptomCodesOf(List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
+            if (row.get("symptom_codes") instanceof List<?>) {
+                return strings(row.get("symptom_codes"));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 结构化根因三元组投影（V147）：取组内首个带合法 root_cause 的提案行
+     * （与 kind 取首行同律——确定性，投影序=提案序）；行缺该键/形状非法 → null
+     * 诚实降级（报告面落 unknown 三元组，不拿 scope/claimKey 冒充），非法形状
+     * WARN 留痕不静默吞。
+     */
+    private static com.objwww.pr.control.alert.domain.model.TypedRootCause rootCauseOf(
+            UUID runId, String claimKey, List<Map<String, Object>> rows) {
+        for (Map<String, Object> row : rows) {
+            if (!(row.get("root_cause") instanceof Map<?, ?> rc)) {
+                continue;
+            }
+            try {
+                return new com.objwww.pr.control.alert.domain.model.TypedRootCause(
+                        str(rc.get("component")), str(rc.get("fault_type")),
+                        str(rc.get("reason_code")));
+            } catch (IllegalArgumentException | NullPointerException malformed) {
+                log.warn("主 FINAL 提案 root_cause 三元组非法，诚实降级 null "
+                        + "run={} claim={} cause={}", runId, claimKey,
+                        malformed.getMessage());
+                return null;
+            }
+        }
+        return null;
     }
 
     /**

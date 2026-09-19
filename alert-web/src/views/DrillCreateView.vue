@@ -187,13 +187,15 @@ import { fmtSeconds, fmtTime } from '../utils/format'
 const router = useRouter()
 const step = ref(0)
 
-// eval-scenarios.yml（registry_version: 2）S1~S5 的静态说明——仅目录接口未就绪时展示，不构成可选目录
+// drill-templates.yml（registry_version: 6，派生自 eval-scenarios.yml）S1~S5/S16/S26 的静态说明——仅目录接口未就绪时展示，不构成可选目录
 const staticScenarios = [
   { id: 'S1', name: 'paymentFailure=50%', type: '业务链路错误率', source: 'AM0 flagd', symptom: 'checkout 烧损率告警（page/ticket）' },
   { id: 'S2', name: 'flagd paymentUnreachable', type: '依赖不可达', source: 'AM0 flagd', symptom: 'checkout 烧损率告警（page/ticket）' },
   { id: 'S3', name: 'F1 幂等失效', type: '业务完整性', source: 'AM2 靶场（Arena）', symptom: 'ArenaDuplicateOrders（page）' },
   { id: 'S4', name: 'F2 状态回跳', type: '状态机非法迁移', source: 'AM2 靶场（Arena）', symptom: 'ArenaIllegalTransitions（page）' },
   { id: 'S5', name: 'F3 超时结果未知', type: '中间态悬挂', source: 'AM2 靶场（Arena）', symptom: 'ArenaOrderStuck（page）' },
+  { id: 'S16', name: 'F9 掉单（支付成功但订单未推进）', type: '业务交易链路-掉单', source: 'AM2 靶场（Arena）', symptom: 'ArenaPaymentOrderMismatch（page）' },
+  { id: 'S26', name: '全工具复合（F9 掉单 + 窗内真实发布变更 + 审批收口）', type: '复合-全工具链+审批收口', source: 'AM2 靶场（Arena）+ 真实变更账本', symptom: 'ArenaPaymentOrderMismatch（page）' },
 ]
 
 // ---------------------------------------------------------------- 第一步：场景目录

@@ -48,6 +48,11 @@ public final class FlagdConditionalRestore {
         boolean generationOwned = expectedGeneration == null || current.generation() == null
                 || expectedGeneration.equals(current.generation());
         if (!valueOwned || !generationOwned) {
+            if (restoreTarget.equals(current.variant())) {
+                return new Result(Outcome.RESTORED, "current=" + current.variant()
+                        + ",generation=" + current.generation()
+                        + "（已在恢复目标值：他者已写回，恢复目标达成——幂等收口不重复写）");
+            }
             return new Result(Outcome.CONFLICT, "current=" + current.variant()
                     + ",generation=" + current.generation()
                     + "（非本次写入面：他者已改写——不覆盖、不宣称恢复成功）");

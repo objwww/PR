@@ -44,22 +44,16 @@
               <el-button size="small" text @click.stop="copyText(row.digest, 'digest 已复制')">复制</el-button>
             </template>
           </el-table-column>
-          <el-table-column label="逻辑版本" width="110">
-            <template #default>
-              <el-tooltip
-                content="资产身份 = 内容 digest，后端无独立逻辑 ID / 版本列（方案 §4.1 要求，数据面无），不做推算"
-                placement="top">
-                <span class="muted">未透出</span>
-              </el-tooltip>
+          <el-table-column label="逻辑版本" width="130">
+            <template #default="{ row }">
+              <span v-if="row.summary?.role_version != null" class="mono">{{ row.summary.role ?? '—' }}@v{{ row.summary.role_version }}</span>
+              <span v-else class="muted">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="110">
-            <template #default>
-              <el-tooltip
-                content="生效状态只能表达「是否在当前 active bundle 内」，但资产与 bundle 的归属关系无读面，无法判定，如实显示未透出"
-                placement="top">
-                <span class="muted">未透出</span>
-              </el-tooltip>
+          <el-table-column label="角色" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.summary?.role" size="small" effect="plain" disable-transitions>{{ roleZh(row.summary.role) }}</el-tag>
+              <span v-else class="muted">—</span>
             </template>
           </el-table-column>
           <el-table-column label="创建人" width="130">
@@ -157,8 +151,18 @@
             <pre class="detail-pre mono">{{ detailContent }}</pre>
           </div>
           <div class="cd-section">
-            <div class="cd-sec-title">差异</div>
-            <div class="muted-block">版本差异对比依赖后端 diff 读面，本批未透出。</div>
+            <div class="cd-sec-title">差异（与同角色上一版本对比）</div>
+            <div v-if="diffState === 'ok'" class="diff-box">
+              <div class="diff-meta muted">基准：{{ diffBaseLabel }}</div>
+              <div
+                v-for="(l, i) in diffRows" :key="i"
+                class="diff-line" :class="'diff-' + l.type"
+              ><span class="diff-sign">{{ l.type === 'add' ? '+' : l.type === 'del' ? '−' : ' ' }}</span>{{ l.text }}</div>
+              <div v-if="diffRows.every(l => l.type === 'same')" class="muted-block">与上一版本内容完全一致</div>
+            </div>
+            <div v-else-if="diffState === 'first'" class="muted-block">该角色无更早版本——这是首个登记版本，无对比基准。</div>
+            <div v-else-if="diffState === 'error'" class="muted-block">基准版本内容拉取失败，差异暂不可用。</div>
+            <div v-else class="muted-block">差异计算中…</div>
           </div>
           <div class="cd-section">
             <div class="cd-sec-title">实验结果</div>
@@ -198,6 +202,10 @@ import {
   ApiNotReadyError, listAssets, listBundles, getAssetDetail,
 } from '../api/versions'
 import { fmtTime } from '../utils/format'
+import { lineDiff } from '../utils/linediff'
+
+const ROLE_ZH = { primary: '主调查', metrics: '指标取证', logs: '日志取证', change: '变更取证' }
+const roleZh = r => ROLE_ZH[r] ?? r ?? '—'
 
 const route = useRoute()
 const router = useRouter()
@@ -300,7 +308,42 @@ const detailState = ref('loading') // loading | ok | not-ready | notfound | erro
 const detailTitle = ref('资产明细')
 const detailContent = ref('')
 const detailNotReadyText = ref('')
+// 差异对比：同 kind+role 的上一登记版本为基准（资产列表即真源，无后端 diff 面）
+const diffRows = ref([])
+const diffState = ref('loading') // loading | ok | first | error
+const diffBaseLabel = ref('')
 let detailRow = null
+
+/** 资产内容 → 可对比文本（PROMPT 取 messages_template 正文，其余落 JSON 全文） */
+function diffTextOf(content) {
+  if (content == null) return ''
+  if (typeof content.messages_template === 'string') return content.messages_template
+  return JSON.stringify(content, null, 2)
+}
+
+async function loadDiff(currentRow) {
+  diffState.value = 'loading'
+  diffRows.value = []
+  const siblings = (assets.value.items ?? [])
+    .filter(a => a.kind === currentRow.kind
+      && a.digest !== currentRow.digest
+      && (a.summary?.role ?? null) === (currentRow.summary?.role ?? null)
+      && a.created_at < currentRow.created_at)
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+  const prev = siblings[0]
+  if (!prev) {
+    diffState.value = 'first'
+    return
+  }
+  diffBaseLabel.value = `${prev.summary?.role ?? '—'}@v${prev.summary?.role_version ?? '—'} · ${prev.digest.slice(0, 12)}… · ${fmtTime(prev.created_at)}`
+  try {
+    const prevDetail = await getAssetDetail(prev.kind, prev.digest)
+    diffRows.value = lineDiff(diffTextOf(prevDetail.content), diffTextOf(detail.value?.content))
+    diffState.value = 'ok'
+  } catch {
+    diffState.value = 'error'
+  }
+}
 
 async function reloadDetail() {
   if (!detailRow) return
@@ -313,6 +356,7 @@ async function reloadDetail() {
     detail.value = d
     detailContent.value = JSON.stringify(d.content, null, 2)
     detailState.value = 'ok'
+    loadDiff(detailRow)
   } catch (e) {
     if (e instanceof ApiNotReadyError) {
       detailState.value = 'not-ready'
@@ -365,4 +409,13 @@ onMounted(reload)
   background: var(--bg); border: 1px dashed var(--line); border-radius: var(--radius);
   padding: 12px; font-size: var(--fs-aux); color: var(--ink-2);
 }
+.diff-box { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.diff-meta { padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: var(--fs-aux); }
+.diff-line {
+  font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.6;
+  padding: 0 10px; white-space: pre-wrap; word-break: break-all;
+}
+.diff-sign { display: inline-block; width: 14px; opacity: 0.7; }
+.diff-add { background: rgba(35, 195, 67, 0.18); color: var(--ok); }
+.diff-del { background: rgba(245, 63, 63, 0.16); color: var(--sev-p0); text-decoration: line-through; }
 </style>

@@ -62,6 +62,15 @@
             <span v-else class="mini">本次调查未产生有效结论</span>
           </div>
         </template>
+        <!-- 失败直接原因（后端 failure 块：模型调用账面码+中文说明；零失败不渲染——
+             那时"未取到足够证据"是真实证据问题，不找借口） -->
+        <div v-if="detail?.failure" class="failure-box">
+          <div><b>未取到有效证据的直接原因：</b>{{ detail.failure.reasonZh }}</div>
+          <div class="mini">
+            模型调用失败共 {{ detail.failure.totalFailed }} 次（<template v-for="c in detail.failure.codes" :key="c.code">{{ c.code }}×{{ c.count }} </template>）
+          </div>
+          <div><b>怎么处理：</b>{{ detail.failure.guidanceZh }}</div>
+        </div>
       </div>
 
       <div class="card panel">
@@ -405,6 +414,41 @@
               <div v-for="sec in reportSections" :key="sec.key" class="box">
                 <div class="lbl">{{ sec.title }}</div>
                 <div v-if="sec.kind === 'text'" class="rpt-text">{{ sec.value }}</div>
+                <!-- 根因三元组人读渲染：unknown 三元组如实标注，不冒充结论 -->
+                <template v-else-if="sec.key === 'root_cause'">
+                  <div v-if="sec.value?.component === 'unknown'" class="muted">
+                    未确认根因（诚实降级：本次调查无确认结论，见下方断言分节）
+                  </div>
+                  <KvTable v-else :data="{
+                    '组件': sec.value?.component ?? '—',
+                    '故障类型': sec.value?.fault_type ?? '—',
+                    '原因码': sec.value?.reason_code ?? '—',
+                  }" />
+                </template>
+                <!-- 类型化断言结构化渲染：种类/判定/陈述/证据面分层，不再裸 JSON -->
+                <template v-else-if="sec.key === 'claims'">
+                  <template v-if="sec.items.length">
+                    <div v-for="(item, i) in sec.items" :key="i" class="claim-card">
+                      <div class="claim-head">
+                        <el-tag size="small" effect="dark" disable-transitions
+                          :type="{ ROOT_CAUSE: 'danger', SYMPTOM: 'warning', HYPOTHESIS: 'primary', EXCLUSION: 'info' }[item.kind] ?? 'info'">
+                          {{ CLAIM_KIND_ZH[item.kind] ?? item.kind ?? item.claim_type }}
+                        </el-tag>
+                        <el-tag size="small" effect="plain" disable-transitions
+                          :type="{ TRUE: 'success', FALSE: 'info', UNKNOWN: 'warning' }[item.status] ?? 'info'">
+                          {{ CLAIM_STATUS_ZH[item.status] ?? item.status }}
+                        </el-tag>
+                      </div>
+                      <div v-if="item.statement" class="rpt-text">{{ item.statement }}</div>
+                      <div class="mini">
+                        <span v-if="(item.symptom_codes ?? []).length">症状码：{{ item.symptom_codes.join('、') }}　</span>
+                        <span v-if="(item.evidence_sources ?? []).length">证据来源：{{ item.evidence_sources.join(' + ') }}　</span>
+                        <span v-if="(item.evidence_refs ?? []).length">证据引用 {{ item.evidence_refs.length }} 条</span>
+                      </div>
+                    </div>
+                  </template>
+                  <div v-else class="muted">无</div>
+                </template>
                 <template v-else-if="sec.kind === 'list'">
                   <template v-if="sec.items.length">
                     <div v-for="(item, i) in sec.items" :key="i" class="line-item">
@@ -690,7 +734,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import KvTable from '../components/common/KvTable.vue'
 import { STATUS_STYLE, STATUS_ORDER } from '../components/RunDagStatus.js'
 import { EVENT_TYPE_ZH, zh } from '../dict/displayNameZh.js'
-import { SPAN_KIND, ATTEMPT_STATE, LEDGER_STATE, spanStateTagType } from '../dict/zh.js'
+import { SPAN_KIND, ATTEMPT_STATE, LEDGER_STATE, spanStateTagType, errorCodeZh } from '../dict/zh.js'
 import { useSseStore } from '../stores/sseStatus.js'
 import { fmtTime } from '../utils/format'
 
@@ -891,9 +935,9 @@ function spanKv(s) {
       ['费用（微单位）', s.costMicros != null ? fmtNum(s.costMicros) : '未定价'],
     )
   }
-  if (s.kind === 'tool') kv.push(['原因码', s.errorCode ?? '—'])
+  if (s.kind === 'tool') kv.push(['原因码', s.errorCode ? `${s.errorCode}（${errorCodeZh(s.errorCode)}）` : '—'])
   if (s.kind === 'task') kv.push(['执行器', s.worker ?? '—'])
-  kv.push(['错误码', s.errorCode ?? '—'])
+  kv.push(['错误码', s.errorCode ? `${s.errorCode}（${errorCodeZh(s.errorCode)}）` : '—'])
   return kv
 }
 function fmtDur(ms) {
@@ -998,7 +1042,29 @@ const reportSections = computed(() => {
   return out
 })
 
+// 报告断言人读映射（kind/status 为枚举原值，缺失时如实回退原值）
+const CLAIM_KIND_ZH = {
+  ROOT_CAUSE: '根因', HYPOTHESIS: '推测', SYMPTOM: '症状', EXCLUSION: '排除',
+}
+const CLAIM_STATUS_ZH = {
+  TRUE: '成立', FALSE: '已排除', UNKNOWN: '未决',
+}
+
 // usageMissing=true → 「用量未回报」，不显 0 冒充
+// 六要素第 5 件「有多大把握」前端检出（与后端 ReportWritingRubric 两锚同律：
+// agent 原文「把握：HIGH|MEDIUM|LOW」/ BA-175 确定性摘要「结论置信度：高|中|未定论」）；
+// raw_text 后端不透出，检测面 = 包内 summary/impact/remediation 文本。检不出 → null 如实
+function detectConfidence(pkg) {
+  const hay = [pkg?.summary, pkg?.impact, pkg?.remediation]
+    .filter(s => typeof s === 'string').join('\n')
+  if (!hay) return null
+  const m = hay.match(/把握[：:]\s*(HIGH|MEDIUM|LOW)/)
+  if (m) return { HIGH: 'HIGH（多源一致且机理通顺）', MEDIUM: 'MEDIUM（多源一致）', LOW: 'LOW（单源证据）' }[m[1]]
+  const zh = hay.match(/结论置信度[：:]\s*(高|中|未定论)/)
+  if (zh) return { '高': 'HIGH（高）', '中': 'MEDIUM（中）', '未定论': 'LOW（未定论）' }[zh[1]]
+  return null
+}
+
 const reportHeadKv = computed(() => {
   const r = report.value
   if (!r || r.state === 'NONE') return {}
@@ -1011,6 +1077,9 @@ const reportHeadKv = computed(() => {
     'token（入/出/合计）': r.usageMissing
       ? '用量未回报'
       : `${r.promptTokens ?? '—'} / ${r.completionTokens ?? '—'} / ${r.totalTokens ?? '—'}`,
+    '把握（六要素第五件）': r.state === 'OK'
+      ? (detectConfidence(reportPkg.value) ?? '未标注（报告未写把握短语，六要素不完整）')
+      : '—',
   }
 })
 
@@ -1076,21 +1145,27 @@ async function seedEvents(runId) {
   if (typeof page.latestSeq === 'number') revision.value = page.latestSeq
 }
 
-function closeStream() {
+// 例程重排不动徽章：服务端设计即"单次排水即 complete"，每轮重排是保活机制而非断线——
+// 只有换票连续失败（真断线）才把徽章打下线；终态 run 排一轮即停（haltOnError），
+// 不进入无限重排循环。增量游标 after_seq 随票传递：重排只排新事件，
+// 不再每轮从 seq=0 全量重推（远程闪屏根因——每 800ms 全量事件重渲染 + 徽章黄绿闪）。
+let ticketFailStreak = 0
+let streamHaltOnError = false
+
+function closeStream(markDisconnected = true) {
   clearTimeout(esRetryTimer)
   esRetryTimer = null
   if (es) { es.close(); es = null }
-  sse.setDisconnected()
+  if (markDisconnected) sse.setDisconnected()
 }
 
-function openStream(runId, delayMs = 800) {
-  closeStream()
-  sse.setConnecting()
+function openStream(runId, delayMs = 2000) {
+  closeStream(false)
   esRetryTimer = setTimeout(async () => {
     try {
       const { ticket } = await api(`/rca-runs/${runId}/events/stream-ticket`, { method: 'POST' })
-      es = new EventSource(`/api/rca-runs/${runId}/events/stream?ticket=${encodeURIComponent(ticket)}`)
-      es.onopen = () => sse.setConnected()
+      es = new EventSource(`/api/rca-runs/${runId}/events/stream?ticket=${encodeURIComponent(ticket)}&after_seq=${lastSeq.value}`)
+      es.onopen = () => { ticketFailStreak = 0; sse.setConnected() }
       es.onmessage = ev => {
         try {
           appendLive(JSON.parse(ev.data))
@@ -1099,12 +1174,19 @@ function openStream(runId, delayMs = 800) {
       }
       // 服务端判定客户端游标过旧：停增量、全量重同步后重新开流
       es.addEventListener('resync', async () => {
-        closeStream()
+        closeStream(false)
         try { await seedEvents(runId) } finally { openStream(runId) }
       })
-      // 票 TTL 30s 单次：浏览器自动重连带旧票必败——统一关流、重新换票开流
-      es.onerror = () => { sse.setDisconnected(); openStream(runId) }
+      // 票 TTL 30s 单次：浏览器自动重连带旧票必败——统一关流、带游标重新换票开流；
+      // 例程重排不降徽章（排水循环=保活，不是断线）
+      es.onerror = () => {
+        if (streamHaltOnError) { closeStream(); return }
+        openStream(runId)
+      }
     } catch {
+      // 换票失败=真断线：连续 3 次才把徽章打下线（防抖，单次抖动不闪）
+      ticketFailStreak += 1
+      if (ticketFailStreak >= 3) sse.setDisconnected()
       openStream(runId, 3000)
     }
   }, delayMs)
@@ -1598,8 +1680,13 @@ onMounted(async () => {
   selectedTaskId.value =
     dagTasks.value.find(t => t.status === 'RUNNING')?.id ?? dagTasks.value[0]?.id ?? null
   try { await seedEvents(route.params.runId) } catch { /* 种子失败不阻塞，SSE resync 兜底 */ }
+  // 终态 run：排一轮增量兜底后即停（haltOnError），不进无限重排；在途 run：持续排水循环
+  streamHaltOnError = !runActive.value
   openStream(route.params.runId)
 })
+
+// 在途 → 终态跳变：下一轮排水后即停（不新增轮询）
+watch(runActive, active => { if (!active) streamHaltOnError = true })
 
 onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 </script>
@@ -1723,6 +1810,16 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
   white-space: pre-wrap; word-break: break-all;
 }
 .pub-lbl { margin-top: 12px; }
+.claim-card {
+  border: 1px solid var(--line); border-radius: var(--radius-ctl);
+  padding: 8px 10px; margin: 6px 0;
+}
+.claim-head { display: flex; gap: 6px; margin-bottom: 4px; }
+.failure-box {
+  margin-top: 8px; padding: 8px 10px; line-height: 1.8;
+  background: var(--bad-bg); border: 1px solid var(--bad);
+  border-radius: var(--radius-ctl); font-size: var(--fs-aux);
+}
 .pub-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .fb-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .w-verdict { width: 180px; }

@@ -123,7 +123,7 @@
           </el-table-column>
           <el-table-column prop="inFlightTasks" label="在飞任务" width="90" align="right" />
         </el-table>
-        <EmptyState v-else kind="empty" description="窗口内无租约活动（无 worker 领取/执行记录）" />
+        <EmptyState v-else kind="empty" description="近 60 分钟无 worker 领取/执行记录——当前无在跑调查或评测任务，系统空闲属正常；触发告警调查或发起评测批后，此处自动出现活动记录" />
       </template>
       <EmptyState v-else-if="workersState === 'forbidden'" kind="forbidden" />
       <EmptyState v-else-if="workersState === 'error'" kind="error"
@@ -219,7 +219,7 @@
             </div>
           </div>
           <VChart v-if="costModels.length" :option="costOption" autoresize class="tools-chart" />
-          <EmptyState v-else kind="empty" description="近 24 小时无可计价模型调用" />
+          <EmptyState v-else kind="empty" description="近 24 小时无可计价模型调用——只统计成功且回报 token 用量的调用；欠费/失败的调用不产生费用" />
         </template>
         <EmptyState v-else-if="costs.state === 'forbidden'" kind="forbidden" />
         <EmptyState v-else-if="costs.state === 'error'" kind="error" description="成本归因加载失败，请重试" @retry="loadCosts" />

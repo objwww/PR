@@ -8,22 +8,26 @@
       <el-button @click="load" :loading="loading">刷新</el-button>
     </header>
 
+    <el-alert v-if="loadFailed" type="error" show-icon :closable="false"
+              title="趋势接口加载失败——卡片一律显示 —，不展示 0 冒充真实零值；请点刷新重试。"
+              style="margin-bottom: 14px" />
+
     <el-row :gutter="14" class="cards">
-      <el-col :span="6"><div class="card"><p class="k">七日接收告警</p><p class="v">{{ total('alerts') }}</p></div></el-col>
-      <el-col :span="6"><div class="card"><p class="k">七日聚合事件</p><p class="v">{{ total('incidents') }}</p></div></el-col>
-      <el-col :span="6"><div class="card"><p class="k">平均降噪率</p><p class="v">{{ avg('noiseReduction') }}<small>%</small></p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">七日接收告警</p><p class="v">{{ stat(total('alerts')) }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">七日聚合事件</p><p class="v">{{ stat(total('incidents')) }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">七日降噪率（加权）</p><p class="v">{{ stat(noiseReduction) }}<small v-if="!loadFailed && noiseReduction != null">%</small></p></div></el-col>
       <el-col :span="6"><div class="card"><p class="k">七日压缩比</p>
-        <p class="v">{{ compression.ratio ?? '—' }}<small v-if="compression.ratio != null"> : 1</small></p>
-        <p class="s">{{ compression.alerts ?? 0 }} 条告警 → {{ compression.incidents ?? 0 }} 个事件</p></div></el-col>
+        <p class="v">{{ loadFailed ? '—' : (compression.ratio ?? '—') }}<small v-if="!loadFailed && compression.ratio != null"> : 1</small></p>
+        <p class="s">{{ loadFailed ? '—' : `${compression.alerts ?? 0} 条告警 → ${compression.incidents ?? 0} 个事件` }}</p></div></el-col>
     </el-row>
     <el-row :gutter="14" class="cards">
-      <el-col :span="6"><div class="card"><p class="k">AI 结论采纳率</p><p class="v">{{ acceptance.rate ?? '—' }}<small v-if="acceptance.rate != null">%</small></p>
-        <p class="s">确认 {{ acceptance.confirmed ?? 0 }} / 标注 {{ acceptance.total ?? 0 }}</p></div></el-col>
-      <el-col :span="6"><div class="card"><p class="k">AI 结论误报率</p><p class="v">{{ acceptance.falsePositiveRate ?? '—' }}<small v-if="acceptance.falsePositiveRate != null">%</small></p>
-        <p class="s">驳回 {{ acceptance.rejected ?? 0 }} / 标注 {{ acceptance.total ?? 0 }}</p></div></el-col>
-      <el-col :span="6"><div class="card"><p class="k">七日静默抑制通知</p><p class="v">{{ silence.suppressedTotal ?? 0 }}</p>
-        <p class="s">生效静默规则 {{ silence.rulesActive ?? 0 }} / {{ silence.rulesTotal ?? 0 }}</p></div></el-col>
-      <el-col :span="6"><div class="card"><p class="k">七日完成调查</p><p class="v">{{ total('runsDone') }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">AI 结论采纳率</p><p class="v">{{ loadFailed ? '—' : (acceptance.rate ?? '—') }}<small v-if="!loadFailed && acceptance.rate != null">%</small></p>
+        <p class="s">{{ loadFailed ? '—' : `确认 ${acceptance.confirmed ?? 0} / 标注 ${acceptance.total ?? 0}` }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">AI 结论误报率</p><p class="v">{{ loadFailed ? '—' : (acceptance.falsePositiveRate ?? '—') }}<small v-if="!loadFailed && acceptance.falsePositiveRate != null">%</small></p>
+        <p class="s">{{ loadFailed ? '—' : `驳回 ${acceptance.rejected ?? 0} / 标注 ${acceptance.total ?? 0}` }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">七日静默抑制通知</p><p class="v">{{ loadFailed ? '—' : (silence.suppressedTotal ?? 0) }}</p>
+        <p class="s">{{ loadFailed ? '—' : `生效静默规则 ${silence.rulesActive ?? 0} / ${silence.rulesTotal ?? 0}` }}</p></div></el-col>
+      <el-col :span="6"><div class="card"><p class="k">七日完成调查</p><p class="v">{{ stat(total('runsDone')) }}</p></div></el-col>
     </el-row>
 
     <div class="table-wrap">
@@ -49,10 +53,11 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '../api/client'
 
 const loading = ref(false)
+const loadFailed = ref(false)
 const days = ref([])
 const acceptance = ref({})
 const silence = ref({})
@@ -61,20 +66,29 @@ const compression = ref({})
 function total(key) {
   return days.value.reduce((s, d) => s + (d[key] ?? 0), 0)
 }
-function avg(key) {
-  const vals = days.value.map(d => d[key]).filter(v => v != null)
-  if (!vals.length) return '—'
-  return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10
+// 失败态不展示数字（防 0 冒充真实零值）；真实零值照常展示
+function stat(v) {
+  return loadFailed.value ? '—' : v
 }
+// 七日加权降噪率 = 1 − 七日事件总量 ÷ 七日告警总量（与下方口径声明一致；
+// 日均算术平均会让小流量日同等权重扭曲结果，弃用）
+const noiseReduction = computed(() => {
+  const alerts = total('alerts')
+  if (!alerts) return null
+  return Math.round((1 - total('incidents') / alerts) * 1000) / 10
+})
 
 async function load() {
   loading.value = true
+  loadFailed.value = false
   try {
     const d = await api('/v1/analytics/trends')
     days.value = d?.days ?? []
     acceptance.value = d?.aiAcceptance ?? {}
     silence.value = d?.silence ?? {}
     compression.value = d?.compression ?? {}
+  } catch (e) {
+    loadFailed.value = true
   } finally {
     loading.value = false
   }

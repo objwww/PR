@@ -52,6 +52,15 @@ class AlertHistoryExecutorTest {
     }
 
     @Test
+    @DisplayName("BA-183：epoch 秒直收（与 logs/change 族同律双收）")
+    void parseArgsAcceptsEpochSeconds() {
+        AlertHistoryExecutor.Query q = AlertHistoryExecutor.parseArgs(
+                args("HighErrorRate", "1757481600", "1757568000"));
+        assertThat(q.since()).isEqualTo(Instant.ofEpochSecond(1_757_481_600L));
+        assertThat(q.until()).isEqualTo(Instant.ofEpochSecond(1_757_568_000L));
+    }
+
+    @Test
     @DisplayName("违约面：缺 alertname / 非 ISO / 负窗 / 窗幅 >72h → INVALID_ARGS")
     void parseArgsRejectsViolations() {
         String since = "2026-09-08T00:00:00Z";

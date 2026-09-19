@@ -197,7 +197,7 @@
         <el-table :data="caseRows" class="cmp-table" v-loading="compareState === 'loading'">
           <el-table-column label="场景" min-width="180">
             <template #default="{ row }">
-              <span class="mono">{{ row.scenarioId }}</span>
+              <span :title="scenarioZh(row.scenarioId).desc ? `${row.scenarioId}：${scenarioZh(row.scenarioId).desc}` : row.scenarioId">{{ scenarioZh(row.scenarioId).name }}</span>
               <span class="round">第 {{ row.roundNo }} 轮</span>
             </template>
           </el-table-column>
@@ -259,7 +259,7 @@
             <el-table :data="cmp.unpaired" size="small">
               <el-table-column label="场景" min-width="160">
                 <template #default="{ row }">
-                  <span class="mono">{{ row.scenarioId }}</span>
+                  <span :title="scenarioZh(row.scenarioId).desc ? `${row.scenarioId}：${scenarioZh(row.scenarioId).desc}` : row.scenarioId">{{ scenarioZh(row.scenarioId).name }}</span>
                   <span class="round">第 {{ row.roundNo }} 轮</span>
                 </template>
               </el-table-column>
@@ -284,7 +284,7 @@
             <el-table :data="cmp.readiness.missingCases" size="small">
               <el-table-column label="场景" min-width="160">
                 <template #default="{ row }">
-                  <span class="mono">{{ row.scenarioId }}</span>
+                  <span :title="scenarioZh(row.scenarioId).desc ? `${row.scenarioId}：${scenarioZh(row.scenarioId).desc}` : row.scenarioId">{{ scenarioZh(row.scenarioId).name }}</span>
                   <span class="round">第 {{ row.roundNo }} 轮</span>
                 </template>
               </el-table-column>
@@ -317,6 +317,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElTag } from 'element-plus'
 import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
+import { scenarioZh } from '../dict/scenarioZh'
 import { fmtClock, fmtRatioStat, fmtTime } from '../utils/format'
 
 const route = useRoute()

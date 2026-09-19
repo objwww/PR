@@ -79,6 +79,11 @@
               </div>
             </template>
           </el-table-column>
+          <el-table-column label="F1" width="90" align="right">
+            <template #default="{ row }">
+              <div class="cell-main" :title="row.precision != null || row.recall != null ? `精确率 ${fmtPct(row.precision)} · 召回率 ${fmtPct(row.recall)}` : undefined">{{ fmtPct(row.f1) }}</div>
+            </template>
+          </el-table-column>
           <el-table-column label="稳定性（EV-09）" width="150">
             <template #default="{ row }">
               <div class="cell-main">pass@1：{{ fmtRatioStat(row.stability?.passAt1) }}</div>
@@ -168,7 +173,7 @@ import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
 import { GOV_TAG_ZH } from '../dict/zh.js'
-import { fmtCount, fmtDuration, fmtPair, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
+import { fmtCount, fmtDuration, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()

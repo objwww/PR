@@ -91,11 +91,19 @@ public class EvalBatchRunner {
      */
     public record RunLifecycle(String mode, String displayName, String launchPlanJson,
                                String workerId, EvalPhaseEventSink phaseSink,
-                               CancelSignal cancelSignal) {
+                               CancelSignal cancelSignal,
+                               java.util.function.Consumer<UUID> terminalHook) {
 
-        /** 旧 CLI 形态：无身份回填、无事件、无取消 */
+        /** 旧 CLI 形态：无身份回填、无事件、无取消、无终态钩子 */
         public static RunLifecycle noop() {
-            return new RunLifecycle(null, null, null, null, null, null);
+            return new RunLifecycle(null, null, null, null, null, null, null);
+        }
+
+        /** 兼容 EV-07 自动落档前形态（6 参——无终态钩子） */
+        public RunLifecycle(String mode, String displayName, String launchPlanJson,
+                            String workerId, EvalPhaseEventSink phaseSink,
+                            CancelSignal cancelSignal) {
+            this(mode, displayName, launchPlanJson, workerId, phaseSink, cancelSignal, null);
         }
 
         boolean active() {
@@ -124,6 +132,13 @@ public class EvalBatchRunner {
         void record(UUID evalRunId, String phase, Instant at, String detailJson) {
             if (active()) {
                 phaseSink.record(evalRunId, phase, at, workerId, detailJson);
+            }
+        }
+
+        /** EV-07 终态钩子（自动对比落档；仅 finalizeOnce 真实迁移成功后调用） */
+        void onTerminal(UUID evalRunId) {
+            if (terminalHook != null) {
+                terminalHook.accept(evalRunId);
             }
         }
     }
@@ -174,6 +189,12 @@ public class EvalBatchRunner {
         lifecycle.onRunStarted(evalRuns, evalRunId, clock.now());
 
         List<GoldenCase> scenarios = registry.scenarios();
+        // 防假绿预检：批件用到的驱动器逐个自检（如 chaos token 未注入），不满足
+        // 在首案注入前抛错 → catch 面落 FAILED（batch_error:preflight…），
+        // 不允许全案 TIMEOUT_OR_ABSENT 后零分"SUCCEEDED"
+        scenarios.stream().map(golden -> driversByRole.get(golden.driver()))
+                .filter(Objects::nonNull).distinct()
+                .forEach(ScenarioDriver::preflight);
         List<EvalCaseResult> results = new ArrayList<>();
         List<BaselineReportGenerator.CaseFailure> failures = new ArrayList<>();
         boolean gateOpen = true;
@@ -234,7 +255,9 @@ public class EvalBatchRunner {
             EvalRun aborted = EvalRun.terminal(evalRunId, metadata, EvalRun.EvalRunState.FAILED,
                     startedAt, clock.now(), null, null, null,
                     "batch_error:" + abbreviate(e.getMessage()));
-            evalRuns.finalizeOnce(aborted);
+            if (evalRuns.finalizeOnce(aborted)) {
+                lifecycle.onTerminal(evalRunId);
+            }
             throw e;
         }
     }
@@ -380,6 +403,9 @@ public class EvalBatchRunner {
         boolean finalized = evalRuns.finalizeOnce(EvalRun.terminal(evalRunId, metadata,
                 EvalRun.EvalRunState.SUCCEEDED, startedAt, clock.now(),
                 ScenarioMetrics.of(scores), counts, report.reportDigest()));
+        if (finalized) {
+            lifecycle.onTerminal(evalRunId);
+        }
         return new BatchResult(evalRunId, ScenarioMetrics.of(scores), counts,
                 report.reportDigest(), finalized);
     }
@@ -411,6 +437,9 @@ public class EvalBatchRunner {
         boolean finalized = evalRuns.finalizeOnce(EvalRun.terminal(evalRunId, metadata,
                 EvalRun.EvalRunState.FAILED, startedAt, clock.now(),
                 null, null, null, reason));
+        if (finalized) {
+            lifecycle.onTerminal(evalRunId);
+        }
         return new BatchResult(evalRunId, null, null, null, finalized);
     }
 

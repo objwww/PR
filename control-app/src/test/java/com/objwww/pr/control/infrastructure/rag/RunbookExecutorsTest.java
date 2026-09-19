@@ -304,6 +304,18 @@ class RunbookExecutorsTest {
                 .hasMessageContaining("权限范围");
     }
 
+    /** BA-183：epoch 秒直收（信封冻结窗以 epoch 秒下发，与 logs/change 族同律双收） */
+    @Test
+    @DisplayName("BA-183：since/until epoch 秒直收")
+    void epochSecondsAccepted() {
+        HistoryRcaSearchExecutor.Query q = HistoryRcaSearchExecutor.parseArgs(
+                Map.of("service", "order-service",
+                        "since", "1757481600", "until", "1757568000"),
+                Set.of("order-service"));
+        assertThat(q.since()).isEqualTo(java.time.Instant.ofEpochSecond(1_757_481_600L));
+        assertThat(q.until()).isEqualTo(java.time.Instant.ofEpochSecond(1_757_568_000L));
+    }
+
     /** H02：缺 service / 窗超 30d → INVALID_ARGS */
     @Test
     @DisplayName("H02：缺 service 与窗超限 → INVALID_ARGS")

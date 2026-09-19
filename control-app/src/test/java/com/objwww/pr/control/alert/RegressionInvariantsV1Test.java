@@ -173,7 +173,9 @@ class RegressionInvariantsV1Test {
                 gateway.invoke(invocation("write.tool", Map.of("q", "x")));
 
         assertThat(result.kind()).isEqualTo(ToolGateway.ToolInvocationResult.Kind.VALIDATE_ONLY);
-        assertThat(result.body()).isNull();
+        // BA-171：VALIDATE_ONLY 带待审批模型可见反馈体（本网关未装配意图台账→降级文案）
+        assertThat(new String(result.body(), java.nio.charset.StandardCharsets.UTF_8))
+                .contains("PENDING_APPROVAL").contains("意图台账未装配");
         assertThat(remote.get()).as("R2 零执行（Phase D 解锁前永久成立）").isZero();
     }
 

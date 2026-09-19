@@ -15,11 +15,23 @@ import java.util.UUID;
  * 沿 PostgresEvalRunCommandRepository 惯例）。insert-only：本类无 UPDATE/DELETE 语句；
  * "生效面" = 同 (baseline,candidate) 对最新落档（created_at DESC, id DESC 稳定落点）。
  *
- * <p>授权面（V85）：control_app select,insert；eval_app 与生产角色显式 revoke。
+ * <p>授权面（V85 + V149 扩展）：control_app select,insert（读面手工落档）；
+ * eval_app select,insert（V149——终态钩子自动落档使 eval-runner 成为生产者）；
+ * 其余生产角色维持 revoke。
  * jsonb 列（dimension_diffs/stats_snapshot/readiness_snapshot(V110/FUP-02)/gate_reasons）
  * 以 ::text 原文出入，结构装配归应用服务。
  */
 public class PostgresEvalComparisonRepository implements EvalComparisonRepository {
+
+    private static final String SELECT_RECORD =
+            "select id, baseline_run_id, candidate_run_id, comparable,"
+                    + " dimension_diffs::text as dimension_diffs_json,"
+                    + " paired_count, unpaired_count, improved_count, regressed_count,"
+                    + " flat_count, stats_snapshot::text as stats_snapshot_json,"
+                    + " readiness_snapshot::text as readiness_snapshot_json,"
+                    + " gate_outcome, gate_reasons::text as gate_reasons_json,"
+                    + " gate_rule_version, actor, created_at"
+                    + " from eval_comparison";
 
     private final JdbcClient jdbc;
 
@@ -71,38 +83,47 @@ public class PostgresEvalComparisonRepository implements EvalComparisonRepositor
     @Override
     public Optional<EvalComparisonRecord> findLatestByPair(UUID baselineRunId,
                                                            UUID candidateRunId) {
-        return jdbc.sql("""
-                        select id, baseline_run_id, candidate_run_id, comparable,
-                               dimension_diffs::text as dimension_diffs_json,
-                               paired_count, unpaired_count, improved_count, regressed_count,
-                               flat_count, stats_snapshot::text as stats_snapshot_json,
-                               readiness_snapshot::text as readiness_snapshot_json,
-                               gate_outcome, gate_reasons::text as gate_reasons_json,
-                               gate_rule_version, actor, created_at
-                        from eval_comparison
-                        where baseline_run_id = :baseline and candidate_run_id = :candidate
+        return jdbc.sql(SELECT_RECORD + """
+                        \swhere baseline_run_id = :baseline and candidate_run_id = :candidate
                         order by created_at desc, id desc
                         limit 1
                         """)
                 .param("baseline", baselineRunId)
                 .param("candidate", candidateRunId)
-                .query((rs, i) -> new EvalComparisonRecord(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("baseline_run_id", UUID.class),
-                        rs.getObject("candidate_run_id", UUID.class),
-                        rs.getBoolean("comparable"),
-                        rs.getString("dimension_diffs_json"),
-                        rs.getInt("paired_count"), rs.getInt("unpaired_count"),
-                        rs.getInt("improved_count"), rs.getInt("regressed_count"),
-                        rs.getInt("flat_count"),
-                        rs.getString("stats_snapshot_json"),
-                        rs.getString("readiness_snapshot_json"),
-                        rs.getString("gate_outcome"),
-                        fromJsonArray(rs.getString("gate_reasons_json")),
-                        rs.getString("gate_rule_version"),
-                        rs.getString("actor"),
-                        rs.getTimestamp("created_at").toInstant()))
+                .query(this::mapRecord)
                 .optional();
+    }
+
+    @Override
+    public Optional<EvalComparisonRecord> findLatestByCandidate(UUID candidateRunId) {
+        return jdbc.sql(SELECT_RECORD + """
+                        \swhere candidate_run_id = :candidate
+                        order by created_at desc, id desc
+                        limit 1
+                        """)
+                .param("candidate", candidateRunId)
+                .query(this::mapRecord)
+                .optional();
+    }
+
+    private EvalComparisonRecord mapRecord(java.sql.ResultSet rs, int rowNum)
+            throws java.sql.SQLException {
+        return new EvalComparisonRecord(
+                rs.getObject("id", UUID.class),
+                rs.getObject("baseline_run_id", UUID.class),
+                rs.getObject("candidate_run_id", UUID.class),
+                rs.getBoolean("comparable"),
+                rs.getString("dimension_diffs_json"),
+                rs.getInt("paired_count"), rs.getInt("unpaired_count"),
+                rs.getInt("improved_count"), rs.getInt("regressed_count"),
+                rs.getInt("flat_count"),
+                rs.getString("stats_snapshot_json"),
+                rs.getString("readiness_snapshot_json"),
+                rs.getString("gate_outcome"),
+                fromJsonArray(rs.getString("gate_reasons_json")),
+                rs.getString("gate_rule_version"),
+                rs.getString("actor"),
+                rs.getTimestamp("created_at").toInstant());
     }
 
     /** 机器码原因表 → jsonb 数组原文（元素为固定机器码词，无引号注入面） */

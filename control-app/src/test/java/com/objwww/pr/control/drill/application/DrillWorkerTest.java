@@ -100,6 +100,22 @@ class DrillWorkerTest {
         }
 
         @Override
+        public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public List<DrillJob> findRetryRequests() {
+            return List.of();
+        }
+
+        @Override
+        public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                    Instant now) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Optional<DrillJob> claimNext(String workerId, Instant claimedAt) {
             Optional<DrillJob> head = byId.values().stream()
                     .filter(j -> j.state() == DrillJob.State.QUEUED)
@@ -264,12 +280,14 @@ class DrillWorkerTest {
     private FakeJobs jobs;
     private FakeEvents events;
     private FixedClock clock;
+    private java.util.function.Function<String, List<String>> symptomFiring;
 
     @BeforeEach
     void setUp() {
         jobs = new FakeJobs();
         events = new FakeEvents();
         clock = new FixedClock();
+        symptomFiring = sid -> List.of();
     }
 
     private DrillWorker worker(DrillInjectionPort port, boolean ready) {
@@ -279,7 +297,8 @@ class DrillWorkerTest {
     private DrillWorker worker(DrillInjectionPort port, boolean ready,
                                boolean launchEnabled) {
         return new DrillWorker(jobs, events, catalog(ready), port, clock, ENVS,
-                "drill-worker-1", 5, 900, new DrillExecutionPolicy(launchEnabled, ENVS));
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(launchEnabled, ENVS),
+                symptomFiring);
     }
 
     private DrillJob enqueue(boolean stopRequested) {
@@ -326,6 +345,71 @@ class DrillWorkerTest {
         assertThat(after.state()).isEqualTo(DrillJob.State.FAILED);
         assertThat(after.terminalReason()).contains("precheck_failed")
                 .contains("EXECUTION_READY");
+    }
+
+    @Test
+    @DisplayName("BA-180 环境洁净门：期望症状残留 firing → PRECHECK→FAILED 零注入，"
+            + "中文人话原因（先恢复环境再发起）")
+    void symptomDirtyStopsBeforeInjection() {
+        DrillJob job = enqueue(false);
+        symptomFiring = sid -> List.of("ArenaDuplicateOrders");
+        DrillWorker w = new DrillWorker(jobs, events, catalogWithSymptoms(),
+                new DrillInjectionPort.NotImplemented(), clock, ENVS,
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS),
+                symptomFiring);
+        w.tick();
+        DrillJob after = jobs.findById(job.id()).orElseThrow();
+        assertThat(after.state()).isEqualTo(DrillJob.State.FAILED);
+        assertThat(after.terminalReason()).contains("precheck_failed")
+                .contains("SYMPTOM_CLEAN").contains("环境不洁净");
+        List<String> transitions = events.stored.stream()
+                .filter(e -> e.eventType() == DrillEvent.EventType.PHASE_TRANSITION)
+                .map(e -> e.fromState() + "→" + e.toState()).toList();
+        assertThat(transitions).containsExactly("QUEUED→PRECHECK", "PRECHECK→FAILED");
+    }
+
+    @Test
+    @DisplayName("BA-180 洁净门探针不可测 = UNKNOWN 不阻塞（诚实边界，不冒充洁净也不误伤）")
+    void symptomProbeUnreadableDoesNotBlock() {
+        DrillJob job = enqueue(false);
+        symptomFiring = sid -> {
+            throw new IllegalStateException("prometheus 503");
+        };
+        DrillWorker w = new DrillWorker(jobs, events, catalogWithSymptoms(),
+                new DrillInjectionPort.NotImplemented(), clock, ENVS,
+                "drill-worker-1", 5, 900, new DrillExecutionPolicy(true, ENVS),
+                symptomFiring);
+        w.tick();
+        DrillJob after = jobs.findById(job.id()).orElseThrow();
+        // UNKNOWN 不阻塞：继续走注入（NotImplemented 如实 FAILED 于 INJECTING）
+        assertThat(after.state()).isEqualTo(DrillJob.State.FAILED);
+        assertThat(after.terminalReason()).contains("INJECTION_NOT_IMPLEMENTED");
+        assertThat(events.stored).anySatisfy(e -> {
+            assertThat(e.eventType()).isEqualTo(DrillEvent.EventType.PRECHECK_RESULT);
+            assertThat(e.payloadJson()).contains("SYMPTOM_CLEAN")
+                    .contains("UNKNOWN");
+        });
+    }
+
+    /** 带症状码的 ready 模板（BA-180 洁净门有判定面） */
+    private static DrillTemplateCatalog catalogWithSymptoms() {
+        return DrillTemplateCatalog.load("""
+                registry_version: 2
+                templates:
+                  - scenario_id: T1
+                    name: 测试场景
+                    symptom_codes: [ArenaDuplicateOrders]
+                    timing: {preheat_seconds: 60, hold_seconds: 600,
+                             max_firing_wait_seconds: 300,
+                             max_resolved_wait_seconds: 600,
+                             cleanup_timeout_seconds: 120}
+                    params:
+                      duration_seconds: {default: 600, min: 60, max: 600}
+                      traffic_scales: [RECIPE]
+                      linked_eval_version_allowed: true
+                    execution:
+                      ready: true
+                """);
     }
 
     @Test

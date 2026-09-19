@@ -1,5 +1,6 @@
 package com.objwww.pr.control.alert.domain.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +27,17 @@ public interface RcaModelCallUsageReader {
 
     /** run 级聚合（实现方自含短事务；无行 → empty） */
     Optional<RunUsage> summarizeByRun(UUID runId);
+
+    /**
+     * run 级模型调用失败码分布（state=FAILED 行按 error_code 聚合，降序；零失败 → 空表）。
+     * 消费面：调查详情/处置中心 situation 卡的"为什么没取到证据"直接原因透出——
+     * 账面码是唯一诚实来源（BA-168 纪律：不猜、不编）。
+     */
+    List<CallFailure> failuresByRun(UUID runId);
+
+    /** 失败码计数行（errorCode 账面原值；UNKNOWN=行无码兜底） */
+    record CallFailure(String errorCode, long count) {
+    }
 
     /** run 级用量/费用聚合投影（字段口径见接口头注） */
     record RunUsage(long callCount, long tokensIn, long tokensOut, Long costMicros,

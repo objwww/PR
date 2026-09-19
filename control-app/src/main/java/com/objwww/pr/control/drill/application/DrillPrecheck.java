@@ -67,6 +67,21 @@ public final class DrillPrecheck {
     public static Result run(DrillTemplate template, String targetEnv,
                              List<String> allowedEnvs, DrillJob occupant,
                              boolean launchEnabled) {
+        return run(template, targetEnv, allowedEnvs, occupant, launchEnabled, null);
+    }
+
+    /**
+     * BA-180 六参面：新增 SYMPTOM_CLEAN 环境洁净门——期望症状码已在 firing（残留）
+     * 时本次演练观察不到自己的新沿（DR-06 关联/结局必然失真），拒绝注入。
+     *
+     * @param residualFiring 期望症状码中当前 firing 的集合（worker 领取复验经
+     *                       AlertProbe 单拍实测）：null = 读面不可测（HTTP 预览面
+     *                       不直连 Prometheus）→ UNKNOWN 不阻塞；空 = 洁净 OK；
+     *                       非空 = FAIL 带中文人话原因
+     */
+    public static Result run(DrillTemplate template, String targetEnv,
+                             List<String> allowedEnvs, DrillJob occupant,
+                             boolean launchEnabled, List<String> residualFiring) {
         List<Check> checks = new ArrayList<>();
         if (template == null) {
             checks.add(new Check("SCENARIO_KNOWN", Status.FAIL, "场景未注册于模板目录"));
@@ -96,6 +111,9 @@ public final class DrillPrecheck {
                         : DrillExecutionPolicy.REASON_CODE
                           + ": 演练启动面已关闭（app.drill.launch-enabled=false，"
                           + "重开需改配置并重启生效）"));
+        // BA-180：环境洁净门——期望症状码已 firing（残留）= 本次症状新沿不可分辨，
+        // 关联/恢复核验必失真；残留码逐条列出，中文人话原因可落地执行
+        checks.add(symptomCleanCheck(template, residualFiring));
         // ---- control 读面无真实信号的项：如实 UNKNOWN，不造假 ----
         checks.add(new Check("TARGET_HEALTH", Status.UNKNOWN,
                 "靶场健康需管理/观测面信号，control 读面无授权通路（待 DR-03 执行域实测）"));
@@ -109,5 +127,27 @@ public final class DrillPrecheck {
         checks.add(new Check("RECOVERY_CAPABILITY", Status.UNKNOWN,
                 "恢复能力以执行域恢复通路为准（DR-04/DR-05 未交付时不冒充可恢复）"));
         return new Result(checks);
+    }
+
+    /** BA-180 洁净门：无症状码 = 无判定面（OK 如实注明）；null = 读面不可测（UNKNOWN
+     *  不阻塞）；非空残留 = FAIL 中文人话原因（拒绝注入，先恢复环境再发起） */
+    private static Check symptomCleanCheck(DrillTemplate template,
+                                           List<String> residualFiring) {
+        if (template.symptomCodes().isEmpty()) {
+            return new Check("SYMPTOM_CLEAN", Status.OK,
+                    "模板未声明症状码——无 firing 残留判定面（核验面同为空）");
+        }
+        if (residualFiring == null) {
+            return new Check("SYMPTOM_CLEAN", Status.UNKNOWN,
+                    "期望症状 firing 残留需 Prometheus 观测面单拍信号，本调用面不直连"
+                            + "（worker 领取复验实测回填）");
+        }
+        if (residualFiring.isEmpty()) {
+            return new Check("SYMPTOM_CLEAN", Status.OK,
+                    "期望症状码当前无 firing 残留（环境洁净）");
+        }
+        return new Check("SYMPTOM_CLEAN", Status.FAIL,
+                "目标告警已在 firing 残留，环境不洁净，请先确认恢复后再发起："
+                        + String.join("、", residualFiring));
     }
 }

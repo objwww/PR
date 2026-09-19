@@ -6,12 +6,24 @@
       <div class="head-meta">
         <el-tag :type="statusType(detail.status)" effect="light">{{ statusLabel(detail.status) }}</el-tag>
         <span>负责人 {{ detail.owner || '未分配' }}</span>
-        <span>原因 {{ detail.reasonCode }}</span>
+        <span>原因 {{ detail.reasonCode }}<template v-if="detail.reasonCode && errorCodeZh(detail.reasonCode) !== detail.reasonCode">（{{ errorCodeZh(detail.reasonCode) }}）</template></span>
         <span>首次出现 {{ fmtTime(detail.firstSeen) }}</span>
         <span>认领期限 {{ fmtTime(detail.ackDue) }}</span>
         <span>解决期限 {{ fmtTime(detail.resolveDue) }}</span>
         <router-link :to="`/runs/${detail.runId}`">关联调查 →</router-link>
       </div>
+    </div>
+
+    <!-- 现状与建议（后端 situation 投影：当前现状/影响程度/建议动作，全由真字段推导） -->
+    <div v-if="detail.situation" class="card-in situation-block">
+      <div class="blk-title">现状与建议</div>
+      <div class="sit-row"><span class="sit-label">当前现状</span>{{ detail.situation.currentState }}</div>
+      <div class="sit-row">
+        <span class="sit-label">影响程度</span>
+        优先级 {{ detail.situation.impact?.priority ?? '—' }} ｜ 类型 {{ detail.situation.impact?.incidentType ?? '—' }}
+        ｜ 证据 {{ detail.situation.impact?.evidenceCount ?? 0 }} 条 ｜ 断言 {{ detail.situation.impact?.claimCount ?? 0 }} 条
+      </div>
+      <div class="sit-row"><span class="sit-label">建议动作</span>{{ detail.situation.suggestion }}</div>
     </div>
 
     <!-- 下一步操作（认领/处理中/解决/转派分清主次） -->
@@ -136,6 +148,7 @@
 // 命令经 emit('command') 交 CasesView 统一走 expectedRevision + idempotencyKey。
 import { computed, ref, watch } from 'vue'
 import { VERIFY_STATUS_ZH, zh } from '../dict/displayNameZh.js'
+import { errorCodeZh } from '../dict/zh.js'
 import { fmtTime } from '../utils/format'
 
 const props = defineProps({ detail: { type: Object, default: null } })
@@ -196,6 +209,9 @@ function submitResolve() {
 }
 
 .blk-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); margin-bottom: 8px; }
+.situation-block { margin-bottom: 12px; }
+.sit-row { font-size: var(--fs-body); color: var(--ink); line-height: 1.8; display: flex; gap: 8px; }
+.sit-label { color: var(--ink-2); flex-shrink: 0; min-width: 64px; }
 .ops-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ops-hint { margin-top: 8px; font-size: var(--fs-aux); color: var(--ink-2); }
 .assign-pop { display: flex; flex-direction: column; }

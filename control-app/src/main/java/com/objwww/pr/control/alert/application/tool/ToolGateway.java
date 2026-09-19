@@ -13,6 +13,7 @@ import com.objwww.pr.control.alert.domain.tool.ToolPolicy;
 import com.objwww.pr.control.alert.domain.tool.ToolRisk;
 
 import java.time.Clock;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,9 @@ import java.util.concurrent.TimeUnit;
  */
 public final class ToolGateway implements ToolInvoker {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ToolGateway.class);
+
     private final ToolRegistry registry;
     private final ToolPolicy policy;
     private final ExecutorService callPool;
@@ -46,6 +50,9 @@ public final class ToolGateway implements ToolInvoker {
     /** PB-B1：意图台账（可空=未装配，意图仅事件面不落行——渐进采纳旧装配零漂移） */
     private final com.objwww.pr.control.alert.application.mutation.ActionIntentLedger
             intentLedger;
+    /** BA-171：意图落账后的审批推进回调（可空=跳过；异常捕获降级不炸调查） */
+    private final com.objwww.pr.control.alert.application.mutation.IntentFollowUp
+            intentFollowUp;
 
     public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
             Clock clock, RcaEventAppender events) {
@@ -69,6 +76,16 @@ public final class ToolGateway implements ToolInvoker {
             Clock clock, RcaEventAppender events, InFlightToolCancels cancels,
             com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags,
             com.objwww.pr.control.alert.application.mutation.ActionIntentLedger intentLedger) {
+        this(registry, policy, callPool, clock, events, cancels, provenanceTags, intentLedger,
+                null);
+    }
+
+    /** BA-171 全参形态：intentFollowUp（意图落账后自动进审批队列；可空=跳过保兼容） */
+    public ToolGateway(ToolRegistry registry, ToolPolicy policy, ExecutorService callPool,
+            Clock clock, RcaEventAppender events, InFlightToolCancels cancels,
+            com.objwww.pr.control.alert.domain.event.DecisionProvenance provenanceTags,
+            com.objwww.pr.control.alert.application.mutation.ActionIntentLedger intentLedger,
+            com.objwww.pr.control.alert.application.mutation.IntentFollowUp intentFollowUp) {
         this.registry = Objects.requireNonNull(registry);
         this.policy = Objects.requireNonNull(policy);
         this.callPool = Objects.requireNonNull(callPool);
@@ -77,6 +94,7 @@ public final class ToolGateway implements ToolInvoker {
         this.cancels = cancels; // 可空（默认不参与在途取消通知）
         this.provenanceTags = provenanceTags;
         this.intentLedger = intentLedger;
+        this.intentFollowUp = intentFollowUp;
     }
 
     /** 下发给 LLM 的工具清单：被拒工具从清单删除（双闸之一） */
@@ -135,9 +153,9 @@ public final class ToolGateway implements ToolInvoker {
                 invocation.investigationInputDigest()));
         ToolRisk risk = registration.definition().risk();
         if (!risk.executable()) {
-            recordIntent(invocation, digest, risk);
+            UUID intentId = recordIntent(invocation, digest, risk);
             return new ToolInvocationResult(ToolInvocationResult.Kind.VALIDATE_ONLY, digest,
-                    null);
+                    pendingApprovalBody(invocation, risk, intentId));
         }
         byte[] body = executeWithDeadline(registration, invocation);
         if (body.length > registration.definition().resultLimitBytes()) {
@@ -252,10 +270,16 @@ public final class ToolGateway implements ToolInvoker {
                 "工具远端暂不可用（临时故障，可重试）");
     }
 
-    /** R2/R3 意图记录（VALIDATE_ONLY，零执行；AM4 不引入审批态；PB-B1 起意图行同短事务入账） */
-    private void recordIntent(ToolInvocation invocation, String digest, ToolRisk risk) {
+    /**
+     * R2/R3 意图记录（VALIDATE_ONLY，零执行；PB-B1 起意图行同短事务入账）。
+     * BA-171：①请求面资源键从 args["service"] 提取随意图落账（替代旧的恒 null——
+     * 授权身份仍只信 Resolver 权威解析，本键只是解析输入）；②意图行提交后挂
+     * IntentFollowUp 审批推进回调（可空=跳过；回调异常只记日志不炸调查——意图留
+     * OPEN 未解析是诚实状态）。返回意图 id（未装配任何账本面 → null）。
+     */
+    private UUID recordIntent(ToolInvocation invocation, String digest, ToolRisk risk) {
         if (events == null && intentLedger == null) {
-            return;
+            return null;
         }
         var intentId = java.util.UUID.randomUUID();
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -274,16 +298,63 @@ public final class ToolGateway implements ToolInvoker {
         }
         String payloadJson = InternalCanonicalJsonV1.canonicalize(payload);
         if (intentLedger != null) {
+            // BA-171 资源键约定：args["service"] 原样作为 requested_resource_key——
+            // resource_alias.resource_key 精确匹配面（键格式以 Resolver 为准）
+            String requestedKey = requestedResourceKey(invocation.args());
             var intent = com.objwww.pr.control.alert.domain.mutation.ActionIntent.open(
                     intentId, invocation.runId(), invocation.taskId(), invocation.attemptId(),
                     invocation.callSeq(), invocation.toolName(), invocation.toolVersion(),
-                    digest, risk, null, payloadJson);
+                    digest, risk, requestedKey, payloadJson);
             intentLedger.record(intent, new RcaEventAppender.EventDraft(
                     intentId, "TOOL_INTENT_VALIDATED", payloadJson));
-            return;
+            // 审批推进（意图行已随 REQUIRES_NEW 短事务提交，回调可读）：无资源键
+            // 无法解析，跳过；回调失败只记日志——意图留 OPEN 未解析，不炸调查
+            if (intentFollowUp != null && requestedKey != null) {
+                try {
+                    intentFollowUp.onIntentRecorded(intentId, requestedKey);
+                } catch (Exception e) {
+                    log.warn("意图审批推进失败（意图留 OPEN 未解析，可人工 resolve/request 兜底）"
+                            + " intent={}: {}", intentId, e.toString());
+                }
+            }
+            return intentId;
         }
         events.appendIndependent(invocation.runId(), new RcaEventAppender.EventDraft(
                 intentId, "TOOL_INTENT_VALIDATED", payloadJson));
+        return intentId;
+    }
+
+    /** 资源键提取约定（BA-171）：args["service"] 原样透出；缺/空白 → null（跳过审批推进） */
+    private static String requestedResourceKey(Map<String, Object> args) {
+        if (args == null) {
+            return null;
+        }
+        Object service = args.get("service");
+        return service instanceof String s && !s.isBlank() ? s.trim() : null;
+    }
+
+    /**
+     * VALIDATE_ONLY 的模型可见反馈体（BA-171）：写类调用不再零反馈——语义=「已提交
+     * 人工审批（审批编号 = intentId 前 8 位），审批通过后方执行；请勿重试同一操作，
+     * 继续其他只读取证」。意图台账未装配时如实降级文案（不冒充已进审批链）。
+     */
+    private static byte[] pendingApprovalBody(ToolInvocation invocation, ToolRisk risk,
+            UUID intentId) {
+        Map<String, Object> pending = new LinkedHashMap<>();
+        pending.put("status", "PENDING_APPROVAL");
+        pending.put("tool", invocation.toolName());
+        pending.put("risk", risk.name());
+        if (intentId != null) {
+            pending.put("intent_id", intentId.toString());
+        }
+        pending.put("message", intentId != null
+                ? "该操作为写类高危操作，已提交人工审批（审批编号 "
+                        + intentId.toString().substring(0, 8) + "），审批通过后方执行；"
+                        + "请勿重试同一操作，继续其他只读取证"
+                : "该操作为写类高危操作，仅校验记录未执行（意图台账未装配，无法进入审批链）；"
+                        + "请勿重试同一操作，继续其他只读取证");
+        return InternalCanonicalJsonV1.canonicalize(pending)
+                .getBytes(StandardCharsets.UTF_8);
     }
 
     private String registrationSchemaHash(ToolInvocation invocation) {

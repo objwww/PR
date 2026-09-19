@@ -5,6 +5,7 @@ import com.objwww.pr.control.alert.application.AlertClock;
 import com.objwww.pr.control.alert.application.DagExecutionService;
 import com.objwww.pr.control.alert.application.DeterministicSupervisor;
 import com.objwww.pr.control.alert.application.PlanCompiler;
+import com.objwww.pr.control.alert.application.ReportWritingRubric;
 import com.objwww.pr.control.alert.application.agent.AgentRegistry;
 import com.objwww.pr.control.alert.application.agent.ChangeAgent;
 import com.objwww.pr.control.alert.application.agent.DirectReadToolAgent;
@@ -18,6 +19,7 @@ import com.objwww.pr.control.alert.application.replay.AgentReplayRunner;
 import com.objwww.pr.control.alert.application.replay.ReadOnlyToolFace;
 import com.objwww.pr.control.alert.application.replay.SnapshotShadowRouter;
 import com.objwww.pr.control.alert.application.tool.ReplayToolGateway;
+import com.objwww.pr.control.alert.application.tool.MutationToolCatalog;
 import com.objwww.pr.control.alert.application.tool.ToolGateway;
 import com.objwww.pr.control.alert.application.tool.ToolInvoker;
 import com.objwww.pr.control.alert.application.tool.ToolRegistry;
@@ -123,11 +125,13 @@ public class AlertAm4Config {
     private static final String DOCKER_CONTAINER_ALLOWLIST_KEY =
             "${app.alert.am4.docker.container-allowlist:}";
     private static final String ALLOWED_TOOLS_KEY =
+            // BA-171：尾部两个 R3 写类审批工具（service.restart/service.rollback）——
+            // 策略放行 ≠ 可执行，Gateway 对 R3 恒 VALIDATE_ONLY 铸意图进审批链
             "${app.alert.am4.allowed-tools:prometheus.query,logs.query,change.query,"
                     + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
                     + "prometheus.rules,logs.aggregate,change.diff,alert.history,"
                     + "runbook.catalog,runbook.fetch,rca_history.search,"
-                    + "code.search,code.read}";
+                    + "code.search,code.read,service.restart,service.rollback}";
     private static final String SHADOW_MAX_CALLS_KEY =
             "${app.alert.am4.shadow.max-calls-per-window:60}";
     private static final String SHADOW_WINDOW_MILLIS_KEY =
@@ -139,7 +143,7 @@ public class AlertAm4Config {
     private static final String TOOL_RESULT_LIMIT_KEY =
             "${app.alert.am4.tool.result-limit-bytes:65536}";
     private static final String PROMPT_VERSION_KEY =
-            "${app.alert.am4.agent.prompt-version:am4-native-v1}";
+            "${app.alert.am4.agent.prompt-version:am4-native-v9}";
     private static final String BUDGET_STEP_KEY = "${app.alert.am4.budget.step:8}";
     private static final String BUDGET_TOOL_CALLS_KEY =
             "${app.alert.am4.budget.tool-calls:4}";
@@ -172,6 +176,93 @@ public class AlertAm4Config {
     /** 臂A 前置债清偿（R7）：委派批上限运行时旋钮，缺省 2=现行为不变；0=零委派臂A 姿态 */
     private static final String R7_PRIMARY_MAX_DELEGATION_BATCHES_KEY =
             "${app.alert.r7.primary.max-delegation-batches:2}";
+    /** 主模式策略 prompt 配置键（缺省空串=回落 {@link #R7_PRIMARY_DEFAULT_PROMPT}；
+     *  完整协议默认值含 JSON 花括号，不能放进占位符默认值——占位符首个 } 即截断） */
+    private static final String R7_PRIMARY_PROMPT_KEY = "${app.alert.r7.primary.prompt:}";
+
+    /**
+     * 主 Agent 缺省 prompt（am4-native-v9，业界提示词规范重写：角色→目标→环境→
+     * 调查路径→收敛标准→诚实纪律→写类工具→写作要求→输出协议→示例 十段分层，
+     * 协议键与 {@code PrimaryDecision.parse} 逐字对齐不变）：
+     * 决策协议明示（分支键 tool_call/delegate/final 恰选一、claim 行键
+     * claim_key/kind/statement/evidence_refs/evidence_roles/root_cause/
+     * symptom_codes、kind 枚举 ROOT_CAUSE/EXCLUSION/HYPOTHESIS/SYMPTOM、
+     * evidence_roles.role 枚举 SUPPORTS/REFUTES/CONTEXT）。root_cause 三元组取值
+     * 只认信封 root_cause_catalog 的 canonical 码（root_cause_hit 评分贯通面）。
+     * v3 起硬要求：ROOT_CAUSE 的 SUPPORTS 引用必须锚到 ≥2 个不同 source 的证据行
+     * （SINGLE_SOURCE 诚实门，单来源只落推测节）。v4 起【最小取证清单】：收敛前
+     * 必须先 metrics.rules 找告警表达式再 query_range 拉窗内曲线 + logs.query 查
+     * WARN/ERROR，两类齐全才许收敛（SMOKE 批 aa7f25b4 实证 miss 模式=只查日志）。
+     * v5 起 symptom_codes 规格（BA-158 同族：SYMPTOM 类 claim 必须携带
+     * symptom_codes=告警名，禁止填 logs/prometheus/loki 等来源标签——批 aa7f25b4
+     * eval_case_result tp=0/fp=99/fn=60 实证）。v6 不改任何协议键，只把策略表达
+     * 从密集单段改为分层结构 + 完整收敛示例（few-shot），提升可读性与依从率。
+     * v7（BA-171）仍不改任何协议键：新增【写类工具（人工审批链）】段——告知模型
+     * service.restart/service.rollback 调用即铸人工审批单、不直接执行、审批结果
+     * 异步生效，取证结论不得依赖未执行的写操作。
+     * v8 仍不改任何协议键：新增【报告写作要求（六要素）】段——final 的 statement
+     * 合起来要让读者按"发生了什么→根因是什么→凭什么判断→影响多大→有多大把握→
+     * 建议怎么办"一段话看懂；硬规则：证据 id/UUID 只进 evidence_refs 与
+     * evidence_roles 字段，statement 正文写自然中文，禁止把证据 id、英文故障码
+     * 写进 statement（正文里的机器码会原样透传到报告摘要）。
+     * v9（BA-177）仍不改任何协议键：【报告写作要求】段切换为共享规约
+     * {@link com.objwww.pr.control.alert.application.ReportWritingRubric#PROMPT_SECTION}
+     * （落地 v9 草案三增量——把握短语硬措辞/不合格反例/禁黑话三条，把握短语即
+     * SixElementsChecker 的检出锚，prompt 与评分同源防口径漂移）；【推荐调查路径】
+     * 第 4 步扩为变更与历史工具直查（change.query/change.diff/alert.history/
+     * rca_history.search 随本版 allowlist 放行）。
+     */
+    private static final String R7_PRIMARY_DEFAULT_PROMPT = """
+            # 角色
+            你是一名资深 SRE 根因调查 Agent。告警触发后，你围绕告警与冻结时间窗，用只读工具逐步取证，定位并证实根因。
+
+            # 工作目标
+            给出可被证据支撑、可被复核的结论：要么确认根因，要么如实说明"目前只能推测/无法定论"。宁可诚实降级，绝不编造。
+
+            # 工作环境（每步信封里有什么）
+            alert（告警名/服务/级别）、冻结时间窗、tool_allowlist（可用工具清单）、tool_schemas（各工具参数形状）、valid_artifact_refs（已取到的证据 id 清单）、root_cause_catalog（根因 canonical 码表）、delegation_batches_remaining（剩余委派批数）。
+
+            # 推荐调查路径
+            1. 读告警：从 alert.alertname 与注解判断症状属于哪一层（流量/延迟/错误率/资源/业务）。
+            2. 指标取证（必须先做）：先用 metrics.rules 找到本告警规则的表达式，再用 metrics.query_range 拉取冻结窗内的指标曲线——确认症状真实存在、幅度与起止点（得到 prometheus 来源证据）。
+            3. 日志取证（必须先做）：用 logs.query 查告警服务在冻结窗内的 WARN/ERROR 日志——找第一条异常与错误模式（得到 logs 来源证据）。
+            4. 变更与历史佐证（需要时）：用 change.query 查冻结窗内的发布/配置变更清单，用 change.diff 核对单次变更的具体内容——变更相关性≠因果性，变更内容必须与故障机理对得上才算因果；用 alert.history 查本告警的历史触发与处置，用 rca_history.search 找同类故障的历史结论作旁证（历史结论是参考不是证据，正文引用以本次取证为准）。需要深挖变更面时也可委派 change 角色，question 写清你要验证的假设。
+            5. 交叉印证：把指标曲线、日志模式、变更时间线对齐到同一时间轴，能互相解释的才下结论。
+
+            # 收敛标准（全部满足才允许在 final 里标 ROOT_CAUSE）
+            - 指标面与日志面两类取证都已完成，且指向同一结论——缺一类即视为证据不足；
+            - ROOT_CAUSE claim 的 SUPPORTS 引用覆盖至少两个不同来源的证据行（以证据行 source 标签为准）；
+            - root_cause 的 component/fault_type/reason_code 三字段逐字取自信封 root_cause_catalog 的同一行——禁止跨行混搭、禁止自造词；信封无 root_cause_catalog 键或无法确定取值时省略 root_cause 键（如实降级，不拿服务名/claim_key 冒充）。
+
+            # 诚实纪律（宁可降级，不可编造）
+            - 只有单一来源支持 → kind=HYPOTHESIS，并在 missing_information 写明缺哪个来源的佐证；
+            - 完全没有可支撑线索 → 输出 final 空 claims（"claims":[]）并在 missing_information 如实声明缺口；
+            - symptom_codes 仅 SYMPTOM claim 必须携带：取值=告警名（信封 alert.alertname，或 metrics.rules 查到的 firing 规则 alertname）——禁止填 logs/prometheus/loki 等来源标签（来源标签不是症状码，评分按告警名等值比对，填来源标签=结构性恒 miss）；其他 kind 省略该键；
+            - 禁止编造无证据的根因。
+
+            # 写类工具（人工审批链）
+            tool_allowlist 里的 service.restart / service.rollback 是写类高危工具：调用不会直接执行，而是创建一张人工审批单（工具结果会返回审批编号），审批通过后由系统异步执行。纪律：
+            - 取证结论不得依赖尚未执行的写操作——root_cause 的证据链只能引用只读取证拿到的证据行；
+            - 同一写操作提交一次即可，请勿重试同一写调用（重复提交不会加速审批）；
+            - 是否建议写操作由你判断，是否执行永远由人类审批者决定；审批结果异步生效，不要原地等待或反复查询。
+
+            """ + ReportWritingRubric.PROMPT_SECTION + """
+
+            # 输出协议（宿主严格解析，逐字遵守）
+            每步回复必须且只能是一个纯 JSON 对象——禁止 markdown 围栏、禁止解释文字、禁止思考过程；顶层恰含以下三个分支键之一：
+            1. 取证：{"tool_call":{"tool_id":"<tool_allowlist 之一>","args":{...}}}——args 形状严格遵守 tool_schemas 的 properties/required。
+            2. 委派（仅确需专业能力且 delegation_batches_remaining>0）：{"delegate":{"requests":[{"gap_id":"g1","role_id":"metrics|logs|change","question":"...","input_refs":[],"scope":{},"requested_budget":4}]}}。
+            3. 收敛：{"final":{"claims":[<claim 行>...],"missing_information":["..."]}}——final 是唯一 Claim 提案出口。
+
+            【claim 行形状】{"claim_key":"c1","kind":"ROOT_CAUSE|EXCLUSION|HYPOTHESIS|SYMPTOM","statement":"<一句话结论>","evidence_refs":["<valid_artifact_refs 之一>"],"evidence_roles":[{"ref":"<evidence_refs 之一>","role":"SUPPORTS|REFUTES|CONTEXT"}],"root_cause":{"component":"...","fault_type":"...","reason_code":"..."},"symptom_codes":["<告警名>"]}
+            - claim_key/kind/statement 必填；evidence_refs 至少一条且只能引用 valid_artifact_refs 中的 id——无证据引用的断言会被整案拒绝，不算有效收敛；
+            - evidence_roles 逐条声明引用对本断言的作用：SUPPORTS=支持、REFUTES=反驳、CONTEXT=仅背景（未声明按 CONTEXT 处理，不计入支持来源；ROOT_CAUSE 须至少一条 SUPPORTS 才被确认为根因；全量日志计数与累计计数器值不能作支持证据）；
+            - root_cause 仅 ROOT_CAUSE claim 携带；symptom_codes 规则见诚实纪律。
+
+            # 示例（一个合格的收敛；e1/e2 只是占位，实际必须引用你信封 valid_artifact_refs 里的真实证据 id）
+            告警 ArenaDuplicateOrders 触发后，你已取证：metrics.query_range 显示冻结窗内订单创建速率翻倍（证据 e1），logs.query 显示同一订单号出现两次 insert（证据 e2），两条证据指向同一结论"重复下单"。则收敛：
+            {"final":{"claims":[{"claim_key":"c1","kind":"SYMPTOM","statement":"冻结窗内订单重复创建，速率翻倍","evidence_refs":["e1","e2"],"evidence_roles":[{"ref":"e1","role":"SUPPORTS"},{"ref":"e2","role":"SUPPORTS"}],"symptom_codes":["ArenaDuplicateOrders"]},{"claim_key":"c2","kind":"ROOT_CAUSE","statement":"下单接口缺少幂等键，重试产生重复订单","evidence_refs":["e1","e2"],"evidence_roles":[{"ref":"e1","role":"SUPPORTS"},{"ref":"e2","role":"SUPPORTS"}],"root_cause":{"component":"order","fault_type":"<catalog 同行的 fault_type>","reason_code":"<catalog 同行的 reason_code>"}}],"missing_information":[]}}
+            （root_cause 三字段只示意形状；实际取值必须逐字取自信封 root_cause_catalog 的同一行。）""";
 
     private static final String OUTPUT_SCHEMA_TYPE = "type";
     private static final String OUTPUT_SCHEMA_OBJECT = "object";
@@ -331,6 +422,17 @@ public class AlertAm4Config {
                 DirectReadToolCatalog.rcaHistorySearch(timeoutMillis, resultLimitBytes),
                 new HistoryRcaSearchExecutor(jdbc,
                         Set.of(ragServiceAllowlist.split(",")))));
+        // BA-171：写类审批双工具（R3，无条件注册——读面透出 /tools 与 LLM 清单
+        // 都需要它们可见）。调用链：Gateway VALIDATE_ONLY 短路铸意图 → 自动进审批
+        // 队列，占位执行器永不触网（触达即装配缺陷）。资源键=args["service"] 原样。
+        registrations.add(new ToolRegistry.Registration(
+                MutationToolCatalog.serviceRestart(timeoutMillis, resultLimitBytes),
+                MutationToolCatalog.nonExecutablePlaceholder(
+                        MutationToolCatalog.TOOL_SERVICE_RESTART)));
+        registrations.add(new ToolRegistry.Registration(
+                MutationToolCatalog.serviceRollback(timeoutMillis, resultLimitBytes),
+                MutationToolCatalog.nonExecutablePlaceholder(
+                        MutationToolCatalog.TOOL_SERVICE_ROLLBACK)));
         // R7-X10 代码取证双工具：checkout 根与绑定映射均配置才注册（fail-closed，
         // docker 同律）。宿主静态声明 service→repo@commit 绑定——模型不可指定仓库/
         // commit/绝对路径；映射坏形状在 CodeSourceBinding.parse 构造期 fail-fast。
@@ -434,6 +536,31 @@ public class AlertAm4Config {
         return new ReadOnlyToolFace(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
                 calls, window, Clock.systemUTC(), false, am4InFlightToolCancels, provenance,
                 actionIntentLedger);
+    }
+
+    /**
+     * BA-171 写类工具咽喉（mutation 面）：全量生产注册表（含 R2/R3）+ 意图台账 +
+     * 审批跟进回调（可空=未装配则意图留 OPEN，诚实降级）。与影子只读面物理隔离——
+     * R3 工具不进影子注册面（ReadOnlyToolFace 裁剪 R0/R1），本面是 VALIDATE_ONLY
+     * 的唯一合法落点。写类工具永远走 VALIDATE_ONLY 短路，执行池实际零使用（复用
+     * am4ShadowPool 不新辟线程资源）。
+     */
+    @Bean
+    public ToolGateway am4MutationToolGateway(ToolRegistry am4ToolRegistry,
+            ToolPolicy am4ToolPolicy, ExecutorService am4ShadowPool,
+            com.objwww.pr.control.alert.application.mutation.ActionIntentLedger
+                    actionIntentLedger,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.mutation.IntentFollowUp>
+                    intentFollowUp,
+            @Value("${app.alert.provenance.build-sha:unknown}") String provenanceBuildSha,
+            @Value("${app.alert.provenance.policy-version:pa-prod-v1}")
+                    String provenancePolicyVersion) {
+        var provenance = com.objwww.pr.control.alert.domain.event.DecisionProvenance
+                .empty(provenancePolicyVersion).withAgentBuildSha(provenanceBuildSha);
+        return new ToolGateway(am4ToolRegistry, am4ToolPolicy, am4ShadowPool,
+                Clock.systemUTC(), null, null, provenance, actionIntentLedger,
+                intentFollowUp.getIfAvailable());
     }
 
     /** 影子对照路由器（M4-34）：同 digest 盖章/独立预算/失败隔离，无发布出口 */
@@ -570,6 +697,7 @@ public class AlertAm4Config {
     @Bean
     public List<DirectReadToolAgent> am4DirectReadAgents(
             ToolRegistry am4ToolRegistry, ReadOnlyToolFace am4ShadowToolFace,
+            ToolGateway am4MutationToolGateway,
             EvidenceRepository evidenceRepository,
             RcaToolInvocationLedger rcaToolInvocationLedger, ObjectMapper objectMapper,
             com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
@@ -586,17 +714,28 @@ public class AlertAm4Config {
         budgetLimits.put(BudgetKind.SUBTASK, budgetSubtasks);
         Map<String, Object> outputSchema = Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT);
         List<DirectReadToolAgent> agents = new ArrayList<>();
-        for (SingleToolEvidenceAgent.ToolSpec spec : directReadSpecs()) {
+        for (SingleToolEvidenceAgent.ToolSpec spec : primaryDelegateSpecs()) {
             // 未注册 = 条件件未配置（docker）——不建 Agent；注册校验留给基座构造期
-            if (am4ToolRegistry.find(spec.toolName(), spec.toolVersion()).isEmpty()) {
+            var registration = am4ToolRegistry.find(spec.toolName(), spec.toolVersion());
+            if (registration.isEmpty()) {
                 continue;
             }
             AgentProfile profile = new AgentProfile(spec.toolName(), AGENT_VERSION,
                     "direct-read", promptVersion, Set.of(spec.toolName()), budgetLimits,
                     outputSchema);
-            agents.add(new DirectReadToolAgent(profile, spec,
-                    am4ShadowToolFace.readOnlyView(), am4ShadowToolFace, evidenceRepository,
-                    rcaToolInvocationLedger, objectMapper, runBudgetGate, am4DoomLoopGuard));
+            if (registration.get().definition().risk().executable()) {
+                agents.add(new DirectReadToolAgent(profile, spec,
+                        am4ShadowToolFace.readOnlyView(), am4ShadowToolFace,
+                        evidenceRepository, rcaToolInvocationLedger, objectMapper,
+                        runBudgetGate, am4DoomLoopGuard));
+            } else {
+                // BA-171：R2/R3 写类工具走 mutation 咽喉（全量注册表 + 意图台账 +
+                // 审批跟进回调）——影子只读面物理无此工具（R0/R1 裁剪）
+                agents.add(new DirectReadToolAgent(profile, spec,
+                        am4ToolRegistry, am4MutationToolGateway,
+                        evidenceRepository, rcaToolInvocationLedger, objectMapper,
+                        runBudgetGate, am4DoomLoopGuard));
+            }
         }
         return List.copyOf(agents);
     }
@@ -688,11 +827,13 @@ public class AlertAm4Config {
     @Bean
     public AgentProfile am4PrimaryProfile(
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
-            @Value("${app.alert.r7.primary.prompt:你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}")
-            String prompt,
+            @Value(R7_PRIMARY_PROMPT_KEY) String prompt,
+            // 同源漂移风险（BA-171 起三处互指）：本默认值 = am4PrimaryToolPort 的同名
+            // 默认值 = PromptWorkbenchController#tools 的透出默认值——放行面调整三处同步改
             @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
                     + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
-                    + "prometheus.rules,logs.aggregate}")
+                    + "prometheus.rules,logs.aggregate,service.restart,service.rollback,"
+                    + "alert.history,change.diff,change.query,rca_history.search}")
             String toolAllowlist,
             @Value("${app.alert.r7.primary.max-steps:8}") int maxSteps,
             @Value(BUDGET_TOOL_CALLS_KEY) long toolCallBudget,
@@ -702,6 +843,9 @@ public class AlertAm4Config {
         if (!enabled) {
             return null;
         }
+        // 缺省空串 → 代码内置完整协议 prompt（占位符默认值放不下含 } 的 JSON 形状示例）
+        String effectivePrompt = prompt == null || prompt.isBlank()
+                ? R7_PRIMARY_DEFAULT_PROMPT : prompt;
         Map<BudgetKind, Long> budget = new LinkedHashMap<>();
         budget.put(BudgetKind.STEP, (long) maxSteps);
         budget.put(BudgetKind.TOOL_CALL, toolCallBudget);
@@ -719,7 +863,7 @@ public class AlertAm4Config {
                                     "主模式 allowlist 工具未注册（启动期 fail-fast）: " + toolId));
             toolSchemas.put(toolId, reg.definition().schema());
         }
-        return new AgentProfile("primary", AGENT_VERSION, prompt, promptVersion,
+        return new AgentProfile("primary", AGENT_VERSION, effectivePrompt, promptVersion,
                 Set.of(toolAllowlist.split(",")), budget,
                 Map.of(OUTPUT_SCHEMA_TYPE, OUTPUT_SCHEMA_OBJECT), toolSchemas,
                 com.objwww.pr.control.alert.domain.agent.AgentPhase.PRIMARY,
@@ -782,9 +926,12 @@ public class AlertAm4Config {
     public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner.PrimaryToolPort
             am4PrimaryToolPort(
             @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            // 同源漂移风险（BA-171 起三处互指）：本默认值 = am4PrimaryProfile 的同名
+            // 默认值 = PromptWorkbenchController#tools 的透出默认值——放行面调整三处同步改
             @Value("${app.alert.r7.primary.tool-allowlist:prometheus.query,logs.query,"
                     + "prometheus.instant,prometheus.metric_value,prometheus.catalog,prometheus.label_values,"
-                    + "prometheus.rules,logs.aggregate}")
+                    + "prometheus.rules,logs.aggregate,service.restart,service.rollback,"
+                    + "alert.history,change.diff,change.query,rca_history.search}")
             String toolAllowlist,
             MetricsAgent am4MetricsAgent, LogsAgent am4LogsAgent,
             ChangeAgent am4ChangeAgent,
@@ -815,6 +962,31 @@ public class AlertAm4Config {
     }
 
     /**
+     * 主 Agent 根因码表（root_cause_hit 评分贯通面）：与评测侧同一份
+     * synonym-lexicon 文件装订 canonical 码清单（配置键
+     * {@code app.alert.r7.primary.root-cause-catalog-path}，缺省与评测
+     * {@code app.alert.eval.lexicon-path} 同默认值）。文件缺失/解析失败 → WARN +
+     * 空码表（信封省略 root_cause_catalog 键），不 fail-fast 阻断告警主链——
+     * 码表是提示面，缺失只影响评分上限。enabled=false 返回 null（NullBean）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort
+            am4RootCauseCatalog(
+            @Value("${app.alert.r7.primary.enabled:false}") boolean enabled,
+            org.springframework.core.io.ResourceLoader resourceLoader,
+            @Value("${app.alert.r7.primary.root-cause-catalog-path:}")
+                    String catalogPath) {
+        if (!enabled) {
+            return null;
+        }
+        // 空串（env 透传缺省）→ 代码缺省（占位符 default 与空 env 语义歧义，单点收口）
+        String effectivePath = catalogPath == null || catalogPath.isBlank()
+                ? "classpath:eval/synonym-lexicon-v1.yml" : catalogPath;
+        return com.objwww.pr.control.alert.infrastructure.catalog.YamlRootCauseCatalog
+                .loadOrEmpty(resourceLoader, effectivePath);
+    }
+
+    /**
      * 任务信封装配器（R1/MA-01）：告警材料读口由 run→incident→最新告警事件确定性
      * 投影（缺项如实 null 不造数）；工具账本/裁决台账直读供轨迹与工作记忆重建。
      * MC21/22 回执合并面（当前轮 ACCEPTED 回执入信封+反证/缺口记忆槽）与 MC31
@@ -841,6 +1013,9 @@ public class AlertAm4Config {
                     skillSelectionService,
             com.objwww.pr.control.alert.domain.repository.ContextSummaryPort
                     contextSummaryPort,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort>
+                    am4RootCauseCatalog,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -877,6 +1052,7 @@ public class AlertAm4Config {
                 evidenceRepository, rcaToolInvocationLedger, delegationDecisionRepository,
                 alertMaterialPort, workingMemoryPort, delegationReceiptRepository,
                 operatorMaterialPort, skillPort, summaryMaterialPort,
+                am4RootCauseCatalog.getIfAvailable(),
                 Clock.systemUTC(), objectMapper);
     }
 
@@ -1064,10 +1240,12 @@ public class AlertAm4Config {
     // ------------------------------------------------------------------ 内部
 
     /**
-     * §一 P0 具名清单 → (工具 id, 证据类型, 来源) 三元组（snake 名 ↔ dotted id 映射
-     * 钉在 {@link DirectReadToolCatalog}；证据类型沿"来源面.查询形状"既有命名法）。
+     * 主 Agent delegates 具名清单 → (工具 id, 证据类型, 来源) 三元组（snake 名 ↔
+     * dotted id 映射钉在 {@link DirectReadToolCatalog}；证据类型沿"来源面.查询形状"
+     * 既有命名法）。BA-171 追加两个 R3 写类审批工具（mutation.* 面——VALIDATE_ONLY
+     * 待审批反馈落证据窗，分型投影走未知类型诚实有界投影）。
      */
-    private static List<SingleToolEvidenceAgent.ToolSpec> directReadSpecs() {
+    private static List<SingleToolEvidenceAgent.ToolSpec> primaryDelegateSpecs() {
         return List.of(
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_INSTANT,
                         "metrics.instant", "prometheus"),
@@ -1097,6 +1275,12 @@ public class AlertAm4Config {
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RUNBOOK_FETCH,
                         "runbook.reference", "rag"),
                 DirectReadToolCatalog.spec(DirectReadToolCatalog.TOOL_RCA_HISTORY,
-                        "rca_history.reference", "rca_history"));
+                        "rca_history.reference", "rca_history"),
+                // BA-171 写类审批双工具（R3）：spec 经 DirectReadToolCatalog.spec 通用
+                // 三元组铸造（name/version/evidenceType/source 四元与风险无关）
+                DirectReadToolCatalog.spec(MutationToolCatalog.TOOL_SERVICE_RESTART,
+                        "mutation.intent", "mutation"),
+                DirectReadToolCatalog.spec(MutationToolCatalog.TOOL_SERVICE_ROLLBACK,
+                        "mutation.intent", "mutation"));
     }
 }

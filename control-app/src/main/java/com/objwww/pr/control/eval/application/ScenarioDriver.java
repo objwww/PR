@@ -26,6 +26,11 @@ public interface ScenarioDriver {
      */
     ActivationReceipt activate(GoldenCase golden, int roundNo);
 
+    /** 开跑前预检（防假绿）：实现自检必需外部条件（凭证/可达性），不满足即抛
+     *  IllegalStateException——批件在首案注入前 FAILED，不允许全灭后零分"SUCCEEDED" */
+    default void preflight() {
+    }
+
     /** 注入解除 + 恢复确认（实现须执行恢复探针；解除失败同样返回回执不抛半途） */
     RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt);
 

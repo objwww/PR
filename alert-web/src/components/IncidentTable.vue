@@ -23,8 +23,10 @@
     </el-table-column>
     <el-table-column label="告警 / 服务" min-width="220">
       <template #default="{ row }">
-        <div class="cell-name">{{ row.alertname ?? row.incidentKey ?? row.incidentId }}</div>
-        <div class="cell-sub">{{ row.service ?? '—' }}</div>
+        <div class="cell-name">{{ row.alertname ? alertZh(row.alertname) : (row.incidentKey ?? row.incidentId) }}</div>
+        <div class="cell-sub">
+          <span v-if="row.alertname && alertZh(row.alertname) !== row.alertname" class="mono">{{ row.alertname }} · </span>{{ row.service ?? '—' }}
+        </div>
       </template>
     </el-table-column>
     <el-table-column label="状态" width="96">
@@ -80,6 +82,7 @@ import CategoryBadge from './common/CategoryBadge.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtAgo, fmtTime } from '../utils/format'
 import { aiStatusOf, WAITING_REASON } from '../dict/zh'
+import { alertZh } from '../dict/scenarioZh'
 
 function waitingLabel(reason) {
   return WAITING_REASON[reason] ?? reason
@@ -95,6 +98,7 @@ defineEmits(['row-click'])
 <style scoped>
 .cell-name { font-weight: 600; color: var(--head); line-height: 1.4; }
 .cell-sub { font-size: var(--fs-aux); color: var(--ink-2); }
+.mono { font-family: var(--mono, monospace); }
 .run-link { margin-left: 8px; font-size: var(--fs-aux); }
 
 /* 行首 4px severity 色条（不整行着色） */

@@ -73,9 +73,32 @@ public final class PrimaryClaimAdmission {
         }
     }
 
-    /** 准入产物：kind 可能被降级、refs 可能被剥离；note 封闭码逗号连接 */
+    /** 准入产物：kind 可能被降级、refs 可能被剥离；note 封闭码逗号连接；
+     *  rootCause 可空透传（ROOT_CAUSE 断言的结构化评分面，null=模型未提供，
+     *  准入语义不变——三元组不影响支持判定/降级决策）；
+     *  symptomCodes 可空透传（SYMPTOM 断言的症状码评分面，null=未声明，
+     *  准入语义不变——症状码不参与支持判定，来源标签冒充的规训归 prompt 协议面） */
     public record AdmittedClaim(String claimKey, String kind, String statement,
-            List<String> evidenceRefs, List<RefVerdict> refVerdicts, String admissionNote) {
+            List<String> evidenceRefs, List<RefVerdict> refVerdicts, String admissionNote,
+            com.objwww.pr.control.alert.domain.model.TypedRootCause rootCause,
+            List<String> symptomCodes) {
+
+        /** 兼容构造：无结构化根因面（旧调用方/测试；rootCause=null 诚实降级） */
+        public AdmittedClaim(String claimKey, String kind, String statement,
+                List<String> evidenceRefs, List<RefVerdict> refVerdicts,
+                String admissionNote) {
+            this(claimKey, kind, statement, evidenceRefs, refVerdicts, admissionNote,
+                    null, null);
+        }
+
+        /** 兼容构造：无结构化根因面（rootCause=null），症状码面按声明透传 */
+        public AdmittedClaim(String claimKey, String kind, String statement,
+                List<String> evidenceRefs, List<RefVerdict> refVerdicts,
+                String admissionNote,
+                com.objwww.pr.control.alert.domain.model.TypedRootCause rootCause) {
+            this(claimKey, kind, statement, evidenceRefs, refVerdicts, admissionNote,
+                    rootCause, null);
+        }
 
         /** 兼容构造：无判定面（旧调用方/测试；verdicts=按引用序全 CONTEXT） */
         public AdmittedClaim(String claimKey, String kind, String statement,
@@ -85,7 +108,7 @@ public final class PrimaryClaimAdmission {
                             .map(ref -> new RefVerdict(ref, RefRole.CONTEXT, null,
                                     NOTE_SUPPORT_UNDECLARED))
                             .toList(),
-                    admissionNote);
+                    admissionNote, null, null);
         }
 
         public AdmittedClaim {
@@ -95,6 +118,7 @@ public final class PrimaryClaimAdmission {
             evidenceRefs = List.copyOf(evidenceRefs);
             refVerdicts = List.copyOf(refVerdicts);
             Objects.requireNonNull(admissionNote, "admissionNote");
+            symptomCodes = symptomCodes == null ? null : List.copyOf(symptomCodes);
         }
 
         /** 是否存在确认支持（SUPPORTS 判定） */
@@ -168,7 +192,8 @@ public final class PrimaryClaimAdmission {
                 downgraded++;
             }
             out.add(new AdmittedClaim(claim.claimKey(), kind, claim.statement(),
-                    List.copyOf(kept), List.copyOf(verdicts), String.join(",", note)));
+                    List.copyOf(kept), List.copyOf(verdicts), String.join(",", note),
+                    claim.rootCause(), claim.symptomCodes()));
         }
         return new AdmissionResult(List.copyOf(out), downgraded, stripped);
     }

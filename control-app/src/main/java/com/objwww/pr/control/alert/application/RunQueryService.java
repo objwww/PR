@@ -226,8 +226,33 @@ public class RunQueryService {
             out.put("edges", edgeRows);
             out.put("claims", claimRows(runId));
             out.put("usage", usageBlock(runId));
+            out.put("failure", failureBlock(runId));
             return out;
         });
+    }
+
+    /**
+     * 模型调用失败块（回答"为什么没取到有效证据"）：零失败 → null（前端不渲染，
+     * 此时"未取到足够证据"是真实证据问题）；有失败 → 码分布 + 中文直接原因/建议
+     * （词典归 {@link ModelFailureGuide}，账面码唯一诚实来源）。
+     */
+    private Map<String, Object> failureBlock(UUID runId) {
+        List<RcaModelCallUsageReader.CallFailure> failures = modelCalls.failuresByRun(runId);
+        if (failures.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> block = new LinkedHashMap<>();
+        List<Map<String, Object>> codes = new ArrayList<>();
+        long total = 0;
+        for (RcaModelCallUsageReader.CallFailure f : failures) {
+            codes.add(Map.of("code", f.errorCode(), "count", f.count()));
+            total += f.count();
+        }
+        block.put("codes", codes);
+        block.put("totalFailed", total);
+        block.put("reasonZh", ModelFailureGuide.summaryReasonZh(failures));
+        block.put("guidanceZh", ModelFailureGuide.guidanceZh(failures.get(0).errorCode()));
+        return block;
     }
 
     /**

@@ -21,7 +21,8 @@ public record DrillEvent(
         Instant createdAt) {
 
     public enum EventType {
-        PHASE_TRANSITION, PRECHECK_RESULT, STOP_REQUESTED, OUTCOME_RECORDED, WORKER_NOTE
+        PHASE_TRANSITION, PRECHECK_RESULT, STOP_REQUESTED, RETRY_REQUESTED,
+        OUTCOME_RECORDED, WORKER_NOTE
     }
 
     public DrillEvent {

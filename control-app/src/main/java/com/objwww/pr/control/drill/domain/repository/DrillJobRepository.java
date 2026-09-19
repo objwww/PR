@@ -11,8 +11,10 @@ import java.util.UUID;
  * DR-02 演练作业仓储（V86 drill_job；同一接口服务两个 DB 身份，授权面在库侧收口）：
  * <ul>
  *   <li>control_app（/api/drills 面）：insert / find 系 / list / count 系 /
- *       requestStop——select,insert + 停止两列 update 授权内，状态机推进零开口；</li>
- *   <li>eval_app（worker）：claimNext/advance/finalize/requeue/findOrphanedClaims——
+ *       requestStop / requestRetry——select,insert + 停止/重试意图列 update 授权内，
+ *       状态机推进零开口（重试意图由 worker 消费后才推进相位）；</li>
+ *   <li>eval_app（worker）：claimNext/advance/finalize/requeue/findOrphanedClaims/
+ *       findRetryRequests/consumeRetry——
  *       列级 update 授权内，正文列（场景/参数/幂等键/发起人）零开口。</li>
  * </ul>
  * claim/推进全部单语句 CAS（SKIP LOCKED + revision 对账）：多 worker 并发恰一人领到，
@@ -41,6 +43,19 @@ public interface DrillJobRepository {
     /** 停止受理 CAS：仅活动中且未受理过才置位（重复停止幂等，DU14；只写 stop 两列，
      *  不碰 updated_at——control_app 列级授权边界） */
     boolean requestStop(UUID id, String stopIdempotencyKey, Instant stopRequestedAt);
+
+    /** DR-04 人工重试意图 CAS（control_app 面；对称 requestStop 的意图列模式——
+     *  HTTP 受理只置 retry_requested_at，RECOVERY_FAILED→RECOVERING 推进归 worker）：
+     *  仅 RECOVERY_FAILED 且未受理过才置位（重复重试幂等） */
+    boolean requestRetry(UUID id, Instant retryRequestedAt);
+
+    /** DR-04 重试意图扫描面（eval_app worker）：有待消费重试意图的 RECOVERY_FAILED 作业 */
+    List<DrillJob> findRetryRequests();
+
+    /** DR-04 重试消费 CAS（eval_app worker）：单语句推进 RECOVERY_FAILED→RECOVERING
+     *  + 清意图列 + 刷新租约（worker_id/claimed_at）——与并发重复消费/截止对账恰一方
+     *  生效（状态机人工重试边 §7.4） */
+    boolean consumeRetry(UUID id, long expectedRevision, String workerId, Instant now);
 
     /** 领取 = 单语句 CAS 且领取即迁移 QUEUED→PRECHECK（BA-114：与 EVAL
      *  claimNextLaunch 同律，行在领取语句提交时即离开 QUEUED 可见集）；

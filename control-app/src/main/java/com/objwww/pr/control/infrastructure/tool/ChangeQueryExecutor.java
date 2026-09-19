@@ -25,7 +25,7 @@ import java.util.Set;
  * 变更事实由 config 激活同事务与部署脚本写入，Agent 保持只读（评审 B1）。
  *
  * <p>语义约束（executor 域内判，同 {@link PrometheusQueryExecutor} 惯例）：
- * since/until 必为 ISO-8601 Instant 且窗幅 ≤ {@value #MAX_WINDOW_SECONDS}s；
+ * since/until 必为 ISO-8601 Instant 或 epoch 秒（BA-183 双收）且窗幅 ≤ {@value #MAX_WINDOW_SECONDS}s；
  * service 可选（缺省 {@value #DEFAULT_SERVICE}）且必须落在 allowlist；
  * 行数硬顶 {@value #ROW_LIMIT}（SQL LIMIT 探针，超出截断并标 truncated）；
  * 序列化流式过字节上限 → 控制面 RESULT_OVERSIZE。空结果 → 模型可见 NO_DATA
@@ -107,16 +107,22 @@ public class ChangeQueryExecutor implements ToolExecutor {
         return new Query(since, until, service);
     }
 
+    /** ISO-8601/epoch 秒双收（BA-183 对齐 LogQueryExecutor：信封冻结窗以 epoch 秒下发，
+     *  LLM 时区换算不可靠，epoch 无歧义——只收 ISO 的格式窄门已两批实证 INVALID_ARGS） */
     private static Instant parseInstant(Object value, String field) {
         if (value == null) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant）");
+                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant 或 epoch 秒）");
+        }
+        String text = String.valueOf(value).trim();
+        if (text.matches("\\d{9,11}")) {
+            return Instant.ofEpochSecond(Long.parseLong(text));
         }
         try {
-            return Instant.parse(String.valueOf(value));
+            return Instant.parse(text);
         } catch (Exception e) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant");
+                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant 或 epoch 秒");
         }
     }
 

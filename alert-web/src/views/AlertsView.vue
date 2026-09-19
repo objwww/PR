@@ -8,7 +8,7 @@
       <div v-for="g in corrGroups" :key="g.service" class="corr-row">
         <el-tag type="warning" effect="plain" size="small">{{ g.firingCount }} 条并发</el-tag>
         <b class="corr-service">{{ g.service }}</b>
-        <span class="cell-sub">{{ g.alerts }}</span>
+        <span class="cell-sub">{{ alertsZh(g.alerts) }}</span>
       </div>
     </div>
 
@@ -170,6 +170,13 @@ import IncidentTable from '../components/IncidentTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtMttr } from '../utils/format'
 import { CATEGORY_OPTIONS, mapCategory } from '../utils/category'
+import { ALERTNAME_ZH } from '../dict/scenarioZh'
+
+// 关联告警组：后端拼接的告警名串逐词中文化（命中词典→中文（原名），未命中原样保留）
+function alertsZh(text) {
+  if (!text) return text
+  return String(text).replace(/[A-Za-z][\w.]*/g, m => (ALERTNAME_ZH[m] ? `${ALERTNAME_ZH[m]}（${m}）` : m))
+}
 
 const route = useRoute()
 const router = useRouter()

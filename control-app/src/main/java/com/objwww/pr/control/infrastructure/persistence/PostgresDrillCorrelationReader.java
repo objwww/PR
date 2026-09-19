@@ -16,10 +16,13 @@ import java.util.UUID;
  *   <li><b>关联键</b>：incident_key 首段（split_part 首段 = alertname=…，INV-AM1-4
  *       标签序钉死 alertname 居首）精确等值场景主症状码——不子串模糊匹配
  *       （LIKE '%alertname=x%' 会误中 alertname=checkout2 形）；</li>
- *   <li><b>时间窗</b>：incident.first_seen_at ∈ [injectedAt, windowEnd]——注入后
- *       新见的 episode 才算本场（incident_key 唯一 + generation 递增：同身份复燃
- *       不换行，窗内多行只会是异标签集的另一 incident）；</li>
- *   <li><b>多候选确定规则</b>：窗口内最早 first_seen_at，id 升序兜底——钉死可重放；</li>
+ *   <li><b>时间窗</b>：incident.episode_started_at ∈ [injectedAt, windowEnd]——注入后
+ *       的<b>新 firing 沿</b>才算本场（BA-180：episode 水印=本 episode 的 firing 起点，
+ *       首见与复燃同键；旧口径取 first_seen_at 会把"同 incident_key 复燃的新 episode"
+ *       全部漏挂——incident_key 唯一 + generation 递增，复燃不换行、first_seen_at 停在
+ *       历史首见，S3 等老场景演练关联恒 null、outcome 恒 FAIL 失真；残留 firing
+ *       （episode 起点早于注入）不命中， SYMPTOM 等待口径与"新沿"一致）；</li>
+ *   <li><b>多候选确定规则</b>：窗口内最早 episode_started_at，id 升序兜底——钉死可重放；</li>
  *   <li><b>靶场维度</b>：incident/alert_event 无 env 标签列（如实面，不硬造）——
  *       首期单靶场 + 靶场专属规则名（Arena 系 / checkout 仅靶场栈的规则产生）隐含
  *       隔离；多靶场落地时需补标签面再扩键。</li>
@@ -40,8 +43,8 @@ public class PostgresDrillCorrelationReader implements DrillCorrelationPort {
         return jdbc.sql("""
                         SELECT i.id, i.current_rca_run_id FROM incident i
                         WHERE split_part(i.incident_key, '|', 1) = :key
-                          AND i.first_seen_at >= :since AND i.first_seen_at <= :until
-                        ORDER BY i.first_seen_at ASC, i.id ASC LIMIT 1
+                          AND i.episode_started_at >= :since AND i.episode_started_at <= :until
+                        ORDER BY i.episode_started_at ASC, i.id ASC LIMIT 1
                         """)
                 .param("key", "alertname=" + primaryAlertname)
                 .param("since", Timestamp.from(injectedAt))

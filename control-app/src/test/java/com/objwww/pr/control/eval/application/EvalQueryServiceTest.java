@@ -363,6 +363,41 @@ class EvalQueryServiceTest {
         assertThat(service.detail(UUID.randomUUID())).isEmpty();
     }
 
+    /** BA-177：六要素完整率透出——有落档行 → complete/total（OK 三件套） */
+    @Test
+    void listRunsAndDetailExposeSixPartsRate() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRow(runId, NOW, "SUCCEEDED")), false);
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.sixPartsStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.SixPartsStatRow(runId, 4, 3)));
+
+        EvalQueryService.EvalRunListItem item = service.listRuns(null, null, 50).items().get(0);
+        assertThat(item.sixPartsRate().status()).isEqualTo("OK");
+        assertThat(item.sixPartsRate().numerator()).isEqualTo(3L);
+        assertThat(item.sixPartsRate().denominator()).isEqualTo(4L);
+
+        EvalQueryService.EvalRunDetailResponse detail = service.detail(runId).orElseThrow();
+        assertThat(detail.sixPartsRate().status()).isEqualTo("OK");
+        assertThat(detail.sixPartsRate().numerator()).isEqualTo(3L);
+        assertThat(detail.sixPartsRate().denominator()).isEqualTo(4L);
+    }
+
+    /** BA-177：无落档行 → UNKNOWN（不填 0 冒充——老批早于 V152 接线本就无六要素账） */
+    @Test
+    void listRunsAndDetailWithoutSixPartsRowsReportUnknown() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(runRow(runId, NOW, "SUCCEEDED")), false);
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+
+        EvalQueryService.EvalRunListItem item = service.listRuns(null, null, 50).items().get(0);
+        assertThat(item.sixPartsRate().status()).isEqualTo("UNKNOWN");
+        assertThat(item.sixPartsRate().numerator()).isNull();
+
+        EvalQueryService.EvalRunDetailResponse detail = service.detail(runId).orElseThrow();
+        assertThat(detail.sixPartsRate().status()).isEqualTo("UNKNOWN");
+    }
+
     // ------------------------------------------------------------------ cases
 
     @Test
@@ -1575,6 +1610,19 @@ class EvalQueryServiceTest {
             List<EvalQueryReader.ModelCallFailureRow> out = new ArrayList<>();
             for (UUID id : evalRunIds) {
                 out.addAll(modelCallFailures.getOrDefault(id, List.of()));
+            }
+            return out;
+        }
+
+        java.util.Map<UUID, List<EvalQueryReader.SixPartsStatRow>> sixPartsStats =
+                java.util.Map.of();
+
+        @Override
+        public List<EvalQueryReader.SixPartsStatRow> listSixPartsStatsForRuns(
+                Iterable<UUID> evalRunIds) {
+            List<EvalQueryReader.SixPartsStatRow> out = new ArrayList<>();
+            for (UUID id : evalRunIds) {
+                out.addAll(sixPartsStats.getOrDefault(id, List.of()));
             }
             return out;
         }

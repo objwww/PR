@@ -35,13 +35,24 @@ public class OperatorQueryService {
     private final Supplier<Instant> clock;
     private final EvidenceRepository evidenceRepository;
     private final ClaimStore claimStore;
+    /** 模型调用失败码读面（可空=null 跳过富化——既有 4 参装配零行为漂移） */
+    private final com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+            modelCallFailures;
 
     public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock,
                                 EvidenceRepository evidenceRepository, ClaimStore claimStore) {
+        this(repository, clock, evidenceRepository, claimStore, null);
+    }
+
+    public OperatorQueryService(OperatorCaseRepository repository, Supplier<Instant> clock,
+                                EvidenceRepository evidenceRepository, ClaimStore claimStore,
+                                com.objwww.pr.control.alert.domain.repository
+                                        .RcaModelCallUsageReader modelCallFailures) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.evidenceRepository = Objects.requireNonNull(evidenceRepository, "evidenceRepository");
         this.claimStore = Objects.requireNonNull(claimStore, "claimStore");
+        this.modelCallFailures = modelCallFailures;
     }
 
     /** tab 计数（view 语义：mine/all/unassigned/overdue 均排除 RESOLVED；notifyUnread 待 AM7） */
@@ -87,6 +98,58 @@ public class OperatorQueryService {
     /** 详情工作区投影；未知 id → empty（controller 404 面） */
     public Optional<Map<String, Object>> detail(UUID id) {
         return repository.findById(id).map(this::workspace);
+    }
+
+    /** reasonCode → [现状说明, 建议动作]（运营可读面；码表随 RCA 失败族扩） */
+    private static final Map<String, String[]> REASON_GUIDANCE = Map.of(
+            "NO_CONFIRMED_ROOT_CAUSE", new String[]{
+                    "AI 调查未取到足够证据确认根因（双源佐证未满），报告如实未决，未做任何处置动作",
+                    "重新发起调查（拉大证据窗口）或人工取证后结案；若告警持续复发请转派服务负责人"},
+            "MODEL_FAILURE_REQUEST_INVALID", new String[]{
+                    "调查过程中模型调用连续失败（详见关联调查的调用链错误码），系统零模型确定性收尾",
+                    "先排除模型侧问题（欠费/凭证/限流）再重新调查；短期可由人工直接研判告警"},
+            "BILLING_OR_ACTIVATION", new String[]{
+                    "模型服务商账户欠费或能力未开通，调查无法执行",
+                    "前往服务商控制台充值/开通后重新调查，系统无需改动"},
+            "GUARDIAN_REJECTED", new String[]{
+                    "处置动作被安全闸（Guardian）拒绝，未执行",
+                    "查看审批处置页的拒绝理由，修正动作内容后重新提交或放弃"});
+
+    /** 现状/影响/建议三件套（全由真字段推导，无源项显 null）；
+     *  NO_CONFIRMED_ROOT_CAUSE 且模型调用有失败账 → 直接原因前置（回答"为什么没取到
+     *  证据"——模型不可用下确定性收尾，不是证据问题）；零失败账 = 真实证据不足，维持原案 */
+    private static Map<String, Object> situationCard(OperatorCase c, List<ClaimStore.ClaimRow> claims,
+            List<com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+                    .CallFailure> failures) {
+        Map<String, Object> card = new LinkedHashMap<>();
+        String[] guide = REASON_GUIDANCE.get(c.reasonCode());
+        long confirmed = claims.stream().filter(r -> r.lifecycle() == ClaimLifecycle.ACTIVE).count();
+        String currentState = guide != null ? guide[0]
+                : "处置单待处理（reason_code=" + c.reasonCode() + "），当前有 " + confirmed + " 条有效断言可参考";
+        String suggestion = guide != null ? guide[1]
+                : "认领后查看关联调查的结论与证据，确认后「解决并填写原因」；不属于本人职责可「转派」";
+        if (!failures.isEmpty() && "NO_CONFIRMED_ROOT_CAUSE".equals(c.reasonCode())) {
+            currentState = "直接原因：" + com.objwww.pr.control.alert.application
+                    .ModelFailureGuide.summaryReasonZh(failures)
+                    + "——调查在模型不可用下以「未决」确定性收尾，未真正执行有效取证";
+            suggestion = com.objwww.pr.control.alert.application.ModelFailureGuide
+                    .guidanceZh(failures.get(0).errorCode()) + "；恢复后重新发起调查即可";
+            List<Map<String, Object>> codes = new ArrayList<>();
+            for (com.objwww.pr.control.alert.domain.repository.RcaModelCallUsageReader
+                    .CallFailure f : failures) {
+                codes.add(Map.of("code", f.errorCode(), "count", f.count()));
+            }
+            card.put("modelFailures", codes);
+        }
+        card.put("currentState", currentState);
+        card.put("suggestion", suggestion);
+        Map<String, Object> impact = new LinkedHashMap<>();
+        impact.put("priority", c.priority());
+        impact.put("incidentType", c.incidentType());
+        impact.put("evidenceCount", c.evidenceRefs().size());
+        impact.put("claimCount", claims.size());
+        card.put("impact", impact);
+        return card;
     }
 
     /** 列表单项投影（命令响应体 case 字段共用） */
@@ -140,6 +203,9 @@ public class OperatorQueryService {
                         .map(OperatorQueryService::evidenceRow)
                         .toList());
         map.put("claims", claims.stream().map(OperatorQueryService::claimRow).toList());
+        map.put("situation", situationCard(c, claims,
+                modelCallFailures != null && c.runId() != null
+                        ? modelCallFailures.failuresByRun(c.runId()) : List.of()));
         String conflictKeys = claims.stream()
                 .filter(r -> r.lifecycle() == ClaimLifecycle.ACTIVE
                         && r.evidenceBasis() == EvidenceBasis.MULTI_SOURCE_CONFLICT)

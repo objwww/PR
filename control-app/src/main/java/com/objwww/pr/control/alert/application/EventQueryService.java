@@ -14,8 +14,10 @@ import java.util.UUID;
  * rca_event 查询服务（M5-13；表+游标是真相源，零迁移——读面按 (run_id, seq) 游标推进）。
  *
  * <p>gap 语义（→ 客户端全量重同步，Unleash delta API 先例）：seq 缺口（游标与首行间
- * 有洞）或客户端超窗（after_seq > latest_seq）即 gap=true；事件 seq 由 appender 保证
- * 连续（M4-10），缺口只可能来自异常现场——防御性显式上报而非静默跳过。
+ * 有洞）或客户端超窗（after_seq > latest_seq）即 gap=true。注意创世约定：run 创建
+ * 本身把 last_event_seq 推进到 1，首个事件行 seq=2（全库 204 个 run min(seq)=2 实测），
+ * 因此初始全量读（after_seq=0）不做 hole 判定——否则每个 run 的首读都被误报成 gap、
+ * 事件流恒空（M5-13 修复）；after_seq≥1 的增量读仍严格判洞，异常现场显式上报。
  */
 public class EventQueryService {
 
@@ -44,7 +46,7 @@ public class EventQueryService {
         long latestSeq = reader.latestSeq(runId).orElse(0);
         List<RcaEventReader.EventRow> rows = reader.readAfter(runId, afterSeq, clamped);
 
-        boolean hole = !rows.isEmpty() && rows.get(0).seq() > afterSeq + 1;
+        boolean hole = !rows.isEmpty() && afterSeq > 0 && rows.get(0).seq() > afterSeq + 1;
         boolean clientAhead = afterSeq > latestSeq;
         boolean drained = rows.isEmpty() && afterSeq < latestSeq;
         boolean gap = hole || clientAhead || drained;

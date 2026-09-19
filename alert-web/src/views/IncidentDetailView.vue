@@ -1,7 +1,7 @@
 <template>
   <div class="incident-page">
     <template v-if="state === 'ok' && d">
-      <PageHeader :title="d.alertname ?? d.incidentKey ?? d.incidentId" :subtitle="`服务：${d.service ?? '—'}`">
+      <PageHeader :title="d.alertname ? alertZh(d.alertname) : (d.incidentKey ?? d.incidentId)" :subtitle="`${d.alertname && alertZh(d.alertname) !== d.alertname ? d.alertname + ' ｜ ' : ''}服务：${d.service ?? '—'}`">
         <template #actions>
           <StatusBadge v-if="sev.key" :severity="sev.key" />
           <el-tag v-else type="info" disable-transitions>未分级</el-tag>
@@ -140,7 +140,13 @@
           <div class="card block">
             <h3>属性</h3>
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="告警名">{{ d.alertname ?? '—' }}</el-descriptions-item>
+              <el-descriptions-item label="告警名">
+                <template v-if="d.alertname">
+                  {{ alertZh(d.alertname) }}
+                  <span v-if="alertZh(d.alertname) !== d.alertname" class="cell-sub mono">（{{ d.alertname }}）</span>
+                </template>
+                <span v-else>—</span>
+              </el-descriptions-item>
               <el-descriptions-item label="服务">{{ d.service ?? '—' }}</el-descriptions-item>
               <el-descriptions-item label="严重度">{{ sev.label }}<template v-if="d.severity">（{{ d.severity }}）</template></el-descriptions-item>
               <el-descriptions-item label="状态"><StatusBadge :status="d.status" /></el-descriptions-item>
@@ -189,7 +195,12 @@
               <h4 class="cat-sub">同服务近 24 小时并发</h4>
               <el-table v-if="rel.sameService24h.length" :data="rel.sameService24h" size="small" border class="click-table"
                 @row-click="r => goIncident(r.incidentId)">
-                <el-table-column prop="alertname" label="告警名" min-width="180" />
+                <el-table-column label="告警名" min-width="180">
+                  <template #default="{ row }">
+                    <div>{{ alertZh(row.alertname) }}</div>
+                    <div v-if="row.alertname && alertZh(row.alertname) !== row.alertname" class="cell-sub mono">{{ row.alertname }}</div>
+                  </template>
+                </el-table-column>
                 <el-table-column label="状态" width="110">
                   <template #default="{ row }"><StatusBadge :status="row.status" /></template>
                 </el-table-column>
@@ -388,6 +399,7 @@ import { mapSeverity } from '../utils/severity'
 import { fmtDuration, fmtTime } from '../utils/format'
 import { CATEGORY_OVERRIDE_OPTIONS } from '../utils/category'
 import { TIMELINE_KIND_ZH, WAITING_REASON_ZH } from '../dict/zh'
+import { alertZh } from '../dict/scenarioZh'
 import { useSessionStore } from '../stores/session'
 
 const session = useSessionStore()
@@ -443,7 +455,7 @@ async function submitOverride() {
   } catch (e) {
     const s = e?.response?.status
     if (s === 404 || s === 403) {
-      ElMessageBox.alert('修正接口依赖后端 UX-01，当前未部署', '提示', { type: 'warning' })
+      ElMessageBox.alert(`修正接口不可用（${s === 403 ? '无权限' : '事故不存在或接口未就绪'}）`, '提示', { type: 'warning' })
     } else if (s === 409) {
       ElMessage.error('分类已被他人修改，正在刷新最新状态')
       ov.open = false
@@ -731,4 +743,6 @@ watch(runId, loadRunDetail)
 .diag-row .claim-text { white-space: pre-wrap; }
 .tl-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .click-table :deep(.el-table__row) { cursor: pointer; }
+.cell-sub { font-size: var(--fs-aux); color: var(--ink-2); }
+.mono { font-family: var(--mono, monospace); }
 </style>

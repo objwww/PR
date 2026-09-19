@@ -168,15 +168,25 @@ public class PostgresApprovalStore implements ApprovalStore,
         return tx.execute(status -> jdbc.sql("""
                         select r.request_id, r.intent_id, r.run_id, r.action_id, r.risk,
                                r.required_approvers, r.requested_at, r.expires_at,
+                               r.policy_version, r.scope_snapshot::text as scope_snapshot_json,
                                count(d.decision_id) filter (where d.decision = 'approved')
                                    as approved_count,
                                count(d.decision_id) filter (where d.decision = 'denied')
-                                   as denied_count
+                                   as denied_count,
+                               ai.tool_name, ai.tool_version, ai.args_json::text as args_json,
+                               ai.resolved_resource_uid,
+                               i.incident_key
                           from approval_request r
                           left join approval_decisions d on d.request_id = r.request_id
+                          left join action_intent ai on ai.intent_id = r.intent_id
+                          left join rca_run rr on rr.id = r.run_id
+                          left join incident i on i.id = rr.incident_id
                          where r.state = 'PENDING'
                          group by r.request_id, r.intent_id, r.run_id, r.action_id, r.risk,
-                               r.required_approvers, r.requested_at, r.expires_at
+                               r.required_approvers, r.requested_at, r.expires_at,
+                               r.policy_version, r.scope_snapshot,
+                               ai.tool_name, ai.tool_version, ai.args_json,
+                               ai.resolved_resource_uid, i.incident_key
                          order by r.requested_at desc
                          limit 50
                         """)
@@ -190,7 +200,14 @@ public class PostgresApprovalStore implements ApprovalStore,
                         rs.getTimestamp("requested_at").toInstant(),
                         rs.getTimestamp("expires_at").toInstant(),
                         rs.getInt("approved_count"),
-                        rs.getInt("denied_count")))
+                        rs.getInt("denied_count"),
+                        rs.getString("tool_name"),
+                        rs.getString("tool_version"),
+                        rs.getString("args_json"),
+                        rs.getString("resolved_resource_uid"),
+                        rs.getString("scope_snapshot_json"),
+                        rs.getString("incident_key"),
+                        rs.getString("policy_version")))
                 .list());
     }
 

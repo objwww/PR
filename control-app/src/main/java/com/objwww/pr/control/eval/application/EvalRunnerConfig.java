@@ -737,6 +737,7 @@ public class EvalRunnerConfig {
                     flagdRestoreSweeper,
             com.objwww.pr.control.drill.application.DrillExecutionPolicy
                     drillExecutionPolicy,
+            AlertProbe alertProbe,
             @Value("${app.drill.target-envs:arena-195}") String targetEnvs,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.drill.worker.poll-seconds:5}") long pollSeconds,
@@ -747,7 +748,8 @@ public class EvalRunnerConfig {
                 drillInjectionPort, drillRecoveryPort, drillClock(),
                 splitTargetEnvs(targetEnvs),
                 workerId + "-drill", pollSeconds, staleClaimSeconds,
-                drillCorrelationPort, flagdRestoreSweeper, drillExecutionPolicy);
+                drillCorrelationPort, flagdRestoreSweeper, drillExecutionPolicy,
+                alertProbe::firingNow);
     }
 
     /** app.drill.target-envs 拆分（worker 领取白名单与复合注入端口靶场白名单

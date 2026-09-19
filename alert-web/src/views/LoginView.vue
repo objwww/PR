@@ -44,8 +44,9 @@ import { useSessionStore } from '../stores/session.js'
 const router = useRouter()
 const route = useRoute()
 const session = useSessionStore()
-const username = ref('')
-const password = ref('')
+// 测试演示账号预填（内网隧道访问的评测环境，应用户要求免手输，点登录即可）
+const username = ref('operator')
+const password = ref('Demo#0917')
 const failed = ref(false)
 const busy = ref(false)
 

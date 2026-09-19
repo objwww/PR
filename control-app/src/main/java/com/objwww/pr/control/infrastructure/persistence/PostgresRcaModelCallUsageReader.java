@@ -61,6 +61,21 @@ public class PostgresRcaModelCallUsageReader implements RcaModelCallUsageReader 
                 agg.costMicros(), agg.usageMissing(), currency, pricingVersion));
     }
 
+    @Override
+    public List<CallFailure> failuresByRun(UUID runId) {
+        return jdbc.sql("""
+                SELECT coalesce(error_code, 'UNKNOWN') AS error_code, count(*) AS cnt
+                  FROM rca_model_call
+                 WHERE run_id = :runId AND state = 'FAILED'
+                 GROUP BY 1
+                 ORDER BY cnt DESC, error_code
+                """)
+                .param("runId", runId)
+                .query((rs, rowNum) -> new CallFailure(
+                        rs.getString("error_code"), rs.getLong("cnt")))
+                .list();
+    }
+
     private record Aggregate(long callCount, long tokensIn, long tokensOut,
                              Long costMicros, long usageMissing) {
     }

@@ -58,7 +58,8 @@ public class PostgresClaimStore implements ClaimStore {
             select id, run_id, claim_fingerprint, claim_hash, claim_key, status,
                    evidence_basis, lifecycle, reason, scope, time_range,
                    observed_generation, sources, evidence_refs, policy_version,
-                   snapshot_digest, kind
+                   snapshot_digest, kind,
+                   root_component, root_fault_type, root_reason_code, symptom_codes
               from rca_claim
             """;
 
@@ -140,7 +141,12 @@ public class PostgresClaimStore implements ClaimStore {
                     evidence_basis = :basis, reason = :reason, kind = :kind,
                     sources = cast(:sources as jsonb),
                     evidence_refs = cast(:refs as jsonb),
-                    policy_version = :policy, updated_at = now()
+                    policy_version = :policy,
+                    root_component = :rootComponent,
+                    root_fault_type = :rootFaultType,
+                    root_reason_code = :rootReasonCode,
+                    symptom_codes = cast(:symptomCodes as jsonb),
+                    updated_at = now()
                   where run_id = :run and claim_fingerprint = :fp and claim_hash = :prior
                 """)
                 .param("hash", claimHash)
@@ -151,6 +157,14 @@ public class PostgresClaimStore implements ClaimStore {
                 .param("sources", jsonOf(verdict.sources()))
                 .param("refs", jsonOf(verdict.evidenceRefs()))
                 .param("policy", verdict.policyVersion())
+                .param("rootComponent", verdict.rootCause() == null
+                        ? null : verdict.rootCause().component())
+                .param("rootFaultType", verdict.rootCause() == null
+                        ? null : verdict.rootCause().faultType())
+                .param("rootReasonCode", verdict.rootCause() == null
+                        ? null : verdict.rootCause().reasonCode())
+                .param("symptomCodes", verdict.symptomCodes() == null
+                        ? null : jsonOf(verdict.symptomCodes()))
                 .param("run", runId)
                 .param("fp", fingerprint)
                 .param("prior", existing.claimHash())
@@ -225,7 +239,12 @@ public class PostgresClaimStore implements ClaimStore {
                 listOf(rs.getString("evidence_refs")),
                 rs.getString("policy_version"),
                 rs.getString("snapshot_digest"),
-                rs.getString("kind") == null ? null : ClaimKind.valueOf(rs.getString("kind")));
+                rs.getString("kind") == null ? null : ClaimKind.valueOf(rs.getString("kind")),
+                rs.getString("root_component"),
+                rs.getString("root_fault_type"),
+                rs.getString("root_reason_code"),
+                rs.getString("symptom_codes") == null
+                        ? null : listOf(rs.getString("symptom_codes")));
     }
 
     private void insertRow(UUID runId, ClaimVerdict verdict, String fingerprint, String claimHash) {
@@ -233,10 +252,13 @@ public class PostgresClaimStore implements ClaimStore {
                 insert into rca_claim(id, run_id, claim_fingerprint, claim_hash, claim_key,
                     status, evidence_basis, lifecycle, reason, scope, time_range,
                     observed_generation, sources, evidence_refs, policy_version,
-                    snapshot_digest, kind)
+                    snapshot_digest, kind,
+                    root_component, root_fault_type, root_reason_code, symptom_codes)
                 values (:id, :run, :fp, :hash, :key, :status, :basis, 'ACTIVE', :reason,
                     :scope, :timeRange, :gen, cast(:sources as jsonb),
-                    cast(:refs as jsonb), :policy, :snapshot, :kind)
+                    cast(:refs as jsonb), :policy, :snapshot, :kind,
+                    :rootComponent, :rootFaultType, :rootReasonCode,
+                    cast(:symptomCodes as jsonb))
                 """)
                 .param("id", UUID.randomUUID()).param("run", runId)
                 .param("fp", fingerprint).param("hash", claimHash)
@@ -252,6 +274,14 @@ public class PostgresClaimStore implements ClaimStore {
                 .param("policy", verdict.policyVersion())
                 .param("snapshot", verdict.snapshotDigest())
                 .param("kind", verdict.kind().name())
+                .param("rootComponent", verdict.rootCause() == null
+                        ? null : verdict.rootCause().component())
+                .param("rootFaultType", verdict.rootCause() == null
+                        ? null : verdict.rootCause().faultType())
+                .param("rootReasonCode", verdict.rootCause() == null
+                        ? null : verdict.rootCause().reasonCode())
+                .param("symptomCodes", verdict.symptomCodes() == null
+                        ? null : jsonOf(verdict.symptomCodes()))
                 .update();
     }
 
@@ -296,6 +326,9 @@ public class PostgresClaimStore implements ClaimStore {
         content.put("evidenceRefs", row.evidenceRefs());
         content.put("sources", row.sources());
         content.put("policyVersion", row.policyVersion());
+        content.put("rootCause", rootCauseOf(row.rootComponent(), row.rootFaultType(),
+                row.rootReasonCode()));
+        content.put("symptomCodes", row.symptomCodes());
         return content;
     }
 
@@ -307,7 +340,25 @@ public class PostgresClaimStore implements ClaimStore {
         content.put("evidenceRefs", verdict.evidenceRefs());
         content.put("sources", verdict.sources());
         content.put("policyVersion", verdict.policyVersion());
+        content.put("rootCause", verdict.rootCause() == null ? null : Map.of(
+                "component", verdict.rootCause().component(),
+                "faultType", verdict.rootCause().faultType(),
+                "reasonCode", verdict.rootCause().reasonCode()));
+        content.put("symptomCodes", verdict.symptomCodes());
         return content;
+    }
+
+    /** 行上三列 → 内容面三元组（全 null = 未提供，载荷面如实 null） */
+    private static Map<String, Object> rootCauseOf(String component, String faultType,
+            String reasonCode) {
+        if (component == null && faultType == null && reasonCode == null) {
+            return null;
+        }
+        Map<String, Object> triple = new LinkedHashMap<>();
+        triple.put("component", component);
+        triple.put("faultType", faultType);
+        triple.put("reasonCode", reasonCode);
+        return triple;
     }
 
     private static LinkedHashMap<String, Object> payload() {

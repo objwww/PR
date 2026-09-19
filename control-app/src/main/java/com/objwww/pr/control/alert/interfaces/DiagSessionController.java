@@ -74,10 +74,10 @@ public class DiagSessionController {
         switch (request.key()) {
             case "impact" -> answer = lines(jdbc.sql("""
                     select '· 服务：' || coalesce(e.lab->>'service', e.lab->>'service_name', '—')
-                           || char(10) || '· 告警：' || coalesce(substring(i.incident_key from 'alertname=([^|]+)'), '—')
-                           || char(10) || '· 状态：' || i.status
-                           || coalesce(char(10) || '· 首次发生：' || to_char(i.episode_started_at, 'YYYY-MM-DD HH24:MI'), '')
-                           || char(10) || '· 累计接收 ' || i.received_count || ' 次（去重事件 ' || i.distinct_event_count || '）'
+                           || chr(10) || '· 告警：' || coalesce(substring(i.incident_key from 'alertname=([^|]+)'), '—')
+                           || chr(10) || '· 状态：' || i.status
+                           || coalesce(chr(10) || '· 首次发生：' || to_char(i.episode_started_at, 'YYYY-MM-DD HH24:MI'), '')
+                           || chr(10) || '· 累计接收 ' || i.received_count || ' 次（去重事件 ' || i.distinct_event_count || '）'
                       from incident i
                       left join lateral (
                           select labels as lab from alert_event
@@ -102,7 +102,7 @@ public class DiagSessionController {
                     "· 暂无事件");
             case "history" -> answer = lines(jdbc.sql("""
                     select '· 累计调查 ' || count(*) || ' 次'
-                           || char(10) || '· 成功 ' || count(*) filter (where state = 'SUCCEEDED')
+                           || chr(10) || '· 成功 ' || count(*) filter (where state = 'SUCCEEDED')
                            || ' ｜ 失败 ' || count(*) filter (where state in ('FAILED','EXPIRED'))
                            || ' ｜ 在途 ' || count(*) filter (where state in ('QUEUED','RUNNING','REPORTING'))
                       from rca_run where incident_id = :id
@@ -110,7 +110,7 @@ public class DiagSessionController {
                     "· 尚未发起过调查");
             case "cost" -> answer = lines(jdbc.sql("""
                     select '· 模型调用 ' || count(m.id) || ' 次'
-                           || char(10) || '· 累计费用 ' || coalesce(round(sum(m.cost_micros) / 1000000.0, 4)::text || ' ' || coalesce(max(m.currency), ''), '—')
+                           || chr(10) || '· 累计费用 ' || coalesce(round(sum(m.cost_micros) / 1000000.0, 4)::text || ' ' || coalesce(max(m.currency), ''), '—')
                       from rca_model_call m join rca_run r on r.id = m.run_id
                      where r.incident_id = :id
                     """).param("id", incidentId).query((rs, i) -> rs.getString(1)).list(),

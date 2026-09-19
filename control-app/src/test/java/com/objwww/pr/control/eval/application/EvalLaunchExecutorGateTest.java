@@ -172,7 +172,7 @@ class EvalLaunchExecutorGateTest {
                     }
 
                     @Override public void sleepSeconds(long s) { }
-                }, "worker-gate-test", gate);
+                }, "worker-gate-test", gate, null);
     }
 
     @Test

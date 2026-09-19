@@ -17,12 +17,12 @@ import java.util.UUID;
  * {@link DrillJobRepository} 的 Postgres 实现（DR-02，V86；JdbcClient 手写 SQL，
  * 沿 PostgresEvalRunCommandRepository 惯例）。
  *
- * <p>同一实现服务两个 DB 身份（授权面 V86 在库侧收口）：
+ * <p>同一实现服务两个 DB 身份（授权面 V86/V150 在库侧收口）：
  * <ul>
  *   <li>control_app（/api/drills 面）：insert / find 系 / list / count 系 /
- *       requestStop——requestStop 只写 stop 两列（不碰 updated_at，列级授权内）；</li>
- *   <li>eval_app（worker）：claimNext/advance/finalize/requeue/findOrphanedClaims——
- *       列级 update 授权内，正文列零开口。</li>
+ *       requestStop / requestRetry——意图列写面（不碰 updated_at），状态机推进零开口；</li>
+ *   <li>eval_app（worker）：claimNext/advance/finalize/requeue/findOrphanedClaims/
+ *       consumeRetry——列级 update 授权内，正文列零开口。</li>
  * </ul>
  * claim/推进全部单语句 CAS（FOR UPDATE SKIP LOCKED + state/revision 双对账）；
  * 领取即相位迁移 QUEUED→PRECHECK（BA-114），「先标记租约、后迁移状态」的
@@ -199,6 +199,54 @@ public class PostgresDrillJobRepository implements DrillJobRepository {
                 .param("key", stopIdempotencyKey)
                 .param("at", Timestamp.from(stopRequestedAt))
                 .param("id", id)
+                .update() > 0;
+    }
+
+    /**
+     * DR-04 人工重试意图 CAS（control_app 面；对称 requestStop）：只写
+     * retry_requested_at 意图列（V150 列级授权）——推进 RECOVERY_FAILED→RECOVERING
+     * 归 worker 消费，HTTP 线程保持状态机零开口；已受理/相位已离开自然落空
+     * （重复重试幂等）。
+     */
+    @Override
+    public boolean requestRetry(UUID id, Instant retryRequestedAt) {
+        return jdbc.sql("""
+                        UPDATE drill_job SET retry_requested_at = :at
+                        WHERE id = :id AND state = 'RECOVERY_FAILED'
+                          AND retry_requested_at IS NULL
+                        """)
+                .param("at", Timestamp.from(retryRequestedAt))
+                .param("id", id)
+                .update() > 0;
+    }
+
+    @Override
+    public List<DrillJob> findRetryRequests() {
+        return jdbc.sql("SELECT " + COLS + " FROM drill_job"
+                        + " WHERE state = 'RECOVERY_FAILED'"
+                        + " AND retry_requested_at IS NOT NULL"
+                        + " ORDER BY retry_requested_at, id")
+                .query(this::map).list();
+    }
+
+    /**
+     * DR-04 重试消费 CAS（eval_app 面）：单语句推进 RECOVERY_FAILED→RECOVERING +
+     * 清意图列 + 刷新租约——与并发重复消费/恢复窗口截止对账恰一方生效。
+     */
+    @Override
+    public boolean consumeRetry(UUID id, long expectedRevision, String workerId,
+                                Instant now) {
+        return jdbc.sql("""
+                        UPDATE drill_job SET state = 'RECOVERING',
+                            retry_requested_at = NULL, worker_id = :worker,
+                            claimed_at = :at, revision = revision + 1, updated_at = :at
+                        WHERE id = :id AND state = 'RECOVERY_FAILED'
+                          AND revision = :rev AND retry_requested_at IS NOT NULL
+                        """)
+                .param("worker", workerId)
+                .param("at", Timestamp.from(now))
+                .param("id", id)
+                .param("rev", expectedRevision)
                 .update() > 0;
     }
 

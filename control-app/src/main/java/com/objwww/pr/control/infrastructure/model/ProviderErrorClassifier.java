@@ -28,6 +28,9 @@ public final class ProviderErrorClassifier {
         return switch (httpStatus) {
             case 400 -> classify400(errorCode);
             case 401 -> new ModelCallFailure.AuthDenied(FaultScope.CREDENTIAL);
+            // 402 Payment Required（DeepSeek Insufficient Balance 实证 2026-09-18）：
+            // 账户欠费，语义是计费/未开通而非请求无效——误归 RequestInvalid 会让账面写成"请求无效"
+            case 402 -> new ModelCallFailure.BillingOrActivation(FaultScope.ACCOUNT);
             case 403 -> classify403(errorCode);
             case 404, 409, 422, 425 -> new ModelCallFailure.RequestInvalid(FaultScope.MODEL);
             case 408 -> new ModelCallFailure.Timeout(FaultScope.ENDPOINT, true); // A10：服务端明示超时，可同路由重试

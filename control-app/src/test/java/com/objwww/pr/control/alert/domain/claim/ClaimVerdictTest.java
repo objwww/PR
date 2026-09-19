@@ -135,4 +135,80 @@ class ClaimVerdictTest {
         assertThat(rootCause.fingerprint()).isEqualTo(hypothesis.fingerprint());
         assertThat(rootCause.contentHash()).isEqualTo(hypothesis.contentHash());
     }
+
+    // ---------------------------------------------- 结构化根因三元组（V147 评分面）
+
+    @Test
+    void rootCause入内容哈希_不入身份指纹() {
+        // 三元组是内容面：同断言补上三元组 = REVISED（contentHash 变），身份不变
+        ClaimVerdict bare = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.ROOT_CAUSE);
+        ClaimVerdict typed = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.ROOT_CAUSE,
+                new com.objwww.pr.control.alert.domain.model.TypedRootCause(
+                        "payment", "BUSINESS_ERROR_RATE", "PAYMENT_CHARGE_FAILURE"));
+        assertThat(typed.rootCause()).isNotNull();
+        assertThat(typed.fingerprint()).isEqualTo(bare.fingerprint());
+        assertThat(typed.contentHash()).isNotEqualTo(bare.contentHash());
+
+        // 同值三元组 → 内容哈希可复现
+        ClaimVerdict typed2 = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.ROOT_CAUSE,
+                new com.objwww.pr.control.alert.domain.model.TypedRootCause(
+                        "payment", "BUSINESS_ERROR_RATE", "PAYMENT_CHARGE_FAILURE"));
+        assertThat(typed2.contentHash()).isEqualTo(typed.contentHash());
+    }
+
+    @Test
+    void compat构造rootCause缺省null() {
+        // 11 参/12 参 compat 构造（存量调用点）→ rootCause=null（未提供=诚实降级）
+        assertThat(verdict("r-1", List.of("ev-1"), List.of("src-a")).rootCause()).isNull();
+        ClaimVerdict twelve = new ClaimVerdict("k", "scope", "tr", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.SINGLE_SOURCE, List.of("s"), "r",
+                List.of("e"), "p", ClaimKind.ROOT_CAUSE);
+        assertThat(twelve.rootCause()).isNull();
+    }
+
+    // ---------------------------------------------- 症状码（V151 评分面）
+
+    @Test
+    void symptomCodes入内容哈希_不入身份指纹() {
+        // 与三元组同律：同断言补上症状码 = REVISED（contentHash 变），身份不变
+        ClaimVerdict bare = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.SYMPTOM);
+        ClaimVerdict coded = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.SYMPTOM,
+                null, List.of("ArenaDuplicateOrders"));
+        assertThat(coded.symptomCodes()).containsExactly("ArenaDuplicateOrders");
+        assertThat(coded.fingerprint()).isEqualTo(bare.fingerprint());
+        assertThat(coded.contentHash()).isNotEqualTo(bare.contentHash());
+
+        // 输入顺序无关（构造即排序去重，内容哈希可复现）
+        ClaimVerdict shuffled = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.SYMPTOM,
+                null, List.of("BAlert", "AAlert", "BAlert"));
+        ClaimVerdict ordered = new ClaimVerdict("k", "scope", "2026-09-05/1h", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.MULTI_SOURCE_CONSISTENT,
+                List.of("src-a"), "r-1", List.of("ev-1"), "policy-v1", ClaimKind.SYMPTOM,
+                null, List.of("AAlert", "BAlert"));
+        assertThat(shuffled.symptomCodes()).containsExactly("AAlert", "BAlert");
+        assertThat(shuffled.contentHash()).isEqualTo(ordered.contentHash());
+    }
+
+    @Test
+    void compat构造symptomCodes缺省null() {
+        // 11/12/13 参 compat 构造（存量调用点）→ symptomCodes=null（未声明=诚实降级）
+        assertThat(verdict("r-1", List.of("ev-1"), List.of("src-a")).symptomCodes())
+                .isNull();
+        ClaimVerdict thirteen = new ClaimVerdict("k", "scope", "tr", 1L, null,
+                ClaimStatus.TRUE, EvidenceBasis.SINGLE_SOURCE, List.of("s"), "r",
+                List.of("e"), "p", ClaimKind.SYMPTOM, null);
+        assertThat(thirteen.symptomCodes()).isNull();
+    }
 }

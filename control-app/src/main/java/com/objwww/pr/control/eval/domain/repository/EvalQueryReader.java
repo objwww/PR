@@ -312,6 +312,22 @@ public interface EvalQueryReader {
     record ModelCallFailureRow(UUID evalRunId, String errorCode, long count) {
     }
 
+    /**
+     * BA-177：多 run 的六要素落档账批量面（six_parts_rate 指标透出，禁 N+1）——
+     * eval_case_six_parts（V152）按 run 聚合 total=已落档案例数、complete=六要素
+     * 齐全数。分母口径：只含"有报告且落档"的案例——无报告案例（TIMEOUT_OR_ABSENT/
+     * STRUCTURE_REJECTED/包异形）本就不可检不进表（SingleCaseScorer 头注），因此
+     * 本指标读作"有报告案例中写全六件事的比例"，不是全部案例的完成率。default 空表
+     * 供测试桩免改（渐进采纳，既有桩零漂移）。
+     */
+    default List<SixPartsStatRow> listSixPartsStatsForRuns(Iterable<UUID> evalRunIds) {
+        return List.of();
+    }
+
+    /** 六要素落档聚合行（total=落档案例数即分母；complete=六要素齐全数即分子） */
+    record SixPartsStatRow(UUID evalRunId, long total, long complete) {
+    }
+
     /** usage 调用行（usage/cost 仅 SUCCESS 带回报行可能在场；pricingVersion 含
      * 'unpriced' 显式态——R4 契约，与 usage 缺失可区分） */
     record UsageCallRow(UUID evalRunId, UUID rcaRunId, UUID attemptId, String roleId,

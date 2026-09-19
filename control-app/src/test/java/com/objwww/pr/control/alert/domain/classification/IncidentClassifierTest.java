@@ -3,6 +3,7 @@ package com.objwww.pr.control.alert.domain.classification;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +37,26 @@ class IncidentClassifierTest {
         // 反例：裸 "slo" 子串（dnslookup）不得误入 BUSINESS
         assertThat(classifier.classify(labels("DnsLookupFailures")).category())
                 .isEqualTo(IncidentCategory.NETWORK);
+    }
+
+    /** BA-180：Arena 业务交易链路症状组（M-a 批 S16~S25 九码 + 靶场三件套）全量入
+     *  BUSINESS——这些告警此前零命中恒 UNCLASSIFIED；探针健康面不盲目吞 arena 前缀 */
+    @Test
+    void arenaBusinessSymptomGroupClassifiedAsBusiness() {
+        List.of("ArenaPaymentOrderMismatch", "ArenaPendingPaymentBacklog",
+                        "ArenaDuplicatePayments", "ArenaReconciliationDiff", "ArenaOversell",
+                        "ArenaFulfillmentGap", "ArenaDuplicateFulfillment",
+                        "ArenaOrderZeroFlow", "ArenaFulfillmentSlaBreach",
+                        "ArenaOrderStuck", "ArenaDuplicateOrders", "ArenaIllegalTransitions")
+                .forEach(name -> {
+                    Classification c = classifier.classify(
+                            labels(name, "service", "order-arena"));
+                    assertThat(c.category()).as(name).isEqualTo(IncidentCategory.BUSINESS);
+                    assertThat(c.ruleId()).as(name).isEqualTo("BUSINESS-ALERTNAME");
+                });
+        assertThat(classifier.classify(
+                labels("ArenaDomainProbeDown", "service", "order-arena")).category())
+                .isEqualTo(IncidentCategory.UNCLASSIFIED);
     }
 
     @Test

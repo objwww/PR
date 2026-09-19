@@ -64,7 +64,8 @@
           <el-table :data="assignments" v-loading="queueLoading" row-key="assignmentId">
             <el-table-column label="场景 / 轮次" min-width="170">
               <template #default="{ row }">
-                <span class="mono">{{ row.scenarioId ?? '未统计' }}</span>
+                <div>{{ scenarioZh(row.scenarioId).name }}</div>
+                <span class="mono muted" :title="scenarioZh(row.scenarioId).desc || undefined">{{ row.scenarioId ?? '未统计' }}</span>
                 <span class="muted"> 第 {{ row.roundNo }} 轮</span>
               </template>
             </el-table-column>
@@ -123,7 +124,8 @@
           <el-table :data="disagreements" v-loading="disLoading">
             <el-table-column label="场景 / 轮次" min-width="170">
               <template #default="{ row }">
-                <span class="mono">{{ row.scenarioId ?? '未统计' }}</span>
+                <div>{{ scenarioZh(row.scenarioId).name }}</div>
+                <span class="mono muted" :title="scenarioZh(row.scenarioId).desc || undefined">{{ row.scenarioId ?? '未统计' }}</span>
                 <span class="muted"> 第 {{ row.roundNo }} 轮</span>
               </template>
             </el-table-column>
@@ -162,7 +164,13 @@
         <div class="cd-section">
           <div class="cd-sec-title">案例</div>
           <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="场景">{{ ws.reviewCase?.scenarioId ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="场景">
+              <template v-if="ws.reviewCase?.scenarioId">
+                {{ scenarioZh(ws.reviewCase.scenarioId).name }}
+                <span class="muted mono">（{{ ws.reviewCase.scenarioId }}）</span>
+              </template>
+              <span v-else class="muted">未统计</span>
+            </el-descriptions-item>
             <el-descriptions-item label="轮次">第 {{ ws.reviewCase?.roundNo }} 轮</el-descriptions-item>
             <el-descriptions-item label="机器判定">{{ ws.reviewCase?.machineVerdict ?? '未统计' }}</el-descriptions-item>
             <el-descriptions-item label="根因命中">
@@ -266,6 +274,7 @@ import { api } from '../api/client'
 import DetailDrawer from '../components/common/DetailDrawer.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
+import { scenarioZh } from '../dict/scenarioZh'
 import { fmtTime } from '../utils/format'
 
 const route = useRoute()

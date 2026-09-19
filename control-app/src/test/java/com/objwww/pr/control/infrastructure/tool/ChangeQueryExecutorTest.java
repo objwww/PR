@@ -64,6 +64,15 @@ class ChangeQueryExecutorTest {
     }
 
     @Test
+    @DisplayName("BA-183：epoch 秒直收（信封冻结窗以 epoch 秒下发，与 logs 族同律双收）")
+    void parseArgsAcceptsEpochSeconds() {
+        ChangeQueryExecutor.Query q = ChangeQueryExecutor.parseArgs(
+                args("1757481600", "1757481900", null), ALLOWLIST);
+        assertThat(q.since()).isEqualTo(Instant.ofEpochSecond(1_757_481_600L));
+        assertThat(q.until()).isEqualTo(Instant.ofEpochSecond(1_757_481_900L));
+    }
+
+    @Test
     @DisplayName("违约面：窗幅 >900s / 负窗 / 非 ISO-8601 / 缺参 / service 越出 allowlist → INVALID_ARGS")
     void parseArgsRejectsSemanticsViolations() {
         String base = "2026-09-10T00:00:00Z";

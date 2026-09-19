@@ -190,7 +190,8 @@ public class EvalQueryService {
                                   long caseCount, Integer totalScenarios,
                                   QualityFacet quality, StabilityFacet stability,
                                   RunFacets facets,
-                                  long modelCallFailures, String modelCallFailureCode) {
+                                  long modelCallFailures, String modelCallFailureCode,
+                                  RatioStat sixPartsRate) {
     }
 
     public record EvalRunListResponse(List<EvalRunListItem> items, String nextCursor,
@@ -208,7 +209,8 @@ public class EvalQueryService {
                                         String displayName, String mode, Integer totalScenarios,
                                         QualityFacet quality, StabilityFacet stability,
                                         RunFacets facets, Instant asOf,
-                                        String terminalReason, JsonNode launchPlan) {
+                                        String terminalReason, JsonNode launchPlan,
+                                        RatioStat sixPartsRate) {
     }
 
     /** 案例列表项（P3：三维评分+过程计数可空直读——null=未评/无检查点，不填 0；
@@ -410,12 +412,20 @@ public class EvalQueryService {
             failuresByRun.computeIfAbsent(failureRow.evalRunId(), k -> new ArrayList<>())
                     .add(failureRow);
         }
+        // BA-177：页内 run 的六要素落档账一次批量取回（禁 N+1）——six_parts_rate
+        // 透出（分母=有报告且落档的案例数，口径见 EvalQueryReader 头注）
+        Map<UUID, EvalQueryReader.SixPartsStatRow> sixPartsByRun = new LinkedHashMap<>();
+        for (EvalQueryReader.SixPartsStatRow sixPartsRow :
+                reader.listSixPartsStatsForRuns(runIds)) {
+            sixPartsByRun.put(sixPartsRow.evalRunId(), sixPartsRow);
+        }
         List<EvalRunListItem> items = new ArrayList<>(page.items().size());
         for (EvalRunRow row : page.items()) {
             items.add(toListItem(row,
                     usageByRun.getOrDefault(row.runId(), List.of()),
                     statsByRun.getOrDefault(row.runId(), List.of()),
-                    failuresByRun.getOrDefault(row.runId(), List.of())));
+                    failuresByRun.getOrDefault(row.runId(), List.of()),
+                    sixPartsRateOf(sixPartsByRun.get(row.runId()))));
         }
         return new EvalRunListResponse(List.copyOf(items), nextCursor, Instant.now());
     }
@@ -467,8 +477,24 @@ public class EvalQueryService {
                     quality,
                     stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId))),
                     facets(row, usageRollup(runId)), Instant.now(),
-                    row.terminalReason(), parseLaunchPlan(row.launchPlanJson()));
+                    row.terminalReason(), parseLaunchPlan(row.launchPlanJson()),
+                    sixPartsRateOf(oneSixPartsRow(reader.listSixPartsStatsForRuns(List.of(runId)))));
         });
+    }
+
+    /** 单 run 六要素聚合行（详情面；与列表同一条批量 SQL 路径，口径一致） */
+    private static EvalQueryReader.SixPartsStatRow oneSixPartsRow(
+            List<EvalQueryReader.SixPartsStatRow> rows) {
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /**
+     * 六要素完整率三件套（BA-177）：无落档行 → UNKNOWN（不填 0 冒充）；有行 →
+     * complete/total。分母=有报告且落档的案例数——无报告案例不可检不进分母
+     * （SingleCaseScorer 落档口径），前端须带此口径说明，防止读成全部案例完成率。
+     */
+    private static RatioStat sixPartsRateOf(EvalQueryReader.SixPartsStatRow row) {
+        return row == null ? unknownRatio() : ratio(row.complete(), row.total());
     }
 
     /** 单 run rollup（详情面；与列表同一条批量 SQL 路径，口径一致） */
@@ -1275,7 +1301,8 @@ public class EvalQueryService {
     private EvalRunListItem toListItem(EvalRunRow row,
             List<EvalQueryReader.UsageCallRow> usageRows,
             List<EvalQueryReader.ScenarioRoundStatRow> statRows,
-            List<EvalQueryReader.ModelCallFailureRow> failureRows) {
+            List<EvalQueryReader.ModelCallFailureRow> failureRows,
+            RatioStat sixPartsRate) {
         // BA-176：失败账聚合——总数 + 主因码（计数最高；并列取码序小者，确定性）
         long failedTotal = 0;
         String dominantCode = null;
@@ -1297,7 +1324,7 @@ public class EvalQueryService {
                 row.displayName(), row.mode(), row.caseCount(), row.totalScenarios(),
                 qualityFacet(row), stabilityFacet(statRows),
                 facets(row, RunUsageRollup.of(usageRows)),
-                failedTotal, failedTotal > 0 ? dominantCode : null);
+                failedTotal, failedTotal > 0 ? dominantCode : null, sixPartsRate);
     }
 
     // ------------------------------------------------------------------ F1 派生（读面现算，零迁移）

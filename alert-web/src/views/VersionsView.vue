@@ -2,7 +2,7 @@
   <div class="versions-page">
     <PageHeader
       title="版本中心"
-      subtitle="发布资产与配置包版本的只读清单：当前激活指针、资产摘要与运行配置切换状态全部来自后端实时查询，刷新即恢复真实状态。"
+      subtitle="配置包 = RCA 系统的一次能力整体切换（包里钉死：用哪版提示词、启用哪些工具、灰度放量比例与白名单）。「当前激活」就是线上实际生效的那一版；所有数据来自后端实时查询，刷新即恢复真实状态。"
     >
       <template #actions>
         <el-button :loading="bundlesLoading || assetsLoading" @click="reload">刷新</el-button>
@@ -13,7 +13,7 @@
     <div class="card zone">
       <div class="zone-head">
         <h2 class="zone-title">配置包版本</h2>
-        <span class="zone-note">发布/回滚只提交服务端命令（需 RELEASE 角色，前端不裁定资格）；生效与否以「当前激活」指针为准，受理不等于已生效</span>
+        <span class="zone-note">「发布到新调查」= 让新发起的调查改用该版配置灰度运行；「回滚到此版本」= 线上切回该版。两者只提交命令（需 RELEASE 资格），生效与否以「当前激活」指针为准，受理不等于已生效</span>
       </div>
       <template v-if="bundlesState === 'ok'">
         <!-- 金丝雀观测（业界对齐 Argo Rollouts metric analysis，保守版：只建议不自动回滚） -->
@@ -228,23 +228,24 @@
       <div v-loading="diff.loading" class="detail-body">
         <template v-if="diff.loaded">
           <p class="cell-sub" style="margin-top: 0">
-            基线（生效版）→ 目标（所选版本）；无差异项不显示。未变更键 {{ diff.unchangedCount }} 个。
+            对比方向：当前生效版 → 所选版本。修改=两版都有但值不同；删除=生效版有而所选版本没有
+            （若回滚到所选版本，这些配置将失效）；新增=所选版本新引入。未变更键 {{ diff.unchangedCount }} 个。
           </p>
           <template v-if="diffTotal">
             <h4 class="diff-h">修改（{{ diff.changed.length }}）</h4>
             <div v-for="c in diff.changed" :key="c.path" class="diff-row">
-              <code class="diff-path">{{ c.path }}</code>
-              <div class="diff-val"><span class="del">{{ c.base }}</span> → <span class="add">{{ c.target }}</span></div>
+              <code class="diff-path">{{ pathZh(c.path) }}</code>
+              <div class="diff-val"><span class="del">{{ valZh(c.base) }}</span> → <span class="add">{{ valZh(c.target) }}</span></div>
             </div>
             <h4 class="diff-h">新增（{{ diff.added.length }}）</h4>
             <div v-for="c in diff.added" :key="c.path" class="diff-row">
-              <code class="diff-path">{{ c.path }}</code>
-              <div class="diff-val"><span class="add">{{ c.target }}</span></div>
+              <code class="diff-path">{{ pathZh(c.path) }}</code>
+              <div class="diff-val"><span class="add">{{ valZh(c.target) }}</span></div>
             </div>
             <h4 class="diff-h">删除（{{ diff.removed.length }}）</h4>
             <div v-for="c in diff.removed" :key="c.path" class="diff-row">
-              <code class="diff-path">{{ c.path }}</code>
-              <div class="diff-val"><span class="del">{{ c.base }}</span></div>
+              <code class="diff-path">{{ pathZh(c.path) }}</code>
+              <div class="diff-val"><span class="del">{{ valZh(c.base) }}</span></div>
             </div>
           </template>
           <EmptyState v-else kind="empty" description="两个版本配置完全一致" />
@@ -271,6 +272,7 @@ import {
 } from '../api/versions'
 import { fmtTime } from '../utils/format'
 import { api } from '../api/client'
+import { alertZh } from '../dict/scenarioZh'
 
 const KINDS = ['PROMPT', 'SKILL', 'TOOL_SCHEMA', 'RUNBOOK_DOC', 'RUNBOOK_CATALOG']
 
@@ -452,6 +454,35 @@ async function openDetail(row) {
 // ===== 版本结构化 Diff（LaunchDarkly 模式）：基线=当前激活行，三类差异真源 diff 端点 =====
 const diff = reactive({ open: false, loading: false, loaded: false, target: '', changed: [], added: [], removed: [], unchangedCount: 0 })
 const diffTotal = computed(() => diff.changed.length + diff.added.length + diff.removed.length > 0)
+
+// 差异键名中文化小字典（就近定义；未命中原名保留，不猜测翻译）
+const PATH_ZH = { policy_version: '策略版本' }
+function pathZh(path) {
+  if (PATH_ZH[path]) return `${PATH_ZH[path]}（${path}）`
+  const m = /^canary\.whitelist\[(\d+)\]$/.exec(path ?? '')
+  if (m) return `金丝雀白名单·第 ${Number(m[1]) + 1} 条（${path}）`
+  return path
+}
+// 差异值中文释义：形如 alertname=X|service=Y|job=Z 的匹配器条目渲染为自然语
+// （alertname 走告警名中文字典，未命中回退原名；service/job 段保留），其余值原文直出
+function valZh(v) {
+  const s = String(v ?? '')
+  if (!s.includes('alertname=')) return s
+  const parts = s.split('|').map(seg => {
+    const eq = seg.indexOf('=')
+    if (eq < 0) return seg
+    const k = seg.slice(0, eq)
+    const val = seg.slice(eq + 1)
+    if (k === 'alertname') {
+      const zh = alertZh(val)
+      return zh === val ? val : `${zh}（${val}）`
+    }
+    if (k === 'service') return `服务 ${val}`
+    if (k === 'job') return `任务 ${val}`
+    return seg
+  })
+  return parts.join(' · ')
+}
 async function openDiff(row) {
   const base = bundles.value.active?.digest
   if (!base) { ElMessage.warning('当前没有生效版本可作对比基线'); return }
@@ -491,7 +522,6 @@ onMounted(() => { reload(); loadWatch() })
 .diff-val .del { color: var(--sev-p0, #F53F3F); text-decoration: line-through; }
 .diff-val .add { color: #23C343; font-weight: 600; }
 
-<style scoped>
 .versions-page { display: flex; flex-direction: column; gap: var(--section-gap); }
 .zone { padding: 16px var(--card-pad) 12px; }
 .zone-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }

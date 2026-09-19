@@ -40,7 +40,7 @@
     </div>
 
     <!-- 只读快照抽屉 -->
-    <DetailDrawer v-model="drawerOpen" :title="snap?.alertname ?? '历史快照'" :size="420">
+    <DetailDrawer v-model="drawerOpen" :title="snapTitle" :size="420">
       <div v-loading="snapLoading" class="snap-box">
         <template v-if="snap">
           <el-descriptions :column="1" border>
@@ -82,6 +82,7 @@ import StatusBadge from '../components/common/StatusBadge.vue'
 import IncidentTable from '../components/IncidentTable.vue'
 import { mapSeverity } from '../utils/severity'
 import { fmtDuration, fmtTime } from '../utils/format'
+import { alertZh } from '../dict/scenarioZh'
 
 const route = useRoute()
 const router = useRouter()
@@ -104,6 +105,13 @@ const snap = ref(null)
 const snapLoading = ref(false)
 const snapError = ref(false)
 const snapRunId = computed(() => snap.value?.run?.runId ?? snap.value?.currentRcaRunId ?? null)
+// 快照抽屉标题：中文名为主，原 alertname 括注保留对账；未收录/缺席回退原文
+const snapTitle = computed(() => {
+  const name = snap.value?.alertname
+  if (!name) return '历史快照'
+  const zhName = alertZh(name)
+  return zhName !== name ? `${zhName}（${name}）` : name
+})
 
 const hasFilter = computed(() => !!(filters.service || filters.q))
 const serviceOptions = computed(() => Object.keys(facets.value?.service ?? {}))

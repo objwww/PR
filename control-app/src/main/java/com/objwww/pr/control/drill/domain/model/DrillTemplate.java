@@ -28,7 +28,8 @@ public record DrillTemplate(
         String impact,
         Timing timing,
         ParamWhitelist params,
-        Execution execution) {
+        Execution execution,
+        Recovery recovery) {
 
     /** 时间参数（对齐 eval-scenarios.yml timing 块；后端据此计算 TTL/预热/恢复窗口） */
     public record Timing(int preheatSeconds, int holdSeconds, int maxFiringWaitSeconds,
@@ -70,6 +71,31 @@ public record DrillTemplate(
         }
     }
 
+    /**
+     * DR-04 恢复/核验参数（模板 recovery 块；缺省值保守）：
+     * probeSeconds = 单拍核验探针预算（有界，不堵 worker 轮询）；
+     * deadlineSeconds = 进入 RECOVERING/VERIFYING 起的恢复+核验总上限——
+     * 超上限未收口 = RECOVERY_FAILED 诚实占位（重试不许死循环）。
+     */
+    public record Recovery(int probeSeconds, int deadlineSeconds) {
+
+        /** 单拍核验探针预算缺省（秒）：小于一轮告警轮询量级，不堵 poll=5s 的 worker 循环 */
+        public static final int DEFAULT_PROBE_SECONDS = 10;
+
+        public Recovery {
+            if (probeSeconds <= 0 || deadlineSeconds <= 0) {
+                throw new IllegalArgumentException("恢复参数必须为正");
+            }
+        }
+
+        /** 模板未声明 recovery 块时的缺省：截止 = maxResolvedWait + cleanupTimeout */
+        public static Recovery defaulted(Timing timing) {
+            Objects.requireNonNull(timing, "timing");
+            return new Recovery(DEFAULT_PROBE_SECONDS, Math.max(1,
+                    timing.maxResolvedWaitSeconds() + timing.cleanupTimeoutSeconds()));
+        }
+    }
+
     public DrillTemplate {
         Objects.requireNonNull(scenarioId, "scenarioId");
         if (scenarioId.isBlank()) {
@@ -79,6 +105,18 @@ public record DrillTemplate(
         Objects.requireNonNull(timing, "timing");
         Objects.requireNonNull(params, "params");
         Objects.requireNonNull(execution, "execution");
+        Objects.requireNonNull(recovery, "recovery");
         symptomCodes = symptomCodes == null ? List.of() : List.copyOf(symptomCodes);
+    }
+
+    /** 兼容 DR-04 前形态的构造（无 recovery 块）：恢复参数按 timing 取缺省 */
+    public DrillTemplate(String scenarioId, String name, String scenarioType,
+                         String faultSource, String driver, String chaosFamily,
+                         String target, List<String> symptomCodes,
+                         String symptomDisplay, String impact, Timing timing,
+                         ParamWhitelist params, Execution execution) {
+        this(scenarioId, name, scenarioType, faultSource, driver, chaosFamily, target,
+                symptomCodes, symptomDisplay, impact, timing, params, execution,
+                Recovery.defaulted(timing));
     }
 }

@@ -1,28 +1,25 @@
 package com.objwww.pr.control.eval.domain;
 
+import com.objwww.pr.control.alert.application.ReportWritingRubric;
 import com.objwww.pr.control.alert.domain.model.EvidencePackageV2;
 
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 根因结论六要素检出器（M-d T5 前置，纪律见 .agent-notes/根因结论六要素纪律.md）。
  *
  * <p>口径（结构面优先，文本面兜底）：发生了什么=summary 非空；根因=root_cause 三元组
  * 三字段全非 blank；凭什么=claims 非空且至少一条带 evidence_refs；影响多大=impact
- * 非空；建议怎么办=remediation 非空；有多大把握=固定短语
- * 「把握：HIGH|MEDIUM|LOW」文本检出（primary v9 写作要求增量锚定，摘要/影响面兜底）。
+ * 非空；建议怎么办=remediation 非空；有多大把握=共享规约
+ * {@link ReportWritingRubric#confidenceLevelOf} 文本检出（认 agent 原文把握硬措辞
+ * 「把握：HIGH|MEDIUM|LOW」与 BA-175 确定性摘要「结论置信度：高/中/未定论」两种锚，
+ * 摘要/影响面兜底）。
  *
  * <p>纯函数零副作用；评分接线（T5）在 SingleCaseScorer 调用后落
  * eval_case_result.conclusion_six_parts 并聚合 six_parts_rate。检不出≠造假填充——
  * 六布尔如实，全绿才算六要素齐。
  */
 public final class SixElementsChecker {
-
-    /** 把握短语（与 deploy/alert/prompts/draft-primary-v9-写作要求增量.md 增量一对齐） */
-    private static final Pattern CONFIDENCE =
-            Pattern.compile("把握[：:]\\s*(HIGH|MEDIUM|LOW)");
 
     /** 检出结果：六布尔 + 把握档位（检不出为 empty——不猜） */
     public record Result(boolean whatHappened, boolean rootCause, boolean evidenceBasis,
@@ -54,14 +51,8 @@ public final class SixElementsChecker {
         String haystack = (reportText == null || reportText.isBlank())
                 ? String.join("\n", nullSafe(pkg.summary()), nullSafe(pkg.impact()))
                 : reportText;
-        Matcher m = CONFIDENCE.matcher(haystack);
-        Optional<String> level = Optional.empty();
-        boolean confidence = false;
-        if (m.find()) {
-            confidence = true;
-            level = Optional.of(m.group(1));
-        }
-        return new Result(what, root, basis, impact, confidence, rec, level);
+        Optional<String> level = ReportWritingRubric.confidenceLevelOf(haystack);
+        return new Result(what, root, basis, impact, level.isPresent(), rec, level);
     }
 
     private static boolean notBlank(String s) {

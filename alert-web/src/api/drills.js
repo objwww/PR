@@ -41,7 +41,8 @@ export async function getDrill(drillId) {
 }
 
 // DR-02 场景目录：{registryVersion, catalogDigest, templates:[TemplateCard]}；
-// execution.ready=false 带 reason（本期五场景均不开放启动，卡片如实展示原因）
+// execution.ready 由服务端裁定（模板 ready ∧ app.drill.launch-enabled 能力位，
+// DrillJobService 覆写），false 带 reason，卡片如实展示原因不可选择
 export async function listTemplates() {
   try {
     return await api('/drills/templates')

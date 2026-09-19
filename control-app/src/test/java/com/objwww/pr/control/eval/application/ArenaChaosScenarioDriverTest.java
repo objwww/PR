@@ -57,6 +57,162 @@ class ArenaChaosScenarioDriverTest {
     }
 
     @Test
+    void F9配方_三单创加付_掉单症状面流量() {
+        FakeChaosAdminClient client = new FakeChaosAdminClient();
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(client, new FakeAlertProbe(), traffic);
+
+        ActivationReceipt receipt = driver.activate(golden("S26", "F9"), 1);
+
+        assertThat(receipt.scenarioId()).isEqualTo("chaos-eval-t01-s26-r1");
+        assertThat(client.lastOnBody.get("scenarioId")).isEqualTo("chaos-eval-t01-s26-r1");
+        // BA-178：F9 = ma-drill-s16.sh 195 实测配方——3 单创+付（capture 落库后故障点吞收口）
+        assertThat(traffic.orders).containsExactly(
+                "chaos-eval-t01-s26-r1-intent-1/chaos-eval-t01-s26-r1-1",
+                "chaos-eval-t01-s26-r1-intent-2/chaos-eval-t01-s26-r1-2",
+                "chaos-eval-t01-s26-r1-intent-3/chaos-eval-t01-s26-r1-3");
+        assertThat(traffic.payments).containsExactly(
+                "order-1/chaos-eval-t01-s26-r1-intent-1",
+                "order-2/chaos-eval-t01-s26-r1-intent-2",
+                "order-3/chaos-eval-t01-s26-r1-intent-3");
+    }
+
+    @Test
+    void 未接线故障族如实抛错不空转() {
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), new FakeTraffic());
+
+        ActivationException ex = assertThrows(ActivationException.class,
+                () -> driver.activate(golden("S99", "F99"), 1));
+
+        // 会话已激活（回执身份随异常移交可恢复），流量零注入，原因如实
+        assertThat(ex.receipt().scenarioId()).isEqualTo("chaos-eval-t01-s99-r1");
+        assertThat(ex.getMessage()).contains("流量注入失败");
+    }
+
+    @Test
+    void F10配方_25单仅创不付_支付悬挂积压() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S17", "F10"), 1);
+
+        // BA-179：F10 = ma-drill-s17.sh 实测配方——25 单仅创单不支付（积压 >20 触 ticket）
+        assertThat(traffic.orders).hasSize(25)
+                .startsWith("chaos-eval-t01-s17-r1-intent-1/chaos-eval-t01-s17-r1-1")
+                .endsWith("chaos-eval-t01-s17-r1-intent-25/chaos-eval-t01-s17-r1-25");
+        assertThat(traffic.payments).isEmpty();
+    }
+
+    @Test
+    void F11配方_同单同correlationId重复支付() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S18", "F11"), 1);
+
+        // BA-179：F11 = ma-drill-s18.sh 实测配方——创+付+同单同 correlationId 再付
+        assertThat(traffic.orders).containsExactly(
+                "chaos-eval-t01-s18-r1-intent-1/chaos-eval-t01-s18-r1-1");
+        assertThat(traffic.payments).containsExactly(
+                "order-1/chaos-eval-t01-s18-r1-intent-1",
+                "order-1/chaos-eval-t01-s18-r1-intent-1");
+    }
+
+    @Test
+    void F12配方_一单创加付_对账不平数量差() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S19", "F12"), 1);
+
+        // BA-179：F12 = ma-drill-s19.sh 实测配方——1 单创+付（DISCOUNT 行被吞）
+        assertThat(traffic.orders).containsExactly(
+                "chaos-eval-t01-s19-r1-intent-1/chaos-eval-t01-s19-r1-1");
+        assertThat(traffic.payments).containsExactly(
+                "order-1/chaos-eval-t01-s19-r1-intent-1");
+    }
+
+    @Test
+    void F13配方_一单创加付_库存超卖() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S20", "F13"), 1);
+
+        // BA-179：F13 = ma-t9-s20.sh 实测配方——1 单创+付（补插超额 INVENTORY 行）
+        assertThat(traffic.orders).containsExactly(
+                "chaos-eval-t01-s20-r1-intent-1/chaos-eval-t01-s20-r1-1");
+        assertThat(traffic.payments).containsExactly(
+                "order-1/chaos-eval-t01-s20-r1-intent-1");
+    }
+
+    @Test
+    void F14配方_25单仅创_下单事件丢失履约未触发() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S21", "F14"), 1);
+
+        // BA-179：F14 = ma-t9-s21.sh 实测配方——25 单仅创单（履约行被吞，counter 差值 >10）
+        assertThat(traffic.orders).hasSize(25)
+                .startsWith("chaos-eval-t01-s21-r1-intent-1/chaos-eval-t01-s21-r1-1")
+                .endsWith("chaos-eval-t01-s21-r1-intent-25/chaos-eval-t01-s21-r1-25");
+        assertThat(traffic.payments).isEmpty();
+    }
+
+    @Test
+    void F15配方_一单创加付_消息重复消费() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S22", "F15"), 1);
+
+        // BA-179：F15 = ma-t9-s22.sh 实测配方——1 单创+付（消费端重复插 attempt 行）
+        assertThat(traffic.orders).containsExactly(
+                "chaos-eval-t01-s22-r1-intent-1/chaos-eval-t01-s22-r1-1");
+        assertThat(traffic.payments).containsExactly(
+                "order-1/chaos-eval-t01-s22-r1-intent-1");
+    }
+
+    @Test
+    void F16配方_25次创单突发_入口静默受理无单不支付() {
+        FakeTraffic traffic = new FakeTraffic();
+        traffic.nullOrders = true; // F16 入口静默：create 受理 accepted 但零落单（返回 null）
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S24", "F16"), 1);
+
+        // BA-179：F16 = ma-t9-s24.sh 实测配方——25 次创单突发全被吞（受理无单→不支付）
+        assertThat(traffic.orders).hasSize(25)
+                .startsWith("chaos-eval-t01-s24-r1-intent-1/chaos-eval-t01-s24-r1-1")
+                .endsWith("chaos-eval-t01-s24-r1-intent-25/chaos-eval-t01-s24-r1-25");
+        assertThat(traffic.payments).isEmpty();
+    }
+
+    @Test
+    void F17配方_16单仅创_履约超时积压() {
+        FakeTraffic traffic = new FakeTraffic();
+        ArenaChaosScenarioDriver driver = driver(new FakeChaosAdminClient(),
+                new FakeAlertProbe(), traffic);
+
+        driver.activate(golden("S25", "F17"), 1);
+
+        // BA-179：F17 = ma-t9-s25.sh 实测配方——16 单仅创单（履约停 CONFIRMING 积压 >15）
+        assertThat(traffic.orders).hasSize(16)
+                .startsWith("chaos-eval-t01-s25-r1-intent-1/chaos-eval-t01-s25-r1-1")
+                .endsWith("chaos-eval-t01-s25-r1-intent-16/chaos-eval-t01-s25-r1-16");
+        assertThat(traffic.payments).isEmpty();
+    }
+
+    @Test
     void 债务1_settle中断即退出_零流量_回执身份随异常移交() {
         FakeChaosAdminClient client = new FakeChaosAdminClient();
         FakeTraffic traffic = new FakeTraffic();
@@ -221,14 +377,22 @@ class ArenaChaosScenarioDriverTest {
 
     private static final class FakeTraffic implements ArenaTrafficClient {
         final List<String> orders = new ArrayList<>();
+        final List<String> payments = new ArrayList<>();
         int failOnCall = -1; // 1-based；-1 = 不失败
+        boolean nullOrders;    // true = 受理无单（F16 入口静默 accepted 零落单形态）
 
         @Override
-        public void createOrder(String intentId, String correlationId, String sku) {
+        public String createOrder(String intentId, String correlationId, String sku) {
             orders.add(intentId + "/" + correlationId);
             if (orders.size() == failOnCall) {
                 throw new IllegalStateException("arena 502");
             }
+            return nullOrders ? null : "order-" + orders.size();
+        }
+
+        @Override
+        public void payOrder(String orderId, String correlationId) {
+            payments.add(orderId + "/" + correlationId);
         }
     }
 }

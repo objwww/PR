@@ -87,6 +87,21 @@ class SixElementsCheckerTest {
     }
 
     @Test
+    void deterministicSummaryConfidenceAnchorIsDetected() {
+        // BA-177 口径对齐：BA-175 确定性摘要的「结论置信度：高/中/未定论」也算把握在场
+        SixElementsChecker.Result r = SixElementsChecker.check(fullPackage(),
+                "确认根因：……。结论置信度：高——全部断言闭环，可据以处置。");
+        assertThat(r.confidence()).isTrue();
+        assertThat(r.confidenceLevel()).contains("HIGH");
+        assertThat(r.complete()).isTrue();
+
+        SixElementsChecker.Result r2 = SixElementsChecker.check(fullPackage(),
+                "结论置信度：未定论——无确认根因，不建议据此处置");
+        assertThat(r2.confidence()).isTrue();
+        assertThat(r2.confidenceLevel()).contains("LOW");
+    }
+
+    @Test
     void blankImpactFailsImpactElement() {
         EvidencePackageV2 pkg = new EvidencePackageV2(2,
                 "摘要", new TypedRootCause("o", "f", "r"),

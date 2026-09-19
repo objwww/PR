@@ -26,7 +26,7 @@ import java.util.Set;
  * ——窗内变更行 + <b>窗前基线</b>（紧邻窗口前最近一行）一次给出，变更前后 diff 由
  * 行序列自然呈现（T08：激活/回滚生效事实可查、rollback_of 引用可辨、时间顺序正确）。
  *
- * <p>纪律同 {@link ChangeQueryExecutor}：窗幅 ≤900s、ISO-8601、service allowlist
+ * <p>纪律同 {@link ChangeQueryExecutor}：窗幅 ≤900s、ISO-8601 或 epoch 秒双收（BA-183）、service allowlist
  * fail-closed、行数 200+1 探针截断、流式序列化字节上限即断、空结果 NO_DATA、
  * 只读 SELECT 模板零写副作用。
  */
@@ -120,16 +120,22 @@ public class ChangeDiffExecutor implements ToolExecutor {
         return new Query(since, until, service);
     }
 
+    /** ISO-8601/epoch 秒双收（BA-183 对齐 LogQueryExecutor：信封冻结窗以 epoch 秒下发，
+     *  LLM 时区换算不可靠，epoch 无歧义） */
     private static Instant parseInstant(Object value, String field) {
         if (value == null) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant）");
+                    "INVALID_ARGS: " + field + " 必填（ISO-8601 Instant 或 epoch 秒）");
+        }
+        String text = String.valueOf(value).trim();
+        if (text.matches("\\d{9,11}")) {
+            return Instant.ofEpochSecond(Long.parseLong(text));
         }
         try {
-            return Instant.parse(String.valueOf(value));
+            return Instant.parse(text);
         } catch (Exception e) {
             throw new ToolControlPlaneException(ToolControlReason.INVALID_ARGS,
-                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant");
+                    "INVALID_ARGS: " + field + " 必为 ISO-8601 Instant 或 epoch 秒");
         }
     }
 

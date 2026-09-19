@@ -210,8 +210,13 @@ class EvalRunWorkerTest {
     }
 
     private EvalRunWorker worker(EvalRunWorker.LaunchExecutor executor) {
+        return worker(executor, () -> false);
+    }
+
+    private EvalRunWorker worker(EvalRunWorker.LaunchExecutor executor,
+                                 WorkerSchemaFreshnessGuard freshness) {
         return new EvalRunWorker(commands, evalRuns, executor,
-                ledger, clock, "worker-ut", 5, STALE_SECONDS);
+                ledger, clock, "worker-ut", 5, STALE_SECONDS, freshness);
     }
 
     /** 清扫面测试用 worker（执行面不应被触达） */
@@ -263,6 +268,28 @@ class EvalRunWorkerTest {
                 .isEqualTo(EvalRunCommand.State.REJECTED);
         assertThat(commands.byId.get(cmd.id()).finishedAt()).isNotNull();
         assertThat(evalRuns.runs).isEmpty();
+    }
+
+    @Test
+    @DisplayName("陈旧 worker 自拒（2026-09-17 实证修复）：护栏 stale=true 时不领取、"
+            + "命令留 PENDING 等新镜像接管；恢复后正常领取")
+    void staleWorkerDoesNotClaim() {
+        java.util.concurrent.atomic.AtomicBoolean stale =
+                new java.util.concurrent.atomic.AtomicBoolean(true);
+        EvalRunWorker worker = worker(newFailingExecutor(), stale::get);
+
+        EvalRunCommand cmd = launch("k-stale", "L");
+        commands.enqueue(cmd);
+        assertThat(worker.tick()).isFalse();
+        assertThat(commands.byId.get(cmd.id()).state())
+                .isEqualTo(EvalRunCommand.State.PENDING);
+        assertThat(evalRuns.runs).isEmpty();
+
+        // 恢复新鲜（新镜像语义）：重新领取并执行到收尾
+        stale.set(false);
+        assertThat(worker.tick()).isTrue();
+        assertThat(commands.byId.get(cmd.id()).state())
+                .isEqualTo(EvalRunCommand.State.FAILED);
     }
 
     // ------------------------------------------------------------------ 孤儿清扫
