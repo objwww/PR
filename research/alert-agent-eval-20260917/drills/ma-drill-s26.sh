@@ -79,27 +79,18 @@ where p.kind='CAPTURE' and p.result='SUCCEEDED'
 union all
 select 'session_state_rows', count(*) from arena.oa_chaos_session where scenario_id='$SCEN';"
 
-echo "== S26-B 充值门后的断言面（DeepSeek 充值后随 eval run 执行；现在只打印模板）=="
+echo "== S26-B 充值门后的断言面（DeepSeek 充值后随 eval run 执行；现在只打印清单）=="
 cat <<'NOTE'
 S26-B 前置：①DeepSeek 充值；②发起覆盖 S26 的 eval run（registry v6；LAUNCH 面选
-  scenario S26 或 md_suite 扩展）；③run 终态后执行下述断言 SQL（runId 替换 <RUN>）：
+  scenario S26 或 md_suite 扩展）；③run 终态后按序断言（<RUN> 替换 runId）：
 
--- 1) 审批五表全链存在性（V114/V119；列名以迁移为准）
-select 'action_intent' as chain, count(*) from action_intent where rca_run_id in
-  (select rca_run_id from eval_case_result where eval_run_id='<RUN>') and exists
-  (select 1 from approval_request r where r.action_id = action_intent.id)
-union all
-select 'approval_request', count(*) from approval_request r
-  join action_intent i on i.id = r.action_id
-  join eval_case_result e on e.rca_run_id = i.rca_run_id and e.eval_run_id='<RUN>'
-union all
-select 'approval_decisions', count(*) from approval_decisions d
-  where d.request_id in (
-    select r.id from approval_request r join action_intent i on i.id = r.action_id
-    join eval_case_result e on e.rca_run_id = i.rca_run_id where e.eval_run_id='<RUN>');
--- 2) 工具链覆盖≥6 类 SUCCESS：GET /api/eval/runs/<RUN>/process-metrics 的
---    toolCallsTotal/toolCallsUnique + rca_tool_invocation 按 tool_name 去重计数
--- 3) 六要素：GET /api/eval/runs/<RUN>/six-parts（complete 与把握分布）
--- 4) judge rubric v2 四题：GET /api/eval/runs/<RUN>/judge（Q4 六要素完整度通过率）
+  1) 审批五表全链：GET /api/eval/runs/<RUN>/approval-chain
+     ——intents/requests/decisions/grants/authorizations 逐级 ≥1（零值=链断，如实报缺）；
+     （备用手写 SQL 模板见 ma-drill-s16 同目录 V114/V119 迁移列名）
+  2) 工具链覆盖≥6 类 SUCCESS：GET /api/eval/runs/<RUN>/process-metrics
+     ——toolCallsTotal/toolCallsUnique + rca_tool_invocation 按 tool_name 去重计数；
+  3) 六要素：GET /api/eval/runs/<RUN>/six-parts —— complete/rate 与把握分布；
+  4) judge rubric v2 四题：GET /api/eval/runs/<RUN>/judge —— Q4 六要素完整度通过率；
+  5) 恢复面：S26-A 段 STEP7 终态对账（本脚本已跑）。
 NOTE
 echo "== S26 演练脚本结束（A 段以上即为可跑全量；B 段待充值）=="
