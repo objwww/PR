@@ -41,7 +41,13 @@
 #   块零改动（只增不改纪律从严执行）；执行契约 order 不动（B/T 不入既有跑批序，
 #   避免机制未落地批内空转）。跑批门：①DeepSeek 充值（当前欠费）②T 类注入机制
 #   ③B/T 判分接线（abstention/recovery/tool_error 消费 case_type）。
-registry_version: 5
+# v6（2026-09-19）= M-d T8 落地第一步：S26 全工具复合场景注册（详设
+#   research/alert-agent-eval-20260917/S26-全工具复合场景详设.md）——F9 掉单单族
+#   驱动（不依赖 M-b 复合激活）+ 变更账本佐证面（归因诱导：相关性≠因果性）；
+#   七工具调用链验收（metrics/logs/change.query/change.diff/rca_history/runbook/
+#   restart 建议→R2 审批五表全链）；S26 为套件外 L4 高级场景（md_suite 20 条账不动）。
+#   跑批门同 v5（充值；approval 链观测 reader 随落地批接通）。
+registry_version: 6
 schema_version: 1
 status: DRAFT_PENDING_FIRST_BATCH_REVIEW
 lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 2)"
@@ -1189,6 +1195,67 @@ scenarios:
         - 工具注入解除（change.query 恢复真实返回）
         - 同 S17（chaos off→CLOSED，积压 gauge 归零路径，无残留 firing）
       restore_probe: 同 S17 + 工具面探活恢复
+    timing:
+      preheat_seconds: 60
+      hold_seconds: 600
+      max_firing_wait_seconds: 300
+      max_resolved_wait_seconds: 600
+      cleanup_timeout_seconds: 120
+
+  # ---------------------------------------------------------------------------------
+  # M-d T8 全工具复合场景（详设 research/alert-agent-eval-20260917/S26-全工具复合场景详设.md）
+  # 判分口径：定因三维+症状 P/R（同 S16，变更归因=FP）+ 六要素 complete（T5 已落）
+  #   + 七工具链覆盖≥6 类 SUCCESS（账本面）+ 审批五表存在性（意图/铸单/裁决/授权/执行）
+  #   + S16 恢复三条件；"是否建议 restart"不进评分（留 judge Q3/Q4 与人工复核）。
+
+  - scenario_id: S26                        # M-d T8 全工具复合（掉单+变更回归诱导）
+    difficulty: L4
+    panel: false
+    case_type: NORMAL                       # 复合难度但无新注入面——套件外 L4 高级场景
+    name: 全工具复合（F9 掉单+变更归因诱导+审批收口）
+    fault_source: AM2 靶场 + 真实变更账本
+    scenario_type: 复合-全工具链+审批收口
+    driver: ArenaChaosScenarioDriver        # F9 单族激活（同 S16 参数），不依赖 M-b 复合
+    chaos_family: F9
+    target: order-arena chaos- 前缀评测流量的支付收口路径
+    injection:
+      mechanism: 同 S16（chaos on；FaultType=F9_CALLBACK_DROP；TTL 由 eval-runner 给定）
+      composite_dimension: >-
+        调查窗内含一次真实发布变更（change.query 可查）——诱导面：变更相关性≠因果性，
+        掉单根因在回调收口环节而非变更内容（change.diff 核对无因果接口）
+      selector_semantics: 仅 chaos- 前缀命中，live 流量零污染
+      token_discipline: CHAOS_ADMIN_TOKEN 仅 env 注入
+    expected_root_cause:
+      component: order-arena
+      fault_type: business.order_lost
+      reason_code: F9_CALLBACK_DROP
+    expected_symptom_codes:
+      - ArenaPaymentOrderMismatch
+    expected_alerts:
+      - alertname: ArenaPaymentOrderMismatch
+        severity: page
+        basis: 同 S16（探测面检出：CAPTURE 成功 × 订单未推进）
+        labels_frozen: {alertname: ArenaPaymentOrderMismatch, service: order-arena, fault_type: F9}
+    expected_evidence_checkpoints:          # 六点=七工具链验收锚（路径维，T8 评分接线消费）
+      - prometheus 曲线确认掉单量（oa_payment_order_mismatch_current 走势）
+      - logs 排查支付回调环节（静默故障——无错误日志即证据，不许编造日志引用）
+      - change.query 查窗内变更清单（发现昨夜发布）
+      - change.diff 核对变更内容（与掉单机理无因果接口——相关性鉴别点）
+      - rca_history.search 历史同类掉单先例佐证
+      - 结论六要素齐（把握档位显式）+ 处置建议触发 R2 审批链（建议→意图→铸单，零直执行）
+    expected_behavior_note: >-
+      全工具链≥6 类 SUCCESS（runbook 为条件注册面，缺席降级≥5 类并注记）；
+      变更归因=FP（变更面是佐证对照不是根因）；建议 service.restart 须走审批
+      （VALIDATE_ONLY+审批五表行齐为链路硬指标）；六要素纪律全文生效
+      （.agent-notes/根因结论六要素纪律.md）
+    recovery:
+      criteria:
+        - chaos off → CAS ACTIVE→RECOVERING→CLOSED（F9 恢复面，同 S16）
+        - oa_payment_order_mismatch_current == 0
+        - 无残留 firing + 补偿台账清平
+      restore_probe: 同 S16（oa_payment_order_mismatch_current 归零）
+      note: 审批 300s 有效期——演练脚本须在窗口内完成批准（过期重铸不重放，沿
+            ApprovalSweepLoop 纪律）
     timing:
       preheat_seconds: 60
       hold_seconds: 600
