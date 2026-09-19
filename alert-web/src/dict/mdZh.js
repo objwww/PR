@@ -26,6 +26,22 @@ export const mdZh = {
     latency: '延迟 P50 / P95',
     noData: '—',
   },
+  drafts: {
+    title: '提示词草稿',
+    source: '来源 /api/v1/prompt-workbench/drafts（起草→对照→裁定；发布走版本中心受控激活，零绕行）',
+    newDraft: '起草',
+    role: '角色',
+    proposedTemplate: '提案模板全文',
+    baseSnapshot: '基线快照（起草时刻冻结）',
+    discard: '弃稿',
+    diff: '对照',
+    baseline: '现行基线',
+    proposal: '本稿提案',
+    empty: '暂无草稿——起草后此处出数',
+    submitOk: '草稿已落档',
+    discardOk: '已弃稿',
+    status: { DRAFT: '起草中', DISCARDED: '已弃稿', APPLIED: '已应用' },
+  },
 }
 
 /** 把握档位中文映射（未知值原样透传——不冒充已知枚举） */

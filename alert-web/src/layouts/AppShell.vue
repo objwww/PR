@@ -128,6 +128,7 @@ const navGroups = [
     items: [
       { label: '评测', to: '/eval', match: ['/eval'], icon: Aim },
       { label: 'Prompt 工作台', to: '/prompt', match: ['/prompt'], icon: EditPen },
+      { label: '提示词草稿', to: '/prompt/drafts', match: ['/prompt/drafts'], icon: EditPen },
     ],
   },
   {
@@ -148,6 +149,8 @@ const navGroups = [
 function isCur(it) {
   // /duty/chat 是独立导航项（通知预览），不并入「值班」高亮
   if (route.path.startsWith('/duty/chat')) return it.match.includes('/duty/chat')
+  // /prompt/drafts 是独立导航项（提示词草稿，M-d T7），不并入「Prompt 工作台」高亮
+  if (route.path.startsWith('/prompt/drafts')) return it.match.includes('/prompt/drafts')
   return it.match.some(p => route.path === p || route.path.startsWith(p + '/'))
 }
 

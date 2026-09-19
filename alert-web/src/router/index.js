@@ -37,6 +37,7 @@ const PostmortemView = () => import('../views/PostmortemView.vue')
 const DiagChatView = () => import('../views/DiagChatView.vue')
 const ConfigCenterView = () => import('../views/ConfigCenterView.vue')
 const PromptWorkbenchView = () => import('../views/PromptWorkbenchView.vue')
+const PromptDraftsView = () => import('../views/PromptDraftsView.vue')
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { bare: true, title: '登录' } },
@@ -48,6 +49,7 @@ const routes = [
   { path: '/history', name: 'history', component: HistoryView, meta: { title: '历史档案' } },
   { path: '/runs', name: 'runs', component: RunsView, meta: { title: '调查队列' } },
   { path: '/prompt', name: 'prompt-workbench', component: PromptWorkbenchView, meta: { title: 'Prompt 工作台' } },
+  { path: '/prompt/drafts', name: 'prompt-drafts', component: PromptDraftsView, meta: { title: '提示词草稿' } },
   { path: '/config', name: 'config-center', component: ConfigCenterView, meta: { title: '配置中心' } },
   { path: '/runs/:runId', name: 'run', component: RunDetailView, meta: { title: '调查详情' } },
   { path: '/cases', name: 'cases', component: CasesView, meta: { title: '处置中心' } },
