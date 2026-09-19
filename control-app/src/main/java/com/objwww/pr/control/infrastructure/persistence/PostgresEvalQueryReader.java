@@ -857,14 +857,18 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getLong("checkpoints_covered"),
                         rs.getLong("grounded_assessed"),
                         rs.getLong("grounded"),
-                        (Long) rs.getObject("p50_latency_ms", Long.class) != null
-                                ? rs.getLong("p50_latency_ms") : null,
-                        (Long) rs.getObject("p95_latency_ms", Long.class) != null
-                                ? rs.getLong("p95_latency_ms") : null,
+                        asLong(rs, "p50_latency_ms"),
+                        asLong(rs, "p95_latency_ms"),
                         rs.getLong("tool_call_total"),
                         rs.getLong("tool_call_failed")))
                 .list().stream().findFirst()
                 .orElse(new ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0));
+    }
+
+    /** percentile_cont 返回 numeric——null 如实，非空经 Number 安全转长整 */
+    private static Long asLong(java.sql.ResultSet rs, String col) throws java.sql.SQLException {
+        Object v = rs.getObject(col);
+        return v == null ? null : ((Number) v).longValue();
     }
 
     // ------------------------------------------------------------------ M-d T8 审批链观测
