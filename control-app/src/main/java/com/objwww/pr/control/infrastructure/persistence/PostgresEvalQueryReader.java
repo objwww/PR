@@ -842,6 +842,53 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .orElse(new ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0));
     }
 
+    // ------------------------------------------------------------------ M-d T8 审批链观测
+
+    /** 审批五表存在性计数（V114/V119 链路：intent→request→decisions/grant→authorization；
+     *  run 集合=本 eval run 的 rca_run_id 集） */
+    @Override
+    public ApprovalChainRow approvalChain(UUID runId) {
+        return jdbc.sql("""
+                        select (select count(*) from action_intent i
+                                  where i.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))          as intents,
+                               (select count(*) from approval_request r
+                                  join action_intent i on i.intent_id = r.intent_id
+                                  where i.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))          as requests,
+                               (select count(*) from approval_decisions d
+                                  join approval_request r on r.request_id = d.request_id
+                                  join action_intent i on i.intent_id = r.intent_id
+                                  where i.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))          as decisions,
+                               (select count(*) from approval_grant g
+                                  join approval_request r on r.request_id = g.request_id
+                                  join action_intent i on i.intent_id = r.intent_id
+                                  where i.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))          as grants,
+                               (select count(*) from operation_authorization o
+                                  join approval_grant g on g.grant_id = o.grant_id
+                                  join approval_request r on r.request_id = g.request_id
+                                  join action_intent i on i.intent_id = r.intent_id
+                                  where i.run_id in (select e2.rca_run_id from eval_case_result e2
+                                                      where e2.eval_run_id = :runId
+                                                        and e2.rca_run_id is not null))          as authorizations
+                        """)
+                .param("runId", runId)
+                .query((rs, i) -> new ApprovalChainRow(
+                        rs.getLong("intents"),
+                        rs.getLong("requests"),
+                        rs.getLong("decisions"),
+                        rs.getLong("grants"),
+                        rs.getLong("authorizations")))
+                .list().stream().findFirst()
+                .orElse(new ApprovalChainRow(0, 0, 0, 0, 0));
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面
 
     /** eval_phase_event 键集分页（无 seq 列——(entered_at, id) 严格大于续页，升序；

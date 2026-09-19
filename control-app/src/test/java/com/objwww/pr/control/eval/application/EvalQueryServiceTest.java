@@ -1339,6 +1339,43 @@ class EvalQueryServiceTest {
         assertThat(service.processMetricsSummary(UUID.randomUUID())).isEmpty();
     }
 
+    // ------------------------------------------------------------------ M-d T8 审批链观测
+
+    @Test
+    void approvalChainSummaryCarriesFiveLedgerCounts() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.approvalChain = new EvalQueryReader.ApprovalChainRow(2, 1, 1, 1, 1);
+
+        EvalQueryService.ApprovalChainResponse out =
+                service.approvalChainSummary(runId).orElseThrow();
+
+        assertThat(out.intents()).isEqualTo(2);
+        assertThat(out.requests()).isEqualTo(1);
+        assertThat(out.decisions()).isEqualTo(1);
+        assertThat(out.grants()).isEqualTo(1);
+        assertThat(out.authorizations()).isEqualTo(1);
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void approvalChainSummaryZeroActivityIsHonest() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "RUNNING");
+
+        EvalQueryService.ApprovalChainResponse out =
+                service.approvalChainSummary(runId).orElseThrow();
+
+        assertThat(out.intents()).isZero();
+        assertThat(out.requests()).isZero();
+        assertThat(out.authorizations()).isZero();
+    }
+
+    @Test
+    void approvalChainSummaryUnknownRunIsEmpty() {
+        assertThat(service.approvalChainSummary(UUID.randomUUID())).isEmpty();
+    }
+
     private static final class FakeReader implements EvalQueryReader {
         EvalRunPage runPage = new EvalRunPage(List.of(), false);
         EvalRunRow run;
@@ -1348,6 +1385,8 @@ class EvalQueryServiceTest {
         EvalQueryReader.ProcessMetricsRow processMetrics =
                 new EvalQueryReader.ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0,
                         null, null, 0, 0);
+        EvalQueryReader.ApprovalChainRow approvalChain =
+                new EvalQueryReader.ApprovalChainRow(0, 0, 0, 0, 0);
         EvalQueryReader.LiveMetricRow liveMetrics;
         List<DatasetRow> datasets = List.of();
         List<PartitionCountRow> partitionCounts = List.of();
@@ -1396,6 +1435,11 @@ class EvalQueryServiceTest {
         @Override
         public EvalQueryReader.ProcessMetricsRow processMetrics(UUID runId) {
             return processMetrics;
+        }
+
+        @Override
+        public EvalQueryReader.ApprovalChainRow approvalChain(UUID runId) {
+            return approvalChain;
         }
 
         @Override

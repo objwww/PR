@@ -574,6 +574,26 @@ public class EvalQueryService {
                 m.p50LatencyMs(), m.p95LatencyMs(), Instant.now()));
     }
 
+    // ------------------------------------------------------------------ M-d T8 审批链观测
+
+    /**
+     * M-d T8 run 级审批链存在性汇总（S26「审批流全走起来」出数面）：五表逐级计数，
+     * 零值=该级无活动如实（不冒充链路完整）；内容合理性归 judge 与人工复核。
+     * run 未知 → empty（controller 404 面）。
+     */
+    public record ApprovalChainResponse(UUID runId, long intents, long requests, long decisions,
+                                        long grants, long authorizations, Instant asOf) {
+    }
+
+    public Optional<ApprovalChainResponse> approvalChainSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        EvalQueryReader.ApprovalChainRow c = reader.approvalChain(runId);
+        return Optional.of(new ApprovalChainResponse(runId, c.intents(), c.requests(),
+                c.decisions(), c.grants(), c.authorizations(), Instant.now()));
+    }
+
     // ------------------------------------------------------------------ P7 judge 汇总
 
     /** 逐题"是"计数（rubric 校准面：题粒度通过率——<0.7 的题触发 rubric 修订） */

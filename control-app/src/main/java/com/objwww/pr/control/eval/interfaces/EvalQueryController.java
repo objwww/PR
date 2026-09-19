@@ -127,6 +127,19 @@ public class EvalQueryController {
                         .body(Map.of("error", "eval run 不存在")));
     }
 
+    /** M-d T8 审批链存在性：五表逐级计数（S26 链路完整性硬指标；零值=无活动如实） */
+    @GetMapping("/runs/{runId}/approval-chain")
+    public ResponseEntity<?> approvalChain(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.approvalChainSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /** M-d T3 过程面汇总：重复动作率/工具错误率/检查点覆盖/结构通过/结论有据/P50·P95
      *  出数面（分母为 0 → 对应率 null 如实，不冒充 0%） */
     @GetMapping("/runs/{runId}/process-metrics")

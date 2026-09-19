@@ -430,6 +430,23 @@ public interface EvalQueryReader {
         return new ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 0);
     }
 
+    // ------------------------------------------------------------------ M-d T8 审批链观测
+
+    /**
+     * run 级审批链存在性行（M-d T8/S26 验收观测面）：action_intent（V114，run_id 直连）
+     * → approval_request（intent_id）→ approval_decisions/grant（request_id）→
+     * operation_authorization（grant_id）五表存在性计数——S26「审批流全走起来」的
+     * 账本断言原料（链路完整性=硬指标；内容合理性归 judge 与人工复核）。
+     */
+    record ApprovalChainRow(long intents, long requests, long decisions, long grants,
+                            long authorizations) {
+    }
+
+    /** 生产实现按库现算；测试桩默认全 0（无审批活动如实） */
+    default ApprovalChainRow approvalChain(UUID runId) {
+        return new ApprovalChainRow(0, 0, 0, 0, 0);
+    }
+
     // ------------------------------------------------------------------ A3 阶段事件读面（§5.3 events 端点）
 
     /** eval_phase_event 投影行（V80 全列减去 created_at；detail 为 jsonb ::text 原文
