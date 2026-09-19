@@ -282,14 +282,15 @@ public class EvalRunnerConfig {
 
     @Bean
     public RcaRunResolver rcaRunResolver(JdbcClient jdbc,
-            @Value("${app.alert.eval.run-tag:}") String runTag) {
+            @Value("${app.alert.eval.run-tag:}") String runTag,
+            @Value("${app.alert.eval.resolver-skew-seconds:0}") long skewSeconds) {
         return new PostgresRcaRunResolver(jdbc, millis -> {
             try {
                 Thread.sleep(millis);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        }, runTag);
+        }, runTag, skewSeconds);
     }
 
     /** flagd 管理面客户端提为共享 bean（DR-A 批）：driver 条件恢复与

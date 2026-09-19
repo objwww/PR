@@ -24,6 +24,12 @@ import java.util.UUID;
  * 两路都只认<b>终态</b> run（SUCCEEDED/FAILED/CANCELLED/SUPERSEDED）——评分需要已完成
  * 的调查，Holmes 经 LiteLLM 需数分钟，轮询直到 timeoutSeconds 耗尽；全程只读，
  * 找不到 = empty（评分落缺席，不猜不凑）。
+ *
+ * <p>FUP-04（2026-09-19）：incident 匹配锚点支持有界容差 {@code skewSeconds}——
+ * Prometheus 路径的 firing（如跨场景副作用把 gauge 顶上去）会在 eval 锚点前数秒
+ * 铸出 run（195 实测早 3 秒被 created-after 过滤排除 → run_not_found）。容差默认
+ * 0 = 行为不变；按部署显式开启（如 60s）。代价：同 alertname 的上一批尾部调查
+ * 若在容差窗内完成会被误配——操作方以批间隔自行规避。
  */
 public class PostgresRcaRunResolver implements RcaRunResolver {
 
@@ -36,11 +42,18 @@ public class PostgresRcaRunResolver implements RcaRunResolver {
     private final JdbcClient jdbc;
     private final Sleeper sleeper;
     private final String runTag;
+    private final long skewSeconds;
 
     public PostgresRcaRunResolver(JdbcClient jdbc, Sleeper sleeper, String runTag) {
+        this(jdbc, sleeper, runTag, 0);
+    }
+
+    public PostgresRcaRunResolver(JdbcClient jdbc, Sleeper sleeper, String runTag,
+                                  long skewSeconds) {
         this.jdbc = Objects.requireNonNull(jdbc);
         this.sleeper = Objects.requireNonNull(sleeper);
         this.runTag = runTag == null ? "" : runTag;
+        this.skewSeconds = Math.max(0, skewSeconds);
     }
 
     @FunctionalInterface
@@ -98,11 +111,16 @@ public class PostgresRcaRunResolver implements RcaRunResolver {
                           AND r.state IN %s
                         ORDER BY r.created_at DESC LIMIT 1
                         """.formatted(TERMINAL_STATES))
-                .param("since", Timestamp.from(activatedAt))
+                .param("since", Timestamp.from(sinceFor(activatedAt, skewSeconds)))
                 .param("pattern", "%alertname=" + alertname + "%")
                 .query((rs, i) -> rs.getString("id"))
                 .list();
         return rows.isEmpty() ? Optional.empty() : parseUuid(rows.getFirst());
+    }
+
+    /** FUP-04 锚点容差（纯函数）：匹配窗自锚点回看 skew 秒；负值钳 0（不前移锚点） */
+    static Instant sinceFor(Instant activatedAt, long skewSeconds) {
+        return activatedAt.minusSeconds(Math.max(0, skewSeconds));
     }
 
     private static Optional<UUID> parseUuid(String value) {
