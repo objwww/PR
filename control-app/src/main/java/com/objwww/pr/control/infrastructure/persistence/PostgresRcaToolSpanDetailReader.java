@@ -19,7 +19,7 @@ public class PostgresRcaToolSpanDetailReader implements RcaToolSpanDetailReader 
 
     /** 包内可见供 SQL 契约测试锁定形状（截断/关联/排序纪律） */
     static final String SQL = """
-            SELECT ti.id, ti.task_id, ti.call_seq,
+            SELECT ti.id, ti.task_id, ti.tool_name, ti.call_seq,
                    left(e.scope, 300)   AS scope_summary,
                    left(e.payload, 500) AS result_summary,
                    ti.result_ref::text  AS evidence_ref,
@@ -44,6 +44,7 @@ public class PostgresRcaToolSpanDetailReader implements RcaToolSpanDetailReader 
                 .query((rs, rowNum) -> new ToolSpanDetail(
                         UUID.fromString(rs.getString("id")),
                         UUID.fromString(rs.getString("task_id")),
+                        rs.getString("tool_name"),
                         rs.getLong("call_seq"),
                         rs.getString("scope_summary"),
                         rs.getString("result_summary"),

@@ -48,6 +48,7 @@ public class TraceDetailController {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("invocationId", d.invocationId().toString());
             row.put("taskId", d.taskId() == null ? null : d.taskId().toString());
+            row.put("toolName", d.toolName());
             row.put("callSeq", d.callSeq());
             row.put("scopeSummary", d.scopeSummary());
             row.put("resultSummary", d.resultSummary());

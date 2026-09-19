@@ -53,10 +53,10 @@ class TraceDetailControllerTest {
         UUID taskId = UUID.randomUUID();
         UUID evidenceId = UUID.randomUUID();
         fake.byRun.put(runId, List.of(
-                new RcaToolSpanDetailReader.ToolSpanDetail(invocationId, taskId, 2,
+                new RcaToolSpanDetailReader.ToolSpanDetail(invocationId, taskId, "logs.query", 2,
                         "{\"timeRange\":\"last_30m\"}", "{\"status\":\"success\",\"data\":[",
                         evidenceId.toString(), "logs_window", "loki"),
-                new RcaToolSpanDetailReader.ToolSpanDetail(UUID.randomUUID(), taskId, 3,
+                new RcaToolSpanDetailReader.ToolSpanDetail(UUID.randomUUID(), taskId, "change.query", 3,
                         null, null, null, null, null)));
         TraceDetailController controller = new TraceDetailController(fake);
 
@@ -68,6 +68,7 @@ class TraceDetailControllerTest {
         assertThat(details.get(0))
                 .containsEntry("invocationId", invocationId.toString())
                 .containsEntry("taskId", taskId.toString())
+                .containsEntry("toolName", "logs.query")
                 .containsEntry("callSeq", 2L)
                 .containsEntry("evidenceRef", evidenceId.toString())
                 .containsEntry("evidenceType", "logs_window")

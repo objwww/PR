@@ -94,6 +94,10 @@
             <div class="qs-label">轮间一致性</div>
             <div class="qs-value">{{ fmtRatioStat(run.stability?.scenarioConsistency) }}</div>
           </div>
+          <div class="qs-item">
+            <div class="qs-label">六要素完整率</div>
+            <div class="qs-value">{{ fmtRatioStat(run.sixPartsRate) }}</div>
+          </div>
         </div>
 
         <!-- 验收口径说明：批次构成 + 每个指标怎么算的，让人能复核数字 -->
@@ -122,9 +126,34 @@
                 报对记 tp、多报（期望里没有却报了）记 fp、漏报（期望里有却没报）记 fn。{{ f1Narrative(run) }}
                 指标全部由后端从案例账本逐案聚合现算，页面不估算不补零。
               </p>
+              <p>
+                <b>六要素完整率</b>：调查报告是否说全了六件事——发生了什么、根因是什么、凭什么判断（有证据引用）、
+                影响多大、有多大把握（显式把握档位）、建议怎么办。分子 = 六件写全的案例数，
+                <b>分母 = 有报告且已落档的案例数</b>：没跑出报告的案例（判定为超时/缺席 TIMEOUT_OR_ABSENT、
+                结构失败 STRUCTURE_REJECTED）没有报告可检，不计入分母——所以本指标读作
+                "写出报告的案例里，报告写完整的比例"，不是全部案例的完成率；早期批次早于六要素落档接线，
+                显示「未统计」属如实无账，不是 0%。
+              </p>
             </div>
           </el-collapse-item>
         </el-collapse>
+
+        <!-- M-d T8 审批链存在性（S26「审批流全走起来」出数面；接口 404=旧后端未部署降级隐藏，
+             全零=本批未触发写类工具如实零值，不伪造活动） -->
+        <div v-if="approvalChain" class="card ap-chain">
+          <div class="ap-title">审批链（写类工具五级存在性）</div>
+          <div class="ap-row">
+            <span>意图 <b>{{ approvalChain.intents }}</b></span><span class="ap-arrow">→</span>
+            <span>审批单 <b>{{ approvalChain.requests }}</b></span><span class="ap-arrow">→</span>
+            <span>裁决 <b>{{ approvalChain.decisions }}</b></span><span class="ap-arrow">→</span>
+            <span>授权 <b>{{ approvalChain.grants }}</b></span><span class="ap-arrow">→</span>
+            <span>执行授权 <b>{{ approvalChain.authorizations }}</b></span>
+          </div>
+          <div class="muted ap-note">
+            写类工具（service.restart / service.rollback）调用即铸意图进人工审批链，审批通过才逐级铸单，全程零直接执行；
+            全零 = 本批案例未触发写类工具（非链断裂）。逐级计数衰减处即链路停留级（如意图有、审批单零 = 意图未进审批队列）。
+          </div>
+        </div>
 
         <!-- EV-03 六状态分面：各面独立表达互不顶替；UNKNOWN/字段缺席一律“未统计”，tooltip 注明数据来源归属 --><el-descriptions class="facets" :column="3" border size="small">
           <el-descriptions-item label="执行状态（executionState）">
@@ -610,24 +639,54 @@
             <span class="muted">第 {{ detail.roundNo }} 轮</span>
           </div>
           <div v-if="scenarioZh(detail.scenarioId).desc" class="muted" style="margin-bottom: 8px">{{ scenarioZh(detail.scenarioId).desc }}</div>
+          <!-- TIMEOUT_OR_ABSENT 的"未统计"不是数据丢失：无报告本就无耗时/Token/实际根因可统计；
+               用 rcaRunId 是否为空区分两种成因（ABSENT=调查未发起 / TIMEOUT=调查未在时限内出有效报告） -->
+          <el-alert v-if="detail.verdict === 'TIMEOUT_OR_ABSENT'" type="info" :closable="false" show-icon class="cd-verdict-note"
+            :title="detail.linkage?.rcaRunId
+              ? '判定说明（TIMEOUT 超时）：调查已发起（见下方关联链的调查运行），但未在时限内产出通过校验的报告——耗时 / Token / 实际根因无有效数据可统计；按评分口径记根因未命中，期望症状计入漏报（FN）。'
+              : '判定说明（ABSENT 缺席）：该案例没有产生调查运行（调查未发起），因此耗时 / Token / 实际根因本来就无数据，不是统计缺失；按评分口径记根因未命中，期望症状计入漏报（FN）。'" />
+          <el-alert v-else-if="detail.verdict === 'STRUCTURE_REJECTED'" type="warning" :closable="false" show-icon class="cd-verdict-note"
+            title="判定说明（结构失败）：调查产出了报告但未通过结构校验（见关联链的报告校验状态）——报告不进入评分，根因命中与实际根因按口径不统计。" />
           <el-descriptions :column="2" border size="small">
             <el-descriptions-item label="根因命中">
               <el-tag v-if="detail.rootCauseHit === false" type="danger" disable-transitions>未命中</el-tag>
               <span v-else-if="detail.rootCauseHit === true">命中</span>
               <span v-else class="muted">未统计</span>
             </el-descriptions-item>
-            <el-descriptions-item label="耗时">{{ detail.latencyMs == null ? '未统计' : `${detail.latencyMs} ms` }}</el-descriptions-item>
+            <el-descriptions-item label="耗时">{{ detail.latencyMs == null ? noDataText : `${detail.latencyMs} ms` }}</el-descriptions-item>
             <el-descriptions-item label="Token 用量">
               <template v-if="detail.totalTokens != null || detail.promptTokens != null || detail.completionTokens != null">
                 输入 {{ fmtNum(detail.promptTokens) }} / 输出 {{ fmtNum(detail.completionTokens) }} / 合计 {{ fmtNum(detail.totalTokens) }}
               </template>
-              <span v-else class="muted">未统计</span>
+              <span v-else class="muted">{{ noDataText }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="期望根因">{{ detail.expectedRootCause ?? '未统计' }}</el-descriptions-item>
-            <el-descriptions-item label="实际根因">{{ detail.actualRootCause ?? '未统计' }}</el-descriptions-item>
+            <el-descriptions-item label="实际根因">{{ detail.actualRootCause ?? noDataText }}</el-descriptions-item>
             <el-descriptions-item label="症状 TP / FP / FN">{{ fmtTff(detail) }}</el-descriptions-item>
             <el-descriptions-item label="选择策略版本">{{ detail.selectionPolicyVersion ?? '未统计' }}</el-descriptions-item>
           </el-descriptions>
+        </div>
+
+        <!-- M-d T2 工具调用明细：本案例调查的工具三要素（参数面/返回摘要/证据引用；
+             接口缺席/无调查 → 诚实空态，不展示推测内容） -->
+        <div class="cd-section">
+          <div class="cd-sec-title">{{ mdZh.toolSpans.title }}</div>
+          <template v-if="toolSpansState === 'ok'">
+            <el-empty v-if="!toolSpans.length" description="本案例调查无工具调用记录" :image-size="48" />
+            <el-collapse v-else>
+              <el-collapse-item v-for="t in toolSpans" :key="t.invocationId" :name="t.invocationId">
+                <template #title>
+                  <span class="mono">{{ t.callSeq }}. {{ t.toolName ?? '未统计' }}</span>
+                  <el-tag v-if="t.evidenceRef" size="small" style="margin-left: 8px" disable-transitions>
+                    {{ mdZh.toolSpans.hasEvidence }}</el-tag>
+                </template>
+                <div class="ts-kv"><span class="ts-k">{{ mdZh.toolSpans.scope }}</span><span class="mono break">{{ t.scopeSummary ?? mdZh.toolSpans.noData }}</span></div>
+                <div class="ts-kv"><span class="ts-k">{{ mdZh.toolSpans.result }}</span><span class="mono break">{{ t.resultSummary ?? mdZh.toolSpans.noData }}</span></div>
+                <div class="ts-kv"><span class="ts-k">{{ mdZh.toolSpans.evidence }}</span><span class="mono break">{{ t.evidenceRef ?? mdZh.toolSpans.noEvidence }}</span></div>
+              </el-collapse-item>
+            </el-collapse>
+          </template>
+          <div v-else-if="toolSpansState === 'unavailable'" class="muted">{{ mdZh.toolSpans.unavailable }}</div>
         </div>
 
         <!-- 场景身份：unresolvedReason 区分成因（AMBIGUOUS/NO_MATCH_OR_HOLDOUT）；
@@ -859,6 +918,7 @@ async function loadRun(silent = false) {
     run.value = r
     pageState.value = 'ok'
     stopAcceptedPoll()
+    loadApprovalChain()
   } catch (e) {
     if (ctl.signal.aborted || seq !== runSeq) return
     if (silent && wasAccepted) return // 等待窗口的轮询抖动：保持等待视图，链式下一拍重试
@@ -886,6 +946,20 @@ let summaryLoaded = false
 // P4 安全面摘要：SafetyGate 裁决 + 红队诱饵采纳（/safety 读面；缺席=无裁决案例）
 const safety = ref(null)
 let safetyLoaded = false
+
+// M-d T8 审批链存在性（/approval-chain 读面；404/403=旧后端未部署 → null 隐藏区块，不伪造零值）
+const approvalChain = ref(null)
+let approvalChainLoaded = false
+
+async function loadApprovalChain() {
+  if (approvalChainLoaded) return
+  approvalChainLoaded = true
+  try {
+    approvalChain.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/approval-chain`)
+  } catch {
+    approvalChain.value = null // 接口未部署/不可见：隐藏区块（降级同 safety 面纪律）
+  }
+}
 
 async function loadSafety() {
   if (safetyLoaded) return
@@ -1106,10 +1180,28 @@ async function loadCaseDetail() {
     if (seq !== detailSeq || cid !== detailCaseId) return
     detail.value = d
     detailState.value = 'ok'
+    loadToolSpans(d.linkage?.rcaRunId)
   } catch (e) {
     if (seq !== detailSeq) return
     const st = e?.response?.status
     detailState.value = st === 403 || st === 404 ? 'unavailable' : 'error'
+  }
+}
+
+// M-d T2 工具调用明细：案例关联 rca_run 的工具三要素（/trace-details；缺席如实留空）
+const toolSpans = ref([])
+const toolSpansState = ref('idle') // idle | ok | unavailable
+
+async function loadToolSpans(rcaRunId) {
+  toolSpans.value = []
+  toolSpansState.value = 'idle'
+  if (!rcaRunId) return
+  try {
+    const d = await api(`/rca-runs/${encodeURIComponent(rcaRunId)}/trace-details`)
+    toolSpans.value = d.details ?? []
+    toolSpansState.value = 'ok'
+  } catch {
+    toolSpansState.value = 'unavailable'
   }
 }
 
@@ -1149,6 +1241,13 @@ const evidenceGroups = computed(() => {
     { key: 'undetermined', label: '未决证据', tagType: 'info', items: ev.undetermined ?? [] },
   ]
 })
+
+// 无报告类判定（TIMEOUT_OR_ABSENT/STRUCTURE_REJECTED）的耗时/Token/实际根因"未统计"是口径性无数据，
+// 就近标注原因指向判定说明，避免被读成统计丢失
+const noDataText = computed(() =>
+  ['TIMEOUT_OR_ABSENT', 'STRUCTURE_REJECTED'].includes(detail.value?.verdict)
+    ? '无数据（原因见上方判定说明）'
+    : '未统计')
 
 function applyVerdict() {
   const query = { ...route.query, tab: 'cases' }
@@ -1358,6 +1457,12 @@ onUnmounted(stopAcceptedPoll)
 .cd-loading { height: 240px; }
 .case-detail { display: flex; flex-direction: column; gap: 18px; }
 .cd-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; }
+.cd-verdict-note { margin-bottom: 10px; }
+.ap-chain { margin-top: 12px; padding: 12px 14px; }
+.ap-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); margin-bottom: 8px; }
+.ap-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: var(--fs-body); }
+.ap-arrow { color: var(--ink-2); }
+.ap-note { margin-top: 8px; font-size: var(--fs-aux); }
 .cd-sec-title { font-size: var(--fs-body); font-weight: 600; color: var(--head); margin-bottom: 8px; }
 .si-dv { margin-top: 8px; font-size: var(--fs-aux); }
 .lk-sub { margin-left: 6px; font-size: var(--fs-aux); }

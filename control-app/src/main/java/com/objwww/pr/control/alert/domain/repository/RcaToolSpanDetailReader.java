@@ -27,7 +27,7 @@ public interface RcaToolSpanDetailReader {
      * evidenceRef/evidenceType/evidenceSource = 证据引用（result_ref 为 null 时三值
      * 全 null——调用未产出证据，如 VALIDATE_ONLY 受理或失败调用，如实不造数）。
      */
-    record ToolSpanDetail(UUID invocationId, UUID taskId, long callSeq,
+    record ToolSpanDetail(UUID invocationId, UUID taskId, String toolName, long callSeq,
                           String scopeSummary, String resultSummary,
                           String evidenceRef, String evidenceType, String evidenceSource) {
     }

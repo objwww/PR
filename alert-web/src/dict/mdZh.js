@@ -42,6 +42,16 @@ export const mdZh = {
     discardOk: '已弃稿',
     status: { DRAFT: '起草中', DISCARDED: '已弃稿', APPLIED: '已应用' },
   },
+  toolSpans: {
+    title: '工具调用明细（M-d）',
+    scope: '查询参数面',
+    result: '返回摘要',
+    evidence: '证据引用',
+    hasEvidence: '有证据',
+    noData: '未统计',
+    noEvidence: '本调用未产证据（VALIDATE_ONLY/失败/复用）',
+    unavailable: '工具明细接口未部署或本案例无调查运行，不展示推测内容',
+  },
 }
 
 /** 把握档位中文映射（未知值原样透传——不冒充已知枚举） */
