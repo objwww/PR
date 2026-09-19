@@ -26,6 +26,9 @@ import java.util.Optional;
  *       L 模式 recovery_state 保持 PENDING=恢复未核验，不冒充 VERIFIED）；
  *       run 已终态（崩溃于收尾前）→ 命令按 run 终态对齐 DONE/FAILED；</li>
  *   <li>usage 对账（M3-25）在批件终态后照旧执行，失败不阻断命令收尾。</li>
+ *   <li><b>陈旧自拒</b>（2026-09-17）：{@link WorkerSchemaFreshnessGuard} 每拍前置
+ *       ——镜像迁移面落后于 DB flyway 最大版本则不领取，命令留 PENDING 等新镜像
+ *       接管（47h 旧镜像抢跑新命令、INSERT 撞新 schema 半途失败的实证修复）。</li>
  * </ul>
  */
 public class EvalRunWorker {
@@ -45,6 +48,9 @@ public class EvalRunWorker {
     private final String workerId;
     private final long pollSeconds;
     private final long staleClaimSeconds;
+    private final WorkerSchemaFreshnessGuard freshness;
+    /** 陈旧自拒的日志沿状态翻转落（不每 tick 刷屏） */
+    private boolean staleLogged;
 
     public EvalRunWorker(EvalRunCommandRepository commands,
                          EvalRunRepository evalRuns,
@@ -53,7 +59,8 @@ public class EvalRunWorker {
                          EvalBatchRunner.EvalClock clock,
                          String workerId,
                          long pollSeconds,
-                         long staleClaimSeconds) {
+                         long staleClaimSeconds,
+                         WorkerSchemaFreshnessGuard freshness) {
         this.commands = Objects.requireNonNull(commands);
         this.evalRuns = Objects.requireNonNull(evalRuns);
         this.executor = Objects.requireNonNull(executor);
@@ -62,6 +69,7 @@ public class EvalRunWorker {
         this.workerId = Objects.requireNonNull(workerId);
         this.pollSeconds = pollSeconds;
         this.staleClaimSeconds = staleClaimSeconds;
+        this.freshness = Objects.requireNonNull(freshness);
     }
 
     /** 常驻循环：启动先扫孤儿，之后 领取→执行→收尾→睡 pollSeconds（中断即退） */
@@ -80,6 +88,20 @@ public class EvalRunWorker {
 
     /** 单拍：领取一条 LAUNCH 并执行；true = 本拍有活干（测试面直调） */
     public boolean tick() {
+        if (freshness.stale()) {
+            // 陈旧镜像自拒（WorkerSchemaFreshnessGuard）：不领取，命令留 PENDING 等
+            // 新镜像 worker——判 REJECTED 会永久杀死本属于新 worker 的命令，不可
+            if (!staleLogged) {
+                log.error("eval worker {} schema 落后于 DB（镜像陈旧）：自拒领取，"
+                        + "LAUNCH 留 PENDING 待新镜像接管", workerId);
+                staleLogged = true;
+            }
+            return false;
+        }
+        if (staleLogged) {
+            log.warn("eval worker {} schema 新鲜度恢复，恢复领取", workerId);
+            staleLogged = false;
+        }
         Optional<EvalRunCommand> claimed =
                 commands.claimNextLaunch(workerId, clock.now());
         if (claimed.isEmpty()) {
@@ -88,10 +110,15 @@ public class EvalRunWorker {
         EvalRunCommand command = claimed.get();
         log.warn("eval worker {} 领取 LAUNCH：command={} run={}", workerId,
                 command.id(), command.evalRunId());
+        Instant claimAt = clock.now();
         try {
             EvalBatchRunner.BatchResult result = executor.execute(command);
             reconcileUsage(result.evalRunId());
             commands.finish(command.id(), EvalRunCommand.State.DONE, clock.now());
+            // 批件完成观测面（诊断"批线程无声消失"：有领取无完成 = 线程消失实锤）
+            log.warn("eval worker {} 批件完成: run={} 耗时={}s",
+                    workerId, command.evalRunId(),
+                    clock.now().minusSeconds(claimAt.getEpochSecond()).getEpochSecond());
         } catch (EvalLaunchGate.EvalLaunchUnsupportedException e) {
             // PAGE-03 能力拒绝（领取后复验）：命令 REJECTED 留痕——从未执行（与跑批
             // 失败 FAILED 区分），run 行零落库；旧客户端漏网命令在此收口
