@@ -210,10 +210,9 @@ public class EvalRunnerConfig {
         // P4：SafetyGate 裁决落库面（eval_case_safety，V141）接评分链；
         // P7：LLM-judge 第三判定式（eval_case_judge，V145）——judge 未配置 =
         // fail-closed 不落行（HttpEvalReportJudge 内部 empty），缺席=未评如实；
-        // 证据回退：NATIVE 链过程计数回退 rca_evidence 面（不恒 0）；
+        // 证据回退：NATIVE 链过程计数先回退 rca_evidence 面（evidenceRepository
+        // 自持装配，BA-172）、再回退 rca_tool_invocation 账本，不恒 0；
         // M-d T5：六要素检出版库面（eval_case_six_parts，V152）——缺席=未评如实
-        // NOTE: EvidenceRepository 需 TransactionOperations（事务管理器），eval profile
-        // 暂无——evidence 传 null=工具计数回退不触发，工具调用恒 0（待接线）
         return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSafetySink(jdbc),
@@ -222,7 +221,8 @@ public class EvalRunnerConfig {
                         .PostgresEvalCaseJudgeSink(jdbc),
                 evidence,
                 new com.objwww.pr.control.infrastructure.persistence
-                        .PostgresEvalCaseSixPartsSink(jdbc));
+                        .PostgresEvalCaseSixPartsSink(jdbc),
+                jdbc);
     }
 
     /** P7 LLM-judge（OpenAI 兼容面；195=litellm-am3 代理）。base-url/api-key 缺席 =

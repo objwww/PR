@@ -21,6 +21,7 @@ import com.objwww.pr.control.eval.domain.ScenarioMetrics.ScoringVerdict;
 import com.objwww.pr.control.eval.domain.model.EvalCaseInput;
 import com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink;
 import com.objwww.pr.control.eval.domain.service.SafetyGate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.Duration;
 import java.util.List;
@@ -55,6 +56,7 @@ public class SingleCaseScorer {
     private final com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink;
     private final EvidenceRepository evidence;
     private final com.objwww.pr.control.eval.domain.repository.EvalCaseSixPartsSink sixPartsSink;
+    private final JdbcClient jdbc;
     private final FinalReportSelector selector = new FinalReportSelector();
 
     public SingleCaseScorer(RcaRunRepository runs,
@@ -100,7 +102,7 @@ public class SingleCaseScorer {
                             com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink,
                             EvidenceRepository evidence) {
         this(runs, reports, investigations, toolCalls, evaluator, safetySink, judge,
-                judgeSink, evidence, null);
+                judgeSink, evidence, null, null);
     }
 
     /** M-d T5 全形：六要素检出版库面（V152 eval_case_six_parts；null = 不落，
@@ -114,7 +116,8 @@ public class SingleCaseScorer {
                             com.objwww.pr.control.eval.domain.repository.EvalReportJudge judge,
                             com.objwww.pr.control.eval.domain.repository.EvalCaseJudgeSink judgeSink,
                             EvidenceRepository evidence,
-                            com.objwww.pr.control.eval.domain.repository.EvalCaseSixPartsSink sixPartsSink) {
+                            com.objwww.pr.control.eval.domain.repository.EvalCaseSixPartsSink sixPartsSink,
+                            JdbcClient jdbc) {
         this.runs = Objects.requireNonNull(runs);
         this.reports = Objects.requireNonNull(reports);
         this.investigations = Objects.requireNonNull(investigations);
@@ -125,6 +128,7 @@ public class SingleCaseScorer {
         this.judgeSink = judgeSink;
         this.evidence = evidence;
         this.sixPartsSink = sixPartsSink;
+        this.jdbc = jdbc;
     }
 
     public Optional<EvalCaseResult> score(UUID evalRunId, GoldenCase golden,
@@ -203,6 +207,23 @@ public class SingleCaseScorer {
                         .count();
             } catch (Exception e) {
                 // 证据面读失败（含 digest 校验拒绝）：维持账本计数 0，不伪造
+            }
+        }
+        if (totalCalls == 0 && jdbc != null) {
+            // NATIVE 确定性链写的是 rca_tool_invocation（确定性步骤账本）而非
+            // rca_tool_call（LLM 工具调用账本）——回退读取，出真值不恒 0
+            try {
+                var inv = jdbc.sql("""
+                        SELECT count(*) AS total,
+                               count(DISTINCT tool_name) AS unique_tools
+                          FROM rca_tool_invocation WHERE run_id = :runId
+                        """).param("runId", rcaRunId)
+                        .query((rs, i) -> new long[]{rs.getLong("total"), rs.getLong("unique_tools")})
+                        .single();
+                totalCalls = inv[0];
+                uniqueCalls = inv[1];
+            } catch (Exception ignored) {
+                // 读失败维持 0 如实
             }
         }
         // P3 路径维 + 结论复核维（确定性纯函数；无检查点 → total=null 如实未评）
