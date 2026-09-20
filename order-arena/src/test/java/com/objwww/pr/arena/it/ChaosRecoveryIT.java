@@ -133,6 +133,71 @@ class ChaosRecoveryIT extends ArenaPostgresITBase {
         }
     }
 
+    // ---------- F1 窗口内清偿（FUP-04(a)） ----------
+
+    @Test
+    void F1窗口内清偿_ACTIVE期超宽限重复单即废单_未到宽限与canonical不动() {
+        // 同 intent 三单：canonical（最早，ago=50s）、重复已过宽限（ago=45s > 40s）、
+        // 重复未到宽限（ago=10s < 40s）；ACTIVE 期扫描只清"过宽限的非 canonical"
+        UUID canonical = seedTradeOrder("intent-drain-1", "chaos-f1d-a-1",
+                "CREATED", "NOT_PAY", null, "sku-std", 50);
+        UUID dueDrain = seedTradeOrder("intent-drain-1", "chaos-f1d-b-2",
+                "CREATED", "NOT_PAY", null, "sku-std", 45);
+        UUID notYet = seedTradeOrder("intent-drain-1", "chaos-f1d-c-3",
+                "CREATED", "NOT_PAY", null, "sku-std", 10);
+        UUID liveOrder = seedTradeOrder("intent-drain-live", "live-clean-drain-1",
+                "CREATED", "NOT_PAY", null, "sku-std", 45);
+        seedChaosSession("f1-sc-drain", "F1", "chaos-f1d", "ACTIVE", 1, 600);
+
+        // 清偿宽限注入为 40s（service() 构造同）
+        int drained = service().scanOnce();
+
+        assertThat(drained).isEqualTo(1);
+        assertThat(bookingStatus(dueDrain)).isEqualTo("DISCARDED");
+        assertThat(discardReason(dueDrain)).isEqualTo("F1_DUPLICATE");
+        assertThat(bookingStatus(canonical)).isEqualTo("CREATED"); // canonical 保留
+        assertThat(bookingStatus(notYet)).isEqualTo("CREATED");    // 未到宽限不动
+        assertThat(bookingStatus(liveOrder)).isEqualTo("CREATED"); // live 零污染
+
+        // 窗口内重复单 gauge 语义仍在场：另一 intent 两张刚落的重复单（未到宽限）不动
+        UUID freshA = seedTradeOrder("intent-drain-2", "chaos-f1d-a-4",
+                "CREATED", "NOT_PAY", null, "sku-std", 2);
+        UUID freshB = seedTradeOrder("intent-drain-2", "chaos-f1d-b-5",
+                "CREATED", "NOT_PAY", null, "sku-std", 1);
+        assertThat(service().scanOnce()).isZero();
+        assertThat(bookingStatus(freshA)).isEqualTo("CREATED");
+        assertThat(bookingStatus(freshB)).isEqualTo("CREATED");
+
+        // 幂等：已废单不在重复组，再扫零动作
+        assertThat(service().scanOnce()).isZero();
+    }
+
+    @Test
+    void F1窗口内清偿_RECOVERING兜底_清偿后收口审计如实() {
+        // ACTIVE 期清偿过后，RECOVERING 时重复组已空（被废单不在非废单集合）——
+        // 收口审计如实记 canonical_kept=1, duplicates_compensated=0，会话可闭
+        UUID canonical = seedTradeOrder("intent-drain-3", "chaos-f1e-a-1",
+                "CREATED", "NOT_PAY", null, "sku-std", 50);
+        UUID dueDrain = seedTradeOrder("intent-drain-3", "chaos-f1e-b-2",
+                "CREATED", "NOT_PAY", null, "sku-std", 45);
+        UUID sessionId = seedChaosSession("f1-sc-drain2", "F1", "chaos-f1e", "ACTIVE", 1, 600);
+
+        assertThat(service().scanOnce()).isEqualTo(1); // ACTIVE 期清偿
+        assertThat(bookingStatus(dueDrain)).isEqualTo("DISCARDED");
+
+        adminJdbc.sql("""
+                UPDATE arena.oa_chaos_session SET state = 'RECOVERING',
+                    generation = generation + 1 WHERE id = :id
+                """).param("id", sessionId).update();
+        assertThat(service().scanOnce()).isZero(); // 兜底轮：无剩余可补
+        assertThat(bookingStatus(canonical)).isEqualTo("CREATED");
+        long sessionRecovered = adminJdbc.sql("""
+                SELECT count(*) FROM arena.oa_injection_audit
+                WHERE session_id = :id AND action = 'RECOVERED'
+                """).param("id", sessionId).query(Long.class).single();
+        assertThat(sessionRecovered).isEqualTo(1L);
+    }
+
     // ---------- F2 ----------
 
     @Test

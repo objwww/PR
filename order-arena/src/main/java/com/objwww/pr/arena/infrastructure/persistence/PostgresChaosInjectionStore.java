@@ -147,6 +147,44 @@ public class PostgresChaosInjectionStore {
                 .list();
     }
 
+    /**
+     * FUP-04(a) 窗口内清偿面：非 canonical 重复单中已 CREATED 超过 graceSeconds 的行
+     * （仅 chaos- 流量、会话 target 圈定）。F1 ACTIVE 期间按此提前废单——
+     * F1 症状（重复单 gauge）在宽限窗内照常在场，卡单 gauge（CREATED 停留超
+     * stuck 阈值）不再被 F1 副作用点火（195 实证：S3 会话 TTL 1260s ≫ 阈值 60s，
+     * 副作用卡单曾把 F3 症状点亮整窗，跨场景污染源）。
+     */
+    public List<DuplicateRow> findF1YoungDuplicates(String target, int graceSeconds) {
+        return jdbc.sql("""
+                WITH ranked AS (
+                    SELECT t.id, t.intent_id, t.booking_status, t.pay_status, t.correlation_id,
+                           row_number() OVER (PARTITION BY t.intent_id
+                                              ORDER BY t.created_at, t.id) AS rn
+                    FROM arena.oa_trade_order t
+                    WHERE t.booking_status <> 'DISCARDED'
+                      AND t.correlation_id LIKE 'chaos-%'
+                      AND (:target IS NULL OR t.correlation_id LIKE :target || '%')
+                )
+                SELECT r.id, r.intent_id, r.booking_status, r.pay_status, r.rn
+                FROM ranked r
+                JOIN (SELECT intent_id FROM ranked GROUP BY intent_id HAVING count(*) > 1) d
+                  ON d.intent_id = r.intent_id
+                WHERE r.rn > 1
+                  AND r.booking_status = 'CREATED'
+                  AND EXISTS (SELECT 1 FROM arena.oa_trade_order t2
+                               WHERE t2.id = r.id
+                                 AND t2.created_at < now() - make_interval(secs => :grace))
+                ORDER BY r.intent_id, r.rn
+                """).param("target", target).param("grace", graceSeconds)
+                .query((rs, i) -> new DuplicateRow(
+                        UUID.fromString(rs.getString("id")),
+                        rs.getString("intent_id"),
+                        rs.getString("booking_status"),
+                        rs.getString("pay_status"),
+                        false))
+                .list();
+    }
+
     // ---------- M-a 业务族恢复（C-4 同生共死：注入工件清除/跳过步骤重放） ----------
     //
     // 恢复语义与探测面（PostgresProbeStore）逐条对偶——修复判定 = 症状判定（同一事实谓词

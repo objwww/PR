@@ -21,9 +21,14 @@ import java.util.function.ToIntFunction;
 /**
  * 恢复驱动（M2-18/19，arena 侧扫描循环每轮调用 {@link #scanOnce}）：
  * <ul>
+ *   <li>ACTIVE F1 → 窗口内清偿（FUP-04(a)）：非 canonical 重复 CREATED 单超过
+ *       清偿宽限（默认 40s &lt; 卡单阈值 60s）即走正常业务路径废单——F1 症状
+ *       （重复单 gauge）在宽限窗内照常在场供调查，卡单 gauge（F3 症状）不再被
+ *       副作用点火（195 实证：S3 TTL 1260s ≫ 阈值 60s，副作用曾点亮 F3 整窗）；</li>
  *   <li>ACTIVE F2 → 逐单回跳注入（审计幂等锚防重）；</li>
  *   <li>RECOVERING F1 → 重复单分析（canonical=最早保留），其余走正常业务路径
- *       废单/退款+补偿（live 零污染：只碰 chaos- 关联）；</li>
+ *       废单/退款+补偿（live 零污染：只碰 chaos- 关联）——含窗口内清偿的兜底
+ *       （收口前最后一次全量补偿，此时不计宽限）；</li>
  *   <li>RECOVERING F2 → 事实驱动恢复（C-4：事实未变才回写）；</li>
  *   <li>RECOVERING F3 → 对账欠账清零后落会话级 RECOVERED 审计
  *       （对账本体在 F3ReconcileService，此处只收口）。</li>
@@ -48,6 +53,7 @@ public class ChaosRecoveryService {
     private final F3ReconcileService f3Reconcile;
     private final int f2Batch;
     private final int stuckThresholdSeconds;
+    private final int f1DrainGraceSeconds;
 
     public ChaosRecoveryService(ChaosSwitchboard switchboard,
                                 PostgresChaosInjectionStore injectionStore,
@@ -58,6 +64,20 @@ public class ChaosRecoveryService {
                                 F3ReconcileService f3Reconcile,
                                 int f2Batch,
                                 int stuckThresholdSeconds) {
+        this(switchboard, injectionStore, tradeOrders, payments, steps, refundChain,
+                f3Reconcile, f2Batch, stuckThresholdSeconds, 40);
+    }
+
+    public ChaosRecoveryService(ChaosSwitchboard switchboard,
+                                PostgresChaosInjectionStore injectionStore,
+                                TradeOrderRepository tradeOrders,
+                                PaymentRecordRepository payments,
+                                OrderCreationSteps steps,
+                                RefundChainService refundChain,
+                                F3ReconcileService f3Reconcile,
+                                int f2Batch,
+                                int stuckThresholdSeconds,
+                                int f1DrainGraceSeconds) {
         this.switchboard = switchboard;
         this.injectionStore = injectionStore;
         this.tradeOrders = tradeOrders;
@@ -67,6 +87,7 @@ public class ChaosRecoveryService {
         this.f3Reconcile = f3Reconcile;
         this.f2Batch = f2Batch;
         this.stuckThresholdSeconds = stuckThresholdSeconds;
+        this.f1DrainGraceSeconds = f1DrainGraceSeconds;
     }
 
     /** @return 本轮注入/恢复动作数（取证/节奏观察用） */
@@ -146,6 +167,24 @@ public class ChaosRecoveryService {
     }
 
     private int handleF1(ChaosSwitchboard.SessionView session) {
+        if ("ACTIVE".equals(session.state())) {
+            // FUP-04(a) 窗口内清偿：非 canonical 重复 CREATED 单超宽限即废单（正常业务
+            // 路径，live 零污染）。宽限 < 卡单阈值 ⇒ 卡单 gauge 不被 F1 副作用点火；
+            // 重复单 gauge 在宽限窗内照常在场（F1 症状可观测面不受损）。
+            // 幂等：已 DISCARDED 的重复单不在 findF1YoungDuplicates 的重复组里，天然不重付。
+            List<DuplicateRow> due = injectionStore.findF1YoungDuplicates(
+                    session.target(), f1DrainGraceSeconds);
+            int drained = 0;
+            for (DuplicateRow row : due) {
+                compensateDuplicate(row);
+                drained++;
+            }
+            if (drained > 0) {
+                log.info("F1 窗口内清偿: scenario={} 宽限={}s 废单={}",
+                        session.scenarioId(), f1DrainGraceSeconds, drained);
+            }
+            return drained;
+        }
         if (!"RECOVERING".equals(session.state())) {
             return 0; // ACTIVE F1 无注入动作（注入点在幂等跳过，create 时已生效）
         }

@@ -207,11 +207,16 @@ public class ArenaConfig {
             F3ReconcileService f3Reconcile,
             @Value("${app.arena.chaos.f2-batch:16}") int f2Batch,
             @Value("${app.arena.probe.stuck-threshold-seconds:60}")
-            int stuckThresholdSeconds) {
+            int stuckThresholdSeconds,
+            @Value("${app.arena.chaos.f1-drain-grace-seconds:40}")
+            int f1DrainGraceSeconds) {
         // stuck 阈值与 DomainProbe 同源：F10 置 UNKNOWN / F17 履约收口的"超龄"判定
         // 必须与探测面一致，保证修复跑完即探测归零
+        // F1 清偿宽限（FUP-04(a)）必须 < stuck 阈值：副作用重复 CREATED 单在越过
+        // 卡单阈值前即被废单，F3 症状 gauge 不被点火；默认 40s 留 20s 余量
         return new ChaosRecoveryService(switchboard, injectionStore, tradeOrders, payments,
-                steps, refundChain, f3Reconcile, f2Batch, stuckThresholdSeconds);
+                steps, refundChain, f3Reconcile, f2Batch, stuckThresholdSeconds,
+                f1DrainGraceSeconds);
     }
 
     @Bean
