@@ -220,7 +220,7 @@ public class EvalRunnerConfig {
                 judge,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseJudgeSink(jdbc),
-                null,
+                evidence,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSixPartsSink(jdbc));
     }
