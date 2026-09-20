@@ -21,6 +21,8 @@ import com.objwww.pr.control.eval.domain.ScenarioMetrics.ScoringVerdict;
 import com.objwww.pr.control.eval.domain.model.EvalCaseInput;
 import com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink;
 import com.objwww.pr.control.eval.domain.service.SafetyGate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.time.Duration;
@@ -44,6 +46,7 @@ import java.util.UUID;
 public class SingleCaseScorer {
 
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final Logger log = LoggerFactory.getLogger(SingleCaseScorer.class);
 
     private final RcaRunRepository runs;
     private final RcaReportRepository reports;
@@ -206,7 +209,9 @@ public class SingleCaseScorer {
                         .distinct()
                         .count();
             } catch (Exception e) {
-                // 证据面读失败（含 digest 校验拒绝）：维持账本计数 0，不伪造
+                // 证据面读失败（含 digest 校验拒绝）：维持账本计数 0，不伪造；
+                // 但必须留痕——p8 实证 GRANT 缺失时这里静默吞成 0（假面路线）
+                log.warn("eval 工具计数证据面回退读失败 run={}：{}", rcaRunId, e.toString());
             }
         }
         if (totalCalls == 0 && jdbc != null) {
@@ -222,8 +227,9 @@ public class SingleCaseScorer {
                         .single();
                 totalCalls = inv[0];
                 uniqueCalls = inv[1];
-            } catch (Exception ignored) {
-                // 读失败维持 0 如实
+            } catch (Exception e) {
+                // 读失败维持 0 如实，但留痕（p8：eval_app 缺 SELECT 授权曾静默归零）
+                log.warn("eval 工具计数 invocation 账本回退读失败 run={}：{}", rcaRunId, e.toString());
             }
         }
         // P3 路径维 + 结论复核维（确定性纯函数；无检查点 → total=null 如实未评）
