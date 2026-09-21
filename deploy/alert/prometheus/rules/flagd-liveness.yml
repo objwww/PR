@@ -1,0 +1,63 @@
+# BA-193 flagd 活性告警（2026-09-19 立案：195 真机 flagd 内存顶限 88%（65.9MiB/75MiB）
+# 后僵死——进程在、gRPC 不服务→payment 扣款卡在旗标求值→checkout 100% 失败、烧损告警
+# 烧 4 小时无人知；docker restart flagd 后立即恢复 8/8 单 2 秒全过。采集面必须纳入告警环）。
+#
+# 序列实测状态（2026-09-20 195 健康窗实测定稿，全部有实证）：
+#   - 端口：flagd:8014/metrics 实测可用——健康时首字节 0.09s；内存顶到 96%
+#     （71.98MiB/75MiB）时同一请求 21s 才出首字节，响应劣化本身即僵死前兆。
+#   - 求值指标实名：feature_flag_flagd_impression_total（按 flag key/reason/variant
+#     打标签，本栈 OTel instrumentation 形态）；官方旧名 flagd_evalution_reason_total
+#     在本版本 /metrics 全量中不存在。另有 feature_flag_flagd_result_reason_total 同义可用。
+#   - 内存指标：prometheus 无 cAdvisor job（195 实测无 cadvisor 容器、宿主 8080 无
+#     cAdvisor），改用 flagd 自身 /metrics 的 process_resident_memory_bytes（RSS），
+#     天然带 job="flagd" 标签，无需引入 cAdvisor。
+#   - 容器限额：docker inspect flagd HostConfig.Memory=78643200（75MiB）2026-09-20
+#     实证；compose 改限额时必须同步本文件阈值。
+groups:
+  - name: flagd-liveness
+    rules:
+      # flagd DOWN（page）：scrape 连续失败 1m——僵死/OOM/崩溃形态，payment 旗标求值
+      # 断供即 checkout 全败（与 BA-189 OtelCollectorDown 同构）
+      - alert: FlagdDown
+        expr: up{job="flagd"} == 0
+        for: 1m
+        labels:
+          severity: page
+          owner: am0
+          category: availability
+        annotations:
+          summary: "flagd 旗标服务失联（page）"
+          description: "prometheus 对 flagd metrics 口抓取连续失败 1m。2026-09-19 实证形态：内存顶限后进程在但 gRPC 不服务，payment 扣款卡在旗标求值→checkout 100% 失败。立即 docker restart flagd（上次 restart 后 8/8 单 2 秒全过），并复核容器内存限额水位。"
+
+      # flagd 内存逼近容器限额（warning）：RSS 超限额 75MiB 的 85%（=63.75MiB）
+      # 持续 5m——顶限僵死前兆。限额 75MiB 来源=195 docker inspect 实证 2026-09-20
+      # （HostConfig.Memory=78643200）；compose 改限额时必须同步本阈值。
+      # 2026-09-20 实证前兆形态：RSS 96% 时 /metrics 首字节从 0.09s 劣化到 21s。
+      - alert: FlagdMemoryNearLimit
+        expr: process_resident_memory_bytes{job="flagd"} > 0.85*75*1024*1024
+        for: 5m
+        labels:
+          severity: warning
+          owner: am0
+          category: capacity
+        annotations:
+          summary: "flagd 内存逼近容器限额（warning）"
+          description: "flagd RSS={{ $value | humanize1024 }}B，超容器限额 75MiB 的 85% 且持续 5m。2026-09-19 实证：顶到 88% 后进程僵死、gRPC 断供；2026-09-20 实证 RSS 96% 时 /metrics 响应劣化 200 倍。应在 Down 前介入——预防性 docker restart flagd（重启后 8/8 单 2 秒全过），并复核 compose 内存限额。"
+
+      # 旗标求值断流（ticket）：scrape 正常但求值速率 5m 归零且持续 10m——进程活着
+      # 但不干活的僵死形态（与 BA-189 OtelCollectorPipelineStall 同构；load-generator
+      # 24/7 走 checkout 路径，求值速率恒正，归零不可能是业务静默）。
+      # 指标名 2026-09-20 195 实测定稿：feature_flag_flagd_impression_total
+      # （本栈 OTel instrumentation 形态；官方旧名 flagd_evalution_reason_total 不存在）。
+      - alert: FlagdEvaluationStall
+        expr: >-
+          sum(rate(feature_flag_flagd_impression_total[5m])) == 0
+          and on() up{job="flagd"} == 1
+        for: 10m
+        labels:
+          severity: ticket
+          owner: am0
+          category: availability
+        annotations:
+          summary: "flagd 旗标求值断流（ticket）"
+          description: "flagd scrape 正常但求值计数速率 5m 归零且持续 10m——进程活着但旗标不求值（僵死形态）。load-generator 全天候有真实流量，速率归零不可能是业务静默。指标名已经 195 /metrics 实测定稿（feature_flag_flagd_impression_total）。"

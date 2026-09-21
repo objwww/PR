@@ -1,0 +1,1189 @@
+{
+  "version": "synthetic-demo-v1",
+  "synthetic": true,
+  "description": "仅验证页面、跑批和统计。DEMO 规则识别“故障线索”，特意把部分线索放在窗口后；绝不代表真实 Jev 效果。",
+  "cases": [
+    {
+      "case_id": "db-pool",
+      "cluster_id": "synthetic-incident-1",
+      "objective": "诊断本次 checkout 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "db-pool-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "db-pool-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-symptoms",
+          "text": "故障线索：当前服务出现请求超时和连接池耗尽。",
+          "required": false
+        },
+        {
+          "id": "db-pool-cause",
+          "text": "故障线索：组件 checkout 的监控和变更记录交叉确认，故障类型 RESOURCE_EXHAUSTED，原因代码 POOL_LIMIT。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "db-pool-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_0_A",
+          "SYM_0_B"
+        ],
+        "evidence_ids": [
+          "db-pool-symptoms",
+          "db-pool-cause"
+        ],
+        "root_cause": {
+          "component": "checkout",
+          "fault_type": "RESOURCE_EXHAUSTED",
+          "reason_code": "POOL_LIMIT"
+        }
+      }
+    },
+    {
+      "case_id": "cpu-hot",
+      "cluster_id": "synthetic-incident-2",
+      "objective": "诊断本次 payment 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "cpu-hot-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "cpu-hot-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-symptoms",
+          "text": "故障线索：当前服务出现响应缓慢和CPU 饱和。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-cause",
+          "text": "故障线索：组件 payment 的监控和变更记录交叉确认，故障类型 OVERLOAD，原因代码 CPU_SATURATION。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "cpu-hot-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_1_A",
+          "SYM_1_B"
+        ],
+        "evidence_ids": [
+          "cpu-hot-symptoms",
+          "cpu-hot-cause"
+        ],
+        "root_cause": {
+          "component": "payment",
+          "fault_type": "OVERLOAD",
+          "reason_code": "CPU_SATURATION"
+        }
+      }
+    },
+    {
+      "case_id": "disk-full",
+      "cluster_id": "synthetic-incident-3",
+      "objective": "诊断本次 order-db 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "disk-full-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "disk-full-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-symptoms",
+          "text": "故障线索：当前服务出现写入失败和磁盘写满。",
+          "required": false
+        },
+        {
+          "id": "disk-full-cause",
+          "text": "故障线索：组件 order-db 的监控和变更记录交叉确认，故障类型 STORAGE，原因代码 DISK_FULL。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "disk-full-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_2_A",
+          "SYM_2_B"
+        ],
+        "evidence_ids": [
+          "disk-full-symptoms",
+          "disk-full-cause"
+        ],
+        "root_cause": {
+          "component": "order-db",
+          "fault_type": "STORAGE",
+          "reason_code": "DISK_FULL"
+        }
+      }
+    },
+    {
+      "case_id": "retry-storm",
+      "cluster_id": "synthetic-incident-4",
+      "objective": "诊断本次 gateway 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "retry-storm-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "retry-storm-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-symptoms",
+          "text": "故障线索：当前服务出现请求放大和重试风暴。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-cause",
+          "text": "故障线索：组件 gateway 的监控和变更记录交叉确认，故障类型 OVERLOAD，原因代码 RETRY_AMPLIFICATION。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "retry-storm-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_3_A",
+          "SYM_3_B"
+        ],
+        "evidence_ids": [
+          "retry-storm-symptoms",
+          "retry-storm-cause"
+        ],
+        "root_cause": {
+          "component": "gateway",
+          "fault_type": "OVERLOAD",
+          "reason_code": "RETRY_AMPLIFICATION"
+        }
+      }
+    },
+    {
+      "case_id": "lock-wait",
+      "cluster_id": "synthetic-incident-5",
+      "objective": "诊断本次 inventory 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "lock-wait-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "lock-wait-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-symptoms",
+          "text": "故障线索：当前服务出现事务阻塞和锁等待。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-cause",
+          "text": "故障线索：组件 inventory 的监控和变更记录交叉确认，故障类型 CONTENTION，原因代码 LOCK_WAIT。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "lock-wait-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_4_A",
+          "SYM_4_B"
+        ],
+        "evidence_ids": [
+          "lock-wait-symptoms",
+          "lock-wait-cause"
+        ],
+        "root_cause": {
+          "component": "inventory",
+          "fault_type": "CONTENTION",
+          "reason_code": "LOCK_WAIT"
+        }
+      }
+    },
+    {
+      "case_id": "network-drop",
+      "cluster_id": "synthetic-incident-6",
+      "objective": "诊断本次 network 告警。",
+      "protected_context": "合成演示。时间窗 2026-09-20T00:00:00Z 至 00:15:00Z；租户 DEMO；只读诊断，不执行任何操作。",
+      "symptom_catalog": {
+        "SYM_0_A": "请求超时",
+        "SYM_0_B": "连接池耗尽",
+        "SYM_1_A": "响应缓慢",
+        "SYM_1_B": "CPU 饱和",
+        "SYM_2_A": "写入失败",
+        "SYM_2_B": "磁盘写满",
+        "SYM_3_A": "请求放大",
+        "SYM_3_B": "重试风暴",
+        "SYM_4_A": "事务阻塞",
+        "SYM_4_B": "锁等待",
+        "SYM_5_A": "连接失败",
+        "SYM_5_B": "丢包"
+      },
+      "root_cause_catalog": {
+        "component": [
+          "checkout",
+          "payment",
+          "order-db",
+          "gateway",
+          "inventory",
+          "network"
+        ],
+        "fault_type": [
+          "RESOURCE_EXHAUSTED",
+          "OVERLOAD",
+          "STORAGE",
+          "CONTENTION",
+          "CONNECTIVITY"
+        ],
+        "reason_code": [
+          "POOL_LIMIT",
+          "CPU_SATURATION",
+          "DISK_FULL",
+          "RETRY_AMPLIFICATION",
+          "LOCK_WAIT",
+          "PACKET_LOSS"
+        ]
+      },
+      "evidence": [
+        {
+          "id": "network-drop-boundary",
+          "text": "反证及边界：数据库复制延迟正常；仅分析本次事件，禁止执行回滚或发布。",
+          "required": true
+        },
+        {
+          "id": "network-drop-noise-1",
+          "text": "较新记录 1：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-2",
+          "text": "较新记录 2：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-3",
+          "text": "较新记录 3：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-4",
+          "text": "较新记录 4：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-5",
+          "text": "较新记录 5：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-6",
+          "text": "较新记录 6：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-7",
+          "text": "较新记录 7：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-8",
+          "text": "较新记录 8：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-9",
+          "text": "较新记录 9：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-10",
+          "text": "较新记录 10：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-11",
+          "text": "较新记录 11：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-12",
+          "text": "较新记录 12：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-13",
+          "text": "较新记录 13：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-14",
+          "text": "较新记录 14：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-15",
+          "text": "较新记录 15：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-16",
+          "text": "较新记录 16：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-17",
+          "text": "较新记录 17：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-18",
+          "text": "较新记录 18：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-19",
+          "text": "较新记录 19：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-20",
+          "text": "较新记录 20：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-21",
+          "text": "较新记录 21：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-22",
+          "text": "较新记录 22：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-symptoms",
+          "text": "故障线索：当前服务出现连接失败和丢包。",
+          "required": false
+        },
+        {
+          "id": "network-drop-cause",
+          "text": "故障线索：组件 network 的监控和变更记录交叉确认，故障类型 CONNECTIVITY，原因代码 PACKET_LOSS。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-23",
+          "text": "较新记录 23：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        },
+        {
+          "id": "network-drop-noise-24",
+          "text": "较新记录 24：帮助中心页面静态资源访问成功，属于另一服务，没有异常。",
+          "required": false
+        }
+      ],
+      "gold": {
+        "symptom_codes": [
+          "SYM_5_A",
+          "SYM_5_B"
+        ],
+        "evidence_ids": [
+          "network-drop-symptoms",
+          "network-drop-cause"
+        ],
+        "root_cause": {
+          "component": "network",
+          "fault_type": "CONNECTIVITY",
+          "reason_code": "PACKET_LOSS"
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,10 @@
 package com.objwww.pr.control.infrastructure.mcp;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.objwww.pr.control.alert.application.mcp.McpMountManager;
+import com.objwww.pr.control.alert.application.mcp.McpServerClient;
+import com.objwww.pr.control.alert.application.mcp.McpTestFixtures;
+import com.objwww.pr.control.alert.domain.mcp.McpServerRegistryRepository;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
@@ -165,5 +169,151 @@ class En06McpSdkSpikeTest {
         // 在 McpMountManagerTest 用可注入端口钉，此处只钉 SDK 挂点真实存在）。
         assertThat(toolsChangeEvents).isEmpty();
         assertThat(spike.listTools()).isNotNull();
+    }
+
+    // ------------------------------------------------------------ D02：SDK 边界映射面
+
+    private McpServerClient sdkAdapter() {
+        return new SdkMcpServerClientFactory(Duration.ofSeconds(5), Duration.ofSeconds(2))
+                .create(new McpServerRegistryRepository.ServerSpec("wire", "streamable_http",
+                        WIREMOCK.baseUrl() + "/mcp", List.of(), null, true));
+    }
+
+    private void stubCallResult(String toolName, String resultJson) {
+        WIREMOCK.stubFor(post(urlEqualTo("/mcp")).atPriority(1)
+                .withRequestBody(matchingJsonPath(
+                        "$[?(@.method == 'tools/call' && @.params.name == '" + toolName + "')]"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("{\"jsonrpc\":\"2.0\",\"id\":\"{{jsonPath request.body '$.id'}}\","
+                                + "\"result\":" + resultJson + "}")));
+    }
+
+    @Test
+    @DisplayName("MCP-01/04（SDK 面）D02-2：structured-only 完整传出、多文本块 \\n 分隔、仅图像显式登记不支持类型")
+    void sdkAdapterMapsStructuredTextSeparatorAndUnsupportedContent() throws Exception {
+        stubCallResult("structured_tool",
+                "{\"content\":[],\"structuredContent\":{\"count\":3},\"isError\":false}");
+        stubCallResult("multi_text",
+                "{\"content\":[{\"type\":\"text\",\"text\":\"a\"},{\"type\":\"text\",\"text\":\"b\"}],"
+                        + "\"isError\":false}");
+        stubCallResult("image_only",
+                "{\"content\":[{\"type\":\"image\",\"data\":\"aGk=\",\"mimeType\":\"image/png\"}],"
+                        + "\"isError\":false}");
+        McpServerClient adapter = sdkAdapter();
+        adapter.connect();
+
+        McpServerClient.McpToolResult structured = adapter.callTool("structured_tool", Map.of());
+        assertThat(structured.structuredPresent()).isTrue();
+        assertThat(structured.structuredContent()).containsEntry("count", 3);
+        assertThat(structured.textContent()).isNull();
+        assertThat(structured.malformed()).as("structured-only 合法，不当畸形").isFalse();
+
+        McpServerClient.McpToolResult multiText = adapter.callTool("multi_text", Map.of());
+        assertThat(multiText.textContent()).as("文本块按显式分隔符组合").isEqualTo("a\nb");
+
+        McpServerClient.McpToolResult imageOnly = adapter.callTool("image_only", Map.of());
+        assertThat(imageOnly.malformed()).isFalse();
+        assertThat(imageOnly.unsupportedContentTypes())
+                .as("不支持类型显式登记，不吞掉不 NPE").containsExactly("image");
+        adapter.close();
+    }
+
+    @Test
+    @DisplayName("MCP-04（SDK 面）D02-2：null content 在 SDK 边界归一化——畸形判定，不发生未分类 NPE")
+    void sdkAdapterNormalizesNullContentAtBoundary() throws Exception {
+        stubCallResult("null_content", "{\"isError\":false}");
+        McpServerClient adapter = sdkAdapter();
+        adapter.connect();
+
+        McpServerClient.McpToolResult result = adapter.callTool("null_content", Map.of());
+
+        assertThat(result.malformed()).as("零文本零结构=畸形（不因 HTTP200 记成功）").isTrue();
+        adapter.close();
+    }
+
+    @Test
+    @DisplayName("D02-4：outputSchema 从工具发现映射进受控注册信息（ToolDescriptor）")
+    void listToolsMapsOutputSchemaIntoToolDescriptor() throws Exception {
+        WIREMOCK.stubFor(post(urlEqualTo("/mcp")).atPriority(1)
+                .withRequestBody(matchingJsonPath("$[?(@.method == 'tools/list')]"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("""
+                                {"jsonrpc":"2.0","id":"{{jsonPath request.body '$.id'}}",
+                                 "result":{"tools":[
+                                   {"name":"get_alerts","description":"list firing alerts",
+                                    "inputSchema":{"type":"object","properties":{},"required":[]},
+                                    "outputSchema":{"type":"object","required":["count"]}}]}}""")));
+        McpServerClient adapter = sdkAdapter();
+        adapter.connect();
+
+        List<McpServerClient.ToolDescriptor> tools = adapter.listTools();
+
+        assertThat(tools).hasSize(1);
+        assertThat(tools.get(0).outputSchema())
+                .containsEntry("type", "object")
+                .containsEntry("required", List.of("count"));
+        adapter.close();
+    }
+
+    @Test
+    @DisplayName("MCP-07/D02-6 接线核验：真实 SDK 收到 list_changed → McpMountManager.onToolsChanged 重检换快照")
+    void toolsListChangedFromSdkTriggersManagerRevalidation() {
+        // tools/list 场景化：首次（挂载校验）v1，其后（通知触发的重检）v2
+        WIREMOCK.stubFor(post(urlEqualTo("/mcp")).atPriority(1)
+                .inScenario("tools-changed")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .withRequestBody(matchingJsonPath("$[?(@.method == 'tools/list')]"))
+                .willSetStateTo("v2")
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("""
+                                {"jsonrpc":"2.0","id":"{{jsonPath request.body '$.id'}}",
+                                 "result":{"tools":[
+                                   {"name":"tool_v1","description":"v1",
+                                    "inputSchema":{"type":"object","properties":{},"required":[]}}]}}""")));
+        WIREMOCK.stubFor(post(urlEqualTo("/mcp")).atPriority(2)
+                .inScenario("tools-changed")
+                .whenScenarioStateIs("v2")
+                .withRequestBody(matchingJsonPath("$[?(@.method == 'tools/list')]"))
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("""
+                                {"jsonrpc":"2.0","id":"{{jsonPath request.body '$.id'}}",
+                                 "result":{"tools":[
+                                   {"name":"tool_v2","description":"v2",
+                                    "inputSchema":{"type":"object","properties":{},"required":[]}}]}}""")));
+        // 服务端→客户端 SSE 通知面：挂载完成后送达 list_changed（延迟避开挂载竞窗）
+        WIREMOCK.stubFor(get(urlEqualTo("/mcp")).atPriority(1)
+                .willReturn(aResponse().withStatus(200)
+                        .withHeader("Content-Type", "text/event-stream")
+                        .withHeader("Mcp-Session-Id", "spike-session-1")
+                        .withFixedDelay(2_000)
+                        .withBody("event: message\n"
+                                + "data: {\"jsonrpc\":\"2.0\","
+                                + "\"method\":\"notifications/tools/list_changed\"}\n\n")));
+
+        var registry = new McpTestFixtures.MemRegistry();
+        McpMountManager manager = new McpMountManager(registry,
+                new SdkMcpServerClientFactory(Duration.ofSeconds(10), Duration.ofSeconds(2)),
+                java.time.Clock.systemUTC(), Duration.ofMinutes(5), 2, java.util.Set.of());
+        manager.register("wire", "streamable_http", WIREMOCK.baseUrl() + "/mcp", List.of(), null);
+        assertThat(manager.snapshot().servers().get("wire").tools())
+                .extracting(McpServerClient.ToolDescriptor::name)
+                .as("挂载校验后 v1 schema 在快照").containsExactly("tool_v1");
+
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(20))
+                .pollInterval(Duration.ofMillis(200))
+                .untilAsserted(() -> assertThat(
+                        manager.snapshot().servers().get("wire").tools())
+                        .extracting(McpServerClient.ToolDescriptor::name)
+                        .as("真实 SDK 通知 → onToolsChanged → 受控重校验后 v2 schema 生效")
+                        .containsExactly("tool_v2"));
+        manager.deregister("wire", Duration.ofMillis(200));
     }
 }

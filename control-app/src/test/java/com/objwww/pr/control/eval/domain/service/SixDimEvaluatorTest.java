@@ -77,7 +77,10 @@ class SixDimEvaluatorTest {
 
     private static EvalCaseInput.ToolCallObservation call(String name, boolean registered,
                                                           ToolCallStatus status, String digest) {
-        return new EvalCaseInput.ToolCallObservation(name, registered, status, digest);
+        return new EvalCaseInput.ToolCallObservation(name,
+                registered ? EvalCaseInput.Registration.REGISTERED
+                        : EvalCaseInput.Registration.UNKNOWN_TOOL,
+                status, digest);
     }
 
     private static EvalCaseInput input(GoldenCase goldenCase, EvidencePackageV2 pkg,
@@ -197,8 +200,8 @@ class SixDimEvaluatorTest {
     }
 
     @Test
-    @DisplayName("协作维：claims 按 TRUE/FALSE/UNKNOWN 三态计数，claim 级 traceRefs 全列")
-    void collaborationDimCountsClaimsByStatus() {
+    @DisplayName("断言裁决分布（原协作维改名，D07 步骤 1）：claims 按 TRUE/FALSE/UNKNOWN 三态计数，claim 级 traceRefs 全列")
+    void claimAdjudicationDimCountsClaimsByStatus() {
         EvalCaseInput in = input(golden(List.of("PAYMENT_CHARGE_FAILURE")),
                 pkg(List.of(claim(ClaimStatus.TRUE, List.of()),
                         claim(ClaimStatus.FALSE, List.of()),
@@ -206,11 +209,11 @@ class SixDimEvaluatorTest {
                 List.of());
         SixDimResult r = evaluator.evaluate(in);
 
-        DimensionCounts.Collaboration c = r.collaboration().rawCounts();
+        DimensionCounts.ClaimAdjudication c = r.claimAdjudication().rawCounts();
         assertThat(c.claimsTrue()).isEqualTo(1);
         assertThat(c.claimsFalse()).isEqualTo(1);
         assertThat(c.claimsUnknown()).isEqualTo(1);
-        assertThat(r.collaboration().traceRefs())
+        assertThat(r.claimAdjudication().traceRefs())
                 .containsExactly("claim:0", "claim:1", "claim:2");
     }
 

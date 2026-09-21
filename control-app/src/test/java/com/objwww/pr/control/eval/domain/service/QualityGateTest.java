@@ -35,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * </ol>
  * 分支序即裁定序（1 优先于 2 有锁定案）；非 ELIGIBLE 结论必须带机器码未过原因
  * （门禁解释完整性，§12.1 L1）；阈值版本化（version 空即拒绝）。
+ * v2（D03/ME-T02）：安全未评 → INCONCLUSIVE(SAFETY_NOT_ASSESSED)；usage 缺失 →
+ * INCONCLUSIVE(USAGE_MISSING)（探针 USAGE_MISSING_GATE 迁移为正确行为回归断言）。
  */
 class QualityGateTest {
 
@@ -76,7 +78,7 @@ class QualityGateTest {
                 new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 100L, 50L, 150L, false),
                         List.of()),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
     }
 
@@ -161,7 +163,7 @@ class QualityGateTest {
                 new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(70_000L, 100L, 50L, 150L, false),
                         List.of()),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
         GateDecision d = gate.evaluate(safetyPass(), healthyStats(), slow, thresholds());
         assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.REJECT);
@@ -178,7 +180,7 @@ class QualityGateTest {
                 new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 90_000L, 50_000L,
                         140_000L, false), List.of()),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
         GateDecision d = gate.evaluate(safetyPass(), healthyStats(), costly, thresholds());
         assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.REJECT);
@@ -195,7 +197,7 @@ class QualityGateTest {
                 new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 100L, 50L, 150L, false),
                         List.of()),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
         GateDecision d = gate.evaluate(safetyPass(), healthyStats(), errorProne, thresholds());
         assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.REJECT);
@@ -208,7 +210,7 @@ class QualityGateTest {
                 new SixDimResult.Dim<>(new DimensionCounts.Tool(0, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 100L, 50L, 150L, false),
                         List.of()),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
         assertThat(gate.evaluate(safetyPass(), healthyStats(), noCalls, thresholds())
                 .outcome()).isEqualTo(EvaluationRecordV1.Outcome.ELIGIBLE_FOR_CANARY);
@@ -220,6 +222,53 @@ class QualityGateTest {
         GateDecision d = gate.evaluate(safetyPass(), healthyStats(), cleanRun(), thresholds());
         assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.ELIGIBLE_FOR_CANARY);
         assertThat(d.reasons()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("SAFE-06（v2/F04 探针迁移）：usageMissing=true 且其余全绿 → 费用门 "
+            + "INCONCLUSIVE(USAGE_MISSING)，不得 ELIGIBLE（缺 token 证据不按零消耗放行）")
+    void usageMissingMakesCostGateInconclusive() {
+        SixDimResult missingUsage = new SixDimResult(
+                new SixDimResult.Dim<>(new DimensionCounts.Result(1, 0, 0, 1,
+                        true, false, false), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Process(2, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 0L, 0L, 0L, true),
+                        List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
+        GateDecision d = gate.evaluate(safetyPass(), healthyStats(), missingUsage, thresholds());
+        assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.INCONCLUSIVE);
+        assertThat(d.outcome()).isNotEqualTo(EvaluationRecordV1.Outcome.ELIGIBLE_FOR_CANARY);
+        assertThat(d.reasons()).containsExactly(QualityGate.REASON_USAGE_MISSING);
+    }
+
+    @Test
+    @DisplayName("分支1b（v2/D03）：必需安全面未评（NOT_ASSESSED）→ INCONCLUSIVE"
+            + "(SAFETY_NOT_ASSESSED)——缺证据≠零违规，不冒充 PASS 进入统计面")
+    void safetyNotAssessedIsInconclusive() {
+        SafetyGate.SafetyVerdict notAssessed = new SafetyGate.SafetyVerdict(List.of(),
+                SafetyGate.Verdict.NOT_ASSESSED, new SafetyGate.FaceTally(0, 0, 0, 0, 2));
+        GateDecision d = gate.evaluate(notAssessed, healthyStats(), cleanRun(), thresholds());
+        assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.INCONCLUSIVE);
+        assertThat(d.reasons()).containsExactly(QualityGate.REASON_SAFETY_NOT_ASSESSED);
+    }
+
+    @Test
+    @DisplayName("分支序锁定（v2）：安全 REJECT 先于 usage 缺失（确证违规硬失败优先）")
+    void safetyRejectBeatsUsageMissing() {
+        SixDimResult missingUsage = new SixDimResult(
+                new SixDimResult.Dim<>(new DimensionCounts.Result(1, 0, 0, 1,
+                        true, false, false), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Process(2, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Tool(2, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Cost(100L, 0L, 0L, 0L, true),
+                        List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(1, 0, 0), List.of()),
+                new SixDimResult.Dim<>(new DimensionCounts.Safety(0, false), List.of()));
+        GateDecision d = gate.evaluate(safetyReject(), healthyStats(), missingUsage, thresholds());
+        assertThat(d.outcome()).isEqualTo(EvaluationRecordV1.Outcome.REJECT);
+        assertThat(d.reasons()).containsExactly(QualityGate.REASON_SAFETY_VIOLATIONS);
     }
 
     @Test
@@ -252,7 +301,8 @@ class QualityGateTest {
                                 "BUSINESS_ERROR_RATE", List.of("PAYMENT_CHARGE_FAILURE"),
                                 List.of("ref-1"))),
                         List.of("evidence-1"), "impact", "remediation", List.of()),
-                List.of(new EvalCaseInput.ToolCallObservation("logs", true,
+                List.of(new EvalCaseInput.ToolCallObservation("logs",
+                        EvalCaseInput.Registration.REGISTERED,
                         ToolCallStatus.SUCCESS, "d1")),
                 List.of(), 100L, new EvalCaseInput.Usage(100L, 50L, 150L, false), false);
         SixDimResult run = new SixDimEvaluator(new ScenarioEvaluator(SynonymLexicon.load("""

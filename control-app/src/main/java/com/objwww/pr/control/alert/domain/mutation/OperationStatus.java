@@ -4,7 +4,8 @@ package com.objwww.pr.control.alert.domain.mutation;
  * mutation 域操作状态（设计基线 §2.11）：PREPARED→DISPATCHED→ACKNOWLEDGED→
  * VERIFIED→COMPLETED 主链；DISPATCHED/ACKNOWLEDGED 超时→UNKNOWN（网络 timeout
  * ≠ failed）→RECONCILING→{VERIFIED / RETRYABLE / ESCALATED / FAILED_CONFIRMED}；
- * RETRYABLE 重派回 DISPATCHED（锁保持）。
+ * DISPATCHED→FAILED_CONFIRMED（BA-191 真执行确定性判败——副作用未发生或已证伪，
+ * 执行器显式判败直落终态，不经 UNKNOWN）；RETRYABLE 重派回 DISPATCHED（锁保持）。
  *
  * <p>两把正交判定（§2.9 R3 首日正确）：
  * <ul>

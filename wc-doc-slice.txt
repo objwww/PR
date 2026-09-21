@@ -1,0 +1,157 @@
+55:
+56:`castFinalizeTask` 的“锁 Run 后插入新任务”可保留短事务，但不要在其中再锁已有任务；候选材料读取也不要隐式带入反向任务锁。唯一冲突使用 `INSERT ... ON CONFLICT DO NOTHING RETURNING` 获取插入结果，不依赖捕获唯一键异常后在同一个 PostgreSQL 事务里继续操作。
+57:
+58:PostgreSQL 官方建议多对象操作采用一致锁顺序，并说明死锁会导致其中一个事务被中止。不能用无限重试遮住倒序锁。参见 [PostgreSQL 显式锁与死锁](https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-DEADLOCKS)。
+59:
+60:### 4.2 修复 CommandService 的应用阶段原子性
+61:
+62:保留“命令先持久化”的第一阶段。第二阶段引入现有 `TransactionOperations`，按如下顺序执行：
+63:
+64:1. 锁定/条件领取这条 PERSISTED 命令；已经终态就返回既有结果。
+65:2. 锁 Run，检查 expectedRevision 与适用状态。新请求对旧 revision 仍返回冲突，不能无条件容忍。
+66:3. 在同一事务中 CAS 终止 Run、使用**加入当前事务的事件 append** 写 RUN_CANCELLED、把本命令标 APPLIED。
+67:4. 事务提交后才发送本地取消提示；提交失败不发提示、不返回 APPLIED。
+68:
+69:这里不能继续使用会开启独立事务的 `appendIndependent`：外层锁着 Run，内层独立事务再推进同一 Run 的事件序号，可能自我等待。需要复用事件仓储的 joinTx 入口。
+70:
+71:新版本三个写入要么一起成功，要么一起回滚，消除新产生的半应用窗口。旧版本遗留的 PERSISTED+终态 Run 不能仅凭状态猜测命令成功：对照该命令标识/事件关联修复；无法证明就记录恢复异常交由对账，不冒认另一个命令的结果。建议新事件 payload 增加 commandId，审计幂等按命令身份处理。
+72:
+73:## 5. 第二批：把取消传播接到执行边界
+74:
+75:### 5.1 复用持久状态，增加轻量本地取消句柄
+76:
+77:增加小型 `RunTerminationService`，供人工 CANCEL 和可信硬期限 EXPIRED 复用终止校验、事件与提交后通知；不新增通用工作流框架。Run 终态本身是持久取消事实，进程重启也不会丢失。批量子任务清理与远端停止留到事务外收敛。
+78:
+79:增加具体类 `ExecutionControl`，包含 Host 提供的 runId、taskId、owner、leaseEpoch、configEpoch、actionKey、有效 deadline、停止原因、执行句柄。不要允许 LLM 或工具参数自报这些身份。优先扩展已有 action/call context，避免给每个工具建一套机制。
+80:
+81:本地注册表以 Run→动作句柄定位 Future/HTTP cancel handle。调用注册后再次读取取消状态，处理“取消发生时句柄尚未注册”的窗口；取消操作与句柄状态更新在本地互斥。提交后通知只是加速，运行中的控制检查还要周期性批量查询数据库，建议先用 1 秒检查周期并压测查询成本。数据库不可读时暂停新的外部动作资格，不按缓存的 active 无限放行。
+82:
+83:进程内通知不覆盖其他进程，因此其他实例仍通过同一持久事实收敛。这对当前单机展示项目已足够；引入 Redis Pub/Sub 仍会需要丢消息恢复，RabbitMQ 仍不能替代数据库终止事实和提交围栏，暂不增加部署负担。
+84:
+85:### 5.2 在这些位置检查，才算接通
+86:
+87:| 位置 | 修改 |
+88:|---|---|
+89:| `BoundedLlmRoleRunner.actionOf` | 用真实 ExecutionControl 回调替换恒 true；压缩、子角色也从共享调用入口传递，不能只修 primary。 |
+90:| `RcaActionGuard` | 保留 Run/epoch/预算检查；新动作准入与终止在数据库中有确定先后，未准入动作取消后零触网。 |
+91:| `PrimaryGatewayToolPort` / `SingleToolEvidenceAgent` | 向 ToolGateway 传递 Host 控制上下文；预算、allowlist 与取消检查都保留。 |
+92:| `ToolGateway.executeWithDeadline` | 注册在飞句柄；有效超时取 tool、task、Run、剩余预算期限最小值。取消时尽力中断，最终执行退出时注销。 |
+93:| `ModelGateway` | 回退等待、限流等待、HTTP 等待都检查控制信号；接入底层支持的 HTTP 取消，不能只在退避循环检查。 |
+94:| `RcaWorker` | 心跳同时检测 Run 终态/失租；停止原因作为类型化结果传回，不能统一转成 retryable EXECUTOR_ERROR。 |
+95:| 任务领取/委派建行 | Run 已终态不得领取、创建新子任务或推进 DAG；事务内复验，禁止仅依赖事务前读。 |
+96:
+97:明确新增停止分类：`RUN_CANCELLED`、`RUN_DEADLINE_EXCEEDED`、`LEASE_LOST` 与 `REMOTE_UNAVAILABLE` 分开。前三者结束当前执行身份，不能触发模型 fallback 或工具重试。工具自身超时是否重试继续由原有副作用/UNKNOWN 策略决定。
+98:
+99:**边界说明：**网络发送与数据库提交不在同一原子事务中。取消后不能发放新动作资格；已在取消前获得资格的动作仍存在极短发送窗口，只能再检查并尽力阻止、如实记账。不要持有数据库行锁跨整个网络请求，制造新的阻塞。
+100:
+101:### 5.3 子任务与资源最终收敛
+102:
+103:增加终态 Run 清理通道，检查 CANCELLED/EXPIRED/FAILED 等终态 Run 下的非终态 Task。不要只从活跃 Run 列表找问题。
+104:
+105:先处理无在飞执行的 READY/BLOCKED/RETRY_WAIT：条件更新 CANCELLED。对 LEASED/RUNNING：撤销提交资格、发送停止信号，同时保留 execution/attempt 是否真正退出的事实。任务业务终态不代表容量可以立即复用；本地线程退出或可靠租约回收后再按 owner+epoch 释放 slot。对远端 UNKNOWN 保持账本占用/对账策略，不能取消即释放全部预算。
+106:
+107:清理可以分批进行，但 Run 已终态必须立即阻断新动作和有效提交。每批可重入，重复执行不重复审计、不误清新 Run 指针。incident 的 `currentRcaRunId` 仅在仍等于本 Run 时清空；若 existing 入场路径存在 incident→Run 锁序，应把指针清理拆为独立条件 UPDATE，不在终止事务中再制造 Run→incident 锁环。
+108:
+109:迟到结果允许落审计或用量对账，不得恢复 Run、推进有效检查点、生成新正式报告或通知。取消前已提交的正式报告、已经发送的通知保留历史，不能宣称取消能撤回它们。
+110:
+111:## 6. 第三批：让看门狗公平、有界、可恢复
+112:
+113:### 6.1 先修 51 条即可出现的扫描饥饿
+114:
+115:本期选 keyset 分页，不新增调度队列。仓储方法改为 `findActiveForReconcileAfter(createdAt,id,limit)`，排序 `(created_at,id)`；查询条件使用这两个字段组成的游标。每次处理一批后保存最后一个键，批内某条处理异常也继续推进到该条之后；读到尾部才从头开始下一轮。
+116:
+117:进程内游标是最小方案，重启从头扫描；连续运行时必须遍历全体。每 tick 只处理一个受限批次，避免大循环霸占线程。如果要求频繁重启也不丢覆盖进度，再持久化单个扫描游标；不是本期默认引入任务领取表。SQL 读取失败不得假装推进，记录扫描失败并重试同一页。
+118:
+119:固定 N 条、每批 B 条、间隔 P 时，覆盖周期近似 `ceil(N/B) × P + 各批处理时间`。比如 N=60、B=50、P=30s，正常连续运行约两批覆盖；这只是配置推导，不是延迟实测承诺。指标必须展示最长未扫描时长，按目标覆盖时间调整批量和间隔。
+120:
+121:补支持排序的活跃部分索引，先 EXPLAIN 现有查询再决定新建，避免重复索引。清理终态子任务使用独立游标与索引，不能让最老几个 UNKNOWN 永久占满清理批次。
+122:
+123:### 6.2 finalizer 要看状态，不是看“是否存在”
+124:
+125:| 事实 | 对账动作 |
+126:|---|---|
+127:| READY/RETRY_WAIT，且到期时间合理 | 等待正常调度；展示等待原因和下一次运行时间 |
+128:| LEASED 且租约有效 | 不重复铸造；超过 Run 硬期限仍走终止策略 |
+129:| LEASED 但租约失效 | 交由条件 reclaim，保证 worker 被阻塞时仍有独立清理机会 |
+130:| DEAD/FAILED_TERMINAL/CANCELLED/STALE | 记 RECOVERY_EXHAUSTED/不一致原因；不得继续标成退避中；按状态机允许边终止或显式待人工 |
+131:| DONE 但 Run 仍活跃 | 检查报告/发布事务事实，执行幂等确定性收尾；材料不一致则报错，不能直接冒认成功 |
+132:| 不存在且材料可信完整 | 锁内复验后创建一次 REPORT_FINALIZE |
+133:
+134:复用现有 maxAttempts=2 的 task 重试预算；不要换 taskKey 创建新 finalizer 绕过预算。`recoveryAttempts` 当前包含铸造及过期动作，不能直接解释为 HTTP 重试次数，分别使用清楚的计数口径。
+135:
+136:### 6.3 写入前重读裁决条件
+137:
+138:过期：锁内读取现行 deadline，只有 `deadline != null && deadline <= DB当前时间`、Run 活跃、当前模式允许，才写终态。没有可信期限的 legacy Run 只观察，不从 updated_at 推算死亡。活动心跳不延长硬期限；无进展告警与硬期限终止是两个概念。
+139:
+140:恢复：锁内复核 purpose=PRODUCTION、Run 状态、材料身份及 finalizer 唯一性。`ReportFinalizeExecutor` 已校验原文 digest，应保留；还需核对材料是否属于本 Run 的获准配置/快照，而不只是取最新的 STRUCTURE_VALIDATED 行。缺少身份列时先补持久绑定与迁移，无法验证则拒绝自动恢复，不用“最新一条”替代版本一致性。
+141:
+142:finalizer deadline 取 `min(原Run硬期限, 当前时间+收尾允许时长)`；已到期不铸造。恢复只组装可信材料，不重跑 LLM 调查，不绕过发布唯一性。
+143:
+144:### 6.4 模式与运行证据
+145:
+146:保持 ALERT_ONLY→SAFE_RECOVER→AUTO_EXPIRE 的渐进开关。应用启动输出脱敏后的 mode、pollInterval、batchLimit；容器有效配置与代码版本同时写验收记录。SAFE_RECOVER 不自动等价于允许过期，按现有分支定义验收。
+147:
+148:增加 `reconcile_last_success_timestamp`、`reconcile_scan_duration`、`reconcile_oldest_unseen_age`、按 decision 计数、`terminal_run_open_tasks`、`cancel_to_local_quiesced_seconds`、`unknown_action_count`、`late_commit_rejected_total`。Prometheus 指标不把 runId/actionKey 当标签，具体身份放结构化日志/事件。
+149:
+150:连续多轮没有成功扫描要对外告警；只检查 HTTP 200 不够。195 整机故障仍需要外部探针，这不是进程内看门狗能解决的，本轮不额外扩建部署面。
+151:
+152:## 7. 文件级实施顺序
+153:
+154:| 卡 | 主要改动文件 | 交付与依赖 |
+155:|---|---|---|
+156:| WC-1 | `PrimaryCheckpointCommitService`、涉及其外层事务的委派/配置切换入口、`RcaRunOrchestrator`、`RunReconciler` | 统一实际锁序及 PG 竞态测试；先交此卡，防止后续扩大锁环。 |
+157:| WC-2 | `CommandService`、`PersistenceConfig`、命令/事件仓储 | 命令第二阶段原子化、commandId 审计关联、旧半应用命令辨识；同键重放结果稳定。 |
+158:| WC-3 | 新具体类 `RunTerminationService` / `ExecutionControl`，既有 Gateway/Worker/调用 context | 终止事实、取消句柄、真实回调、停止分类、deadline 最小化。类名为建议，已有同义设施优先扩展。 |
+159:| WC-4 | Run/Task 仓储与 `RunReconciler`、`ReportFinalizeExecutor` | 公平分页、终态任务清理、finalizer 状态分类、锁内复验；必要增量 migration，编号按实施时最新版本分配。 |
+160:| WC-5 | Run 读接口及 RunDetail 页面、指标接线、测试目录 | 展示停止进度与原因，完成下表 E2E；最后才灰度提升模式。 |
+161:
+162:每卡独立可审查，但 WC-3 与 WC-4 联合验收后才能声称取消闭环。代码可构建或普通 A0 成功不替代这批异常路径验收。
+163:
+164:## 8. 增量测试用例：30 项，尚待实现/执行
+165:
+166:共用要求：Run/incident 使用唯一测试标识；外部调用用可控制的本地 HTTP 服务统计请求与退出；真实 PG 测试用两个独立连接和 barrier 控制交错，不靠 sleep 猜竞态。每项同时检查数据库状态、事件、请求计数及容量/用量账本。
+167:
+168:| ID | 层级 | 操作与故障点 | 必须断言 |
+169:|---|---|---|---|
+170:| WC-T01 | PG | 建 60 条活跃 Run，前 50 条永不退出；末条已过期；连续分页 | 第 60 条在完整覆盖周期内被检查；老记录不饿死后续记录。 |
+171:| WC-T02 | PG | 同 created_at 建 60 条；处理中一条抛异常 | id 次序稳定，异常不使游标停住、不遗漏后一页。 |
+172:| WC-T03 | 集成 | 扫描中重启；下一轮插入新 Run | 从头恢复后可覆盖全体；新记录进入后续完整轮；记录真实覆盖延迟。 |
+173:| WC-T04 | 单元+PG | finalizer 分别 READY/RETRY_WAIT/LEASED | 正确等待或回收，无重复 finalizer。 |
+174:| WC-T05 | 单元+PG | finalizer DEAD/DONE/CANCELLED，Run 仍活跃 | 不再无限 WAIT_BACKOFF；DONE 验证材料，失败态记录明确收敛结果。 |
+175:| WC-T06 | PG | 两个 reconciler 同时恢复同一 Run | 至多一条 finalizer、一次恢复事件/计数；事务不被唯一冲突留下 aborted 状态。 |
+176:| WC-T07 | PG | checkpoint 持锁与 expire/finish 并发，用 barrier 编排 | 完成或合法冲突，无 AB-BA 死锁；所有提交围栏仍有效。 |
+177:| WC-T08 | PG | 外层委派/配置切换事务调用 checkpoint，并发取消 | 外层也遵守锁序；取消先提交则零新子任务，配置身份无错配。 |
+178:| WC-T09 | PG | CANCEL 的 CAS、事件、APPLIED 任一写入后抛异常 | 应用事务整体回滚；命令保持可重放；不存在终态缺事件的新窗口。 |
+179:| WC-T10 | PG | 同幂等键取消重放 10 次，再并发提交另一旧 revision 命令 | 原命令结果稳定；事件仅一次；另一旧请求合法冲突。 |
+180:| WC-T11 | 迁移集成 | 构造旧版 PERSISTED+已取消/事件已写的半应用行 | 能证明身份才补标；无法证明不冒认、不删除历史证据。 |
+181:| WC-T12 | E2E | 主 Agent 等子任务时取消，子任务含 READY/BLOCKED/RETRY_WAIT | 全部失去执行资格并最终终态；没有新委派和后续外部请求。 |
+182:| WC-T13 | E2E | 工具 HTTP 阻塞时取消 | 尝试中断；本地退出后注销句柄；停止原因不是 REMOTE_UNAVAILABLE；零重试。 |
+183:| WC-T14 | E2E | 模型 HTTP 阻塞时取消 | 主/子角色均收到停止；不切备用模型；远端未确认则 UNKNOWN。 |
+184:| WC-T15 | E2E | 在模型退避、限流队列等待时取消 | 退出等待，后续调用计数不增加。 |
+185:| WC-T16 | 竞态 | 取消恰好发生在句柄注册前/后、动作准入前/后 | 注册前不丢信号；终止后零新资格；既有资格可能在飞但有账可查。 |
+186:| WC-T17 | E2E | 已提交取消，屏蔽进程内通知 | 周期数据库检查仍使执行收敛，证明通知不是唯一机制。 |
+187:| WC-T18 | E2E | 实例 A 接取消、实例 B 执行 | B 从持久事实停止；不能只在 A 的注册表找到句柄才有效。 |
+188:| WC-T19 | PG+E2E | 取消后返回成功模型/工具结果并尝试提交 | Run 不复活、checkpoint 不推进、无新正式发布；允许必要审计及用量对账。 |
+189:| WC-T20 | E2E | 底层调用忽略线程中断 | 显示停止中/UNKNOWN，不假报本地静默、不立即复用忙槽；有截止与告警。 |
+190:| WC-T21 | PG | 旧 owner/epoch 的释放回执晚到，新 owner 已持槽 | 旧回执不能释放新槽；不能覆盖新 attempt。 |
+191:| WC-T22 | PG | 取消旧 Run 后 incident 指针已指向新 Run | 条件清理不清新指针，不影响新 Run。 |
+192:| WC-T23 | 单元+PG | Run 硬期限早于工具或 finalizer 期限 | 使用最早期限；终止原因明确，无额外完整工具超时窗口。 |
+193:| WC-T24 | PG | deadline 为 null 的历史影子/legacy，长时间无更新 | 不仅凭年龄误杀；明确未具备自动裁决条件。 |
+194:| WC-T25 | PG | 候选读取后 Run 完成/取消；材料版本变化 | 锁内复验失败零恢复/零过期副作用；不使用旧快照恢复。 |
+195:| WC-T26 | E2E | 取消时 PG 短暂不可用、稍后恢复 | 未提交不得返回 APPLIED；执行端不得无限放行新动作；恢复后可重放。 |
+196:| WC-T27 | PG | 终态清理批次中杀进程，重启再次清理 | 幂等完成剩余 Task/slot/指针对账，审计不重复。 |
+197:| WC-T28 | E2E | ALERT_ONLY/SAFE_RECOVER/AUTO_EXPIRE 相同输入分别跑 | 每模式动作符合契约；effective config 与记录一致。 |
+198:| WC-T29 | E2E | 控制扫描循环持续失败但 HTTP 健康 | 看门狗健康指标与告警触发，页面不只显示“服务正常”。 |
+199:| WC-T30 | E2E | 取消前通知已提交/已发送，取消后返回迟到结果 | 历史通知保留；迟到结果不能制造第二次正式通知。 |
+200:
+201:对 WC-T13/14/17/18 建议初始目标：健康 DB、支持取消的本地适配器下，取消提交至本地静默 P95 ≤ 2 秒。该值是拟定验收目标，不是当前性能数据；不支持远端撤销的调用按 WC-T20 显式分组，不能混入平均值掩盖未停止。
+202:
+203:## 9. 验收与上线过程
+204:
+205:1. 锁定实施版本与工作区补丁摘要。先跑已有测试，再新增上述回归；PG 用例必须连接真实 PostgreSQL，不能用 mock 通过替代。
+206:2. 在隔离环境用受控 HTTP 服务跑取消/超时/忽略中断，再跑主 Agent 动态委派的端到端取消。无需注入真实生产故障。
+207:3. 部署先保持 ALERT_ONLY，核对分页覆盖、模式、循环 lastSuccess、终态积压和误判候选。旧 E2E 影子材料保留，不能按 alertname 字符串猜身份后批量取消。
+208:4. SAFE_RECOVER 只开放有可信材料与身份的生产 Run。恢复预算、唯一发布和 WC-T06/T25 通过后才放行。
+209:5. AUTO_EXPIRE 只开放可信硬期限，WC-T07/T09/T19/T21/T24/T27 必须通过。异常时回退模式并保留已提交终态，不自动复活或清空账本。
+210:
+211:完成标准不是“看门狗类存在”，而是：后续 Run 必被检查、终止原子可重放、新动作被拦截、在飞工作有停止/UNKNOWN 结果、迟到提交无效、资源最终对账、前端显示真实收敛状态。上述证据未齐前，应标为“具备恢复与取消基础能力，完整闭环待验收”。

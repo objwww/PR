@@ -134,6 +134,11 @@ class EvalRunnerMainTest {
         }
 
         @Override
+        public List<EvalRun> findStrandedRuns(java.time.Instant startedBefore) {
+            return List.of();
+        }
+
+        @Override
         public List<EvalCaseResult> findCasesByRunId(UUID runId) {
             return List.of();
         }

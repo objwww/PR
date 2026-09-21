@@ -37,6 +37,16 @@ public interface RcaToolInvocationLedger {
     boolean fail(UUID operationId, ToolInvocationState terminal, ToolReasonCode reasonCode);
 
     /**
+     * BA-190（W3）：fail 带拒因具体消息（reason_detail 列，V155）——INVALID_ARGS/
+     * 控制面拒绝的 message 随账落档，事后可考（不再只靠随容器丢失的 WARN 日志）。
+     * default 委托三参 = 假件/桩零漂移（详情丢弃不影响结算语义）；生产 PG 实现覆盖落列。
+     */
+    default boolean fail(UUID operationId, ToolInvocationState terminal,
+                         ToolReasonCode reasonCode, String reasonDetail) {
+        return fail(operationId, terminal, reasonCode);
+    }
+
+    /**
      * EX-A4a（F16）：恢复扫描——PENDING 悬挂超 cutoff → UNKNOWN/TRANSPORT_UNKNOWN
      * （进程死后的孤儿回执永不达；BA-13② 同律，Holmes ExternalInvocation 与
      * InvestigationResult 之外的第一方工具账本）。单语句条件写，返回收敛行数。

@@ -745,10 +745,12 @@ public class NativeInvestigationExecutor implements RcaTaskExecutor {
         return true;
     }
 
-    /** 主 Runner 可重试失败封闭集（每一类都已在运行器内计步，步数耗尽兜底保终止） */
+    /** 主 Runner 可重试失败封闭集（每一类都已在运行器内计步，步数耗尽兜底保终止；
+     * JE-01：JEV_REVIEW_GAP = 复核缺口反馈轮，同样已计步、同签名二次自动放行） */
     private static boolean isPrimaryRetryable(String reason) {
         return reason != null && (reason.equals("DECISION_UNPARSEABLE")
                 || reason.equals("TOOL_NOT_ALLOWED")
+                || reason.equals("JEV_REVIEW_GAP")
                 || reason.startsWith("TOOL_RETRYABLE"));
     }
 

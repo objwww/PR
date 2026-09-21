@@ -199,6 +199,11 @@ class EvalBatchRunnerLifecycleTest {
         }
 
         @Override
+        public List<EvalRun> findStrandedRuns(Instant startedBefore) {
+            return List.of();
+        }
+
+        @Override
         public List<EvalCaseResult> findCasesByRunId(UUID runId) {
             return List.copyOf(cases);
         }

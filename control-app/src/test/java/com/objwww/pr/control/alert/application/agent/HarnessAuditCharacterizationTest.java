@@ -62,7 +62,33 @@ class HarnessAuditCharacterizationTest {
         assertThat(result.outcome()).isEqualTo(SingleToolEvidenceAgent.AgentOutcome.FAILED);
         assertThat(result.errorClass()).isEqualTo("REMOTE_UNAVAILABLE");
         verify(ledger).open(any());
-        verify(ledger).fail(any(), eq(ToolInvocationState.FAILED), any(ToolReasonCode.class));
+        // BA-190（W3）：四参 fail——模型可见族固定脱敏文案随账落 reason_detail
+        verify(ledger).fail(any(), eq(ToolInvocationState.FAILED), any(ToolReasonCode.class),
+                eq("工具响应不可解析（临时故障，可重试）"));
+        verify(ledger, never()).succeed(any());
+    }
+
+    @Test
+    void invalidArgsRejectionSettlesLedgerFailedWithReasonDetail() {
+        // BA-190（W3）：INVALID_ARGS 控制面拒绝的具体消息（字段/格式/取值域）随账落
+        // reason_detail——事后"为什么被拒"可考，不再只靠随容器丢失的 WARN 日志
+        var registry = new ToolRegistry(List.of(new ToolRegistry.Registration(
+                MetricsAgent.toolDefinition(1000, 4096), e -> new byte[0])));
+        var profile = new AgentProfile("metrics", "1", "audit", "1",
+                Set.of(MetricsAgent.TOOL_NAME), Map.of(), Map.of("type", "object"));
+        var agent = new MetricsAgent(profile, registry, invocation -> {
+            throw new com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException(
+                    com.objwww.pr.control.alert.domain.tool.ToolControlReason.INVALID_ARGS,
+                    "未声明字段: fromm");
+        }, evidence, ledger, new ObjectMapper());
+
+        assertThatThrownBy(() -> agent.investigate(context(),
+                new MetricsAgent.MetricsQuery("up", "100", "200", "30s")))
+                .isInstanceOf(
+                        com.objwww.pr.control.alert.domain.tool.ToolControlPlaneException.class);
+
+        verify(ledger).fail(any(), eq(ToolInvocationState.FAILED),
+                eq(ToolReasonCode.INVALID_INPUT), eq("未声明字段: fromm"));
         verify(ledger, never()).succeed(any());
     }
 

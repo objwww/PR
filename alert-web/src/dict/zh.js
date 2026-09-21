@@ -226,7 +226,7 @@ export const ACTION_ID_ZH = {
   'scale.database': ['数据库扩容', '对目标数据库实例执行扩容（连接池/规格），影响数据面可用性'],
   'scale.service': ['服务扩容', '对目标服务执行副本/规格扩容，影响业务面容量'],
   'service.restart': ['重启服务', 'AI 调查建议重启目标服务以恢复服务。R3 高危写操作：调用不直接执行，需两名审批人批准后由系统进入执行计划（无 unlock 白名单时为模拟执行）'],
-  'service.rollback': ['回滚服务', 'AI 调查建议将目标服务回滚到上一版本。R3 高危写操作：调用不直接执行，需两名审批人批准后由系统进入执行计划（无 unlock 白名单时为模拟执行）'],
+  'service.rollback': ['回滚服务', 'AI 调查建议将目标服务回滚到上一版本。R3 高危写操作：调用不直接执行，需两名审批人批准后由系统进入执行计划（flagd paymentFailure 场景已列入 unlock 白名单：批准后真实执行翻回旗标并落 change_event 回滚行；白名单外仍为模拟执行）'],
 }
 export function actionZh(actionId) {
   if (!actionId) return '—'
@@ -236,4 +236,23 @@ export function actionZh(actionId) {
 export function actionDesc(actionId) {
   const hit = ACTION_ID_ZH[actionId]
   return hit ? hit[1] : ''
+}
+
+/**
+ * 评测批终态卡因（eval_run.terminal_reason）→ 中文解读（BA-190 W4）。
+ * worker_lost 族带分号后缀（recovery_unverified 等），按前缀命中；
+ * 其余卡因（cancelled_by_operator、batch_error:* 及 BA-190 W2 起的中文卡因原文）
+ * 后端已写可读文本，前端原样展示，不在本字典重复。
+ */
+export const EVAL_TERMINAL_REASON_ZH = {
+  // BA-192 搁浅清扫：更具体的卡因键须排在 worker_lost 之前（前缀按插入序命中）
+  'worker_lost;no_command_ledger': '批件停留在“运行中”但系统查不到它的执行记录（命令账本机制之前的历史批件，worker 已失联、现场恢复未经核验）。启动清扫已如实终态化为失败（案例结果不可覆盖语义，不会自动续跑）。请重新发起新批（系统会自动生成唯一 run-tag）',
+  worker_lost: '评测 worker 在跑批中被重建/重启，批件中断（案例结果不可覆盖语义，不会自动续跑）。中断时激活的故障由 TTL 自动清理。请重新发起新批（系统会自动生成唯一 run-tag）',
+}
+export function evalTerminalReasonZh(reason) {
+  if (!reason) return ''
+  for (const [prefix, zh] of Object.entries(EVAL_TERMINAL_REASON_ZH)) {
+    if (reason === prefix || reason.startsWith(prefix + ';')) return zh
+  }
+  return reason
 }

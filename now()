@@ -1,0 +1,6 @@
+c65c5fc3|SUCCEEDED|t|09:55:31
+2b1e8ff9|SUCCEEDED|t|09:55:31
+bbddb20a|SUCCEEDED|t|08:48:45
+ERROR:  argument of WHERE must be type boolean, not type timestamp with time zone
+LINE 1: ...cision, count(*) from canary_route_decision where created_at...
+                                                             ^

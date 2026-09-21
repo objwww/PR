@@ -27,10 +27,10 @@ class GoldenScenarioRegistryMdSuiteGateTest {
     @Test
     void loadsV5WithAllTwentyThreeRegisteredScenarios() throws IOException {
         GoldenScenarioRegistry registry = loadReal();
-        assertThat(registry.registryVersion()).isEqualTo(6);
+        assertThat(registry.registryVersion()).isEqualTo(8);
         // 15 既有（S1~S5+S16~S25）+ 8 新增（B1~B5+T1~T3）+ 1 S26（M-d T8 全工具复合）
-        // SR 两例走 case_version 回放不在此列
-        assertThat(registry.scenarios()).hasSize(24);
+        // + 1 S27（BA-185 变更回归+审批回滚）；SR 两例走 case_version 回放不在此列
+        assertThat(registry.scenarios()).hasSize(25);
     }
 
     @Test
@@ -49,6 +49,14 @@ class GoldenScenarioRegistryMdSuiteGateTest {
         // S26 全工具复合：F9 单族（不依赖 M-b 复合激活的装载面佐证）
         assertThat(registry.byScenarioId("S26").chaosFamily()).isEqualTo("F9");
         assertThat(registry.byScenarioId("S26").difficulty()).isEqualTo("L4");
+        // S27 变更回归（BA-185）：flagd 驱动 + change_ledger 账本联动块齐备
+        // （service=payment/actor 非空——发布事实落 change_event 的注册面）
+        GoldenCase s27 = registry.byScenarioId("S27");
+        assertThat(s27.driver()).isEqualTo("FlagdScenarioDriver");
+        assertThat(s27.injection().flag()).isEqualTo("paymentFailure");
+        assertThat(s27.injection().changeLedger()).isNotNull();
+        assertThat(s27.injection().changeLedger().service()).isEqualTo("payment");
+        assertThat(s27.expectedRootCause().reasonCode()).isEqualTo("PAYMENT_CHARGE_FAILURE");
     }
 
     @Test

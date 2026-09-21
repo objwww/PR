@@ -11,8 +11,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * DR-02 模板目录：随 jar 封装的真实目录（drill-templates.yml，派生自
- * eval-scenarios.yml registry v6——BA-178 追平：S16/S26 入目录，F9 流量配方同批接线；
- * BA-179：S17~S22/S24/S25 入目录，F10~F17 流量配方同批接线）
+ * eval-scenarios.yml registry v8——BA-178 追平：S16/S26 入目录，F9 流量配方同批接线；
+ * BA-179：S17~S22/S24/S25 入目录，F10~F17 流量配方同批接线；BA-185：S27 变更回归
+ * 入目录，change_ledger 账本联动+审批回滚处置链；ME-T08：v8 同步升锚，模板面零变化）
  * 可装载、十五场景齐备、公开面字段正确、可执行性分批开放（DR-A 批：S1/S2 已接线 ready=true，
  * S3~S5 维持 false）；白名单装载天然剥离 GT 扩展键；digest 稳定可复现。
  */
@@ -29,14 +30,14 @@ class DrillTemplateCatalogTest {
     }
 
     @Test
-    @DisplayName("封装目录装载：registry v6 + S1~S5/S16~S22/S24~S26 十五场景齐备")
+    @DisplayName("封装目录装载：registry v8 + S1~S5/S16~S22/S24~S27 十六场景齐备")
     void bundledCatalogLoads() {
         DrillTemplateCatalog catalog = loadBundled();
-        assertThat(catalog.registryVersion()).isEqualTo(6);
+        assertThat(catalog.registryVersion()).isEqualTo(8);
         assertThat(catalog.templates())
                 .extracting(DrillTemplate::scenarioId)
                 .containsExactly("S1", "S2", "S3", "S4", "S5", "S16", "S17", "S18",
-                        "S19", "S20", "S21", "S22", "S24", "S25", "S26");
+                        "S19", "S20", "S21", "S22", "S24", "S25", "S26", "S27");
     }
 
     @Test
@@ -130,9 +131,29 @@ class DrillTemplateCatalogTest {
     }
 
     @Test
+    @DisplayName("BA-185：S27 变更回归模板公开面（FlagdScenarioDriver/时间参数同 S1/"
+            + "ready 带真实原因——change_ledger 账本联动+R3 审批链处置）")
+    void s27TemplatePublicFace() {
+        DrillTemplateCatalog catalog = loadBundled();
+        DrillTemplate s27 = catalog.byScenarioId("S27").orElseThrow();
+        assertThat(s27.name()).contains("变更回归");
+        assertThat(s27.driver()).isEqualTo("FlagdScenarioDriver");
+        assertThat(s27.chaosFamily()).isNull();
+        assertThat(s27.symptomCodes()).containsExactly("checkout");
+        assertThat(s27.timing().preheatSeconds()).isEqualTo(60);
+        assertThat(s27.timing().holdSeconds()).isEqualTo(600);
+        assertThat(s27.timing().maxFiringWaitSeconds()).isEqualTo(1500);
+        assertThat(s27.timing().maxResolvedWaitSeconds()).isEqualTo(2100);
+        assertThat(s27.timing().cleanupTimeoutSeconds()).isEqualTo(120);
+        assertThat(s27.params().durationDefaultSeconds()).isEqualTo(600);
+        assertThat(s27.params().trafficScales()).containsExactly("RECIPE");
+        assertThat(s27.execution().ready()).isTrue();
+        assertThat(s27.execution().reason()).contains("BA-185");
+    }
+
+    @Test
     @DisplayName("contentDigest 稳定可复现（作业 template_digest 冻结源）")
-    void digestStable() {
-        assertThat(loadBundled().contentDigest())
+    void digestStable() {        assertThat(loadBundled().contentDigest())
                 .isEqualTo(loadBundled().contentDigest());
     }
 

@@ -59,6 +59,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    ports:
+      # MIG-127（2026-09-21）：eval-worker 迁 127（2C4G 评测机）后跨机触库——
+      # 仅绑 WireGuard 隧道面 wg0（10.250.250.1），公网/内网 eth0 零暴露；
+      # 授权面由 pg_hba + eval_app 角色口令承担（默认 pg_hba 全 scram-sha-256）
+      - "10.250.250.1:5432:5432"
     networks:
       - internal
       # AM2（M2-02）：postgres 加入跨栈共享网，供 arena 域触库——
@@ -118,6 +123,18 @@ services:
       SPRING_FLYWAY_ENABLED: "false" # 迁移唯一执行者 = migrate one-shot（文件头注）
       # M3 模型治理（AM4 Java 替换 HolmesGPT 时复用；AM1 期 Holmes 外调不经此路由）
       AGENT_MODEL_API_KEY: ${AGENT_MODEL_API_KEY:?}
+      # JE-01：Jev 增强路径（TypeSafe 结构化决策口；key 原文只在 .env，mode 缺省 OFF 零调用）
+      AGENT_MODEL_JEV_MODE: ${AGENT_MODEL_JEV_MODE:-OFF}
+      AGENT_MODEL_BASE_URL_JEV: ${AGENT_MODEL_BASE_URL_JEV:-https://api.typesafe.ai}
+      AGENT_MODEL_API_KEY_JEV: ${AGENT_MODEL_API_KEY_JEV:-}
+      AGENT_MODEL_JEV_MIN_POOL: ${AGENT_MODEL_JEV_MIN_POOL:-20}
+      AGENT_MODEL_JEV_MAX_SELECTED: ${AGENT_MODEL_JEV_MAX_SELECTED:-20}
+      # JE-02：模型输入捕获档位（digest-only|redacted|full；redacted=落掩敏原文，供
+      # "每步主模型输入"审计与回放对账）
+      APP_ALERT_R7_INPUT_CAPTURE: ${APP_ALERT_R7_INPUT_CAPTURE:-digest-only}
+      # V167：模型输出捕获档位（off|digest-only|redacted|full；默认 off=零行档，
+      # A/B 对照实验窗覆写 redacted/full 后每步推理回答可在 RunDetailView 展开）
+      APP_ALERT_R7_OUTPUT_CAPTURE: ${APP_ALERT_R7_OUTPUT_CAPTURE:-off}
       # AM1 告警链路（§6.4/§6.5）：webhook bearer 与 Holmes 独立凭证
       # 键名与 application.yml / AlertSelfCheck 三方统一（BA-09①，G0-02）
       ALERTMANAGER_WEBHOOK_BEARER_TOKEN: ${ALERTMANAGER_WEBHOOK_BEARER_TOKEN:?}
@@ -158,10 +175,11 @@ services:
       # 真窗经 .env 显式指向 litellm-am3（alert-net 内网 http://litellm-am3:4000/v1）。
       APP_ALERT_R7_PRIMARY_ENABLED: ${APP_ALERT_R7_PRIMARY_ENABLED:-false}
       APP_ALERT_R7_PRIMARY_RELEASE_DIGEST: ${APP_ALERT_R7_PRIMARY_RELEASE_DIGEST:-}
-      # 主模式策略 prompt 透传（执行者 2026-09-11 增补）：缺省=代码内置默认
-      # （"直接受限取证，按需委派专家"——195 真窗实证该默认过保守，qwen/glm 均
-      #  零委派致 RX02/RD09/armC 前提不成立）；覆写文本只描述调查策略，不携带场景答案
-      APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-你是主调查 Agent：直接受限取证，按需委派专家，最终以带引用 Claim 收敛。}
+      # 主模式策略 prompt 透传：缺省空串=回落代码内置完整决策协议默认
+      # （am4-native-v2，含 root_cause_catalog 码表用法；占位符默认值放不下含 }
+      #  的 JSON 形状示例，故不再内联一句话默认）；覆写文本只描述调查策略，
+      # 不携带场景答案
+      APP_ALERT_R7_PRIMARY_PROMPT: ${APP_ALERT_R7_PRIMARY_PROMPT:-}
       # 委派批上限透传（armA 旋钮，执行者 2026-09-12 增补）：缺省 2=现行为；
       # A0 直查车辆 .env 置 0=零委派姿态（phase4 断言零 DELEGATE，与车辆口径一致）
       APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES: ${APP_ALERT_R7_PRIMARY_MAX_DELEGATION_BATCHES:-2}
@@ -172,6 +190,15 @@ services:
       # 主模式步数上限透传（演示工程 2026-09-14 增补）：缺省 8=现行为；deepseek 系
       # 真窗实证 8 步内在 catalog 回路徘徊未收敛（STEPS_EXHAUSTED）——演示姿态置 12
       APP_ALERT_R7_PRIMARY_MAX_STEPS: ${APP_ALERT_R7_PRIMARY_MAX_STEPS:-8}
+      # 主模式 run TOKEN 预算透传（2026-09-17 推理模型切换实证）：缺省 60000 对
+      # reasoning 模型（reasoning_tokens 计入输出）不足——12 步×16500 预约恒在
+      # 中途 BudgetExhausted；推理姿态 .env 置 200000
+      APP_ALERT_R7_PRIMARY_BUDGET_TOKENS: ${APP_ALERT_R7_PRIMARY_BUDGET_TOKENS:-60000}
+      # 根因码表词表路径透传（根因评分贯通修复）：缺省=classpath:eval/synonym-lexicon-v1.yml
+      # （与评测 app.alert.eval.lexicon-path 同默认值）；control-app 主链 jar 内无该
+      #  classpath 资源时 WARN+空码表降级（信封省略 root_cause_catalog，不阻断主链），
+      #  部署侧指向挂载的 deploy/alert/eval/synonym-lexicon-v1.yml 即生效
+      APP_ALERT_R7_PRIMARY_ROOT_CAUSE_CATALOG_PATH: ${APP_ALERT_R7_PRIMARY_ROOT_CAUSE_CATALOG_PATH:-file:/opt/pr/eval/synonym-lexicon-v1.yml}
       # Prometheus 工具服务范围面透传（执行者 2026-09-12 增补）：catalog/metric_value
       # 必填 service 的 allowlist（R10 范围纪律）；旧 SPRING_APPLICATION_JSON 退场后
       # 显式钉死，缺省回落 control-app 单服务
@@ -180,12 +207,21 @@ services:
       # 的 service allowlist（LokiAggregateExecutor/LogQueryExecutor 共用）；热窗 RCA
       # 实证 payment 把支付失败打在 WARN 级日志，下游取证必须覆盖 payment
       APP_ALERT_AM4_LOGS_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_LOGS_SERVICE_ALLOWLIST:-control-app,checkout,frontend,recommendation}
+      # 变更查询/历史案例检索的服务范围面透传（2026-09-21 S26 未决根因实证增补）：
+      # change.query/change.diff 与 rca_history.search 的 R10 allowlist——.env 键
+      # 无映射行不进容器（B1 同型坑），缺省回落 control-app 单服务会把 order-arena
+      # 场景全部 INVALID_ARGS 拒掉烧步数
+      APP_ALERT_AM4_CHANGE_SERVICE_ALLOWLIST: ${APP_ALERT_AM4_CHANGE_SERVICE_ALLOWLIST:-control-app}
+      APP_ALERT_RAG_SERVICE_ALLOWLIST: ${APP_ALERT_RAG_SERVICE_ALLOWLIST:-control-app}
       # 评测发射开关透传（演示工程 2026-09-15 增补）：缺省 false=闭面；演示期临时置
       # true 跑 L 模式评测，跑完收回（EvalRunnerMain 闭面纪律不变）
       APP_EVAL_LAUNCH_ENABLED: ${APP_EVAL_LAUNCH_ENABLED:-false}
       # 评测已部署数据集版本白名单透传（P4 2026-09-17 增补）：逗号分隔多版本；
       # 缺省 eval-ds-1=既有部署事实（命令面 gate 与 worker 领取复验同源）
       APP_EVAL_LAUNCH_DATASET_VERSIONS: ${APP_EVAL_LAUNCH_DATASET_VERSIONS:-eval-ds-1}
+      # 每场景轮次上限透传（2026-09-17 根因评分贯通批设为 10；评测域补强批上调至
+      # 30=支持 30 轮重复批，EV-09 稳定性三件套即命中率统计面）
+      APP_EVAL_LAUNCH_MAX_ROUNDS: ${APP_EVAL_LAUNCH_MAX_ROUNDS:-30}
       # 演练启动能力位透传（联调审计修复 2026-09-17）：缺省 false=闭面（SAFE-04
       # 停止/恢复推进链交付前的设计态）；DrillExecutionPolicy 启动时装配、非热更新，
       # 翻转 = .env 置 true + compose up -d 重启。Spring 松绑定同名映射
@@ -229,9 +265,15 @@ services:
     ports:
       # 默认仅绑 loopback（安全底线）；Alertmanager 在 docker 内网投递，公网零暴露
       - "${CONTROL_BIND:-127.0.0.1}:${CONTROL_PORT:-8080}:8080"
+      # MIG-127（2026-09-21）：127 上的 eval-worker 回投评测告警（/webhooks/alertmanager）
+      # 与 operator API 核验——仅绑 WireGuard 隧道面 wg0
+      - "10.250.250.1:8080:8080"
     volumes:
       # CAS：报告 artifact 读写
       - cas-data:/var/cas
+      # 根因码表词表（根因评分贯通修复）：与评测 worker 同一份文件，只读挂载供
+      # 主链信封下发 root_cause_catalog（缺席=WARN+空码表降级，不阻断主链）
+      - ./alert/eval/synonym-lexicon-v1.yml:/opt/pr/eval/synonym-lexicon-v1.yml:ro
     read_only: true
     tmpfs:
       - /tmp

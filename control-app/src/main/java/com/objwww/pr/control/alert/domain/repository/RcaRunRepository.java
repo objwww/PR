@@ -43,6 +43,25 @@ public interface RcaRunRepository {
         insertRouted(run, routing);
     }
 
+    /**
+     * JE-01：Jev 增强开关随铸造冻结（V159 jev_enabled 列）——三处铸造点读运行时
+     * 开关随行落列，执行期只读；切换开关不改变在跑调查。默认实现 = 无该列语义的
+     * 环境（测试 fake/降级仓储）忽略旗标，行为与三参版等价（false = 现有链路）。
+     */
+    default void insertRouted(RcaRun run, RcaRunRouting routing,
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs,
+            boolean jevEnabled) {
+        insertRouted(run, routing, inputs);
+    }
+
+    /**
+     * JE-01：run 铸造时冻结的 Jev 增强开关单列读（执行面选材/复核触发判据；
+     * 与路由四列同类的"行上元数据、不进聚合 record"读法）。默认 false = 现有链路。
+     */
+    default boolean jevEnabledById(UUID id) {
+        return false;
+    }
+
     /** 行锁（finishTask 收尾算法 "lock task → lock incident" 链路） */
     Optional<RcaRun> findByIdForUpdate(UUID id);
 

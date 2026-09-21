@@ -119,21 +119,33 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
     @Override
     public void insertRouted(RcaRun run, RcaRunRouting routing,
             com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs) {
+        insertRouted(run, routing, inputs, false);
+    }
+
+    /**
+     * JE-01：Jev 增强开关随铸造冻结落列（V159 jev_enabled）——执行期只读，
+     * update/updateIfRevision 均不回写该列。
+     */
+    @Override
+    public void insertRouted(RcaRun run, RcaRunRouting routing,
+            com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs,
+            boolean jevEnabled) {
         jdbc.sql("""
                 INSERT INTO rca_run (
                     id, incident_id, generation, trigger_kind, state, investigation_hash,
                     created_at, updated_at, started_at, finished_at, last_error,
                     engine, config_digest, stickiness_key, canary_bucket,
                     investigation_input_digest, window_start, window_end,
-                    purpose, purpose_source, completion_kind
+                    purpose, purpose_source, completion_kind, jev_enabled
                 ) VALUES (
                     :id, :incidentId, :generation, :trigger, :state, :investigationHash,
                     :createdAt, :updatedAt, :startedAt, :finishedAt, CAST(:lastError AS jsonb),
                     :engine, :configDigest, :stickinessKey, :bucket,
                     :investigationInputDigest, :windowStart, :windowEnd,
-                    :purpose, :purposeSource, :completionKind
+                    :purpose, :purposeSource, :completionKind, :jevEnabled
                 )
-                """)
+                """
+        )
                 .param("id", run.id())
                 .param("incidentId", run.incidentId())
                 .param("generation", run.generation())
@@ -156,8 +168,21 @@ public class PostgresRcaRunRepository implements RcaRunRepository {
                 .param("purpose", run.purpose().name())
                 .param("purposeSource", run.purposeSource())
                 .param("completionKind", run.completionKind())
+                .param("jevEnabled", jevEnabled)
                 .update();
         seedEpochZero(run, routing);
+    }
+
+    /** JE-01：执行面单列读（存量行 false = 现有链路原样） */
+    @Override
+    public boolean jevEnabledById(UUID id) {
+        Boolean enabled = jdbc.sql(
+                        "SELECT jev_enabled FROM rca_run WHERE id = :id")
+                .param("id", id)
+                .query(Boolean.class)
+                .optional()
+                .orElse(false);
+        return Boolean.TRUE.equals(enabled);
     }
 
     /** EN-04 准入播种：epoch=0 行（ON CONFLICT 幂等；失败不阻断铸造——切换面可辨） */

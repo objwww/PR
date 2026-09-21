@@ -63,6 +63,7 @@ endpoints:
     alerts:
       # 继承 default-alert：3 败告警 / 2 胜恢复 / 恢复同报
       - type: custom
+        description: "控制面健康探针连续失败：control-app 宕机或窄反代中断，RCA 调查与前端控制台不可用，请立即检查 deploy-control-app-1 容器状态"
 
   # EX-C4：M7 值班链黑盒（窄反代→control→PG→resolver 全链 200 面，operator bearer）——
   # control 健康仍 200 而值班链断（如 DB/快照面故障）时本探针独立可见
@@ -76,6 +77,7 @@ endpoints:
       - "[STATUS] == 200"
     alerts:
       - type: custom
+        description: "值班链快照探针失败：值班表/通知链中断，告警通知可能无法送达当班人，请检查 duty-adapter 与值班快照接口"
 
   # EX-C4（§8.4 既设计）：adapter 自身 /health——adapter 崩则本探针 TRIGGERED 且
   # 投递必败（自指监控死锁：adapter 挂时无人报 adapter 挂，AM7 §8 已登记承诺边界）；
@@ -88,6 +90,7 @@ endpoints:
       - "[STATUS] == 200"
     alerts:
       - type: custom
+        description: "duty-adapter 健康探针失败：告警转发适配器宕机，值班通知无法投递，请检查 127 宿主 duty-adapter 容器"
 
   # 告警链路自身（AM health；值班通道失明面独立可见）
   - name: RCA_SYSTEM_alertmanager_health
@@ -98,6 +101,7 @@ endpoints:
       - "[STATUS] == 200"
     alerts:
       - type: custom
+        description: "Alertmanager 健康探针失败：告警路由/静默失效，业务告警可能丢失，请检查 alertmanager 容器"
 
   # 合成 canary（业务面探针；arena 前端经 envoy 的黑盒健康）
   - name: business_canary_arena_frontend
@@ -109,3 +113,4 @@ endpoints:
       - "[RESPONSE_TIME] < 5000"
     alerts:
       - type: custom
+        description: "业务面合成探针失败：arena 前端不可达，用户侧访问可能受影响，请检查 arena 前端与 envoy"

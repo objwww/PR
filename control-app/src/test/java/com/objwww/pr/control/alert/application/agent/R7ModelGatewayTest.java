@@ -350,6 +350,146 @@ class R7ModelGatewayTest {
         assertThat(row.errorCode()).isEqualTo("LEDGER_WRITE_FAILED");
     }
 
+    // ------------------------------------------------------- 输出捕获（V167，R2 对称面）
+
+    /** 7 参装配捷径：换输出捕获档位时复用（inputCapture 维持 setUp 默认 DIGEST_ONLY） */
+    private RcaModelGateway gatewayWithOutput(
+            AlertInMemoryStores.OutputCaptures outputCaptures) {
+        return new RcaModelGateway(gatewayOf(client, platformLedger), stores.modelCalls,
+                new PricingService(Map.of()), inputCaptures, outputCaptures, CLOCK,
+                Integer.MAX_VALUE);
+    }
+
+    @Test
+    void r2b_full档_输出原文落行_digest为原始响应摘要() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.FULL);
+        rcaGateway = gatewayWithOutput(outputs);
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", "req-abc", Duration.ofMillis(7)));
+
+        RcaModelOutcome outcome = rcaGateway.call(ctx(), "prompt", 100);
+
+        assertThat(outcome.content()).isEqualTo("决策JSON");
+        assertThat(outputs.all()).hasSize(1);
+        var row = outputs.all().get(0);
+        assertThat(row.modelCallId()).isEqualTo(outcome.operationId());
+        assertThat(row.outputText()).as("FULL 档落原文（A/B 对照可展示）").isEqualTo("决策JSON");
+        assertThat(row.outputDigest())
+                .as("outputDigest 恒为原始响应摘要")
+                .isEqualTo(Digest.sha256Of("决策JSON").value());
+        assertThat(row.messageBytes()).isPositive();
+        assertThat(stores.modelCalls.all().get(0).state())
+                .as("捕获落行后成功终态照常结算").isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void r2b_redacted档_输出掩敏留痕_掩文不等于摘要() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.REDACTED);
+        rcaGateway = gatewayWithOutput(outputs);
+        String leaky = "建议用 Authorization: Bearer sk-abcdef1234567890 回源";
+        client.enqueue(new RouteCallOutcome.Ok(leaky, new TokenUsage(20, 10, 30),
+                false, "model-rca", null, Duration.ofMillis(7)));
+
+        rcaGateway.call(ctx(), "prompt", 100);
+
+        var row = outputs.all().get(0);
+        assertThat(row.outputText()).as("密钥值零出现").doesNotContain("sk-abcdef1234567890");
+        assertThat(row.outputText()).as("掩码锚在场").contains("***");
+        assertThat(row.redactionNote()).contains("masked");
+        assertThat(row.outputDigest())
+                .as("摘要仍为原始响应摘要（掩文不可反推=读面诚实'已掩敏'）")
+                .isEqualTo(Digest.sha256Of(leaky).value());
+    }
+
+    @Test
+    void r2b_digestOnly档_输出零原文_摘要可对账() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.DIGEST_ONLY);
+        rcaGateway = gatewayWithOutput(outputs);
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", null, Duration.ofMillis(7)));
+
+        rcaGateway.call(ctx(), "prompt", 100);
+
+        var row = outputs.all().get(0);
+        assertThat(row.outputText()).as("digest-only 零原文").isNull();
+        assertThat(row.outputDigest()).isEqualTo(Digest.sha256Of("决策JSON").value());
+        assertThat(row.redactionNote()).isNull();
+    }
+
+    @Test
+    void r2b_off档_零行档一行不落_成功照常() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.OFF);
+        rcaGateway = gatewayWithOutput(outputs);
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", null, Duration.ofMillis(7)));
+
+        RcaModelOutcome outcome = rcaGateway.call(ctx(), "prompt", 100);
+
+        assertThat(outcome.content()).isEqualTo("决策JSON");
+        assertThat(outputs.all()).as("OFF 默认面零写入").isEmpty();
+        assertThat(stores.modelCalls.all().get(0).state()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void r2b_输出捕获写失败_账记LEDGER_WRITE_FAILED_成功结果不放行_已触网如实() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.FULL);
+        rcaGateway = gatewayWithOutput(outputs);
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", null, Duration.ofMillis(7)));
+        outputs.failure = new IllegalStateException("模拟 rca_model_output 不可写");
+
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), "prompt", 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "LEDGER_WRITE_FAILED")
+                .hasFieldOrPropertyWithValue("zeroNetwork", false);
+
+        assertThat(client.calls()).as("与输入捕获零触网的诚实差异：响应已在手").isEqualTo(1);
+        var row = stores.modelCalls.all().get(0);
+        assertThat(row.state()).isEqualTo("FAILED");
+        assertThat(row.errorCode()).isEqualTo("LEDGER_WRITE_FAILED");
+    }
+
+    @Test
+    void r2b_失败调用_无输出产出_零捕获行() {
+        AlertInMemoryStores.OutputCaptures outputs =
+                new AlertInMemoryStores.OutputCaptures(
+                        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.FULL);
+        rcaGateway = gatewayWithOutput(outputs);
+        client.enqueue(new RouteCallOutcome.Failed(
+                new ModelCallFailure.RequestInvalid(FaultScope.MODEL), 400, null, null,
+                Duration.ofMillis(3)));
+
+        assertThatThrownBy(() -> rcaGateway.call(ctx(), "prompt", 100))
+                .isInstanceOf(RcaModelCallException.class)
+                .hasFieldOrPropertyWithValue("errorCode", "REQUEST_INVALID");
+
+        assertThat(outputs.all()).as("FAILED/TIMEOUT 不落行（诚实'无输出'，不伪造错误文本）")
+                .isEmpty();
+        assertThat(stores.modelCalls.all().get(0).state()).isEqualTo("FAILED");
+    }
+
+    @Test
+    void r2b_遗留五六参构造_默认OFF零行档() {
+        // 存量装配（5/6 参）零行为漂移：输出捕获缺省 OFF，成功调用零捕获行
+        client.enqueue(new RouteCallOutcome.Ok("决策JSON", new TokenUsage(20, 10, 30),
+                false, "model-rca", "req-abc", Duration.ofMillis(7)));
+
+        RcaModelOutcome outcome = rcaGateway.call(ctx(), "prompt", 100);
+
+        assertThat(outcome.content()).isEqualTo("决策JSON");
+        assertThat(stores.modelCalls.all().get(0).state()).isEqualTo("SUCCESS");
+    }
+
     // ------------------------------------------------------- R10 输入限额（MA-03/MC10~11）
 
     @Test

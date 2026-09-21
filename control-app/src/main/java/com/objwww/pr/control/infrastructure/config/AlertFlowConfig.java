@@ -141,10 +141,23 @@ public class AlertFlowConfig {
                                                SlaPolicy sla,
                                                CanaryRouter canaryRouter,
                                                com.objwww.pr.control.alert.domain.classification.IncidentClassifier incidentClassifier,
-                                               com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository) {
+                                               com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository incidentCategoryRepository,
+                                               com.objwww.pr.control.alert.application.JevRunFlag jevRunFlag) {
         return new IncidentProjector(events, incidents, runs, tasks,
                 identity, deferredPolicy, sla, AlertClock.system(), canaryRouter,
-                incidentClassifier, incidentCategoryRepository);
+                incidentClassifier, incidentCategoryRepository, jevRunFlag);
+    }
+
+    /**
+     * JE-01：运行时 Jev 开关（页面旗标 → 配置默认回退，TTL 缓存）——三处铸造点
+     * 共用同一解析面，铸点读"当前意愿"冻结进 run 行。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.JevRunFlag jevRunFlag(
+            com.objwww.pr.control.alert.domain.repository.RuntimeFlagRepository flags,
+            @Value("${app.alert.r7.jev.enabled:false}") boolean configDefault) {
+        return new com.objwww.pr.control.alert.application.RuntimeJevRunFlag(
+                flags, configDefault, java.time.Clock.systemUTC());
     }
 
     @Bean
@@ -295,8 +308,31 @@ public class AlertFlowConfig {
                         .valueOf(behavior.trim().toUpperCase()));
     }
 
+    /**
+     * BA-191：flagd 回滚真执行器（service.rollback × V156 白名单旗标资源）——条件
+     * 恢复判定/台账/传输面与 eval 侧 DR-05 三面共用同一份组件（control_app 经 V156
+     * 获得 flagd_restore_ledger 读+收口面；change_event 写面 V40 已授 control_app）。
+     */
+    @Bean
+    public com.objwww.pr.control.infrastructure.runner.FlagdRollbackActionRunner
+    flagdRollbackActionRunner(
+            org.springframework.jdbc.core.simple.JdbcClient jdbc,
+            @Value("${app.alert.eval.flag-admin-url:http://flagd-admin:8081}")
+            String flagAdminUrl) {
+        return new com.objwww.pr.control.infrastructure.runner.FlagdRollbackActionRunner(
+                new com.objwww.pr.control.eval.application.FlagdScenarioDriver
+                        .FlagAdminClient.Http(flagAdminUrl).asAdminPort(),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresFlagdRestoreLedger(jdbc),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresChangeEventLedger(jdbc),
+                java.time.Clock.systemUTC());
+    }
+
     /** PD-D1：真执行 Runner 不设独立 @Bean（endpoint 缺席 = null，@Bean 禁 null）——
-     *  在 dispatcher 装配处内联构造；真派发面缺席时 UNKNOWN→ESCALATED 兜底 */
+     *  在 dispatcher 装配处内联构造；真派发面缺席时 UNKNOWN→ESCALATED 兜底。
+     *  BA-191：按 action_id 路由（service.rollback→flagd 回滚执行器），通用 HTTP
+     *  endpoint 为可空兜底；两者皆缺席 = null 保持旧语义 */
     @Bean
     public com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher
     operationOutboxDispatcher(
@@ -304,15 +340,24 @@ public class AlertFlowConfig {
             com.objwww.pr.control.alert.application.mutation.OperationLedgerStore operations,
             com.objwww.pr.control.alert.application.mutation.ResourceLockStore locks,
             com.objwww.pr.control.alert.application.mutation.DryRunActionRunner runner,
+            com.objwww.pr.control.infrastructure.runner.FlagdRollbackActionRunner
+                    flagdRollbackRunner,
             com.objwww.pr.control.alert.domain.event.RcaEventAppender events,
             @Value("${app.alert.inbox.owner:control-1}") String owner,
             @Value("${app.alert.mutation.dispatch-lease:PT1M}") java.time.Duration lease,
             @Value("${app.alert.mutation.dispatch-interval:PT5S}") java.time.Duration interval,
             @Value("${app.alert.mutation.executor.endpoint:}") String realEndpoint) {
-        com.objwww.pr.control.alert.application.mutation.ActionRunner realRunner =
+        com.objwww.pr.control.alert.application.mutation.ActionRunner httpRunner =
                 realEndpoint == null || realEndpoint.isBlank() ? null
                         : com.objwww.pr.control.infrastructure.runner.HttpActionRunner.create(
                         realEndpoint.trim(), 5000, 15000);
+        com.objwww.pr.control.alert.application.mutation.ActionRunner realRunner =
+                new com.objwww.pr.control.alert.application.mutation.RoutedActionRunner(
+                        java.util.Map.of(
+                                com.objwww.pr.control.alert.application.tool
+                                        .MutationToolCatalog.TOOL_SERVICE_ROLLBACK,
+                                flagdRollbackRunner),
+                        httpRunner);
         return new com.objwww.pr.control.alert.application.mutation.OperationOutboxDispatcher(
                 outbox, operations, locks, runner, realRunner, events, owner + "-dispatcher",
                 lease, interval, java.time.Clock.systemUTC());
@@ -527,12 +572,13 @@ public class AlertFlowConfig {
                                                          .ReportWinnerRepository winners,
                                                  com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
                                                  com.objwww.pr.control.ops.application.OperatorCaseService operatorCaseService,
+                                                 com.objwww.pr.control.alert.application.JevRunFlag jevRunFlag,
                                                  @Value("${app.alert.worker.slot-scope:rca}") String slotScope) {
         // M6-07：fallback 与 holmesShadowSampler 参数已随退场摘除（铸造点拆面）
         return new RcaRunOrchestrator(tasks, runs, attempts, reports, incidents,
                 slots, investigationResults, toolCalls, notifier, artifacts,
                 sla, AlertClock.system(), slotScope, alertMetrics, canaryRouter, winners,
-                canaryCollector, operatorCaseService);
+                canaryCollector, operatorCaseService, jevRunFlag);
     }
 
     /** B4：canary 采集适配器（NATIVE run 收尾链唯一写入方；LIVE 生产溯源门） */
@@ -901,11 +947,12 @@ public class AlertFlowConfig {
             DeferredPolicy deferredPolicy,
             SlaPolicy sla,
             TransactionOperations tx,
+            com.objwww.pr.control.alert.application.JevRunFlag jevRunFlag,
             @Value("${app.alert.redrive.poll-interval:PT30S}") Duration pollInterval) {
         // BA-146：tx 必传——决策行/run 行原子对（V31 deferred FK）只能在事务内成立
         return new com.objwww.pr.control.alert.application.IncidentWaitingRedrive(
                 incidents, runs, tasks, canaryRouter, deferredPolicy, sla,
-                AlertClock.system(), pollInterval, tx);
+                AlertClock.system(), pollInterval, tx, jevRunFlag);
     }
 
     /** PA-A2（V112）：每日验链作业——全 run 哈希链重算比对（R9 口径：assumed DB

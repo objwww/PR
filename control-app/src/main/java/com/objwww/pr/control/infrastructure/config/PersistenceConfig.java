@@ -118,6 +118,22 @@ public class PersistenceConfig {
                 jdbc);
     }
 
+    /** JE-01：系统运行时旗标存储（V159 alert_runtime_flag；页面可写开关行） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RuntimeFlagRepository
+    runtimeFlagRepository(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresRuntimeFlagRepository(jdbc);
+    }
+
+    /** JE-02：Jev 选材审计台账（V166 rca_jev_selection；append-only 决策事实） */
+    @Bean
+    public com.objwww.pr.control.alert.domain.repository.RcaJevSelectionPort
+    rcaJevSelectionPort(JdbcClient jdbc, ObjectMapper objectMapper) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresRcaJevSelectionRepository(jdbc, objectMapper);
+    }
+
     @Bean
     public com.objwww.pr.control.alert.domain.repository.RcaTaskRepository rcaTaskRepository(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaTaskRepository(jdbc);
@@ -184,6 +200,33 @@ public class PersistenceConfig {
     public com.objwww.pr.control.alert.domain.agent.RcaModelInputReplayPort
     rcaModelInputReplayPort(JdbcClient jdbc) {
         return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelInputReplay(
+                jdbc);
+    }
+
+    /**
+     * 输出捕获（V167 rca_model_output，append-only；R2 输入捕获对称面）。档位
+     * {@code app.alert.r7.output-capture: off|full|redacted|digest-only}（默认
+     * off=零行档——一行不落；A/B 对照实验窗覆写 full/redacted 才落文）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture rcaModelOutputCapture(
+            JdbcClient jdbc,
+            @Value("${app.alert.r7.output-capture:off}") String level) {
+        com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level parsed =
+                com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level
+                        .valueOf(level.trim().toUpperCase().replace('-', '_'));
+        if (parsed == com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level.OFF) {
+            return com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.OFF;
+        }
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelOutputCapture(
+                jdbc, parsed);
+    }
+
+    /** 输出捕获读面（/api/rca-runs/{runId}/model-outputs 数据源）：账行左连两侧捕获档 */
+    @Bean
+    public com.objwww.pr.control.alert.domain.agent.RcaModelOutputReadPort
+    rcaModelOutputReadPort(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence.PostgresRcaModelOutputRead(
                 jdbc);
     }
 

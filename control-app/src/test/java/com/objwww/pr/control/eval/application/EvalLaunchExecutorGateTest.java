@@ -211,6 +211,11 @@ class EvalLaunchExecutorGateTest {
                 return Optional.empty();
             }
 
+            @Override public List<com.objwww.pr.control.eval.domain.EvalRun> findStrandedRuns(
+                    Instant startedBefore) {
+                return List.of();
+            }
+
             @Override public List<com.objwww.pr.control.eval.domain.EvalCaseResult> findCasesByRunId(
                     java.util.UUID id) {
                 return List.of();

@@ -82,16 +82,55 @@
             <div class="qs-label">召回率（recall）</div>
             <div class="qs-value">{{ fmtPct(run.recall) }}</div>
           </div>
+          <!-- M-e D01（F09 修正）：micro/macro 分称；pass^k 仅固定 k 且全部计划
+               trial 终态完整时命名，暂态标徽 + 进度如实；文案走 evalStabilityZh 字典 -->
           <div class="qs-item">
-            <div class="qs-label">pass@1（逐轮）</div>
+            <div class="qs-label">
+              {{ EVAL_STABILITY_ZH.microPass.label }}
+              <el-tooltip :content="EVAL_STABILITY_ZH.microPass.tip" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </div>
             <div class="qs-value">{{ fmtRatioStat(run.stability?.passAt1) }}</div>
           </div>
           <div class="qs-item">
-            <div class="qs-label">pass@k（全轮命中）</div>
-            <div class="qs-value">{{ fmtRatioStat(run.stability?.passAllRounds) }}</div>
+            <div class="qs-label">
+              {{ EVAL_STABILITY_ZH.macroPass.label }}
+              <el-tooltip :content="EVAL_STABILITY_ZH.macroPass.tip" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </div>
+            <div class="qs-value">{{ fmtMacro(run.stability?.macroPassRate) }}</div>
           </div>
           <div class="qs-item">
-            <div class="qs-label">轮间一致性</div>
+            <div class="qs-label">
+              {{ allPlannedRoundsLabel(run.stability) }}
+              <el-tooltip :content="EVAL_STABILITY_ZH.allPlannedRounds.tip" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+              <span v-if="run.stability?.planComplete === false" class="stab-provisional">暂态</span>
+            </div>
+            <div class="qs-value">{{ fmtRatioStat(run.stability?.passAllRounds) }}</div>
+            <div v-if="run.stability?.planComplete === false" class="qs-sub">
+              {{ EVAL_STABILITY_ZH.roundsProgress.label }} {{ fmtPair(run.stability?.roundsProgress?.numerator, run.stability?.roundsProgress?.denominator) }}
+            </div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">
+              {{ EVAL_STABILITY_ZH.passAtLeastOnce.label }}
+              <el-tooltip :content="EVAL_STABILITY_ZH.passAtLeastOnce.tip" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </div>
+            <div class="qs-value">{{ fmtRatioStat(run.stability?.passAtLeastOnce) }}</div>
+          </div>
+          <div class="qs-item">
+            <div class="qs-label">
+              {{ EVAL_STABILITY_ZH.consistency.label }}
+              <el-tooltip :content="EVAL_STABILITY_ZH.consistency.tip" placement="top">
+                <span class="facet-tip">?</span>
+              </el-tooltip>
+            </div>
             <div class="qs-value">{{ fmtRatioStat(run.stability?.scenarioConsistency) }}</div>
           </div>
           <div class="qs-item">
@@ -118,7 +157,13 @@
                 <b>批次构成</b>：本实验 = 数据集 {{ run.datasetVersion ?? '—' }} 的
                 {{ run.totalScenarios ?? '—' }} 个场景 × 每场景多轮重复（已结清
                 {{ fmtPair(run.caseCount, run.totalScenarios) }} 案）。
-                同一场景重复多轮是为了度量 Agent 非确定性——单轮命中可能是运气，看 pass@1（逐轮命中率）与 pass@k（全轮都命中）才稳。
+                同一场景重复多轮是为了度量 Agent 非确定性——单轮命中可能是运气，要看重复轮次的稳定性指标：
+                <b>逐轮成功率 micro</b>（命中轮 ÷ 已落档轮，逐轮等权）与<b>场景等权成功率 macro</b>（各场景命中率的算术平均）
+                分称，场景轮数不同时二者必然偏离，不混称同一个 pass@1；<b>全部计划轮次成功率</b> = 冻结计划轮次
+                全部终态落档且轮轮命中的场景占比——只有固定 k 且全部计划 trial 终态完整时才构成 pass^k 通过结论，
+                运行中/缺轮时本页标「暂态」并展示计划轮次进度，不出最终结论；<b>至少一次成功 pass@k</b> 是通行
+                pass@k 本义（k 次重复至少一轮命中的场景占比），实测比例直展，不用 p^k 估算冒充。
+                <b>轮间一致性</b>只说明答案稳定——稳定地答错也一致，一致性单独不代表质量。
               </p>
               <p><b>根因判定</b>：每个案例的期望根因是一个三元组（组件 / 故障类型 / 原因码），Agent 报告的三元组逐项与期望比对：</p>
               <ul>
@@ -242,7 +287,8 @@
 
       <!-- 案例：verdict 筛选 + 游标分页 + 失败样本展开；复合 row-key 防同场景多轮串行 -->
       <div v-if="tab === 'cases'" class="card panel">
-        <!-- P4 安全面摘要：SafetyGate 裁决 + 红队诱饵采纳（拦截率出数面） -->
+        <!-- P4 安全面摘要：SafetyGate 五态裁决 + 红队诱饵采纳 + ME-T02 三事实 tally
+             （NOT_ASSESSED 未评不冒充零违规；tally 缺席旧批如实"旧口径"；文案 dict/evalMeZh） -->
         <div class="ev-summary" v-if="safety && safety.assessedCases > 0">
           <div class="es-head">
             <span class="es-title">安全面（P4）</span>
@@ -254,8 +300,24 @@
               <div class="es-value">{{ fmtCount(safety.assessedCases) }}</div>
             </div>
             <div class="es-item">
-              <div class="es-label">REJECT / PASS</div>
-              <div class="es-value">{{ safety.rejects }} / {{ safety.passes }}</div>
+              <div class="es-label">{{ EVAL_ME_SAFETY_ZH.verdictTitle }}</div>
+              <div class="es-value">{{ safety.passes }} / {{ safety.rejects }} / {{ safety.notAssessed ?? '—' }} / {{ safety.notApplicable ?? '—' }} / {{ safety.errors ?? '—' }}</div>
+              <div v-if="(safety.notAssessed ?? 0) > 0" class="qs-sub">{{ EVAL_ME_SAFETY_ZH.notAssessedNote }}</div>
+              <div v-if="(safety.errors ?? 0) > 0" class="qs-sub">{{ EVAL_ME_SAFETY_ZH.errorNote }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_SAFETY_ZH.tallyTitle }}</div>
+              <template v-if="safety.attempted != null">
+                <div class="es-value">{{ safety.attempted }} / {{ safety.blocked }} / {{ safety.executedViolations }}</div>
+                <div v-if="(safety.notAssessedFaces ?? 0) > 0" class="qs-sub">
+                  {{ EVAL_ME_SAFETY_ZH.tally.notAssessedFaces }} {{ safety.notAssessedFaces }}（已评面 {{ safety.assessedFaces }}）
+                </div>
+                <div v-if="(safety.tallyMissingCases ?? 0) > 0" class="qs-sub">{{ EVAL_ME_SAFETY_ZH.tally.partial }}</div>
+              </template>
+              <template v-else>
+                <div class="es-value muted">旧口径</div>
+                <div class="qs-sub">{{ EVAL_ME_SAFETY_ZH.tally.legacy }}</div>
+              </template>
             </div>
             <div class="es-item">
               <div class="es-label">红队案例</div>
@@ -330,6 +392,219 @@
                 <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('HIGH') }} {{ sixParts.high }}</el-tag>
                 <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('MEDIUM') }} {{ sixParts.medium }}</el-tag>
                 <el-tag size="small" class="es-tag" disable-transitions>{{ mdSixPartsLevel('LOW') }} {{ sixParts.low }}</el-tag>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- M-e T11 行为评测摘要：引用六检查五态 + 覆盖双轨 + 分子分母 + 失败标签
+             （assessed=0 未评整卡诚实隐藏，沿六要素卡惯例；文案 dict/evalMeZh） -->
+        <div class="ev-summary" v-if="behavior && behavior.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">{{ EVAL_ME_BEHAVIOR_ZH.title }}</span>
+            <span class="muted es-note">{{ EVAL_ME_BEHAVIOR_ZH.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.assessed }}</div>
+              <div class="es-value">{{ fmtCount(behavior.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.graderVersion }}</div>
+              <div class="es-value">{{ behavior.graderVersions?.join('、') || '—' }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.coverageText }}</div>
+              <div class="es-value">{{ fmtCoveragePair(behavior.coverage?.textCovered, behavior.coverage?.textTotal) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.coverageEvidence }}</div>
+              <div class="es-value">{{ fmtCoveragePair(behavior.coverage?.evidenceCovered, behavior.coverage?.evidenceTotal) }}</div>
+              <div class="qs-sub">{{ EVAL_ME_BEHAVIOR_ZH.coverageEvidenceNote }}（被评 {{ fmtCount(behavior.coverage?.evidenceAssessed) }} 案）</div>
+            </div>
+            <div class="es-item" v-if="behavior.failureLabels?.length">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.failureLabelsTitle }}</div>
+              <div class="es-value">
+                <el-tag v-for="l in behavior.failureLabels" :key="l.label" size="small" type="danger" class="es-tag" disable-transitions>{{ l.label }} × {{ l.count }}</el-tag>
+              </div>
+            </div>
+          </div>
+          <div class="es-strip">
+            <div v-for="c in orderedBehaviorChecks(behavior.checks)" :key="c.name" class="es-item">
+              <div class="es-label">{{ behaviorCheckZh(c.name) }}</div>
+              <div class="es-value">{{ behaviorCheckCountsText(c.statusCounts) }}</div>
+            </div>
+            <div class="es-item" v-if="behavior.metrics?.length">
+              <div class="es-label">{{ EVAL_ME_BEHAVIOR_ZH.metricsTitle }}</div>
+              <div class="es-value">
+                <template v-for="m in behavior.metrics" :key="m.name">
+                  <span class="es-tag">{{ behaviorMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ME-T12a 死循环观测摘要：终态分布 + 五检查五态 + 分子分母 + 失败标签
+             （assessed=0 未评整卡诚实隐藏，沿 behavior 卡惯例；文案 dict/evalMeZh） -->
+        <div class="ev-summary" v-if="loopObs && loopObs.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">{{ EVAL_ME_LOOP_ZH.title }}</span>
+            <span class="muted es-note">{{ EVAL_ME_LOOP_ZH.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_LOOP_ZH.assessed }}</div>
+              <div class="es-value">{{ fmtCount(loopObs.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_LOOP_ZH.graderVersion }}</div>
+              <div class="es-value">{{ loopObs.graderVersions?.join('、') || '—' }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_LOOP_ZH.stopReasonsTitle }}</div>
+              <div class="es-value">
+                <el-tag v-for="(n, r) in loopObs.stopReasons" :key="r" size="small" class="es-tag" disable-transitions>{{ loopStopReasonZh(r) }} × {{ n }}</el-tag>
+              </div>
+            </div>
+            <div class="es-item" v-if="loopObs.failureLabels?.length">
+              <div class="es-label">{{ EVAL_ME_LOOP_ZH.failureLabelsTitle }}</div>
+              <div class="es-value">
+                <el-tag v-for="l in loopObs.failureLabels" :key="l.label" size="small" type="danger" class="es-tag" disable-transitions>{{ loopFailureLabelZh(l.label) }} × {{ l.count }}</el-tag>
+              </div>
+            </div>
+          </div>
+          <div class="es-strip">
+            <div v-for="c in orderedChecks(loopObs.checks, EVAL_ME_LOOP_ZH.checkOrder)" :key="c.name" class="es-item">
+              <div class="es-label">{{ loopCheckZh(c.name) }}</div>
+              <div class="es-value">{{ behaviorCheckCountsText(c.statusCounts) }}</div>
+              <div v-if="(c.statusCounts?.NOT_ASSESSED ?? 0) > 0" class="qs-sub">{{ EVAL_ME_LOOP_ZH.notAssessedNote }}</div>
+            </div>
+            <div class="es-item" v-if="loopObs.metrics?.length">
+              <div class="es-label">{{ EVAL_ME_LOOP_ZH.metricsTitle }}</div>
+              <div class="es-value">
+                <template v-for="m in loopObs.metrics" :key="m.name">
+                  <span class="es-tag">{{ loopMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ME-T12a 多 Agent 协作摘要：标量三件 + 十三检查五态 + 分子分母 + MAST 标签 + 归因双轨
+             （assessed=0 未评整卡诚实隐藏；双轨分列不混） -->
+        <div class="ev-summary" v-if="collab && collab.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">{{ EVAL_ME_COLLAB_ZH.title }}</span>
+            <span class="muted es-note">{{ EVAL_ME_COLLAB_ZH.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.assessed }}</div>
+              <div class="es-value">{{ fmtCount(collab.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.graderVersion }}</div>
+              <div class="es-value">{{ collab.graderVersions?.join('、') || '—' }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.scalars.edgeCount }}</div>
+              <div class="es-value">{{ fmtNullable(collab.edges) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.scalars.admittedCount }}</div>
+              <div class="es-value">{{ fmtNullable(collab.admitted) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.scalars.tokenCostTotal }}</div>
+              <div class="es-value">{{ fmtNullable(collab.tokenCostTotal) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.suspectedTitle }}</div>
+              <div class="es-value">{{ fmtCount(collab.suspectedAttributions) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.supportedTitle }}</div>
+              <div class="es-value">{{ fmtCount(collab.supportedAttributions) }}</div>
+            </div>
+            <div class="es-item" v-if="collab.failureLabels?.length">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.failureLabelsTitle }}</div>
+              <div class="es-value">
+                <el-tag v-for="l in collab.failureLabels" :key="l.label" size="small" type="danger" class="es-tag" disable-transitions>{{ collabFailureLabelZh(l.label) }}（{{ l.label }}）× {{ l.count }}</el-tag>
+              </div>
+            </div>
+          </div>
+          <div class="es-strip">
+            <div v-for="c in orderedChecks(collab.checks, EVAL_ME_COLLAB_ZH.checkOrder)" :key="c.name" class="es-item">
+              <div class="es-label">{{ collabCheckZh(c.name) }}</div>
+              <div class="es-value">{{ behaviorCheckCountsText(c.statusCounts) }}</div>
+              <div v-if="(c.statusCounts?.NOT_APPLICABLE ?? 0) > 0 && c.name === 'handoff_fact_constraint_retention'" class="qs-sub">{{ EVAL_ME_COLLAB_ZH.zeroHandoffsNote }}</div>
+              <div v-else-if="(c.statusCounts?.NOT_ASSESSED ?? 0) > 0" class="qs-sub">{{ EVAL_ME_COLLAB_ZH.notAssessedNote }}</div>
+            </div>
+            <div class="es-item" v-if="collab.metrics?.length">
+              <div class="es-label">{{ EVAL_ME_COLLAB_ZH.metricsTitle }}</div>
+              <div class="es-value">
+                <template v-for="m in collab.metrics" :key="m.name">
+                  <span class="es-tag">{{ collabMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ME-T12a 上下文漂移摘要：消费观测四件 + 六检查五态 + 分子分母 + 失败标签 + 挂起清单
+             （assessed=0 未评整卡诚实隐藏；无压缩事件 = withSummary=0 如实区分） -->
+        <div class="ev-summary" v-if="drift && drift.assessed > 0">
+          <div class="es-head">
+            <span class="es-title">{{ EVAL_ME_DRIFT_ZH.title }}</span>
+            <span class="muted es-note">{{ EVAL_ME_DRIFT_ZH.source }}</span>
+          </div>
+          <div class="es-strip">
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.assessed }}</div>
+              <div class="es-value">{{ fmtCount(drift.assessed) }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.graderVersion }}</div>
+              <div class="es-value">{{ drift.graderVersions?.join('、') || '—' }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.withSummary }}</div>
+              <div class="es-value">{{ fmtCount(drift.withSummary) }}</div>
+              <div class="qs-sub">{{ EVAL_ME_DRIFT_ZH.noSummaryNote }}</div>
+            </div>
+            <div class="es-item">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.consumptionTitle }}</div>
+              <div class="es-value">
+                <span class="es-tag">{{ EVAL_ME_DRIFT_ZH.consumption.observed }} {{ fmtCount(drift.consumptionObserved) }}</span>
+                <span class="es-tag">{{ EVAL_ME_DRIFT_ZH.consumption.summaryCommitted }} {{ fmtCount(drift.summaryCommitted) }}</span>
+                <span class="es-tag">{{ EVAL_ME_DRIFT_ZH.consumption.consumerInvoked }} {{ fmtCount(drift.consumerInvoked) }}</span>
+                <span class="es-tag">{{ EVAL_ME_DRIFT_ZH.consumption.consumed }} {{ fmtCount(drift.consumed) }}</span>
+              </div>
+            </div>
+            <div class="es-item" v-if="drift.failureLabels?.length">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.failureLabelsTitle }}</div>
+              <div class="es-value">
+                <el-tag v-for="l in drift.failureLabels" :key="l.label" size="small" type="danger" class="es-tag" disable-transitions>{{ l.label }} × {{ l.count }}</el-tag>
+              </div>
+            </div>
+          </div>
+          <div class="es-strip">
+            <div v-for="c in orderedChecks(drift.checks, EVAL_ME_DRIFT_ZH.checkOrder)" :key="c.name" class="es-item">
+              <div class="es-label">{{ driftCheckZh(c.name) }}</div>
+              <div class="es-value">{{ behaviorCheckCountsText(c.statusCounts) }}</div>
+              <div v-if="(c.statusCounts?.NOT_ASSESSED ?? 0) > 0" class="qs-sub">{{ EVAL_ME_DRIFT_ZH.notAssessedNote }}</div>
+            </div>
+            <div class="es-item" v-if="drift.metrics?.length">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.metricsTitle }}</div>
+              <div class="es-value">
+                <template v-for="m in drift.metrics" :key="m.name">
+                  <span class="es-tag">{{ driftMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+                </template>
+              </div>
+            </div>
+            <div class="es-item" v-if="drift.deferred?.length">
+              <div class="es-label">{{ EVAL_ME_DRIFT_ZH.deferredTitle }}</div>
+              <div class="es-value">
+                <template v-for="d in drift.deferred" :key="d">
+                  <span class="es-tag">{{ d.split(':')[0] }}</span>
+                </template>
               </div>
             </div>
           </div>
@@ -694,6 +969,155 @@
           <div v-else-if="toolSpansState === 'unavailable'" class="muted">{{ mdZh.toolSpans.unavailable }}</div>
         </div>
 
+        <!-- M-e T11 证据行为：六检查逐项五态徽章 + 中文成因（裸 reason code 随行备查）、
+             覆盖双轨、指标分子/分母、失败标签、归属证据引用；无落档整节诚实隐藏 -->
+        <div class="cd-section" v-if="detail.behavior?.length">
+          <div class="cd-sec-title">{{ EVAL_ME_BEHAVIOR_ZH.title }}</div>
+          <div v-for="(b, bi) in detail.behavior" :key="bi" class="bh-entry">
+            <div class="bh-head muted">
+              {{ EVAL_ME_BEHAVIOR_ZH.graderVersion }} {{ b.graderVersion ?? '未统计' }}
+              <template v-if="b.traceDigest"> · {{ EVAL_ME_BEHAVIOR_ZH.traceDigest }} <span class="mono break">{{ b.traceDigest.slice(0, 16) }}…</span></template>
+            </div>
+            <el-descriptions :column="2" border size="small" class="bh-cov">
+              <el-descriptions-item :label="EVAL_ME_BEHAVIOR_ZH.coverageText">
+                {{ fmtCoveragePair(b.coverage?.textCovered, b.coverage?.textTotal) }}
+              </el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_BEHAVIOR_ZH.coverageEvidence">
+                {{ fmtCoveragePair(b.coverage?.evidenceCovered, b.coverage?.evidenceTotal) }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <div class="bh-checks">
+              <div v-for="c in orderedBehaviorChecks(b.checks)" :key="c.name" class="bh-check-row">
+                <span class="bh-check-name">{{ behaviorCheckZh(c.name) }}</span>
+                <el-tag size="small" :type="behaviorStatusTagType(c.status)" disable-transitions>{{ behaviorStatusZh(c.status) }}</el-tag>
+                <span class="bh-reason">{{ behaviorReasonZh(c.reasonCode) }}<span class="mono muted">（{{ c.reasonCode ?? '—' }}）</span></span>
+              </div>
+            </div>
+            <div v-if="b.metrics?.length" class="bh-line muted">
+              {{ EVAL_ME_BEHAVIOR_ZH.metricsTitle }}：
+              <span v-for="m in b.metrics" :key="m.name" class="es-tag">{{ behaviorMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+            </div>
+            <div v-if="b.failureLabels?.length" class="bh-line">
+              <span class="muted">{{ EVAL_ME_BEHAVIOR_ZH.failureLabelsTitle }}：</span>
+              <el-tag v-for="l in b.failureLabels" :key="l" size="small" type="danger" class="es-tag" disable-transitions>{{ l }}</el-tag>
+            </div>
+            <div v-if="b.evidenceRefs?.length" class="bh-line muted">
+              {{ EVAL_ME_BEHAVIOR_ZH.evidenceRefsTitle }}（{{ b.evidenceRefs.length }}）：
+              <span v-for="r in b.evidenceRefs" :key="r" class="mono break es-tag">{{ r }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ME-T12a 死循环观测：终态/标量行 + 五检查逐项五态徽章 + 中文成因（裸码备查）；
+             无落档整节诚实隐藏 -->
+        <div class="cd-section" v-if="detail.loop?.length">
+          <div class="cd-sec-title">{{ EVAL_ME_LOOP_ZH.title }}</div>
+          <div v-for="(l, li) in detail.loop" :key="li" class="bh-entry">
+            <div class="bh-head muted">
+              {{ EVAL_ME_LOOP_ZH.graderVersion }} {{ l.graderVersion ?? '未统计' }}
+              · {{ EVAL_ME_LOOP_ZH.scalars.stopReason }} {{ loopStopReasonZh(l.stopReason ?? 'NONE') }}
+            </div>
+            <el-descriptions :column="3" border size="small" class="bh-cov">
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.detectionEventIndex">{{ fmtNullable(l.detectionEventIndex) }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.firstNoProgressEventIndex">{{ fmtNullable(l.firstNoProgressEventIndex) }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.postStopNewActions">{{ fmtNullable(l.postStopNewActions) }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.physicalCallsFromOnset">{{ fmtNullable(l.physicalCallsFromOnset) }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.tokensFromOnset">{{ fmtNullable(l.tokensFromOnset) }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_LOOP_ZH.scalars.secondsFromOnset">{{ fmtNullable(l.secondsFromOnset) }}</el-descriptions-item>
+            </el-descriptions>
+            <div class="bh-checks">
+              <div v-for="c in orderedChecks(l.checks, EVAL_ME_LOOP_ZH.checkOrder)" :key="c.name" class="bh-check-row">
+                <span class="bh-check-name">{{ loopCheckZh(c.name) }}</span>
+                <el-tag size="small" :type="behaviorStatusTagType(c.status)" disable-transitions>{{ behaviorStatusZh(c.status) }}</el-tag>
+                <span class="bh-reason">{{ loopReasonZh(c.reasonCode) }}<span class="mono muted">（{{ c.reasonCode ?? '—' }}）</span></span>
+              </div>
+            </div>
+            <div v-if="l.metrics?.length" class="bh-line muted">
+              {{ EVAL_ME_LOOP_ZH.metricsTitle }}：
+              <span v-for="m in l.metrics" :key="m.name" class="es-tag">{{ loopMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+            </div>
+            <div v-if="l.failureLabels?.length" class="bh-line">
+              <span class="muted">{{ EVAL_ME_LOOP_ZH.failureLabelsTitle }}：</span>
+              <el-tag v-for="fl in l.failureLabels" :key="fl" size="small" type="danger" class="es-tag" disable-transitions>{{ loopFailureLabelZh(fl) }}</el-tag>
+            </div>
+          </div>
+        </div>
+
+        <!-- ME-T12a 多 Agent 协作：标量三件 + 十三检查逐项五态徽章 + MAST 标签 + 归因双轨分列；
+             无落档整节诚实隐藏 -->
+        <div class="cd-section" v-if="detail.collab?.length">
+          <div class="cd-sec-title">{{ EVAL_ME_COLLAB_ZH.title }}</div>
+          <div v-for="(cb, ci) in detail.collab" :key="ci" class="bh-entry">
+            <div class="bh-head muted">
+              {{ EVAL_ME_COLLAB_ZH.graderVersion }} {{ cb.graderVersion ?? '未统计' }}
+              · {{ EVAL_ME_COLLAB_ZH.scalars.edgeCount }} {{ fmtNullable(cb.edgeCount) }}
+              · {{ EVAL_ME_COLLAB_ZH.scalars.admittedCount }} {{ fmtNullable(cb.admittedCount) }}
+              · {{ EVAL_ME_COLLAB_ZH.scalars.tokenCostTotal }} {{ fmtNullable(cb.tokenCostTotal) }}
+            </div>
+            <div class="bh-checks">
+              <div v-for="c in orderedChecks(cb.checks, EVAL_ME_COLLAB_ZH.checkOrder)" :key="c.name" class="bh-check-row">
+                <span class="bh-check-name">{{ collabCheckZh(c.name) }}</span>
+                <el-tag size="small" :type="behaviorStatusTagType(c.status)" disable-transitions>{{ behaviorStatusZh(c.status) }}</el-tag>
+                <span class="bh-reason">{{ collabReasonZh(c.reasonCode) }}<span class="mono muted">（{{ c.reasonCode ?? '—' }}）</span></span>
+              </div>
+            </div>
+            <div v-if="cb.metrics?.length" class="bh-line muted">
+              {{ EVAL_ME_COLLAB_ZH.metricsTitle }}：
+              <span v-for="m in cb.metrics" :key="m.name" class="es-tag">{{ collabMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+            </div>
+            <div v-if="cb.failureLabels?.length" class="bh-line">
+              <span class="muted">{{ EVAL_ME_COLLAB_ZH.failureLabelsTitle }}：</span>
+              <el-tag v-for="fl in cb.failureLabels" :key="fl" size="small" type="danger" class="es-tag" disable-transitions>{{ collabFailureLabelZh(fl) }}（{{ fl }}）</el-tag>
+            </div>
+            <div v-if="cb.suspectedAttributions?.length" class="bh-line muted">
+              {{ EVAL_ME_COLLAB_ZH.suspectedTitle }}：
+              <span v-for="a in cb.suspectedAttributions" :key="a" class="es-tag">{{ a }}</span>
+            </div>
+            <div v-if="cb.supportedAttributions?.length" class="bh-line muted">
+              {{ EVAL_ME_COLLAB_ZH.supportedTitle }}：
+              <span v-for="a in cb.supportedAttributions" :key="a" class="es-tag">{{ a }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ME-T12a 上下文漂移：摘要指纹 + 消费观测四件 + 六检查逐项五态徽章 + 挂起清单；
+             无落档整节诚实隐藏 -->
+        <div class="cd-section" v-if="detail.drift?.length">
+          <div class="cd-sec-title">{{ EVAL_ME_DRIFT_ZH.title }}</div>
+          <div v-for="(d, di) in detail.drift" :key="di" class="bh-entry">
+            <div class="bh-head muted">
+              {{ EVAL_ME_DRIFT_ZH.graderVersion }} {{ d.graderVersion ?? '未统计' }}
+              <template v-if="d.summaryDigest"> · {{ EVAL_ME_DRIFT_ZH.summaryDigest }} <span class="mono break">{{ d.summaryDigest.slice(0, 16) }}…</span></template>
+              <template v-else> · {{ EVAL_ME_DRIFT_ZH.noSummaryNote }}</template>
+            </div>
+            <el-descriptions v-if="d.consumption" :column="4" border size="small" class="bh-cov">
+              <el-descriptions-item :label="EVAL_ME_DRIFT_ZH.consumption.mode">{{ d.consumption.mode ?? '—' }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_DRIFT_ZH.consumption.summaryCommitted">{{ d.consumption.summaryCommitted ? '是' : '否' }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_DRIFT_ZH.consumption.consumerInvoked">{{ d.consumption.consumerInvoked ? '是' : '否' }}</el-descriptions-item>
+              <el-descriptions-item :label="EVAL_ME_DRIFT_ZH.consumption.consumed">{{ d.consumption.consumed == null ? '—（未观测）' : (d.consumption.consumed ? '是' : '否') }}</el-descriptions-item>
+            </el-descriptions>
+            <div class="bh-checks">
+              <div v-for="c in orderedChecks(d.checks, EVAL_ME_DRIFT_ZH.checkOrder)" :key="c.name" class="bh-check-row">
+                <span class="bh-check-name">{{ driftCheckZh(c.name) }}</span>
+                <el-tag size="small" :type="behaviorStatusTagType(c.status)" disable-transitions>{{ behaviorStatusZh(c.status) }}</el-tag>
+                <span class="bh-reason">{{ driftReasonZh(c.reasonCode) }}<span class="mono muted">（{{ c.reasonCode ?? '—' }}）</span></span>
+              </div>
+            </div>
+            <div v-if="d.metrics?.length" class="bh-line muted">
+              {{ EVAL_ME_DRIFT_ZH.metricsTitle }}：
+              <span v-for="m in d.metrics" :key="m.name" class="es-tag">{{ driftMetricZh(m.name) }} {{ m.numerator }}/{{ m.denominator }}</span>
+            </div>
+            <div v-if="d.failureLabels?.length" class="bh-line">
+              <span class="muted">{{ EVAL_ME_DRIFT_ZH.failureLabelsTitle }}：</span>
+              <el-tag v-for="fl in d.failureLabels" :key="fl" size="small" type="danger" class="es-tag" disable-transitions>{{ fl }}</el-tag>
+            </div>
+            <div v-if="d.deferred?.length" class="bh-line muted">
+              {{ EVAL_ME_DRIFT_ZH.deferredTitle }}：
+              <span v-for="(dd, ddi) in d.deferred" :key="ddi" class="es-tag">{{ dd.split(':')[0] }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 场景身份：unresolvedReason 区分成因（AMBIGUOUS/NO_MATCH_OR_HOLDOUT）；
              旧后端字段缺席时回退三路并列笼统文案 -->
         <div class="cd-section">
@@ -811,6 +1235,8 @@ import StatusBadge from '../components/common/StatusBadge.vue'
 import { scenarioZh } from '../dict/scenarioZh'
 import { mdSixPartsLevel, mdZh } from '../dict/mdZh'
 import { evalTerminalReasonZh } from '../dict/zh.js'
+import { EVAL_STABILITY_ZH, allPlannedRoundsLabel } from '../dict/evalStabilityZh.js'
+import { EVAL_ME_BEHAVIOR_ZH, EVAL_ME_COLLAB_ZH, EVAL_ME_DRIFT_ZH, EVAL_ME_LOOP_ZH, EVAL_ME_SAFETY_ZH, behaviorCheckZh, behaviorMetricZh, behaviorReasonZh, behaviorStatusTagType, behaviorStatusZh, collabCheckZh, collabFailureLabelZh, collabMetricZh, collabReasonZh, driftCheckZh, driftMetricZh, driftReasonZh, loopCheckZh, loopFailureLabelZh, loopMetricZh, loopReasonZh, loopStopReasonZh } from '../dict/evalMeZh.js'
 import { fmtClock, fmtCount, fmtDuration, fmtFacet, fmtNum, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -821,6 +1247,13 @@ const badgeState = s => ({ RUNNING: 'RUNNING', SUCCEEDED: 'COMPLETED', FAILED: '
 
 // 分面未接线/缺席（UNKNOWN/null）→ 弱化显示
 const isUnknownFacet = v => v == null || v === 'UNKNOWN'
+
+// M-e D01：macro 场景等权成功率（MacroStat{value, samples, status}；非整数计数比，
+// OK → 百分比，UNKNOWN/缺席 → 未统计，不填 0 冒充）
+function fmtMacro(stat) {
+  if (!stat || stat.status !== 'OK' || stat.value == null) return '未统计'
+  return fmtPct(stat.value)
+}
 
 // P3 定因逐维：三布尔 → "x/y"（null=未评不填 0）
 function fmtDim(componentHit, faultHit, reasonHit) {
@@ -999,6 +1432,96 @@ async function loadSixParts() {
   } catch { /* 六要素面缺席如实留空 */ }
 }
 
+// M-e T11 行为评测摘要：eval_case_behavior（/behavior 读面；assessed=0 = 未评，整卡诚实隐藏）
+const behavior = ref(null)
+let behaviorLoaded = false
+
+async function loadBehavior() {
+  if (behaviorLoaded) return
+  behaviorLoaded = true
+  try {
+    behavior.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/behavior`)
+  } catch { /* 行为面缺席如实留空（旧后端未部署同律） */ }
+}
+
+// ME-T12a 死循环观测摘要：eval_case_loop（/loop 读面；assessed=0 = 未评，整卡诚实隐藏）
+const loopObs = ref(null)
+let loopLoaded = false
+
+async function loadLoop() {
+  if (loopLoaded) return
+  loopLoaded = true
+  try {
+    loopObs.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/loop`)
+  } catch { /* 死循环面缺席如实留空（旧后端未部署同律） */ }
+}
+
+// ME-T12a 多 Agent 协作摘要：eval_case_collab（/collab 读面；assessed=0 = 未评，整卡诚实隐藏）
+const collab = ref(null)
+let collabLoaded = false
+
+async function loadCollab() {
+  if (collabLoaded) return
+  collabLoaded = true
+  try {
+    collab.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/collab`)
+  } catch { /* 协作面缺席如实留空（旧后端未部署同律） */ }
+}
+
+// ME-T12a 上下文漂移摘要：eval_case_drift（/drift 读面；assessed=0 = 未评，整卡诚实隐藏）
+const drift = ref(null)
+let driftLoaded = false
+
+async function loadDrift() {
+  if (driftLoaded) return
+  driftLoaded = true
+  try {
+    drift.value = await api(`/eval/runs/${encodeURIComponent(runId.value)}/drift`)
+  } catch { /* 漂移面缺席如实留空（旧后端未部署同律） */ }
+}
+
+// 三族共用：检查展示序对齐各自评分器评定序（聚合响应按名排序，展示按字典序）
+function orderedChecks(checks, order) {
+  const list = checks ?? []
+  return [...list].sort((a, b) => {
+    const ia = order.indexOf(a.name)
+    const ib = order.indexOf(b.name)
+    return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib)
+  })
+}
+
+// 可空标量：null → '—'（未观测如实，不填 0 冒充）
+function fmtNullable(v) {
+  return v == null ? '—' : fmtCount(v)
+}
+
+// 覆盖双轨分子/分母：全 null → 未评（该轨未评不填 0）；有值如实 x/y
+function fmtCoveragePair(covered, total) {
+  if (covered == null && total == null) return EVAL_ME_BEHAVIOR_ZH.noData
+  return `${fmtCount(covered)} / ${fmtCount(total)}`
+}
+
+// 六检查展示序对齐 BehaviorEvaluator 评定序（聚合响应按名排序，展示按字典序）
+function orderedBehaviorChecks(checks) {
+  const list = checks ?? []
+  const order = EVAL_ME_BEHAVIOR_ZH.checkOrder
+  return [...list].sort((a, b) => {
+    const ia = order.indexOf(a.name)
+    const ib = order.indexOf(b.name)
+    return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib)
+  })
+}
+
+// run 级检查五态计数 → 人话（只出非零态；未评/不适用不并入零违规口径）
+function behaviorCheckCountsText(counts) {
+  const parts = []
+  for (const [status, zh] of [['PASS', '通过'], ['FAIL', '不通过'], ['NOT_ASSESSED', '未评'], ['NOT_APPLICABLE', '不适用'], ['ERROR', '异常']]) {
+    const n = counts?.[status] ?? 0
+    if (n > 0) parts.push(`${zh} ${n}`)
+  }
+  return parts.length ? parts.join(' · ') : '—'
+}
+
 // M-d T3 过程面指标：/process-metrics 读面；settled=0 = 无已结清案例，整卡诚实隐藏
 const processMetrics = ref(null)
 let processMetricsLoaded = false
@@ -1104,6 +1627,10 @@ function ensureCasesTabLoaded() {
   loadSafety()
   loadJudge()
   loadSixParts()
+  loadBehavior()
+  loadLoop()
+  loadCollab()
+  loadDrift()
   loadProcessMetrics()
 }
 
@@ -1421,6 +1948,8 @@ onUnmounted(stopAcceptedPoll)
 .caliber-body ul { margin: 4px 0 8px; padding-left: 20px; }
 .qs-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .qs-value { font-size: 18px; font-weight: 600; color: var(--head); }
+.qs-sub { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 2px; }
+.stab-provisional { font-size: var(--fs-aux); color: var(--warn, #b26a00); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 4px; }
 
 .facets { border-top: 1px solid var(--line); padding-top: 12px; }
 .facet-tip {
@@ -1488,6 +2017,17 @@ onUnmounted(stopAcceptedPoll)
 .ref-meta { color: var(--ink-2); }
 .ref-unresolved { color: var(--ink-2); font-style: italic; }
 .ref-none, .evg-none { font-size: var(--fs-aux); padding-left: 10px; }
+
+/* M-e 证据行为小节 */
+.bh-entry { border-top: 1px dashed var(--line); padding-top: 8px; margin-top: 8px; }
+.bh-entry:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+.bh-head { font-size: var(--fs-aux); margin-bottom: 6px; }
+.bh-cov { margin-bottom: 8px; }
+.bh-checks { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.bh-check-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-body); }
+.bh-check-name { min-width: 96px; font-weight: 600; color: var(--head); }
+.bh-reason { font-size: var(--fs-aux); color: var(--ink); }
+.bh-line { font-size: var(--fs-aux); margin-top: 4px; }
 
 .fail-sample { padding: 8px 16px; }
 .fs-label { font-size: var(--fs-aux); color: var(--ink-2); margin-bottom: 4px; }

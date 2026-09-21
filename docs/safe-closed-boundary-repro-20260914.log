@@ -1,0 +1,16 @@
+CLOSE-PREVIEW ready=false canLaunch=true create=LAUNCH_DISABLED
+17:23:15.847 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker audit 领取作业：drill=c28fcd71-41ed-4fe2-b72a-11eeeeaffeec scenario=T1 env=arena-195
+CLOSE-BACKLOG apiLaunchEnabled=false injectionPortCalls=1
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (E:\ProgramInstall\maven\apache-maven-3.9.16\maven-repository\net\bytebuddy\byte-buddy-agent\1.15.11\byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+CLOSE-CLI mode=once directRunBatch=true (stopped at fake port)
+CLOSE-CLI mode=workre directRunBatch=true (stopped at fake port)
+COMPARE candidateState=RUNNING baselineCases=5 candidateCases=5 paired=5 unpaired=0 missingDigest=false gate=PASS persisted=true
+COMPARE candidateState=FAILED baselineCases=5 candidateCases=5 paired=5 unpaired=0 missingDigest=false gate=PASS persisted=true
+COMPARE candidateState=SUCCEEDED baselineCases=50 candidateCases=5 paired=5 unpaired=45 missingDigest=false gate=PASS persisted=true
+COMPARE candidateState=SUCCEEDED baselineCases=5 candidateCases=5 paired=5 unpaired=0 missingDigest=true gate=PASS persisted=true
+AUDIT COMPLETE: observed boundaries reproduced; not production PASS

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jev · 独立实验台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><div class="brand">J<span>实验台</span></div><div class="tag">冻结证据 · 成对比较 · 独立运行</div><span id="connection">连接中…</span></header>
+<main>
+  <div class="heading"><div><p class="eyebrow">CONTEXT SELECTION / A–B LAB</p><h1>让数据回答，Jev 是否有帮助。</h1><p class="muted">同一份证据，两条诊断路径。比较召回、F1 和完整调用开销，保留每一次实验的依据。</p></div><span class="pill">不接入告警调查主链</span></div>
+  <div id="error" role="alert" hidden></div>
+  <section class="setup card">
+    <div><h2>01 / 冻结数据</h2><label class="upload">导入标注数据集 JSON<input id="file" type="file" accept=".json,application/json"></label><button id="example" class="quiet">载入合成示例</button><p id="datasetInfo" class="muted">尚未载入数据集</p><p class="hint">gold 仅用于评分，不传给 Jev 或诊断模型。相同事件的变体应使用同一 cluster_id。</p></div>
+    <div><h2>02 / 配对实验</h2><div class="fields"><label>运行通道<select id="mode"><option value="demo">DEMO · 本地规则演示</option><option value="live">LIVE · 真实 API</option></select></label><label>批次数<input id="rounds" type="number" value="30" min="1" max="30"></label><label>两组证据条数上限<input id="maxItems" type="number" value="20" min="1" max="80"></label><label>两组证据字符预算<input id="maxChars" type="number" value="8000" min="500" max="24000"></label><label>Jev 保留阈值<input id="threshold" type="number" value="0.5" min="0" max="1" step="0.05"></label><label>运行时限（秒）<input id="deadline" type="number" value="7200" min="30" max="28800"></label></div><p id="plan" class="hint"></p><button id="start" class="primary" disabled>运行 30 批配对实验</button></div>
+    <div class="protocol"><h2>03 / 唯一变量</h2><p><b class="baseline">A 基线</b><br>按冻结顺序填充证据窗口</p><p><b class="candidate">B 使用 Jev</b><br>按相关性选取原文，再放回原顺序</p><p class="hint">两组保留相同约束与必保留证据。使用相同诊断模型、提示词和预算。本阶段不生成摘要、不调用线上工具。</p><p id="modelInfo" class="hint"></p></div>
+  </section>
+  <div class="runbar"><label>实验记录<select id="history"><option value="">选择实验</option></select></label><button id="refresh" class="quiet">刷新</button><button id="download" class="quiet" disabled>导出完整 JSON</button><button id="cancel" class="danger" disabled>取消运行</button></div>
+  <section class="card status"><div><span id="runMode" class="pill">未运行</span><strong id="statusText">等待实验</strong><span id="progressText" class="muted">0 / 0 配对</span></div><progress id="progress" max="1" value="0"></progress><p id="verdict">30 次重复衡量稳定性；独立事件数量决定可推广程度。</p><p id="provenance" class="hint"></p></section>
+  <section class="cards" id="cards"></section>
+  <section class="card"><div class="section-title"><h2>每批结果 · 最终症状 F1</h2><div><span class="baseline">● A 基线</span>　<span class="candidate">● B Jev</span></div></div><svg id="chart" viewBox="0 0 1000 200" role="img" aria-label="每批配对有效样本的平均 F1，缺失批次不连线"></svg><p class="hint">曲线只包含成对成功的样本；没有完整配对的批次留空。主指标是最终诊断症状集合，不是 Jev 自评。</p></section>
+  <section class="card"><h2>指标对照</h2><p class="hint">质量：同一组成对成功样本。调用开销：全部已执行尝试，包含失败。— 表示未知或未评测；字符数不等于 Token。</p><div class="scroll"><table><thead><tr><th>指标</th><th>A · 基线</th><th>B · Jev</th><th>B − A</th></tr></thead><tbody id="metrics"></tbody></table></div></section>
+  <section class="card"><h2>逐批与逐案例审计</h2><p class="hint">点击记录查看证据 ID、Jev 分数、最终诊断、错误和真实 API usage。取消或失败记录保留，不自动补跑。</p><div class="scroll rows"><table><thead><tr><th>批次 / 案例</th><th>执行顺序</th><th>A 状态 / F1</th><th>B 状态 / F1</th><th>Δ F1</th></tr></thead><tbody id="details"></tbody></table></div><details id="audit"><summary>选中记录</summary><pre id="auditText">尚未选择</pre></details></section>
+  <footer>Jev Lab v1 · 所有实验存储于独立本地目录 · DEMO 和合成数据均不能证明真实收益</footer>
+</main></body></html>

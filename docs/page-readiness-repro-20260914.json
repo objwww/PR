@@ -1,0 +1,83 @@
+{
+  "kind": "defect-characterization-not-acceptance",
+  "noNetwork": true,
+  "count": 8,
+  "results": [
+    {
+      "id": "PAGE-01",
+      "defectReproduced": true,
+      "evidence": [
+        "/api/api/drills/a",
+        "/api/api/drills/a/stop",
+        "/api/api/drills/a/events",
+        "/api/api/release-assets?limit=50",
+        "/api/api/release-assets/bundles",
+        "/api/api/release-assets/prompt/abc",
+        "/api/api/rca-runs/r/config-epochs"
+      ]
+    },
+    {
+      "id": "PAGE-02",
+      "defectReproduced": true,
+      "evidence": "403 and 404 both become ApiNotReadyError; HTTP status is lost"
+    },
+    {
+      "id": "PAGE-04",
+      "defectReproduced": true,
+      "evidence": {
+        "sameIdempotencyKey": true,
+        "seconds1": 3600,
+        "seconds2": 3590
+      }
+    },
+    {
+      "id": "PAGE-05",
+      "defectReproduced": true,
+      "evidence": {
+        "displayed": "A",
+        "submittedTo": "/eval/reviews/assignments/B/submit",
+        "body": {
+          "rubricVersion": "v1",
+          "verdict": "CORRECT",
+          "score": null,
+          "labels": [],
+          "reason": "Assessment of case A",
+          "evidenceRefs": [],
+          "expectedRevision": 2
+        }
+      }
+    },
+    {
+      "id": "PAGE-06",
+      "defectReproduced": true,
+      "evidence": {
+        "previewDuration": 60,
+        "launchDuration": 120,
+        "launchStillEnabled": true
+      }
+    },
+    {
+      "id": "PAGE-07",
+      "defectReproduced": true,
+      "evidence": {
+        "initialLoadingAtFirstTick": true,
+        "starts": 1,
+        "stops": 1,
+        "pollingAfterSuccessfulLoad": false
+      }
+    },
+    {
+      "id": "PAGE-08",
+      "defectReproduced": true,
+      "evidence": {
+        "workerRefreshFailedButState": "ok",
+        "oneHostStaleButChartStale": false
+      }
+    },
+    {
+      "id": "PAGE-09",
+      "defectReproduced": true,
+      "evidence": "A linked run outside the most recent 50 rows is cleared without a detail lookup"
+    }
+  ]
+}

@@ -68,6 +68,17 @@ public final class ArenaChaosScenarioDriver implements ScenarioDriver {
     }
 
     /**
+     * BA-190 run-tag 空值兜底：返回带本批有效 run-tag 的拷贝（传输面/探针/数据集
+     * 版本共享，仅 tag 替换）——runner 批开始时把空 tag 兜底为按 evalRunId 派生的
+     * 逐批唯一值，原单例（env 静态 tag）不被改写，解析侧 RcaRunResolver 同式派生。
+     */
+    @Override
+    public ArenaChaosScenarioDriver withRunTag(String effectiveRunTag) {
+        return new ArenaChaosScenarioDriver(client, alertProbe, traffic, datasetVersion,
+                effectiveRunTag, settleMillis);
+    }
+
+    /**
      * 每轮独立靶场场景 id（全局唯一约束面）；解析侧（RcaRunResolver）同式派生。
      * uq_chaos_scenario 是永存台账——重跑同批必须换 run-tag（启动方注入，逐批唯一），
      * 否则二次激活必撞唯一约束。id 形态约束 [a-z0-9][a-z0-9-]{2,63}，run-tag 非法

@@ -122,6 +122,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     private final int stepMaxTokens;
     /** PA-A4：轮次回环守卫（monologue 维；可空=permissive——既有装配零行为漂移） */
     private final RoleLoopGuard roleLoopGuard;
+    /** JE-01：Jev 增强缝（可空=null 零漂移——选材/复核全旁路，既有链路原样） */
+    private final JevEnhancementPort jev;
+    /** ME-T12/D08：压缩消费观测 append 口（NOOP=零写姿态，既有装配零行为漂移） */
+    private final CompactionConsumptionPort consumptionPort;
 
     public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
             PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
@@ -156,10 +160,35 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             Clock clock, ContextCompactionService compaction,
             PrimaryCheckpointCommitService commits, int stepMaxTokens,
             RoleLoopGuard roleLoopGuard) {
+        this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
+                clock, compaction, commits, stepMaxTokens, roleLoopGuard, null);
+    }
+
+    /** JE-01 全参形态：接 Jev 增强缝（可空=null 零漂移） */
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock, ContextCompactionService compaction,
+            PrimaryCheckpointCommitService commits, int stepMaxTokens,
+            RoleLoopGuard roleLoopGuard, JevEnhancementPort jev) {
+        this(guard, supervisor, checkpoints, evidence, assembler, toolPort, mapper,
+                clock, compaction, commits, stepMaxTokens, roleLoopGuard, jev,
+                CompactionConsumptionPort.NOOP);
+    }
+
+    /** ME-T12/D08 全参形态：接压缩消费观测 append 口（null 视为 NOOP 零写姿态） */
+    public BoundedLlmRoleRunner(RcaActionGuard guard, DeterministicSupervisor supervisor,
+            PrimaryCheckpointRepository checkpoints, EvidenceRepository evidence,
+            ContextAssembler assembler, PrimaryToolPort toolPort, ObjectMapper mapper,
+            Clock clock, ContextCompactionService compaction,
+            PrimaryCheckpointCommitService commits, int stepMaxTokens,
+            RoleLoopGuard roleLoopGuard, JevEnhancementPort jev,
+            CompactionConsumptionPort consumptionPort) {
         if (stepMaxTokens <= 0) {
             throw new IllegalArgumentException("stepMaxTokens 必须为正: " + stepMaxTokens);
         }
         this.roleLoopGuard = Objects.requireNonNull(roleLoopGuard, "roleLoopGuard");
+        this.jev = jev;
         this.guard = Objects.requireNonNull(guard, "guard");
         this.supervisor = Objects.requireNonNull(supervisor, "supervisor");
         this.checkpoints = Objects.requireNonNull(checkpoints, "checkpoints");
@@ -171,6 +200,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         this.compaction = compaction;
         this.commits = Objects.requireNonNull(commits, "commits（提交围栏缺件）");
         this.stepMaxTokens = stepMaxTokens;
+        this.consumptionPort = consumptionPort == null
+                ? CompactionConsumptionPort.NOOP : consumptionPort;
     }
 
     @Override
@@ -202,16 +233,30 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         }
 
         // 信封装配委托 ContextAssembler（R1 am4-envelope.v2：真实内容入模）；
-        // snapshotDigest = 稳定面（不含 last_error 反馈）——R5 签名键 + 快照回填共用
+        // snapshotDigest = 稳定面（不含 last_error 反馈）——R5 签名键 + 快照回填共用。
+        // JE-01：快照/材料单读前移，选材在全量池上做（先于 EVIDENCE_LIMIT 窗口截断
+        // ——被窗口挤掉的早期反证才有机会被选回，JEV-01）；jev=null 时选材全旁路。
         int batchesRemaining = Math.max(0, supervisor.maxDelegationBatches()
                 - checkpoint.batchesUsed());
-        ContextAssembler.Assembly assembly =
-                assembler.assemble(request, checkpoint, batchesRemaining);
-        maybeCompact(request, checkpoint, assembly);
+        ContextAssembler.EvidenceSnapshot snapshot =
+                assembler.evidenceSnapshot(request.task().runId());
+        ContextAssembler.AlertMaterial material =
+                assembler.alertMaterial(request.task().runId());
+        boolean enhanced = jev != null && jev.enabledFor(request);
+        ContextAssembler.EvidenceSelection selection = jev == null ? null
+                : jev.selectContext(new JevEnhancementPort.SelectionInput(
+                        request, checkpoint, snapshot, material));
+        ContextAssembler.Assembly assembly = assembler.assemble(request, checkpoint,
+                batchesRemaining, snapshot, material, selection, enhanced);
+        maybeCompact(request, checkpoint, assembly, enhanced);
+        if (enhanced) {
+            // Summary consumption advances revision: re-read before both model input and checkpoint CAS.
+            checkpoint = checkpoints.findByTask(request.task().id()).orElseThrow();
+            assembly = assembler.assemble(request,checkpoint,batchesRemaining,snapshot,material,selection,true);
+        }
         RcaModelOutcome outcome;
         try {
-            outcome = guard.guardedModelCall(actionOf(request, checkpoint), assembly.prompt(),
-                    stepMaxTokens, Math.max(TOKEN_ESTIMATE_PER_STEP, stepMaxTokens + 500L));
+            outcome = modelDecision(request,checkpoint,assembly);
         } catch (com.objwww.pr.control.alert.domain.agent.RcaModelCallException e) {
             // R5 同签名熔断（BA-120/MC25）：模型面终态失败（零触网栅栏/步级可重试除外）
             // 同 (errorCode+稳定信封) 连续第 2 次 → 确定性未决收敛，不再同参重发
@@ -262,7 +307,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             case TOOL_CALL -> driveToolCall(request, checkpoint, decision,
                     assembly.snapshotDigest(), assembly.memory());
             case DELEGATE -> driveDelegate(request, checkpoint, decision);
-            case FINAL -> driveFinal(request, checkpoint, decision);
+            case FINAL -> driveFinal(request, checkpoint, decision,
+                    assembly.snapshotDigest());
         };
     }
 
@@ -283,7 +329,12 @@ public class BoundedLlmRoleRunner implements RoleRunner {
         }
         UUID evidenceId;
         try {
-            evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
+            var context=request.callContext();
+            if (jev != null && jev.enabledFor(request) && checkpoint.lastError() != null
+                    && checkpoint.lastError().startsWith(JevEnhancementService.REVIEW_FEEDBACK_SIG)) {
+                context=context.withFreshEvidence();
+            }
+            evidenceId = toolPort.invoke(context, tool.toolId(), tool.args());
         } catch (com.objwww.pr.control.alert.domain.tool.ToolModelVisibleException e) {
             // 模型可见族（超时/限流/远端故障/零数据/越权/未分类）：计步重驱，步数耗尽
             // 兜底保终止。A0 补充方案 §3 分类保真——INTERNAL_ERROR/TOOL_NOT_ALLOWED
@@ -383,7 +434,8 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     }
 
     private RoleRunner.RoleDriveResult driveFinal(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint, PrimaryDecision decision) {
+            PrimaryCheckpoint checkpoint, PrimaryDecision decision,
+            String stableDigest) {
         // A0 补充方案 §2：全量准入（作用面授予+载荷确定性检查）——evidence/runId 传入
         PrimaryClaimAdmission.AdmissionResult admission = PrimaryClaimAdmission.admit(
                 decision.finalAnswer().claims(), validRefsOf(request),
@@ -422,6 +474,24 @@ public class BoundedLlmRoleRunner implements RoleRunner {
             }
             row.put("admission_note", claim.admissionNote());
             claimRows.add(row);
+        }
+        // JE-01：Jev 复核（提交前）——发现缺口时以结构化反馈重驱，主任务在剩余步数
+        // 预算内重新取证；同签名第二次/失败/关闭均放行（服务面有界回退，预算内收敛）。
+        // 缺口轮未发起工具调用（monologue 计入）且计步（steps+1）——步数耗尽照旧走
+        // 确定性兜底 FINAL，终止面不变。
+        if (jev != null && !claimRows.isEmpty()) {
+            java.util.Optional<String> gapFeedback = jev.reviewFinal(
+                    new JevEnhancementPort.ReviewInput(request, checkpoint, claimRows,
+                            decision.finalAnswer().missingInformation(), reviewEvidence(request)));
+            if (gapFeedback.isPresent()) {
+                if (gapFeedback.get().startsWith("JEV_REVIEW_LIMIT")) {
+                    return deterministicFinal(request,checkpoint,"jev-limit","JEV_REVIEW_LIMIT",gapFeedback.get());
+                }
+                advanceStep(request, checkpoint, stableDigest, null,
+                        gapFeedback.get());
+                log.info("Jev 复核发现缺口，计步反馈重驱 task={}", request.task().id());
+                return RoleRunner.RoleDriveResult.failed("JEV_REVIEW_GAP");
+            }
         }
         commitCheckpoint(request, checkpoint,
                 "primary:" + checkpoint.taskId() + ":final:" + checkpoint.decisionSeq(),
@@ -467,17 +537,26 @@ public class BoundedLlmRoleRunner implements RoleRunner {
      * 异常不打断主路径（压缩是优化，有界回退=按原材料继续）。
      */
     private void maybeCompact(RoleRunner.RoleDriveRequest request,
-            PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly) {
+            PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly, boolean enhanced) {
         if (compaction == null) {
             return;
         }
         try {
             ContextCompactionService.CompactionOutcome outcome =
-                    compaction.afterToolResults(request, checkpoint, assembly);
+                    (enhanced ? compaction.forJevRun() : compaction).afterToolResults(request, checkpoint, assembly);
             if (outcome.committed()) {
                 log.info("R11 压缩已提交 task={} summaryId={} token {}→{}",
                         request.task().id(), outcome.summary().id(),
                         outcome.summary().tokenBefore(), outcome.summary().tokenAfter());
+            }
+            // ME-T12/D08：消费观测逐次 append（V164 rca_compaction_consumption）——
+            // 评测侧取最新行作 ContextDrift 输入；落库失败同 try 吞掉不打断主路径
+            ContextCompactionService.ConsumptionObservation obs = outcome.consumption();
+            if (obs != null && outcome.summary() != null) {
+                consumptionPort.record(request.task().runId(), request.task().id(),
+                        outcome.summary().summaryDigest(), obs.mode(),
+                        outcome.committed(), obs.consumerInvoked(), obs.consumed(),
+                        obs.policyDigest());
             }
         } catch (RuntimeException e) {
             log.warn("R11 压缩边界异常（不打断主路径）task={} {}",
@@ -527,10 +606,15 @@ public class BoundedLlmRoleRunner implements RoleRunner {
     /** §六 模型动作身份：绑定三元组 + 检查点计数（decision_seq 为账本动作序） */
     private RcaActionGuard.ModelAction actionOf(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint) {
+        return actionOf(request,checkpoint,checkpoint.decisionSeq());
+    }
+
+    private RcaActionGuard.ModelAction actionOf(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, long actionSeq) {
         var task = request.task();
         var binding = request.binding();
         return new RcaActionGuard.ModelAction(task.runId(), task.id(),
-                request.callContext().attemptId(), checkpoint.decisionSeq(),
+                request.callContext().attemptId(), actionSeq,
                 checkpoint.roundId(), binding.roleId(), binding.roleVersion(),
                 binding.roleDigest(), request.callContext().observedGeneration(),
                 task.leaseEpoch(), task.leaseUntil() != null ? task.leaseUntil()
@@ -539,6 +623,30 @@ public class BoundedLlmRoleRunner implements RoleRunner {
                 checkpoint.inputSnapshotDigest(),
                 com.objwww.pr.control.alert.application.ExecutionControl.aliveHeartbeat(
                         request.callContext().controlSignal()));
+    }
+
+    private RcaModelOutcome modelDecision(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly) {
+        long estimate=jev!=null && jev.enabledFor(request)
+                ? Math.max(TOKEN_ESTIMATE_PER_STEP,(long)assembly.approxTokens()+stepMaxTokens)
+                : Math.max(TOKEN_ESTIMATE_PER_STEP,stepMaxTokens+500L);
+        try {
+            return guard.guardedModelCall(actionOf(request,checkpoint),assembly.prompt(),stepMaxTokens,estimate);
+        } catch (com.objwww.pr.control.alert.domain.agent.RcaModelCallException e) {
+            if (!e.retryable() || e.zeroNetwork() || jev==null || !jev.allowModelRetry(request)) throw e;
+            return guard.guardedModelCall(actionOf(request,checkpoint,
+                    JevEnhancementService.MODEL_RETRY_SEQ_BASE+checkpoint.decisionSeq()),
+                    assembly.prompt(),stepMaxTokens,estimate);
+        }
+    }
+
+    private List<Map<String,Object>> reviewEvidence(RoleRunner.RoleDriveRequest request) {
+        if(jev==null || !jev.enabledFor(request)) return List.of();
+        return evidence.findByRunId(request.task().runId()).stream().limit(60)
+                .map(row -> Map.<String,Object>of("ref",row.evidenceId().toString(),
+                        "text",ContextAssembler.clip(row.canonicalPayload()==null?"":row.canonicalPayload(),1500).text(),
+                        "text_truncated",row.canonicalPayload()!=null && row.canonicalPayload().length()>1500))
+                .toList();
     }
 
     /** R5：lastError 是否本签名的前次落痕（前缀识别——反馈文本与机器签名同槽共存） */

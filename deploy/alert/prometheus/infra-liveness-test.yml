@@ -1,0 +1,114 @@
+# BA-189 infra-liveness.yml 的 promtool 规则测试（离线触发路径证据，不扰动生产）
+# 用法：promtool test rules infra-liveness-test.yml（同目录引用被测文件）
+# 序列形态按 2026-09-20 01:xxZ 195 label/__name__ 实测设计；计数器用 +增量 表达 rate。
+rule_files:
+  - rules/infra-liveness.yml
+
+evaluation_interval: 15s
+
+tests:
+  # 1) 采集器 DOWN：up=0 持续超 1m → page firing
+  - interval: 15s
+    input_series:
+      - series: 'up{job="otel-collector", instance="otel-collector:9464"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: OtelCollectorDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              owner: am0
+              category: availability
+              job: otel-collector
+              instance: otel-collector:9464
+            exp_annotations:
+              summary: "otel-collector 采集器失联（page）"
+              description: "prometheus 对 otel-collector:9464 抓取连续失败 1m。otel-demo 全系指标断流，SLO 烧损等下游告警将失真（不 firing≠健康）。立即检查容器状态（docker ps/restart），历史上限 400MiB OOM 僵死有前科。"
+
+  # 2) 管道断流：采集器 up=1 但接收计数器完全平坦（rate=0）持续超 10m → ticket firing
+  - interval: 15s
+    input_series:
+      - series: 'up{job="otel-collector", instance="otel-collector:9464"}'
+        values: '1x60'
+      - series: 'otelcol_receiver_accepted_spans_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '5000x60'
+      - series: 'otelcol_receiver_accepted_metric_points_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '9000x60'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: OtelCollectorPipelineStall
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              owner: am0
+              category: availability
+            exp_annotations:
+              summary: "otel-collector 管道断流（ticket）"
+              description: "采集器 scrape 正常但 spans+metric_points 接收速率 5m 归零且持续 10m——进程活着但管道不进数据（僵死形态）。load-generator 全天候有真实流量，速率归零不可能是业务静默。"
+
+  # 3) 内存逼近限额：RSS=350MiB（>340MiB 阈值）持续超 5m → warning firing
+  - interval: 15s
+    input_series:
+      - series: 'otelcol_process_memory_rss_bytes{service_name="otelcol-contrib"}'
+        values: '367001600x30'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: OtelCollectorMemoryNearLimit
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: am0
+              category: capacity
+              service_name: otelcol-contrib
+            exp_annotations:
+              summary: "otel-collector 内存逼近容器限额（warning）"
+              description: "collector RSS=350MiB，超容器限额 400MiB 的 85% 且持续 5m。OOM 僵死前兆——应排查内存limiter配置或重启采集器，并复核宿主内存水位（memory-gate 三档闸）。"
+
+  # 4) 限流拒数据：refused 计数器每拍 +2 持续超 10m → warning firing
+  - interval: 15s
+    input_series:
+      - series: 'otelcol_receiver_refused_spans_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '0+2x60'
+      - series: 'otelcol_receiver_refused_metric_points_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: OtelCollectorRefusingData
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              owner: am0
+              category: capacity
+            exp_annotations:
+              summary: "otel-collector 内存限流开始拒数据（warning）"
+              description: "memory_limiter 近 5m 持续拒绝 spans/metric_points 且持续 10m——观测数据正在丢失。当前 RSS 接近软限，需降载或扩限，否则下一步即 OtelCollectorMemoryNearLimit→Down。"
+
+  # 5) 反向用例：健康流量（速率恒正、RSS 正常、up=1）→ 四告警全部不触发
+  - interval: 15s
+    input_series:
+      - series: 'up{job="otel-collector", instance="otel-collector:9464"}'
+        values: '1x60'
+      - series: 'otelcol_receiver_accepted_spans_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '5000+100x60'
+      - series: 'otelcol_receiver_accepted_metric_points_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '9000+150x60'
+      - series: 'otelcol_process_memory_rss_bytes{service_name="otelcol-contrib"}'
+        values: '195035136x60'
+      - series: 'otelcol_receiver_refused_spans_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '0x60'
+      - series: 'otelcol_receiver_refused_metric_points_total{receiver="otlp", service_name="otelcol-contrib"}'
+        values: '0x60'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: OtelCollectorDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: OtelCollectorPipelineStall
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: OtelCollectorMemoryNearLimit
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: OtelCollectorRefusingData
+        exp_alerts: []

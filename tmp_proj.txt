@@ -1,0 +1,409 @@
+package com.objwww.pr.control.alert.application;
+
+import com.objwww.pr.control.alert.domain.model.AlertEvent;
+import com.objwww.pr.control.alert.domain.model.AlertFiringStatus;
+import com.objwww.pr.control.alert.domain.model.Incident;
+import com.objwww.pr.control.alert.domain.model.IncidentStatus;
+import com.objwww.pr.control.alert.domain.model.RcaRun;
+import com.objwww.pr.control.alert.domain.model.RcaRunRouting;
+import com.objwww.pr.control.alert.domain.model.RcaRunState;
+import com.objwww.pr.control.alert.domain.model.RcaTask;
+import com.objwww.pr.control.alert.domain.model.RcaTaskState;
+import com.objwww.pr.control.alert.domain.model.RunTrigger;
+import com.objwww.pr.control.alert.domain.classification.Classification;
+import com.objwww.pr.control.alert.domain.classification.IncidentClassifier;
+import com.objwww.pr.control.alert.domain.repository.AlertEventRepository;
+import com.objwww.pr.control.alert.domain.repository.IncidentCategoryRepository;
+import com.objwww.pr.control.alert.domain.repository.IncidentRepository;
+import com.objwww.pr.control.alert.domain.repository.RcaRunRepository;
+import com.objwww.pr.control.alert.domain.repository.RcaTaskRepository;
+import com.objwww.pr.control.alert.domain.service.AlertIdentityFactory;
+import com.objwww.pr.control.alert.domain.service.DeferredPolicy;
+import com.objwww.pr.control.alert.domain.service.SlaPolicy;
+import com.objwww.pr.control.alert.domain.statemachine.IncidentStateMachine;
+import com.objwww.pr.control.release.application.CanaryRouter;
+import com.objwww.pr.shared.Digest;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * 投影器（§6.7 单事务算法）：拆组 → 逐 alert 软背压 → alert_event 幂等追加 →
+ * incident upsert（episode 水印乱序收敛）→ 铸 rca_run（CanaryRouter 定引擎，M5-10）
+ * + 按引擎选 task_key（M6-01）。
+ *
+ * <p>"单事务"指 event/incident/run/task 四表的原子性，由调用方
+ * （AlertInboxProcessor）经 TransactionOperations 包裹；inbox 行自身的状态流转在事务外，
+ * 崩溃缝隙由租约过期回收 + event 幂等兜底（重投时重复 alert 只累加计数，不重铸 run）。
+ *
+ * <p>三计数语义（V7 注释对齐）：received_count=每次 alert 到达；
+ * distinct_event_count=新 event 落库；notification_count=重复通知（撞 uq_alert_event_dedup）。
+ *
+ * <p>乱序策略（§6.7 + BA-12①/G0-07 修正）：episode 水印 = episode_started_at；
+ * startsAt &lt; 水印的晚到事件（firing 或 resolved）只计数，不覆盖状态、不动水印、不铸 run。
+ * 同 episode 内 resolved 先于 firing 到达的迟到 firing（startsAt &lt; resolvedAt）
+ * 同样只追加 event + 计数——不是再现，不复活 incident、不铸 run（否则 incident 卡死 FIRING，
+ * 真正的 resolved 已被消费，再无事件能关掉它）。
+ */
+public class IncidentProjector {
+
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(IncidentProjector.class);
+
+    /** 投影结果（AlertInboxProcessor 据此决定 inbox 行终局/重投） */
+    public record ProjectOutcome(int immediateCount, int deferredCount, int duplicateCount) {
+        public int totalAlerts() {
+            return immediateCount + deferredCount;
+        }
+    }
+
+    private final AlertEventRepository events;
+    private final IncidentRepository incidents;
+    private final RcaRunRepository runs;
+    private final RcaTaskRepository tasks;
+    private final AlertIdentityFactory identity;
+    private final DeferredPolicy deferredPolicy;
+    private final SlaPolicy sla;
+    private final AlertClock clock;
+    private final CanaryRouter canaryRouter;
+    private final IncidentClassifier classifier;
+    private final IncidentCategoryRepository categories;
+
+    /** M5-10：CanaryRouter 注入构造（新 run 铸造点路由决策 + 路由四列落行）。
+     * M6-07：无 router 便捷构造（默认 holmesOnly）已删——HOLMES 投影不铸 run 后
+     * 该默认等价"永不铸 run"陷阱（C-77）；路由依赖显式必填（fail-closed 装配律）。
+     * UX-01：classifier/categories 显式必填（同律）——分类是投影内事务的一部分，
+     * 只写 rule_* 列（override_* 不在其 SQL 内，人工值不可能被规则覆盖）。 */
+    public IncidentProjector(AlertEventRepository events,
+                             IncidentRepository incidents,
+                             RcaRunRepository runs,
+                             RcaTaskRepository tasks,
+                             AlertIdentityFactory identity,
+                             DeferredPolicy deferredPolicy,
+                             SlaPolicy sla,
+                             AlertClock clock,
+                             CanaryRouter canaryRouter,
+                             IncidentClassifier classifier,
+                             IncidentCategoryRepository categories) {
+        this.events = Objects.requireNonNull(events);
+        this.incidents = Objects.requireNonNull(incidents);
+        this.runs = Objects.requireNonNull(runs);
+        this.tasks = Objects.requireNonNull(tasks);
+        this.identity = Objects.requireNonNull(identity);
+        this.deferredPolicy = Objects.requireNonNull(deferredPolicy);
+        this.sla = Objects.requireNonNull(sla);
+        this.clock = Objects.requireNonNull(clock);
+        this.canaryRouter = Objects.requireNonNull(canaryRouter);
+        this.classifier = Objects.requireNonNull(classifier);
+        this.categories = Objects.requireNonNull(categories);
+    }
+
+    /**
+     * 整组投影。BA-13③：backlog 计数在组首查一次，组内用增量估算
+     * （每条非重复的立即投影至多多出 1 活跃 incident + 1 排队 task 的保守上界），
+     * 洪峰时组内前 N 条投完、后续自然 DEFERRED——ST-A07 语义不变。
+     * 载荷腐坏抛 IllegalArgumentException（调用方 DEAD_LETTER）。
+     */
+    public ProjectOutcome project(UUID inboxId, List<ParsedAlert> alerts) {
+        Objects.requireNonNull(inboxId, "inboxId");
+        int immediate = 0;
+        int deferred = 0;
+        int duplicates = 0;
+        int activeIncidents = incidents.countActive();
+        int queuedTasks = tasks.countQueued();
+        for (ParsedAlert alert : alerts) {
+            // EX-A4b（F18）：背压闸后移——事实去重/恢复状态/材料更新永远先入正确性通道，
+            // admission 只挡"新调查铸造"（merge 内 castRunIfAdmitted），恢复事件不再被吞。
+            // 计数沿用 BA-13③ 保守上界（每条非重复至多 +1 活跃 +1 排队）。
+            AlertResult result = projectAlert(inboxId, alert, activeIncidents, queuedTasks);
+            if (result.duplicate()) {
+                duplicates++;
+            } else {
+                activeIncidents++;
+                queuedTasks++;
+                immediate++;
+            }
+            if (result.withheld()) {
+                deferred++;
+            }
+        }
+        return new ProjectOutcome(immediate, deferred, duplicates);
+    }
+
+    /** 单条投影结果：duplicate=重复通知；withheld=新调查被 admission 暂扣（等待重驱） */
+    private record AlertResult(boolean duplicate, boolean withheld) {
+    }
+
+    /** 单条投影；duplicate=true 表示重复通知（去重键已存在，仅计数） */
+    private AlertResult projectAlert(UUID inboxId, ParsedAlert alert,
+                                     int activeIncidents, int queuedTasks) {
+        // 缺 alertname 抛 IllegalArgumentException → 整组 DEAD_LETTER（入口未校验该标签，投影期兜底）
+        String key = identity.incidentKey(alert.labels());
+        Digest payloadHash = identity.payloadHash(alert.status(), alert.labels(), alert.startsAt());
+        Digest invHash = identity.investigationHash(alert.labels(), alert.annotations());
+        Instant now = clock.now();
+
+        Incident incident = incidents.findByKeyForUpdate(key).orElse(null);
+        boolean firstSeen = incident == null;
+        if (firstSeen) {
+            Incident fresh = insertIncident(key, alert, now);
+            // EX-A4b（F19）：insert 返回 false = 同 key 他人已铸（PG 面 ON CONFLICT
+            // DO NOTHING，唯一冲突不再是异常、事务不中断）——重读既有行按非首见合并
+            if (incidents.insert(fresh)) {
+                incident = fresh;
+            } else {
+                incident = incidents.findByKeyForUpdate(key).orElseThrow();
+                firstSeen = false;
+            }
+        }
+
+        // 去重预判（incident 行锁串行化同 key 投影，预判与追加之间无竞态；uq 为最终防线）
+        boolean duplicate = events.existsByDedup(alert.fingerprint(), payloadHash, alert.startsAt());
+        // UX-01：规则重分类时机 = 非重复且未迟出 episode 水印（晚到事件只计数，
+        // 不从旧材料刷新分类面；重复通知 labels 与已处理事件相同，重分类无意义）
+        boolean reclassify = !duplicate
+                && (firstSeen || !alert.startsAt().isBefore(incident.episodeStartedAt()));
+
+        MergeResult merged = merge(incident, alert, invHash, duplicate, firstSeen, now,
+                activeIncidents, queuedTasks);
+        incidents.update(merged.incident());
+
+        if (reclassify) {
+            Classification classification = classifier.classify(alert.labels());
+            categories.applyRuleClassification(incident.id(), classification.category(),
+                    classification.ruleId(), classification.ruleVersion(), now);
+        }
+
+        if (!duplicate) {
+            // generation 取 merge 后的 episode 归属（RESOLVED→FIRING 再现事件属于新 episode）
+            events.append(new AlertEvent(UUID.randomUUID(), inboxId, incident.id(),
+                    merged.incident().generation(), alert.fingerprint(), alert.status(),
+                    alert.labels(), alert.annotations(), alert.startsAt(), alert.endsAt(),
+                    payloadHash, invHash, now));
+        }
+        if (merged.castRun() != null) {
+            castRunAndTask(merged.incident(), alert, invHash, merged.castRun(), now);
+        }
+        return new AlertResult(duplicate, merged.withheld());
+    }
+
+    /** 首见告警铸 incident 骨架（三计数从 0 起，累计统一在 merge——避免首条双计） */
+    private Incident insertIncident(String key, ParsedAlert alert, Instant now) {
+        boolean firing = alert.status() == AlertFiringStatus.FIRING;
+        return new Incident(UUID.randomUUID(), key,
+                firing ? IncidentStatus.FIRING : IncidentStatus.RESOLVED,
+                0,
+                alert.startsAt(),
+                firing ? alert.startsAt() : null,
+                firing ? null : now,
+                null, null,
+                0, 0, 0,
+                null,
+                now, now, now, now);
+    }
+
+    // ------------------------------------------------------------------ upsert 合并算法
+
+    /** merge 输出：更新后的 incident + 是否需要铸新 run（null=不铸）+ 新调查是否被暂扣 */
+    private record MergeResult(Incident incident, RunTrigger castRun, boolean withheld) {
+    }
+
+    private MergeResult merge(Incident incident, ParsedAlert alert, Digest invHash,
+                              boolean duplicate, boolean firstSeen, Instant now,
+                              int activeIncidents, int queuedTasks) {
+        // 首见：骨架状态/水印已由 insertIncident 定，只计首条；firing 首见无条件铸 INITIAL
+        // （没有上一轮调查，不进 RERUN 判定——lastInvestigationHash=null 与任何新材料都"不等"）
+        if (firstSeen) {
+            Incident counted = withCounts(incident, incident.receivedCount() + 1,
+                    incident.distinctEventCount() + (duplicate ? 0 : 1),
+                    incident.notificationCount() + (duplicate ? 1 : 0), now);
+            if (alert.status() == AlertFiringStatus.FIRING && !duplicate) {
+                // EX-A4b（F18/F24）：admission 只挡新调查本身——incident/事件已落，
+                // 暂扣面显式 waitingReason=DEFERRED 供重驱扫描（不再"整条告警消失"）
+                if (deferredPolicy.decide(activeIncidents, queuedTasks)
+                        == DeferredPolicy.Decision.DEFERRED) {
+                    return new MergeResult(withWaitingReason(counted, "DEFERRED"), null, true);
+                }
+                return new MergeResult(counted, castRunIfFree(counted, RunTrigger.INITIAL), false);
+            }
+            return new MergeResult(counted, null, false);
+        }
+
+        // 重复通知：payloadHash 相同 → labels/status/startsAt 相同（注意 annotations 不在
+        // payloadHash 内——annotations 变化同时改变 investigationHash 才值得重查；
+        // F18 材料面由"非重复 + 材料变化 → RERUN/pendding"通道承接，此处只累加计数）
+        if (duplicate) {
+            return new MergeResult(withCounts(incident, incident.receivedCount() + 1,
+                    incident.distinctEventCount(), incident.notificationCount() + 1, now),
+                    null, false);
+        }
+
+        boolean withinEpisode = !alert.startsAt().isBefore(incident.episodeStartedAt());
+        // 晚到（startsAt < 水印）：只计数，不覆盖状态/水印/材料（§6.7 乱序策略）
+        if (!withinEpisode) {
+            return new MergeResult(withCounts(incident, incident.receivedCount() + 1,
+                    incident.distinctEventCount() + 1, incident.notificationCount(), now),
+                    null, false);
+        }
+
+        if (alert.status() == AlertFiringStatus.FIRING) {
+            if (incident.status() == IncidentStatus.RESOLVED) {
+                // BA-12①/G0-07 同 episode 乱序防御：resolved 已定局，迟到的 firing
+                // （startsAt 早于 resolve 时刻）不是再现——只追加 event + 计数。
+                // 真再现的 startsAt 必然晚于上一次 resolve 时刻。
+                if (incident.resolvedAt() != null
+                        && alert.startsAt().isBefore(incident.resolvedAt())) {
+                    return new MergeResult(withCounts(incident, incident.receivedCount() + 1,
+                            incident.distinctEventCount() + 1, incident.notificationCount(), now),
+                            null, false);
+                }
+                // 再现 = 新 episode（使用状态机计算 generation，§6.7）
+                int newGeneration = IncidentStateMachine.nextGeneration(
+                        incident.status(), IncidentStatus.FIRING, incident.generation());
+                Incident revived = new Incident(incident.id(), incident.incidentKey(),
+                        IncidentStatus.FIRING, newGeneration,
+                        alert.startsAt(), alert.startsAt(), null,
+                        incident.lastInvestigationHash(), null,
+                        incident.receivedCount() + 1, incident.distinctEventCount() + 1,
+                        incident.notificationCount(),
+                        incident.currentRcaRunId(),
+                        incident.firstSeenAt(), now, incident.createdAt(), now,
+                        incident.waitingReason());
+                if (deferredPolicy.decide(activeIncidents, queuedTasks)
+                        == DeferredPolicy.Decision.DEFERRED) {
+                    return new MergeResult(withWaitingReason(revived, "DEFERRED"), null, true);
+                }
+                return new MergeResult(revived, castRunIfFree(revived, RunTrigger.INITIAL), false);
+            }
+            // FIRING 持续：更新 lastFiringStartsAt；材料变化走 pending/rerun 判定
+            Instant lastFiring = maxTs(incident.lastFiringStartsAt(), alert.startsAt());
+            Incident updated = new Incident(incident.id(), incident.incidentKey(),
+                    incident.status(), incident.generation(),
+                    incident.episodeStartedAt(), lastFiring, incident.resolvedAt(),
+                    incident.lastInvestigationHash(), incident.pendingInvestigationHash(),
+                    incident.receivedCount() + 1, incident.distinctEventCount() + 1,
+                    incident.notificationCount(),
+                    incident.currentRcaRunId(),
+                    incident.firstSeenAt(), now, incident.createdAt(), now,
+                    incident.waitingReason());
+            if (runs.findActiveByIncidentId(incident.id()).isPresent()) {
+                // 调查中：材料变化只记 pending（ST-A05：连续变化覆盖，收尾时一次 rerun）
+                if (!invHash.equals(incident.pendingInvestigationHash())
+                        && !invHash.equals(incident.lastInvestigationHash())) {
+                    return new MergeResult(withPending(updated, invHash), null, false);
+                }
+                return new MergeResult(updated, null, false);
+            }
+            // 无活跃 run：材料变化才值得重查（RERUN）；材料未变 = 重复调查无益，不铸
+            if (!invHash.equals(incident.lastInvestigationHash())) {
+                if (deferredPolicy.decide(activeIncidents, queuedTasks)
+                        == DeferredPolicy.Decision.DEFERRED) {
+                    return new MergeResult(withWaitingReason(updated, "DEFERRED"), null, true);
+                }
+                return new MergeResult(updated, RunTrigger.RERUN, false);
+            }
+            return new MergeResult(updated, null, false);
+        }
+
+        // 有效 resolved：FIRING→RESOLVED（generation 保持；run 收尾由 finishTask 处理，T06）
+        Incident resolved = new Incident(incident.id(), incident.incidentKey(),
+                IncidentStatus.RESOLVED, incident.generation(),
+                incident.episodeStartedAt(), incident.lastFiringStartsAt(), now,
+                incident.lastInvestigationHash(), incident.pendingInvestigationHash(),
+                incident.receivedCount() + 1, incident.distinctEventCount() + 1,
+                incident.notificationCount(),
+                incident.currentRcaRunId(),
+                incident.firstSeenAt(), now, incident.createdAt(), now);
+        return new MergeResult(resolved, null, false);
+    }
+
+    /** 新 episode 的 run 铸造前置：确认没有活跃 run 残留（收尾缝隙防御，uq 兜底 23505） */
+    private RunTrigger castRunIfFree(Incident incident, RunTrigger trigger) {
+        return runs.findActiveByIncidentId(incident.id()).isPresent() ? null : trigger;
+    }
+
+    private void castRunAndTask(Incident incident, ParsedAlert alert, Digest invHash,
+                                RunTrigger trigger, Instant now) {
+        // M5-10：新 run 铸造点路由决策——路由四列随行落库（Run 启动固定不再变，
+        // 回滚只影响新 Run）；决策审计行随路由器必落（runId 与 run 行一致）
+        UUID runId = UUID.randomUUID();
+        RcaRunRouting routing = canaryRouter.route(
+                runId, incident.incidentKey(), incident.incidentKey());
+        // M6-07 Holmes 退场（C-70）：HOLMES 投影=决策审计行照记（路由器判断面原样
+        // 保留，历史可比性不破）但不铸 run/task——第二引擎已物理下线，技术方案 §4.4
+        // "无写入入口"不变量由本守卫保证；fail-closed 不代跑 NATIVE（INV-AM6-2 同律：
+        // 语义分歧不得伪装成交付）。incident 等待下一次告警再驱动（不做指针/pending 变更）。
+        if (routing.engine() == com.objwww.pr.control.alert.domain.model.RcaEngine.HOLMES) {
+            log.info("incident {} 路由决策 {} 为 HOLMES 意愿：第二引擎已退场，决策照记不铸 run",
+                    incident.id(), routing.decision());
+            // EX-A4b（F24）：显式等待态替代"等下一次告警"的沉默——"无引擎"不当成功，
+            // 重驱扫描（IncidentWaitingRedrive）在路由意愿恢复后铸 run
+            incidents.update(withWaitingReason(incident, "WAITING_CAPABILITY"));
+            return;
+        }
+        int priority = sla.priority(alert.labels().get("severity"));
+        RcaRun run = new RcaRun(runId, incident.id(), incident.generation(),
+                trigger, RcaRunState.QUEUED, invHash, now, now, null, null, null,
+                // SR §3.1：准入身份随铸造落行（生产路径；影子/评测走各自受控入口）
+                com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
+                "incident-projector", null);
+        // EX-A0（F14）：调查输入身份+冻结时间窗随铸造一次落列（Run 创建时冻结，
+        // 执行期只读——禁止静默改取"执行时最近十分钟"）
+        runs.insertRouted(run, routing,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
+                        incident, now));
+        // SR §4.1：铸点冻结对账硬期限（首记不覆盖；重启/重试不重置；旧 Run 无值不追溯）
+        runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
+        RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),
+                RcaTaskState.READY, priority, now, now, sla.deadline(now, priority),
+                null, null, 0, 0, 3, now, now);
+        tasks.insert(task);
+
+        // pending = 本轮 run 的调查材料基准；收尾算法（§6.7 finishTask）以其变化判 rerun
+        incidents.update(new Incident(incident.id(), incident.incidentKey(),
+                incident.status(), incident.generation(),
+                incident.episodeStartedAt(), incident.lastFiringStartsAt(), incident.resolvedAt(),
+                incident.lastInvestigationHash(), invHash,
+                incident.receivedCount(), incident.distinctEventCount(),
+                incident.notificationCount(),
+                run.id(),
+                incident.firstSeenAt(), incident.lastEventAt(), incident.createdAt(), now));
+    }
+
+    private Incident withCounts(Incident i, long received, long distinct, long notifications,
+                                Instant now) {
+        return new Incident(i.id(), i.incidentKey(), i.status(), i.generation(),
+                i.episodeStartedAt(), i.lastFiringStartsAt(), i.resolvedAt(),
+                i.lastInvestigationHash(), i.pendingInvestigationHash(),
+                received, distinct, notifications,
+                i.currentRcaRunId(),
+                i.firstSeenAt(), now, i.createdAt(), now, i.waitingReason());
+    }
+
+    private Incident withPending(Incident i, Digest pending) {
+        return new Incident(i.id(), i.incidentKey(), i.status(), i.generation(),
+                i.episodeStartedAt(), i.lastFiringStartsAt(), i.resolvedAt(),
+                i.lastInvestigationHash(), pending,
+                i.receivedCount(), i.distinctEventCount(), i.notificationCount(),
+                i.currentRcaRunId(),
+                i.firstSeenAt(), i.lastEventAt(), i.createdAt(), i.lastEventAt(),
+                i.waitingReason());
+    }
+
+    /** EX-A4b（F24）：受理未调查的显式原因（WAITING_CAPABILITY / DEFERRED） */
+    private static Incident withWaitingReason(Incident i, String reason) {
+        return new Incident(i.id(), i.incidentKey(), i.status(), i.generation(),
+                i.episodeStartedAt(), i.lastFiringStartsAt(), i.resolvedAt(),
+                i.lastInvestigationHash(), i.pendingInvestigationHash(),
+                i.receivedCount(), i.distinctEventCount(), i.notificationCount(),
+                i.currentRcaRunId(),
+                i.firstSeenAt(), i.lastEventAt(), i.createdAt(), i.lastEventAt(), reason);
+    }
+
+    private static Instant maxTs(Instant a, Instant b) {
+        return a == null || b.isAfter(a) ? b : a;
+    }
+}

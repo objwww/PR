@@ -348,6 +348,32 @@ class ArenaChaosScenarioDriverTest {
         }
     }
 
+    @Test
+    void withRunTag拷贝_仅替换tag_原单例不改写() {
+        // BA-190：批开始时 runner 以有效 run-tag（空 tag 按 evalRunId 派生）拷贝驱动——
+        // 拷贝激活用新 tag 派生 scenario id，原单例（env 静态 tag "T01"）不被改写
+        FakeChaosAdminClient client = new FakeChaosAdminClient();
+        ArenaChaosScenarioDriver original = driver(client, new FakeAlertProbe(),
+                new FakeTraffic());
+
+        ScenarioDriver copy = original.withRunTag("refde9e17");
+
+        assertThat(copy).isNotSameAs(original);
+        ActivationReceipt receipt = copy.activate(golden("S3", "F1"), 1);
+        assertThat(receipt.scenarioId()).isEqualTo("chaos-eval-refde9e17-s3-r1");
+        assertThat(client.lastOnBody.get("scenarioId")).isEqualTo("chaos-eval-refde9e17-s3-r1");
+        // 原单例 tag 不改写（eval-worker 与演练面共享 chaosAdminClient 传输面）
+        ActivationReceipt originalReceipt = original.activate(golden("S3", "F1"), 1);
+        assertThat(originalReceipt.scenarioId()).isEqualTo("chaos-eval-t01-s3-r1");
+    }
+
+    @Test
+    void 非tag敏感驱动_withRunTag默认原样返回零行为变化() {
+        ScenarioDriver infra = new InfrastructureScenarioDriver();
+
+        assertThat(infra.withRunTag("refde9e17")).isSameAs(infra);
+    }
+
     private static final class FakeAlertProbe implements AlertProbe {
         final List<String> sessionClosedIds = new ArrayList<>();
         final List<String> allResolvedIds = new ArrayList<>();

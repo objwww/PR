@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-09-20T06:43:00.098203+00:00",
+  "unit_tests": {
+    "passed": 25,
+    "failed": 0,
+    "log": "E:/kimiCode/var/jev-lab-browser/unit-tests.log"
+  },
+  "browser": {
+    "passed": true,
+    "viewports": [
+      "1440x1000",
+      "390x844"
+    ],
+    "console_errors": 0
+  },
+  "demo": {
+    "run_id": "2e2ddc9e-07f4-4478-a817-dbeee3f77c1c",
+    "batches": 30,
+    "valid_pairs": 180,
+    "verdict": "INCONCLUSIVE",
+    "live_api_called": false
+  },
+  "documentation_links_checked": 15,
+  "sha256": {
+    "experiments/jev-lab/.gitignore": "32dae3052f331ee34d628ef535709b301259a45df7c7522c4d35dcf49873f00b",
+    "experiments/jev-lab/app.js": "d93bb24cfd039da0bfdbc64cf0b190e2015e96b982dee065bbb23eb64116375b",
+    "experiments/jev-lab/example-dataset.json": "efa2f526b140d2549816018b514fe63a105a4146281410f9040c1da101777b63",
+    "experiments/jev-lab/index.html": "a7f8192480be5bbdfaa169fa57108740a23d1b6e298110e028be6298320e17a5",
+    "experiments/jev-lab/lab.py": "efcedf554784bc039505bc5c21758d23187cc1efabed1b58cfc29182e4907b46",
+    "experiments/jev-lab/README.md": "0c18b1cfca9e110ed6b6d1d5f2e27946b95d1901930e561a5ea0c546f76a6b92",
+    "experiments/jev-lab/smoke_browser.py": "4962b454eb934bd7e0f226005f98116f23cb446707c586b6a56ec21ec94d44c2",
+    "experiments/jev-lab/style.css": "8cd757332f2e966fcee8b9a48ac0e045a1c1f4650c6ccb453039d44deb4dd95b",
+    "experiments/jev-lab/test_lab.py": "6b6bfc48919a5f7fffcdbd7bed37ab5150660397a6b7306b2a23db0ea91a8d0c",
+    "var/jev-lab-browser/unit-tests.log": "a325027b30cf8232e6dc863a31350b52eaaa88635b6d2c40e14b88ae0e3eab5c",
+    "var/jev-lab-browser/demo-30-batches.json": "c51bffdd35f9533fa236ce2f45ce3183ca289285875f0e0632d33d7250d8a458"
+  }
+}

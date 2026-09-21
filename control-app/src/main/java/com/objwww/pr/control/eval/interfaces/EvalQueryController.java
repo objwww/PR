@@ -127,6 +127,62 @@ public class EvalQueryController {
                         .body(Map.of("error", "eval run 不存在")));
     }
 
+    /** M-e 行为评测汇总：eval_case_behavior 出数面（未评 run → assessed=0 如实缺席，
+     *  沿 six-parts 口径；无行 ≠ 零问题） */
+    @GetMapping("/runs/{runId}/behavior")
+    public ResponseEntity<?> behavior(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.behaviorSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
+    /** ME-T12 死循环评测汇总：eval_case_loop 出数面（未评 run → assessed=0 如实缺席，
+     *  沿 behavior 端点律；无行 ≠ 零问题） */
+    @GetMapping("/runs/{runId}/loop")
+    public ResponseEntity<?> loop(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.loopSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
+    /** ME-T12a 协作评测汇总：eval_case_collab 出数面（未评 run → assessed=0 如实
+     *  缺席，沿 loop 端点律；无行 ≠ 零问题） */
+    @GetMapping("/runs/{runId}/collab")
+    public ResponseEntity<?> collab(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.collabSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
+    /** ME-T12a 上下文漂移评测汇总：eval_case_drift 出数面（未评 run → assessed=0
+     *  如实缺席，沿 collab 端点律；无行 ≠ 零问题；无压缩事件 = withSummary=0 如实） */
+    @GetMapping("/runs/{runId}/drift")
+    public ResponseEntity<?> drift(@PathVariable String runId) {
+        UUID id = parseId(runId);
+        if (id == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "runId 非法"));
+        }
+        return query.driftSummary(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.status(404)
+                        .body(Map.of("error", "eval run 不存在")));
+    }
+
     /** M-d T8 审批链存在性：五表逐级计数（S26 链路完整性硬指标；零值=无活动如实） */
     @GetMapping("/runs/{runId}/approval-chain")
     public ResponseEntity<?> approvalChain(@PathVariable String runId) {

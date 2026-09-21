@@ -21,6 +21,7 @@ import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.ScenarioMetrics.ScoringVerdict;
 import com.objwww.pr.control.eval.domain.SynonymLexicon;
 import com.objwww.pr.control.eval.domain.repository.EvalRunRepository;
+import com.objwww.pr.control.eval.domain.service.PairedTrialStats;
 import com.objwww.pr.shared.Digest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -146,6 +147,50 @@ class EvalBatchRunnerTest {
         }
     }
 
+    /** BA-190：记录 withRunTag 收到的有效 tag（注入面；ScriptedDriver 为 final，组合代理） */
+    private static final class TagRecordingDriver implements ScenarioDriver {
+        final ScriptedDriver delegate = new ScriptedDriver();
+        final List<String> tags = new ArrayList<>();
+
+        @Override
+        public ScenarioDriver withRunTag(String effectiveRunTag) {
+            tags.add(effectiveRunTag);
+            return this;
+        }
+
+        @Override
+        public ActivationReceipt activate(GoldenCase golden, int roundNo) {
+            return delegate.activate(golden, roundNo);
+        }
+
+        @Override
+        public RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt) {
+            return delegate.deactivate(golden, receipt);
+        }
+    }
+
+    /** BA-190：记录 withRunTag 收到的有效 tag（解析面） */
+    private static final class TagRecordingResolver implements RcaRunResolver {
+        private final StubResolver delegate;
+        final List<String> tags = new ArrayList<>();
+
+        TagRecordingResolver(StubResolver delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public RcaRunResolver withRunTag(String effectiveRunTag) {
+            tags.add(effectiveRunTag);
+            return this;
+        }
+
+        @Override
+        public Optional<UUID> resolve(GoldenCase golden, int roundNo, Instant activatedAt,
+                                      int timeoutSeconds) {
+            return delegate.resolve(golden, roundNo, activatedAt, timeoutSeconds);
+        }
+    }
+
     private static final class StubResolver implements RcaRunResolver {
         private final UUID runId;
         private final RuntimeException toThrow;
@@ -214,6 +259,11 @@ class EvalBatchRunnerTest {
         }
 
         @Override
+        public List<EvalRun> findStrandedRuns(Instant startedBefore) {
+            return List.of();
+        }
+
+        @Override
         public List<EvalCaseResult> findCasesByRunId(UUID runId) {
             return List.copyOf(cases);
         }
@@ -239,7 +289,19 @@ class EvalBatchRunnerTest {
     // ------------------------------------------------------------------ 装配
 
     private SingleCaseScorer scorer() {
-        SynonymLexicon lexicon = SynonymLexicon.load("""
+        return new SingleCaseScorer(runs, reports, investigations, toolCalls,
+                new ScenarioEvaluator(lexicon()));
+    }
+
+    /** D03：带安全落档面的评分器（其余装配同 scorer()） */
+    private SingleCaseScorer scorerWithSink(
+            com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink sink) {
+        return new SingleCaseScorer(runs, reports, investigations, toolCalls,
+                new ScenarioEvaluator(lexicon()), sink);
+    }
+
+    private static SynonymLexicon lexicon() {
+        return SynonymLexicon.load("""
                 lexicon_version: 1
                 components:
                   - code: payment
@@ -252,8 +314,6 @@ class EvalBatchRunnerTest {
                     fault_type: BUSINESS_ERROR_RATE
                     synonyms: [扣款失败]
                 """);
-        return new SingleCaseScorer(runs, reports, investigations, toolCalls,
-                new ScenarioEvaluator(lexicon));
     }
 
     /** 命中链：SUCCEEDED run + 已验证命中报告 + tool_calls（silence 豁免） */
@@ -286,6 +346,68 @@ class EvalBatchRunnerTest {
         return new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
                 Map.of("FlagdScenarioDriver", driver), new StubProbe(), incidentProbe,
                 resolver, scorer(), repo, new BaselineReportGenerator(), metadata(), 2, clock);
+    }
+
+    /** D03：带安全落档面的跑批装配（其余同 runner(...)） */
+    private EvalBatchRunner runnerWithSink(ScriptedDriver driver, RcaRunResolver resolver,
+                                           RecordingEvalRuns repo,
+                                           EvalBatchRunner.EvalClock clock,
+                                           com.objwww.pr.control.eval.domain.repository
+                                                   .EvalCaseSafetySink sink) {
+        return new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
+                Map.of("FlagdScenarioDriver", driver), new StubProbe(),
+                (alertname, maxWaitSeconds) -> true, resolver, scorerWithSink(sink), repo,
+                new BaselineReportGenerator(), metadata(), 2, clock);
+    }
+
+    /** D03 安全落库假件（insert-only；每行 = [scenarioId, roundNo, verdict]） */
+    private static final class RecordingSafetySink implements
+            com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink {
+        final List<String[]> rows = new ArrayList<>();
+
+        @Override
+        public boolean insert(UUID evalRunId, String scenarioId, int roundNo,
+                              String verdict, String violationsJson, boolean redteam,
+                              String tallyJson) {
+            for (String[] row : rows) {
+                if (row[0].equals(scenarioId) && row[1].equals(Integer.toString(roundNo))) {
+                    return false;
+                }
+            }
+            rows.add(new String[]{scenarioId, Integer.toString(roundNo), verdict});
+            return true;
+        }
+    }
+
+    /** D09 预登记落库假件（每行 = "runId|minClusters|digest|registeredAt"；
+     *  failOnInsert = 模拟落库失败验 fail-soft） */
+    private static final class RecordingPreregSink implements
+            com.objwww.pr.control.eval.domain.repository.EvalPreregistrationSink {
+        final List<String> rows = new ArrayList<>();
+        boolean failOnInsert = false;
+
+        @Override
+        public void insert(UUID evalRunId, int minClusters, String preregDigest,
+                           Instant registeredAt) {
+            if (failOnInsert) {
+                throw new IllegalStateException("prereg insert boom");
+            }
+            rows.add(evalRunId + "|" + minClusters + "|" + preregDigest + "|"
+                    + registeredAt);
+        }
+    }
+
+    /** D09：带预登记落档面的跑批装配（其余同 runner(...)） */
+    private EvalBatchRunner runnerWithPrereg(ScriptedDriver driver,
+                                             RcaRunResolver resolver,
+                                             RecordingEvalRuns repo,
+                                             EvalBatchRunner.EvalClock clock,
+                                             com.objwww.pr.control.eval.domain.repository
+                                                     .EvalPreregistrationSink sink) {
+        return new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
+                Map.of("FlagdScenarioDriver", driver), new StubProbe(),
+                (alertname, maxWaitSeconds) -> true, resolver, scorer(), repo,
+                new BaselineReportGenerator(), metadata(), 2, clock, "", sink);
     }
 
     private static EvalRunMetadata metadata() {
@@ -463,27 +585,125 @@ class EvalBatchRunnerTest {
     }
 
     @Test
-    @DisplayName("注入失败：该轮落档 activate_failed、不解除（未激活）、门关闭、批仍 SUCCEEDED")
-    void activateFailureDocumentedAndGateCloses() {
+    @DisplayName("零注入全灭（BA-190）：activate_failed+gate_blocked → 批 FAILED 中文卡因，不再假绿 SUCCEEDED")
+    void zeroInjectionWipeoutFinalizesFailedHonestly() {
         UUID runId = seedHitChain();
         ScriptedDriver driver = new ScriptedDriver();
-        driver.activateFailures.add(new IllegalStateException("flagd admin down"));
+        driver.activateFailures.add(new IllegalStateException(
+                "scenario 已存在或同型同靶会话仍活跃"));
         RecordingEvalRuns repo = new RecordingEvalRuns();
         EvalBatchRunner batch = runner(driver, new StubResolver(runId, null), repo,
                 new StepClock());
 
         EvalBatchRunner.BatchResult result = batch.runBatch();
 
+        // 案例落档语义不变：首案 activate_failed、次案 gate_blocked
         assertThat(driver.activations).isEqualTo(1);
         assertThat(driver.deactivations).isZero();
         assertThat(repo.cases).hasSize(2);
         EvalCaseResult failed = repo.cases.get(0);
         assertThat(failed.verdict()).isEqualTo(ScoringVerdict.TIMEOUT_OR_ABSENT);
         assertThat(failed.failureSampleJson())
-                .contains("activate_failed").contains("flagd admin down");
+                .contains("activate_failed").contains("scenario 已存在或同型同靶会话仍活跃");
+        assertThat(repo.cases.get(1).failureSampleJson()).contains("gate_blocked");
+        // 批终态：FAILED + 中文卡因（零真实注入 = 测量无效）；无指标快照/基线报告
+        assertThat(result.finalized()).isTrue();
+        assertThat(repo.finalizedRuns).hasSize(1);
+        EvalRun terminal = repo.finalizedRuns.get(0);
+        assertThat(terminal.state()).isEqualTo(EvalRun.EvalRunState.FAILED);
+        assertThat(terminal.terminalReason())
+                .contains("全部案例注入失败")
+                .contains("activate_failed")
+                .contains("测量无效");
+        assertThat(terminal.summary()).isNull();
+        assertThat(terminal.baselineReportDigest()).isNull();
+        assertThat(result.snapshot()).isNull();
+    }
+
+    @Test
+    @DisplayName("零注入全灭（BA-190）：首轮起 prev_round_not_resolved 全灭 → 批 FAILED（同样零真实注入）")
+    void prevRoundUnresolvedFromStartWipeoutFinalizesFailed() {
+        UUID runId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        // 注入前 episode 核验从首轮起就不过 → 两轮全灭（R1 prev_round_not_resolved、
+        // R2 gate_blocked），零真实激活
+        EvalBatchRunner batch = runner(driver, new StubResolver(runId, null), repo,
+                new StepClock(), (alertname, maxWaitSeconds) -> false);
+
+        EvalBatchRunner.BatchResult result = batch.runBatch();
+
+        assertThat(driver.activations).isZero();
+        assertThat(repo.cases).hasSize(2);
+        assertThat(repo.cases.get(0).failureSampleJson()).contains("prev_round_not_resolved");
         assertThat(repo.cases.get(1).failureSampleJson()).contains("gate_blocked");
         assertThat(result.finalized()).isTrue();
+        assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.FAILED);
+        assertThat(repo.finalizedRuns.get(0).terminalReason()).contains("全部案例注入失败");
+    }
+
+    @Test
+    @DisplayName("部分 gate_blocked 保留原语义（BA-190 不误伤）：有真实激活的批仍 SUCCEEDED")
+    void partialGateBlockedKeepsSucceededSemantics() {
+        UUID runId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        // R1 正常激活但恢复回执未达 → R2 gate_blocked；有一轮真实激活 ≠ 零注入全灭
+        driver.receipts.add(new ScenarioDriver.RecoveryReceipt("S1", "d", 1,
+                false, true, List.of("injection_not_reverted")));
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        EvalBatchRunner batch = runner(driver, new StubResolver(runId, null), repo,
+                new StepClock());
+
+        batch.runBatch();
+
+        assertThat(driver.activations).isEqualTo(1);
         assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
+        assertThat(repo.finalizedRuns.get(0).terminalReason()).isNull();
+    }
+
+    @Test
+    @DisplayName("BA-190 空 run-tag 兜底：注入面与解析面收到同一按 evalRunId 派生的有效 tag（幂等且合法）")
+    void blankRunTagDerivesSameEffectiveTagForDriverAndResolver() {
+        UUID hitRun = seedHitChain();
+        UUID evalRunId = UUID.randomUUID();
+        TagRecordingDriver driver = new TagRecordingDriver();
+        TagRecordingResolver resolver = new TagRecordingResolver(
+                new StubResolver(hitRun, null));
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        EvalBatchRunner batch = new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
+                Map.of("FlagdScenarioDriver", driver), new StubProbe(),
+                (alertname, maxWaitSeconds) -> true, resolver, scorer(), repo,
+                new BaselineReportGenerator(), metadata(), 2, new StepClock(), "");
+
+        EvalBatchRunner.BatchResult result = batch.runBatch(evalRunId,
+                EvalBatchRunner.RunLifecycle.noop());
+
+        String expected = EvalRunTags.effective("", evalRunId);
+        assertThat(expected).matches("r[0-9a-f]{12}");
+        // runner 与 resolver 同式同值——scenario_map 匹配链不断裂；批正常 SUCCEEDED
+        assertThat(driver.tags).containsExactly(expected);
+        assertThat(resolver.tags).containsExactly(expected);
+        assertThat(result.finalized()).isTrue();
+        assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
+    }
+
+    @Test
+    @DisplayName("BA-190 配置 run-tag 非空：原样透传（旧语义零漂移）")
+    void configuredRunTagPassesThroughUnchanged() {
+        UUID hitRun = seedHitChain();
+        TagRecordingDriver driver = new TagRecordingDriver();
+        TagRecordingResolver resolver = new TagRecordingResolver(
+                new StubResolver(hitRun, null));
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        EvalBatchRunner batch = new EvalBatchRunner(GoldenScenarioRegistry.load(REGISTRY),
+                Map.of("FlagdScenarioDriver", driver), new StubProbe(),
+                (alertname, maxWaitSeconds) -> true, resolver, scorer(), repo,
+                new BaselineReportGenerator(), metadata(), 2, new StepClock(), "p6g025339");
+
+        batch.runBatch(UUID.randomUUID(), EvalBatchRunner.RunLifecycle.noop());
+
+        assertThat(driver.tags).containsExactly("p6g025339");
+        assertThat(resolver.tags).containsExactly("p6g025339");
     }
 
     @Test
@@ -504,5 +724,109 @@ class EvalBatchRunnerTest {
         assertThat(driver.deactivations).isEqualTo(1);
         assertThat(repo.finalizedRuns).hasSize(1);
         assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.FAILED);
+    }
+
+    // ------------------------------------------------------------------ D03 缺席案例安全终态（ME-T02）
+
+    @Test
+    @DisplayName("D03：已注入但 run 不可解析（run_not_found）→ 安全行 NOT_ASSESSED；"
+            + "正常评分轮由 scorer 收尾落安全行（trace 缺失不冒充零违规）")
+    void safetyOutcomeRecordedForRunNotFoundAndScoredRounds() {
+        UUID runId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        RecordingSafetySink sink = new RecordingSafetySink();
+        // R1 解析成功（scorer 收尾），R2 解析失败（run_not_found）
+        int[] resolveCalls = {0};
+        RcaRunResolver resolver = (golden, roundNo, activatedAt, timeoutSeconds) ->
+                ++resolveCalls[0] == 1 ? Optional.of(runId) : Optional.empty();
+        EvalBatchRunner batch = runnerWithSink(driver, resolver, repo, new StepClock(), sink);
+
+        batch.runBatch();
+
+        assertThat(sink.rows).hasSize(2);
+        // R1：scorer 终态收尾（种子 tool_call 行 status=null 不进观测 → 零观测覆盖
+        // NOT_ASSESSED，缺证据不冒充零违规）
+        assertThat(sink.rows.get(0)).containsExactly("S1", "1", "NOT_ASSESSED");
+        // R2：run_not_found（已注入无 trace）→ NOT_ASSESSED
+        assertThat(sink.rows.get(1)).containsExactly("S1", "2", "NOT_ASSESSED");
+    }
+
+    @Test
+    @DisplayName("D03：未注入轮（gate_blocked）→ 安全行 NOT_APPLICABLE（合理 NA 不计未评）")
+    void gateBlockedRoundRecordsSafetyNotApplicable() {
+        UUID runId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.receipts.add(new ScenarioDriver.RecoveryReceipt("S1", "d", 1,
+                false, true, List.of("injection_not_reverted")));
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        RecordingSafetySink sink = new RecordingSafetySink();
+        EvalBatchRunner batch = runnerWithSink(driver, new StubResolver(runId, null), repo,
+                new StepClock(), sink);
+
+        batch.runBatch();
+
+        assertThat(sink.rows).hasSize(2);
+        assertThat(sink.rows.get(0)).containsExactly("S1", "1", "NOT_ASSESSED");
+        assertThat(sink.rows.get(1)).containsExactly("S1", "2", "NOT_APPLICABLE");
+    }
+
+    @Test
+    @DisplayName("D03：注入失败（activate_failed，未注入）→ 安全行 NOT_APPLICABLE")
+    void activateFailedRoundRecordsSafetyNotApplicable() {
+        ScriptedDriver driver = new ScriptedDriver();
+        driver.activateFailures.add(new IllegalStateException("chaos token missing"));
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        RecordingSafetySink sink = new RecordingSafetySink();
+        EvalBatchRunner batch = runnerWithSink(driver, new StubResolver(null, null), repo,
+                new StepClock(), sink);
+
+        batch.runBatch();
+
+        assertThat(sink.rows).hasSize(2);
+        assertThat(sink.rows).allSatisfy(row -> assertThat(row[2]).isEqualTo("NOT_APPLICABLE"));
+    }
+
+    @Test
+    @DisplayName("D09：批起始落登记一行——run id 同源、minClusters=MIN_CLUSTERS、digest 自证锚")
+    void preregistrationRecordedAtBatchStart() {
+        UUID rcaRunId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        StepClock clock = new StepClock();
+        RecordingPreregSink sink = new RecordingPreregSink();
+        EvalBatchRunner batch = runnerWithPrereg(driver, new StubResolver(rcaRunId, null),
+                repo, clock, sink);
+
+        EvalBatchRunner.BatchResult result = batch.runBatch();
+
+        assertThat(result.finalized()).isTrue();
+        assertThat(sink.rows).hasSize(1);
+        UUID evalRunId = repo.runningInserts.get(0).id();
+        String expectedDigest = Digest.sha256Of("eval-prereg/v1|runId=" + evalRunId
+                + "|minClusters=" + PairedTrialStats.MIN_CLUSTERS
+                + "|registeredAt=2026-01-01T00:00:00Z").value();
+        assertThat(sink.rows.get(0)).isEqualTo(evalRunId + "|"
+                + PairedTrialStats.MIN_CLUSTERS + "|" + expectedDigest
+                + "|2026-01-01T00:00:00Z");
+    }
+
+    @Test
+    @DisplayName("D09：登记落库失败不阻发批（fail-soft 记 warn，批仍 SUCCEEDED）")
+    void preregistrationFailureDoesNotBlockBatch() {
+        UUID rcaRunId = seedHitChain();
+        ScriptedDriver driver = new ScriptedDriver();
+        RecordingEvalRuns repo = new RecordingEvalRuns();
+        RecordingPreregSink sink = new RecordingPreregSink();
+        sink.failOnInsert = true;
+        EvalBatchRunner batch = runnerWithPrereg(driver, new StubResolver(rcaRunId, null),
+                repo, new StepClock(), sink);
+
+        EvalBatchRunner.BatchResult result = batch.runBatch();
+
+        assertThat(result.finalized()).isTrue();
+        assertThat(sink.rows).isEmpty();
+        assertThat(repo.finalizedRuns).hasSize(1);
+        assertThat(repo.finalizedRuns.get(0).state()).isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
     }
 }

@@ -25,6 +25,9 @@ import java.util.Optional;
  *       run 仍 RUNNING（崩溃于跑批中）→ 终态化 FAILED（terminal_reason=worker_lost，
  *       L 模式 recovery_state 保持 PENDING=恢复未核验，不冒充 VERIFIED）；
  *       run 已终态（崩溃于收尾前）→ 命令按 run 终态对齐 DONE/FAILED；</li>
+ *   <li><b>搁浅清扫（BA-192）</b>：同拍第二路——RUNNING 超龄且 eval_run_command
+ *       零活体行的 run（命令账本机制前的老批件，孤儿命令面看不到）终态化 FAILED，
+ *       terminal_reason=worker_lost;no_command_ledger（mode 不可考，如实标注）；</li>
  *   <li>usage 对账（M3-25）在批件终态后照旧执行，失败不阻断命令收尾。</li>
  *   <li><b>陈旧自拒</b>（2026-09-17）：{@link WorkerSchemaFreshnessGuard} 每拍前置
  *       ——镜像迁移面落后于 DB flyway 最大版本则不领取，命令留 PENDING 等新镜像
@@ -77,6 +80,11 @@ public class EvalRunWorker {
         int orphans = sweepOrphanedClaims();
         if (orphans > 0) {
             log.warn("eval worker {} 启动孤儿清扫：{} 条 CLAIMED 命令已处置", workerId, orphans);
+        }
+        int stranded = sweepStrandedRuns();
+        if (stranded > 0) {
+            log.warn("eval worker {} 启动搁浅清扫：{} 条无命令账本的 RUNNING run 已终态化",
+                    workerId, stranded);
         }
         log.warn("eval worker {} 进入轮询（poll={}s, staleClaim={}s）",
                 workerId, pollSeconds, staleClaimSeconds);
@@ -169,6 +177,24 @@ public class EvalRunWorker {
                 log.warn("孤儿命令 {} 对齐 run 终态 {}", orphan.id(), existing.state());
             }
             handled++;
+        }
+        return handled;
+    }
+
+    /** 搁浅 run 清扫（BA-192 对账盲区闭环）：RUNNING 超龄且无活体命令的 run——
+     *  命令账本（V81）之前的老批件在 eval_run_command 零行，findOrphanedClaims
+     *  永远看不到，在此终态化 FAILED；返回处置条数 */
+    public int sweepStrandedRuns() {
+        Instant staleBefore = clock.now().minusSeconds(staleClaimSeconds);
+        int handled = 0;
+        for (EvalRun run : evalRuns.findStrandedRuns(staleBefore)) {
+            // finalizeOnce CAS 幂等：并发 worker/重复启动下只终态一次
+            if (evalRuns.finalizeOnce(EvalRun.terminal(run.id(), run.metadata(),
+                    EvalRun.EvalRunState.FAILED, run.startedAt(), clock.now(),
+                    null, null, null, EvalRunLifecycle.strandedTerminalReason()))) {
+                log.warn("搁浅 run {} 终态化 FAILED（worker_lost，无命令账本）", run.id());
+                handled++;
+            }
         }
         return handled;
     }

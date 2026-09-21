@@ -4,8 +4,10 @@ import com.objwww.pr.control.drill.application.FlagdAdminPort;
 import com.objwww.pr.control.drill.application.FlagdConditionalRestore;
 import com.objwww.pr.control.drill.domain.model.FlagdRestoreRecord;
 import com.objwww.pr.control.drill.domain.model.FlagdState;
+import com.objwww.pr.control.drill.domain.repository.ChangeEventLedger;
 import com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger;
 import com.objwww.pr.control.eval.domain.GoldenCase;
+import com.objwww.pr.shared.Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClient;
@@ -41,6 +43,14 @@ import java.util.UUID;
  *       所有权判据 = injection 声明的写入值、恢复目标 = 模板 baseline；不落账，
  *       worker 重启清扫不可达——生产接线归 EvalRunnerConfig 传四参构造。</li>
  * </ul>
+ *
+ * <p>BA-185 变更账本联动（S27 变更回归）：injection 带 change_ledger 块时，flag
+ * 翻转即"配置发布"——激活在恢复台账落账后如实落 change_event 发布行
+ * （{@link ChangeEventLedger}，source=deployment/action=DEPLOY，service/actor 取
+ * 注册块，configDigest=发布内容指纹 sha256(flag|baseline→variant)）；写失败向上抛
+ * （生效而无证据 = 激活判败，恢复台账 OPEN 行已落、恢复面不受损）；恢复不写反向
+ * ROLLBACK 行（append-only 历史事实；审批链 dry_run 未真实执行回滚，不虚构账本）。
+ * 无 change_ledger 块的既有场景零行为变化（noop）。
  */
 public final class FlagdScenarioDriver implements ScenarioDriver {
 
@@ -50,6 +60,7 @@ public final class FlagdScenarioDriver implements ScenarioDriver {
     private final AlertProbe alertProbe;
     private final FlagdRestoreLedger restoreLedger;
     private final Clock clock;
+    private final ChangeEventLedger changeEventLedger;
 
     /** 无台账过渡装配（DR-05 接线前）：不落账、重启清扫不可达；条件恢复仍生效 */
     public FlagdScenarioDriver(FlagAdminClient client, AlertProbe alertProbe) {
@@ -58,10 +69,17 @@ public final class FlagdScenarioDriver implements ScenarioDriver {
 
     public FlagdScenarioDriver(FlagAdminClient client, AlertProbe alertProbe,
                                FlagdRestoreLedger restoreLedger, Clock clock) {
+        this(client, alertProbe, restoreLedger, clock, ChangeEventLedger.noop());
+    }
+
+    public FlagdScenarioDriver(FlagAdminClient client, AlertProbe alertProbe,
+                               FlagdRestoreLedger restoreLedger, Clock clock,
+                               ChangeEventLedger changeEventLedger) {
         this.client = Objects.requireNonNull(client);
         this.alertProbe = Objects.requireNonNull(alertProbe);
         this.restoreLedger = Objects.requireNonNull(restoreLedger);
         this.clock = Objects.requireNonNull(clock);
+        this.changeEventLedger = Objects.requireNonNull(changeEventLedger);
     }
 
     @Override
@@ -86,6 +104,16 @@ public final class FlagdScenarioDriver implements ScenarioDriver {
                 applied, after == null ? null : after.generation(),
                 injection.baselineVariant(), deadlineAt(golden, now),
                 FlagdRestoreRecord.State.OPEN, null, now, now));
+        // BA-185：change_ledger 块在场 = flag 翻转即配置发布——发布事实如实落
+        // change_event（恢复台账 OPEN 行已先落，写失败抛出 = 激活判败但恢复面完整）
+        GoldenCase.Injection.ChangeLedger changeLedger = injection.changeLedger();
+        if (changeLedger != null) {
+            changeEventLedger.recordDeploy(new ChangeEventLedger.DeployFact(
+                    "eval-" + golden.scenarioId().toLowerCase() + "-"
+                            + UUID.randomUUID(),
+                    changeLedger.service(), "production",
+                    releaseDigest(injection), changeLedger.actor(), now));
+        }
         return new ActivationReceipt(golden.scenarioId(),
                 ChaosAdminClient.actionDigest("flagd", golden.scenarioId(),
                         injection.flag(), injection.variant(), applied).value(),
@@ -147,6 +175,13 @@ public final class FlagdScenarioDriver implements ScenarioDriver {
         return now.plusSeconds((long) t.preheatSeconds() + t.holdSeconds()
                 + t.maxFiringWaitSeconds() + t.maxResolvedWaitSeconds()
                 + t.cleanupTimeoutSeconds());
+    }
+
+    /** BA-185 发布内容指纹（change_event.config_digest char(64)）：同一发布内容
+     *  同一 digest——change.diff 的窗前基线与窗内发布行可据此辨识"变了什么" */
+    private static String releaseDigest(GoldenCase.Injection injection) {
+        return Digest.sha256Of("flagd:" + injection.flag() + ":"
+                + injection.baselineVariant() + "->" + injection.variant()).value();
     }
 
     /** 读当前值与代际（尽力面：传输失败 = null，由调用方如实记缺，不阻断激活写入） */

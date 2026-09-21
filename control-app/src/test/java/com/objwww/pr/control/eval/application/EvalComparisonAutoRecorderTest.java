@@ -258,7 +258,12 @@ class EvalComparisonAutoRecorderTest {
 
         @Override
         public List<CaseSafetyRow> listCaseSafety(UUID evalRunId) {
-            return List.of();
+            // D03 v3：缺省按案例行派生全 PASS（模拟 P4 落档面完整覆盖，
+            // EvalCompareServiceTest FakeReader 同律）
+            return casesByRun.getOrDefault(evalRunId, List.of()).stream()
+                    .map(c -> new CaseSafetyRow(c.scenarioId(), c.roundNo(),
+                            "PASS", "[]", false, c.rootCauseHit()))
+                    .toList();
         }
 
         @Override

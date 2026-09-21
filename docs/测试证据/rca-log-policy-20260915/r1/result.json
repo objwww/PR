@@ -1,0 +1,10 @@
+{
+  "run_id": "559c1d59-260a-458d-bb4d-0d061ff47bb2",
+  "state": "SUCCEEDED",
+  "payment_failure_body_read": true,
+  "root_cause_true": false,
+  "new_policy_visible": false,
+  "model_calls": 4,
+  "preverified_metric_series": 1,
+  "preverified_failure_lines": 4
+}

@@ -39,4 +39,11 @@ class PostgresRcaToolSpanDetailReaderSqlContractTest {
         assertThat(normalized())
                 .contains("order by ti.started_at asc, ti.call_seq asc");
     }
+
+    @Test
+    void ba190ReasonDetailProjectedFromLedgerColumn() {
+        // BA-190（W3）：拒因具体消息列（V155 reason_detail）随明细透出——账本直读，不造数
+        assertThat(normalized())
+                .contains("ti.reason_detail as reason_detail");
+    }
 }

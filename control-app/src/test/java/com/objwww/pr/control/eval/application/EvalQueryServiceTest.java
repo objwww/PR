@@ -90,7 +90,8 @@ class EvalQueryServiceTest {
         assertThat(reader.lastRunCursor).isEqualTo(new KeysetCursor(at, id));
     }
 
-    /** EV-09 稳定性三件套：多轮聚合 + 无案例 UNKNOWN 两态 */
+    /** EV-09 稳定性三件套：多轮聚合 + 无案例 UNKNOWN 两态；D01 扩展面：无冻结
+     *  launch plan（旧 CLI 跑批）→ micro/macro 实测照算，计划对照面如实 null/UNKNOWN */
     @Test
     void listRunsAssemblesStabilityFacetFromScenarioRoundStats() {
         UUID runId = UUID.randomUUID();
@@ -110,8 +111,18 @@ class EvalQueryServiceTest {
         assertThat(stability.passAllRounds().denominator()).isEqualTo(2L);
         assertThat(stability.scenarioConsistency().numerator()).isEqualTo(1L);
         assertThat(stability.scenarioConsistency().denominator()).isEqualTo(2L);
+        // D01：两场景均有命中 → 至少一次成功 2/2；macro = (1 + 1/2)/2 = 0.75
+        assertThat(stability.passAtLeastOnce().numerator()).isEqualTo(2L);
+        assertThat(stability.passAtLeastOnce().denominator()).isEqualTo(2L);
+        assertThat(stability.macroPassRate().value()).isCloseTo(0.75, within(1e-9));
+        assertThat(stability.macroPassRate().samples()).isEqualTo(2L);
+        // 无冻结计划快照（launchPlanJson=null）→ 计划对照面不猜
+        assertThat(stability.roundsProgress().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.plannedRoundsPerScenario()).isNull();
+        assertThat(stability.planComplete()).isNull();
     }
 
+    /** D01/ST-05：无案例落档 → 全面 UNKNOWN/null，零适用分母绝不显示绿色 100% */
     @Test
     void listRunsWithoutCaseRowsReportsUnknownStability() {
         reader.runPage = new EvalRunPage(List.of(runRow(UUID.randomUUID(), NOW, "SUCCEEDED")), false);
@@ -122,6 +133,152 @@ class EvalQueryServiceTest {
         assertThat(stability.passAt1().status()).isEqualTo("UNKNOWN");
         assertThat(stability.passAllRounds().status()).isEqualTo("UNKNOWN");
         assertThat(stability.scenarioConsistency().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.passAtLeastOnce().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.macroPassRate().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.macroPassRate().value()).isNull();
+        assertThat(stability.roundsProgress().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.plannedRoundsPerScenario()).isNull();
+        assertThat(stability.planComplete()).isNull();
+    }
+
+    /** D01 冻结计划行：替换 launchPlanJson（其余列沿 runRow 形状） */
+    private static EvalRunRow withLaunchPlan(EvalRunRow row, String launchPlanJson) {
+        return withLifecycle(row, null, null, null, null, launchPlanJson);
+    }
+
+    /**
+     * D01/ST-01：两场景各计划 3 轮且全部终态落档，A=[成功×3]、B=[成功,失败,成功]
+     * → micro=5/6，全部计划轮次成功=1/2，至少一次成功=2/2（通行 pass@k 本义），
+     * 固定 k=3 且计划完整 → 允许以 pass^3 命名（plannedRoundsPerScenario=3、
+     * planComplete=true、进度 6/6）。
+     */
+    @Test
+    void st01FixedKCompletePlanYieldsMicroAllSuccessAtLeastOnceAndK() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLaunchPlan(runRow(runId, NOW, "SUCCEEDED"),
+                "{\"roundsPerScenario\":3,\"caseKeys\":[\"sA\",\"sB\"]}")), false);
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sA", 3, 3, 1, 1),
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sB", 3, 2, 2, 2)));
+
+        EvalQueryService.StabilityFacet stability =
+                service.listRuns(null, null, 50).items().get(0).stability();
+
+        assertThat(stability.passAt1())
+                .isEqualTo(new EvalQueryService.RatioStat(5L, 6L, "OK"));
+        assertThat(stability.passAllRounds())
+                .isEqualTo(new EvalQueryService.RatioStat(1L, 2L, "OK"));
+        assertThat(stability.passAtLeastOnce())
+                .isEqualTo(new EvalQueryService.RatioStat(2L, 2L, "OK"));
+        assertThat(stability.plannedRoundsPerScenario()).isEqualTo(3);
+        assertThat(stability.planComplete()).isTrue();
+        assertThat(stability.roundsProgress())
+                .isEqualTo(new EvalQueryService.RatioStat(6L, 6L, "OK"));
+    }
+
+    /**
+     * D01/ST-02：计划 3 轮仅完成 1 轮且成功 → 进度 completed=1/planned=3 如实呈现，
+     * planComplete=false（暂态观测）——不构成"3 轮全部成功"的最终通过结论。
+     */
+    @Test
+    void st02PartialCompletionShowsProgressWithoutFinalPassConclusion() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLaunchPlan(runRow(runId, NOW, "RUNNING"),
+                "{\"roundsPerScenario\":3,\"caseKeys\":[\"sA\"]}")), false);
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sA", 1, 1, 1, 1)));
+
+        EvalQueryService.StabilityFacet stability =
+                service.listRuns(null, null, 50).items().get(0).stability();
+
+        assertThat(stability.roundsProgress())
+                .isEqualTo(new EvalQueryService.RatioStat(1L, 3L, "OK"));
+        assertThat(stability.planComplete()).isFalse();
+        assertThat(stability.plannedRoundsPerScenario()).isEqualTo(3);
+        // 暂态值是真实已落档观测，照报不误标最终
+        assertThat(stability.passAllRounds())
+                .isEqualTo(new EvalQueryService.RatioStat(1L, 1L, "OK"));
+    }
+
+    /**
+     * D01/ST-03：sA 回放形态计划 1 轮 1/1、sB 注入形态计划 3 轮 1/3 → micro=2/4、
+     * macro=(1+1/3)/2 分称不混；场景轮数不同 → plannedRoundsPerScenario=null
+     * （全成功比例绝不命名为统一 pass^3）。
+     */
+    @Test
+    void st03MixedKSeparatesMicroFromMacroAndNeverNamesUniformPassK() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLaunchPlan(runRow(runId, NOW, "SUCCEEDED"),
+                "{\"roundsPerScenario\":3,\"caseKeys\":[\"sA\",\"sB\"]}")), false);
+        // sA 为数据集回放案例 → runner effectiveRounds 同律裁剪计划 1 轮
+        reader.planCaseKeysByDataset = java.util.Map.of("rca100-v1", List.of("sA"));
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sA", 1, 1, 1, 1),
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sB", 3, 1, 1, 1)));
+
+        EvalQueryService.StabilityFacet stability =
+                service.listRuns(null, null, 50).items().get(0).stability();
+
+        assertThat(stability.passAt1())
+                .isEqualTo(new EvalQueryService.RatioStat(2L, 4L, "OK"));
+        assertThat(stability.macroPassRate().value())
+                .isCloseTo((1.0 + 1.0 / 3.0) / 2.0, within(1e-9));
+        assertThat(stability.macroPassRate().samples()).isEqualTo(2L);
+        assertThat(stability.plannedRoundsPerScenario()).isNull();
+        assertThat(stability.planComplete()).isTrue();
+        assertThat(stability.roundsProgress())
+                .isEqualTo(new EvalQueryService.RatioStat(4L, 4L, "OK"));
+        assertThat(stability.passAllRounds())
+                .isEqualTo(new EvalQueryService.RatioStat(1L, 2L, "OK"));
+    }
+
+    /**
+     * D01/ST-04：同一错误根因连续 3 轮（判定一致 DECIDABLE、实际根因一致但全错）
+     * → consistency=1/1 而 task success=0/3：一致性照报但绝不能读成高质量结论；
+     * 全缺席场景同理（0% 是真实零值，不是绿色 100%）。
+     */
+    @Test
+    void st04ConsistentWrongAnswerIsConsistencyNotQuality() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLaunchPlan(runRow(runId, NOW, "SUCCEEDED"),
+                "{\"roundsPerScenario\":3,\"caseKeys\":[\"sA\"]}")), false);
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sA", 3, 0, 1, 1)));
+
+        EvalQueryService.StabilityFacet stability =
+                service.listRuns(null, null, 50).items().get(0).stability();
+
+        assertThat(stability.scenarioConsistency())
+                .isEqualTo(new EvalQueryService.RatioStat(1L, 1L, "OK"));
+        assertThat(stability.passAt1())
+                .isEqualTo(new EvalQueryService.RatioStat(0L, 3L, "OK"));
+        assertThat(stability.passAllRounds())
+                .isEqualTo(new EvalQueryService.RatioStat(0L, 1L, "OK"));
+        assertThat(stability.passAtLeastOnce())
+                .isEqualTo(new EvalQueryService.RatioStat(0L, 1L, "OK"));
+        assertThat(stability.macroPassRate().value()).isCloseTo(0.0, within(1e-9));
+    }
+
+    /**
+     * D01：launch_plan 快照缺 caseKeys 身份（FUP-03 前的历史批）→ 计划对照面
+     * 整体 UNKNOWN/null（缺身份不猜轮次、不出完整性结论），实测比率仍照算。
+     */
+    @Test
+    void launchPlanWithoutCaseKeysDegradesPlanFacetsHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLaunchPlan(runRow(runId, NOW, "SUCCEEDED"),
+                "{\"roundsPerScenario\":3}")), false);
+        reader.scenarioRoundStats = java.util.Map.of(runId, List.of(
+                new EvalQueryReader.ScenarioRoundStatRow(runId, "sA", 3, 3, 1, 1)));
+
+        EvalQueryService.StabilityFacet stability =
+                service.listRuns(null, null, 50).items().get(0).stability();
+
+        assertThat(stability.passAt1())
+                .isEqualTo(new EvalQueryService.RatioStat(3L, 3L, "OK"));
+        assertThat(stability.roundsProgress().status()).isEqualTo("UNKNOWN");
+        assertThat(stability.plannedRoundsPerScenario()).isNull();
+        assertThat(stability.planComplete()).isNull();
     }
 
     /** BA-176：模型调用失败账聚合进列表项——总数 + 主因码（计数最高，并列取码序小者） */
@@ -708,6 +865,20 @@ class EvalQueryServiceTest {
         assertThat(out.facets().recoveryState()).isEqualTo("NOT_APPLICABLE");
     }
 
+    @Test
+    void listItemCarriesTerminalReasonForFailedRuns() {
+        // BA-190（W4）：列表行透出终态卡因——worker_lost 等失败批在评测列表可直接
+        // 展示中文解读（前端 zh.js 字典），不必逐批进详情
+        UUID id = UUID.randomUUID();
+        reader.runPage = new EvalRunPage(List.of(withLifecycle(
+                runRow(id, NOW, "FAILED"), "L", "PENDING",
+                "worker_lost;recovery_unverified", null, null)), false);
+
+        EvalQueryService.EvalRunListItem out = service.listRuns(null, null, 50).items().get(0);
+
+        assertThat(out.terminalReason()).isEqualTo("worker_lost;recovery_unverified");
+    }
+
     // ------------------------------------------------------------------ fakes
 
     /**
@@ -1280,6 +1451,621 @@ class EvalQueryServiceTest {
         assertThat(service.safetySummary(UUID.randomUUID())).isEmpty();
     }
 
+    @Test
+    void safetySummarySeparatesFiveVerdictStatesAndAggregatesTally() {
+        // ME-T02 五态分列：NOT_ASSESSED 不得计入 passes（未评不冒充通过）；
+        // tally 三事实/覆盖分母合计只加有 tally 行
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.safetyRows = List.of(
+                new EvalQueryReader.CaseSafetyRow("S1", 1, "PASS", null, false, true,
+                        "{\"attempted\":2,\"blocked\":2,\"executedViolations\":0,"
+                                + "\"assessedFaces\":5,\"notAssessedFaces\":0}"),
+                new EvalQueryReader.CaseSafetyRow("S2", 1, "REJECT",
+                        "[{\"face\":\"SCHEMA\"}]", false, false,
+                        "{\"attempted\":1,\"blocked\":1,\"executedViolations\":0,"
+                                + "\"assessedFaces\":5,\"notAssessedFaces\":0}"),
+                new EvalQueryReader.CaseSafetyRow("S3", 1, "NOT_ASSESSED", null, false, null,
+                        "{\"attempted\":0,\"blocked\":0,\"executedViolations\":0,"
+                                + "\"assessedFaces\":3,\"notAssessedFaces\":2}"),
+                new EvalQueryReader.CaseSafetyRow("S4", 1, "NOT_APPLICABLE", null, false, null),
+                new EvalQueryReader.CaseSafetyRow("S5", 1, "ERROR", null, false, null));
+
+        EvalQueryService.SafetySummaryResponse out = service.safetySummary(runId).orElseThrow();
+
+        assertThat(out.assessedCases()).isEqualTo(5);
+        assertThat(out.passes()).isEqualTo(1);
+        assertThat(out.rejects()).isEqualTo(1);
+        assertThat(out.notAssessed()).isEqualTo(1);
+        assertThat(out.notApplicable()).isEqualTo(1);
+        assertThat(out.errors()).isEqualTo(1);
+        assertThat(out.attempted()).isEqualTo(3);
+        assertThat(out.blocked()).isEqualTo(3);
+        assertThat(out.executedViolations()).isZero();
+        assertThat(out.assessedFaces()).isEqualTo(13);
+        assertThat(out.notAssessedFaces()).isEqualTo(2);
+        assertThat(out.tallyCases()).isEqualTo(3);
+        assertThat(out.tallyMissingCases()).isEqualTo(2);
+        assertThat(out.faceCounts()).containsExactly(
+                new EvalQueryService.SafetyFaceCount("SCHEMA", 1));
+    }
+
+    @Test
+    void safetySummaryLegacyRowsWithoutTallyYieldNullTallyHonestly() {
+        // 旧批无 tally 行：各合计 null 如实"旧口径"，不填 0；passes 仍按 PASS 计数
+        // （旧二态批 passes = assessed - rejects，值不变）
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.safetyRows = List.of(
+                new EvalQueryReader.CaseSafetyRow("S1", 1, "PASS", null, false, true),
+                new EvalQueryReader.CaseSafetyRow("S2", 1, "REJECT",
+                        "[{\"face\":\"UNAUTHORIZED_TOOL\"}]", false, false));
+
+        EvalQueryService.SafetySummaryResponse out = service.safetySummary(runId).orElseThrow();
+
+        assertThat(out.passes()).isEqualTo(1);
+        assertThat(out.attempted()).isNull();
+        assertThat(out.blocked()).isNull();
+        assertThat(out.executedViolations()).isNull();
+        assertThat(out.assessedFaces()).isNull();
+        assertThat(out.notAssessedFaces()).isNull();
+        assertThat(out.tallyCases()).isZero();
+        assertThat(out.tallyMissingCases()).isEqualTo(2);
+    }
+
+    // ------------------------------------------------------------------ M-e T11 行为评测汇总
+
+    private static EvalQueryReader.CaseBehaviorRow behaviorRow(UUID caseResultId,
+                                                               String scenarioId,
+                                                               String graderVersion,
+                                                               String coverageJson,
+                                                               String checksJson,
+                                                               String metricsJson,
+                                                               String failureLabelsJson,
+                                                               String evidenceRefsJson) {
+        return new EvalQueryReader.CaseBehaviorRow(caseResultId, scenarioId, 1,
+                graderVersion, "d".repeat(64), coverageJson, checksJson, metricsJson,
+                failureLabelsJson, evidenceRefsJson);
+    }
+
+    @Test
+    void behaviorSummaryAggregatesChecksMetricsLabelsAndCoverage() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        UUID case1 = UUID.randomUUID();
+        UUID case2 = UUID.randomUUID();
+        reader.behaviorRows = List.of(
+                behaviorRow(case1, "S1", "behavior-v1",
+                        "{\"textCovered\":2,\"textTotal\":3,"
+                                + "\"evidenceCovered\":2,\"evidenceTotal\":3}",
+                        "[{\"name\":\"citation_attachment\",\"status\":\"PASS\","
+                                + "\"reasonCode\":\"ATTACHMENT_FULL\",\"evidenceRefs\":[]},"
+                                + "{\"name\":\"evidence_checkpoint_coverage\",\"status\":\"FAIL\","
+                                + "\"reasonCode\":\"CHECKPOINT_EVIDENCE_MISSING\",\"evidenceRefs\":[\"e1\"]}]",
+                        "[{\"name\":\"citation_attachment_rate\",\"numerator\":1,\"denominator\":1},"
+                                + "{\"name\":\"evidence_checkpoint_coverage\",\"numerator\":2,\"denominator\":3}]",
+                        "[\"CHECKPOINT_EVIDENCE_MISSING\"]",
+                        "[\"e1\"]"),
+                behaviorRow(case2, "S2", "behavior-v1",
+                        // 无检查点案例：evidence 轨 null = 该轨未评，不进分母不填 0
+                        "{\"textCovered\":null,\"textTotal\":null,"
+                                + "\"evidenceCovered\":null,\"evidenceTotal\":null}",
+                        "[{\"name\":\"citation_attachment\",\"status\":\"NOT_ASSESSED\","
+                                + "\"reasonCode\":\"EVIDENCE_READ_UNAVAILABLE\",\"evidenceRefs\":[]},"
+                                + "{\"name\":\"evidence_checkpoint_coverage\",\"status\":\"NOT_APPLICABLE\","
+                                + "\"reasonCode\":\"NO_CHECKPOINTS\",\"evidenceRefs\":[]}]",
+                        "[{\"name\":\"citation_attachment_rate\",\"numerator\":0,\"denominator\":1}]",
+                        "[]",
+                        "[]"));
+
+        EvalQueryService.BehaviorSummaryResponse out =
+                service.behaviorSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isEqualTo(2);
+        assertThat(out.rows()).isEqualTo(2);
+        assertThat(out.graderVersions()).containsExactly("behavior-v1");
+        // 覆盖双轨：text 合计含 null 行不加值；evidence 分母只含被评行
+        assertThat(out.coverage().textCovered()).isEqualTo(2);
+        assertThat(out.coverage().textTotal()).isEqualTo(3);
+        assertThat(out.coverage().evidenceCovered()).isEqualTo(2);
+        assertThat(out.coverage().evidenceTotal()).isEqualTo(3);
+        assertThat(out.coverage().evidenceAssessed()).isEqualTo(1);
+        // checks 五态计数（按检查名聚合）
+        assertThat(out.checks()).hasSize(2);
+        EvalQueryService.BehaviorCheckStat attachment = out.checks().stream()
+                .filter(c -> c.name().equals("citation_attachment")).findFirst().orElseThrow();
+        assertThat(attachment.statusCounts())
+                .containsEntry("PASS", 1L).containsEntry("NOT_ASSESSED", 1L);
+        EvalQueryService.BehaviorCheckStat coverageCheck = out.checks().stream()
+                .filter(c -> c.name().equals("evidence_checkpoint_coverage"))
+                .findFirst().orElseThrow();
+        assertThat(coverageCheck.statusCounts())
+                .containsEntry("FAIL", 1L).containsEntry("NOT_APPLICABLE", 1L);
+        // metrics 分子/分母合计（分母 0 如实不约分）
+        assertThat(out.metrics()).containsExactlyInAnyOrder(
+                new EvalQueryService.BehaviorMetricStat("citation_attachment_rate", 1, 2),
+                new EvalQueryService.BehaviorMetricStat("evidence_checkpoint_coverage", 2, 3));
+        assertThat(out.failureLabels()).containsExactly(
+                new EvalQueryService.BehaviorLabelCount("CHECKPOINT_EVIDENCE_MISSING", 1));
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void behaviorSummaryNoRowsAssessedZeroHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.behaviorRows = List.of();
+
+        EvalQueryService.BehaviorSummaryResponse out =
+                service.behaviorSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isZero();
+        assertThat(out.rows()).isZero();
+        assertThat(out.coverage().textCovered()).isNull();
+        assertThat(out.coverage().evidenceTotal()).isNull();
+        assertThat(out.checks()).isEmpty();
+        assertThat(out.metrics()).isEmpty();
+        assertThat(out.failureLabels()).isEmpty();
+    }
+
+    @Test
+    void behaviorSummaryUnknownRunIsEmpty() {
+        assertThat(service.behaviorSummary(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void caseDetailIncludesBehaviorEntriesPerGrader() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        reader.behaviorByCase.put(caseId, List.of(
+                behaviorRow(caseId, "infra/redis-oom", "behavior-v1",
+                        "{\"textCovered\":1,\"textTotal\":2,"
+                                + "\"evidenceCovered\":1,\"evidenceTotal\":2}",
+                        "[{\"name\":\"citation_support\",\"status\":\"NOT_ASSESSED\","
+                                + "\"reasonCode\":\"CONTENT_UNAVAILABLE\",\"evidenceRefs\":[\"e1\"]}]",
+                        "[{\"name\":\"citation_attachment_rate\",\"numerator\":1,\"denominator\":2}]",
+                        "[\"CITATION_DANGLING\"]",
+                        "[\"e1\"]")));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.behavior()).hasSize(1);
+        EvalQueryService.CaseBehaviorEntry entry = out.behavior().get(0);
+        assertThat(entry.graderVersion()).isEqualTo("behavior-v1");
+        assertThat(entry.coverage().textCovered()).isEqualTo(1);
+        assertThat(entry.coverage().evidenceTotal()).isEqualTo(2);
+        assertThat(entry.checks()).containsExactly(
+                new EvalQueryService.CaseBehaviorCheck("citation_support", "NOT_ASSESSED",
+                        "CONTENT_UNAVAILABLE", List.of("e1")));
+        assertThat(entry.metrics()).containsExactly(
+                new EvalQueryService.CaseBehaviorMetric("citation_attachment_rate", 1, 2));
+        assertThat(entry.failureLabels()).containsExactly("CITATION_DANGLING");
+        assertThat(entry.evidenceRefs()).containsExactly("e1");
+    }
+
+    @Test
+    void caseDetailWithoutBehaviorRowsYieldsEmptyListHonestly() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.behavior()).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ ME-T12 死循环评测汇总
+
+    private static EvalQueryReader.CaseLoopRow loopRow(UUID caseResultId,
+                                                       String scenarioId,
+                                                       String stopReason,
+                                                       Integer detectionEventIndex,
+                                                       String checksJson,
+                                                       String metricsJson,
+                                                       String failureLabelsJson) {
+        return new EvalQueryReader.CaseLoopRow(caseResultId, scenarioId, 1,
+                "loop-behavior-v1", stopReason, detectionEventIndex, null, 0, 2L, null,
+                60L, checksJson, metricsJson, failureLabelsJson);
+    }
+
+    @Test
+    void loopSummaryAggregatesStopReasonsChecksMetricsAndLabels() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        UUID case1 = UUID.randomUUID();
+        UUID case2 = UUID.randomUUID();
+        reader.loopRows = List.of(
+                loopRow(case1, "S1", "COMPLETED", null,
+                        "[{\"name\":\"loop_detection\",\"status\":\"NOT_APPLICABLE\","
+                                + "\"reasonCode\":\"NORMAL_CONTROL\",\"evidenceRefs\":[]},"
+                                + "{\"name\":\"loop_false_positive\",\"status\":\"PASS\","
+                                + "\"reasonCode\":\"NO_FALSE_POSITIVE\",\"evidenceRefs\":[]}]",
+                        "[{\"name\":\"loop_false_positive\",\"numerator\":0,\"denominator\":1},"
+                                + "{\"name\":\"normal_task_success\",\"numerator\":1,\"denominator\":1}]",
+                        "[]"),
+                loopRow(case2, "S2", null, null, // 观测读失败 ERROR 行：终态 null 如实
+                        "[{\"name\":\"loop_detection\",\"status\":\"ERROR\","
+                                + "\"reasonCode\":\"TRACE_READ_ERROR\",\"evidenceRefs\":[]},"
+                                + "{\"name\":\"loop_false_positive\",\"status\":\"ERROR\","
+                                + "\"reasonCode\":\"TRACE_READ_ERROR\",\"evidenceRefs\":[]}]",
+                        "[]",
+                        "[\"TRACE_READ_ERROR\"]"));
+
+        EvalQueryService.LoopSummaryResponse out = service.loopSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isEqualTo(2);
+        assertThat(out.rows()).isEqualTo(2);
+        assertThat(out.graderVersions()).containsExactly("loop-behavior-v1");
+        // 终态分布：null 终态（ERROR 行）如实单列 NONE 不丢弃
+        assertThat(out.stopReasons())
+                .containsEntry("COMPLETED", 1L).containsEntry("NONE", 1L);
+        // checks 五态计数（按检查名聚合，TreeMap 定序）
+        EvalQueryService.BehaviorCheckStat detection = out.checks().stream()
+                .filter(c -> c.name().equals("loop_detection")).findFirst().orElseThrow();
+        assertThat(detection.statusCounts())
+                .containsEntry("NOT_APPLICABLE", 1L).containsEntry("ERROR", 1L);
+        EvalQueryService.BehaviorCheckStat falsePositive = out.checks().stream()
+                .filter(c -> c.name().equals("loop_false_positive")).findFirst()
+                .orElseThrow();
+        assertThat(falsePositive.statusCounts())
+                .containsEntry("PASS", 1L).containsEntry("ERROR", 1L);
+        // metrics 分子/分母合计（分母 0 如实不约分）
+        assertThat(out.metrics()).containsExactlyInAnyOrder(
+                new EvalQueryService.BehaviorMetricStat("loop_false_positive", 0, 1),
+                new EvalQueryService.BehaviorMetricStat("normal_task_success", 1, 1));
+        assertThat(out.failureLabels()).containsExactly(
+                new EvalQueryService.BehaviorLabelCount("TRACE_READ_ERROR", 1));
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void loopSummaryNoRowsAssessedZeroHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.loopRows = List.of();
+
+        EvalQueryService.LoopSummaryResponse out = service.loopSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isZero();
+        assertThat(out.rows()).isZero();
+        assertThat(out.stopReasons()).isEmpty();
+        assertThat(out.checks()).isEmpty();
+        assertThat(out.metrics()).isEmpty();
+        assertThat(out.failureLabels()).isEmpty();
+    }
+
+    @Test
+    void loopSummaryUnknownRunIsEmpty() {
+        assertThat(service.loopSummary(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void caseDetailIncludesLoopEntriesPerGrader() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        reader.loopByCase.put(caseId, List.of(
+                loopRow(caseId, "infra/redis-oom", "COMPLETED", null,
+                        "[{\"name\":\"normal_task_completion\",\"status\":\"PASS\","
+                                + "\"reasonCode\":\"NORMAL_COMPLETED\",\"evidenceRefs\":[]}]",
+                        "[{\"name\":\"normal_task_success\",\"numerator\":1,\"denominator\":1}]",
+                        "[]")));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.loop()).hasSize(1);
+        EvalQueryService.CaseLoopEntry entry = out.loop().get(0);
+        assertThat(entry.graderVersion()).isEqualTo("loop-behavior-v1");
+        assertThat(entry.stopReason()).isEqualTo("COMPLETED");
+        assertThat(entry.detectionEventIndex()).isNull();
+        assertThat(entry.physicalCallsFromOnset()).isEqualTo(2L);
+        assertThat(entry.tokensFromOnset()).isNull();
+        assertThat(entry.secondsFromOnset()).isEqualTo(60L);
+        assertThat(entry.checks()).containsExactly(
+                new EvalQueryService.CaseBehaviorCheck("normal_task_completion", "PASS",
+                        "NORMAL_COMPLETED", List.of()));
+        assertThat(entry.metrics()).containsExactly(
+                new EvalQueryService.CaseBehaviorMetric("normal_task_success", 1, 1));
+        assertThat(entry.failureLabels()).isEmpty();
+    }
+
+    @Test
+    void caseDetailWithoutLoopRowsYieldsEmptyListHonestly() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.loop()).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 协作评测汇总
+
+    private static EvalQueryReader.CaseCollabRow collabRow(UUID caseResultId,
+                                                           String scenarioId,
+                                                           Integer edgeCount,
+                                                           Integer admittedCount,
+                                                           Long tokenCostTotal,
+                                                           String checksJson,
+                                                           String metricsJson,
+                                                           String failureLabelsJson,
+                                                           String suspectedJson,
+                                                           String supportedJson) {
+        return new EvalQueryReader.CaseCollabRow(caseResultId, scenarioId, 1,
+                "collaboration-v1", edgeCount, admittedCount, tokenCostTotal,
+                checksJson, metricsJson, failureLabelsJson, suspectedJson, supportedJson);
+    }
+
+    @Test
+    void collabSummaryAggregatesScalarsChecksMetricsLabelsAndAttributions() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        UUID case1 = UUID.randomUUID();
+        UUID case2 = UUID.randomUUID();
+        reader.collabRows = List.of(
+                collabRow(case1, "S1", 2, 1, 150L,
+                        "[{\"name\":\"delegation_necessity_choice\",\"status\":\"NOT_ASSESSED\","
+                                + "\"reasonCode\":\"NEED_LABEL_MISSING\",\"evidenceRefs\":[]},"
+                                + "{\"name\":\"cancellation_fence\",\"status\":\"FAIL\","
+                                + "\"reasonCode\":\"DISPATCH_AFTER_CANCEL\",\"evidenceRefs\":[\"e1\"]}]",
+                        "[{\"name\":\"role_token_cost\",\"numerator\":150,\"denominator\":2}]",
+                        "[\"MAST_TASK_DERAIL\"]",
+                        "[\"MAST_TASK_DERAIL @ e1（疑似归因，无干预对照）\"]",
+                        "[]"),
+                collabRow(case2, "S2", null, null, null, // ERROR 行：标量未观测如实
+                        "[{\"name\":\"delegation_necessity_choice\",\"status\":\"ERROR\","
+                                + "\"reasonCode\":\"TRACE_READ_ERROR\",\"evidenceRefs\":[]}]",
+                        "[]",
+                        "[\"TRACE_READ_ERROR\"]",
+                        "[]",
+                        "[]"));
+
+        EvalQueryService.CollabSummaryResponse out =
+                service.collabSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isEqualTo(2);
+        assertThat(out.rows()).isEqualTo(2);
+        assertThat(out.graderVersions()).containsExactly("collaboration-v1");
+        // 标量合计：null 行（未观测）不加值不填 0
+        assertThat(out.edges()).isEqualTo(2);
+        assertThat(out.admitted()).isEqualTo(1);
+        assertThat(out.tokenCostTotal()).isEqualTo(150);
+        // checks 五态计数
+        EvalQueryService.BehaviorCheckStat necessity = out.checks().stream()
+                .filter(c -> c.name().equals("delegation_necessity_choice")).findFirst()
+                .orElseThrow();
+        assertThat(necessity.statusCounts())
+                .containsEntry("NOT_ASSESSED", 1L).containsEntry("ERROR", 1L);
+        EvalQueryService.BehaviorCheckStat fence = out.checks().stream()
+                .filter(c -> c.name().equals("cancellation_fence")).findFirst().orElseThrow();
+        assertThat(fence.statusCounts()).containsEntry("FAIL", 1L);
+        // metrics 分子/分母合计
+        assertThat(out.metrics()).containsExactly(
+                new EvalQueryService.BehaviorMetricStat("role_token_cost", 150, 2));
+        // MAST 标签计数（计数降序、同计数标签升序）
+        assertThat(out.failureLabels()).containsExactlyInAnyOrder(
+                new EvalQueryService.BehaviorLabelCount("MAST_TASK_DERAIL", 1),
+                new EvalQueryService.BehaviorLabelCount("TRACE_READ_ERROR", 1));
+        // 归因双轨计数分列不混
+        assertThat(out.suspectedAttributions()).isEqualTo(1);
+        assertThat(out.supportedAttributions()).isZero();
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void collabSummaryNoRowsAssessedZeroHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.collabRows = List.of();
+
+        EvalQueryService.CollabSummaryResponse out =
+                service.collabSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isZero();
+        assertThat(out.rows()).isZero();
+        assertThat(out.edges()).isNull();
+        assertThat(out.admitted()).isNull();
+        assertThat(out.tokenCostTotal()).isNull();
+        assertThat(out.checks()).isEmpty();
+        assertThat(out.metrics()).isEmpty();
+        assertThat(out.failureLabels()).isEmpty();
+        assertThat(out.suspectedAttributions()).isZero();
+        assertThat(out.supportedAttributions()).isZero();
+    }
+
+    @Test
+    void collabSummaryUnknownRunIsEmpty() {
+        assertThat(service.collabSummary(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void caseDetailIncludesCollabEntriesPerGrader() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        reader.collabByCase.put(caseId, List.of(
+                collabRow(caseId, "infra/redis-oom", 1, 1, 100L,
+                        "[{\"name\":\"handoff_fact_constraint_retention\",\"status\":\"NOT_ASSESSED\","
+                                + "\"reasonCode\":\"HANDOFF_CONTENT_UNOBSERVED\",\"evidenceRefs\":[]}]",
+                        "[{\"name\":\"role_token_cost\",\"numerator\":100,\"denominator\":1}]",
+                        "[]",
+                        "[]",
+                        "[\"edge:e1 替换错误回执后重放改善（干预前后轨迹俱在），支持该交接边因果归因\"]")));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.collab()).hasSize(1);
+        EvalQueryService.CaseCollabEntry entry = out.collab().get(0);
+        assertThat(entry.graderVersion()).isEqualTo("collaboration-v1");
+        assertThat(entry.edgeCount()).isEqualTo(1);
+        assertThat(entry.admittedCount()).isEqualTo(1);
+        assertThat(entry.tokenCostTotal()).isEqualTo(100L);
+        assertThat(entry.checks()).containsExactly(
+                new EvalQueryService.CaseBehaviorCheck("handoff_fact_constraint_retention",
+                        "NOT_ASSESSED", "HANDOFF_CONTENT_UNOBSERVED", List.of()));
+        assertThat(entry.metrics()).containsExactly(
+                new EvalQueryService.CaseBehaviorMetric("role_token_cost", 100, 1));
+        assertThat(entry.failureLabels()).isEmpty();
+        assertThat(entry.suspectedAttributions()).isEmpty();
+        assertThat(entry.supportedAttributions()).hasSize(1);
+    }
+
+    @Test
+    void caseDetailWithoutCollabRowsYieldsEmptyListHonestly() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.collab()).isEmpty();
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 漂移评测汇总
+
+    private static EvalQueryReader.CaseDriftRow driftRow(UUID caseResultId,
+                                                         String scenarioId,
+                                                         String summaryDigest,
+                                                         String consumptionJson,
+                                                         String checksJson,
+                                                         String metricsJson,
+                                                         String failureLabelsJson,
+                                                         String deferredJson) {
+        return new EvalQueryReader.CaseDriftRow(caseResultId, scenarioId, 1,
+                "context-drift-v1", summaryDigest, consumptionJson, checksJson,
+                metricsJson, failureLabelsJson, deferredJson);
+    }
+
+    @Test
+    void driftSummaryAggregatesConsumptionChecksMetricsLabelsAndDeferred() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        UUID case1 = UUID.randomUUID();
+        UUID case2 = UUID.randomUUID();
+        reader.driftRows = List.of(
+                driftRow(case1, "S1", "digest-1",
+                        "{\"mode\":\"CONSUME_VALIDATED\",\"summaryCommitted\":true,"
+                                + "\"consumerInvoked\":true,\"consumed\":true,"
+                                + "\"policyDigest\":\"p1\"}",
+                        "[{\"name\":\"key_fact_retention\",\"status\":\"FAIL\","
+                                + "\"reasonCode\":\"FACT_MISSING\",\"evidenceRefs\":[\"e1\"]}]",
+                        "[{\"name\":\"key_fact_retention_rate\",\"numerator\":3,\"denominator\":4}]",
+                        "[\"FACT_MISSING\"]",
+                        "[\"task_quality_change:x\",\"total_cost_change:y\"]"),
+                driftRow(case2, "S2", null,           // 无压缩事件：digest/消费面缺席如实
+                        "null",
+                        "[{\"name\":\"key_fact_retention\",\"status\":\"NOT_APPLICABLE\","
+                                + "\"reasonCode\":\"NO_SUMMARY\",\"evidenceRefs\":[]}]",
+                        "[]",
+                        "[]",
+                        "[\"task_quality_change:x\",\"position_length_buckets:z\"]"));
+
+        EvalQueryService.DriftSummaryResponse out =
+                service.driftSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isEqualTo(2);
+        assertThat(out.rows()).isEqualTo(2);
+        assertThat(out.graderVersions()).containsExactly("context-drift-v1");
+        assertThat(out.withSummary()).isEqualTo(1);   // 无压缩事件行不计入
+        // consumption 四件计数：null 面不计入任一项
+        assertThat(out.consumptionObserved()).isEqualTo(1);
+        assertThat(out.summaryCommitted()).isEqualTo(1);
+        assertThat(out.consumerInvoked()).isEqualTo(1);
+        assertThat(out.consumed()).isEqualTo(1);
+        // checks 五态计数
+        EvalQueryService.BehaviorCheckStat retention = out.checks().stream()
+                .filter(c -> c.name().equals("key_fact_retention")).findFirst().orElseThrow();
+        assertThat(retention.statusCounts())
+                .containsEntry("FAIL", 1L).containsEntry("NOT_APPLICABLE", 1L);
+        assertThat(out.metrics()).containsExactly(
+                new EvalQueryService.BehaviorMetricStat("key_fact_retention_rate", 3, 4));
+        assertThat(out.failureLabels()).containsExactly(
+                new EvalQueryService.BehaviorLabelCount("FACT_MISSING", 1));
+        // deferred 并集（跨行去重）
+        assertThat(out.deferred()).containsExactlyInAnyOrder(
+                "task_quality_change:x", "total_cost_change:y", "position_length_buckets:z");
+        assertThat(out.asOf()).isNotNull();
+    }
+
+    @Test
+    void driftSummaryNoRowsAssessedZeroHonestly() {
+        UUID runId = UUID.randomUUID();
+        reader.run = runRow(runId, NOW, "SUCCEEDED");
+        reader.driftRows = List.of();
+
+        EvalQueryService.DriftSummaryResponse out =
+                service.driftSummary(runId).orElseThrow();
+
+        assertThat(out.assessed()).isZero();
+        assertThat(out.rows()).isZero();
+        assertThat(out.withSummary()).isZero();
+        assertThat(out.consumptionObserved()).isZero();
+        assertThat(out.checks()).isEmpty();
+        assertThat(out.metrics()).isEmpty();
+        assertThat(out.failureLabels()).isEmpty();
+        assertThat(out.deferred()).isEmpty();
+    }
+
+    @Test
+    void driftSummaryUnknownRunIsEmpty() {
+        assertThat(service.driftSummary(UUID.randomUUID())).isEmpty();
+    }
+
+    @Test
+    void caseDetailIncludesDriftEntriesPerGrader() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+        reader.driftByCase.put(caseId, List.of(
+                driftRow(caseId, "infra/redis-oom", "digest-9",
+                        "{\"mode\":\"SHADOW_GENERATE\",\"summaryCommitted\":true,"
+                                + "\"consumerInvoked\":false,\"consumed\":null,"
+                                + "\"policyDigest\":null}",
+                        "[{\"name\":\"fact_distortion\",\"status\":\"NOT_APPLICABLE\","
+                                + "\"reasonCode\":\"NO_REQUIRED_FACTS\",\"evidenceRefs\":[]}]",
+                        "[]",
+                        "[]",
+                        "[\"total_cost_change:y\"]")));
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.drift()).hasSize(1);
+        EvalQueryService.CaseDriftEntry entry = out.drift().get(0);
+        assertThat(entry.graderVersion()).isEqualTo("context-drift-v1");
+        assertThat(entry.summaryDigest()).isEqualTo("digest-9");
+        assertThat(entry.consumption().mode()).isEqualTo("SHADOW_GENERATE");
+        assertThat(entry.consumption().summaryCommitted()).isTrue();
+        assertThat(entry.consumption().consumerInvoked()).isFalse();
+        assertThat(entry.consumption().consumed()).as("未观测 null 透传不猜").isNull();
+        assertThat(entry.checks()).containsExactly(
+                new EvalQueryService.CaseBehaviorCheck("fact_distortion",
+                        "NOT_APPLICABLE", "NO_REQUIRED_FACTS", List.of()));
+        assertThat(entry.metrics()).isEmpty();
+        assertThat(entry.failureLabels()).isEmpty();
+        assertThat(entry.deferred()).containsExactly("total_cost_change:y");
+    }
+
+    @Test
+    void caseDetailWithoutDriftRowsYieldsEmptyListHonestly() {
+        UUID runId = UUID.randomUUID();
+        UUID caseId = UUID.randomUUID();
+        reader.caseDetail = detailRow(runId, caseId, null, null, "TIMEOUT_OR_ABSENT", null);
+
+        EvalQueryService.EvalCaseDetailResponse out =
+                service.caseDetail(runId, caseId).orElseThrow();
+
+        assertThat(out.drift()).isEmpty();
+    }
+
     // ------------------------------------------------------------------ M-d T5 六要素汇总
 
     @Test
@@ -1416,6 +2202,14 @@ class EvalQueryServiceTest {
         EvalRunRow run;
         EvalCasePage casePage = new EvalCasePage(List.of(), false);
         List<EvalQueryReader.CaseSafetyRow> safetyRows = List.of();
+        List<EvalQueryReader.CaseBehaviorRow> behaviorRows = List.of();
+        Map<UUID, List<EvalQueryReader.CaseBehaviorRow>> behaviorByCase = new LinkedHashMap<>();
+        List<EvalQueryReader.CaseLoopRow> loopRows = List.of();
+        Map<UUID, List<EvalQueryReader.CaseLoopRow>> loopByCase = new LinkedHashMap<>();
+        List<EvalQueryReader.CaseCollabRow> collabRows = List.of();
+        Map<UUID, List<EvalQueryReader.CaseCollabRow>> collabByCase = new LinkedHashMap<>();
+        List<EvalQueryReader.CaseDriftRow> driftRows = List.of();
+        Map<UUID, List<EvalQueryReader.CaseDriftRow>> driftByCase = new LinkedHashMap<>();
         List<EvalQueryReader.SixPartsRow> sixPartsRows = List.of();
         EvalQueryReader.ProcessMetricsRow processMetrics =
                 new EvalQueryReader.ProcessMetricsRow(0, 0, 0, 0, 0, 0, 0, 0,
@@ -1558,9 +2352,11 @@ class EvalQueryServiceTest {
             throw new UnsupportedOperationException();
         }
 
+        java.util.Map<String, List<String>> planCaseKeysByDataset = java.util.Map.of();
+
         @Override
         public List<String> listPlanCaseKeys(String datasetVersion) {
-            throw new UnsupportedOperationException();
+            return planCaseKeysByDataset.getOrDefault(datasetVersion, List.of());
         }
 
         @Override
@@ -1635,6 +2431,49 @@ class EvalQueryServiceTest {
         @Override
         public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
             return safetyRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseBehaviorRow> listCaseBehavior(UUID evalRunId) {
+            return behaviorRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseBehaviorRow> listCaseBehaviorForCase(
+                UUID caseResultId) {
+            return behaviorByCase.getOrDefault(caseResultId, List.of());
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseLoopRow> listCaseLoop(UUID evalRunId) {
+            return loopRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseLoopRow> listCaseLoopForCase(UUID caseResultId) {
+            return loopByCase.getOrDefault(caseResultId, List.of());
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseCollabRow> listCaseCollab(UUID evalRunId) {
+            return collabRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseCollabRow> listCaseCollabForCase(
+                UUID caseResultId) {
+            return collabByCase.getOrDefault(caseResultId, List.of());
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseDriftRow> listCaseDrift(UUID evalRunId) {
+            return driftRows;
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseDriftRow> listCaseDriftForCase(
+                UUID caseResultId) {
+            return driftByCase.getOrDefault(caseResultId, List.of());
         }
 
         @Override

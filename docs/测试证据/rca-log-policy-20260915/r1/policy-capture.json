@@ -1,0 +1,22 @@
+[
+  {
+    "id": "97ac02aa-824d-40d3-b1c8-5dff6bd46220",
+    "capture_level": "DIGEST_ONLY",
+    "new_policy_visible": null
+  },
+  {
+    "id": "86c73ca9-871d-4fdc-9892-0a65624f03a7",
+    "capture_level": "DIGEST_ONLY",
+    "new_policy_visible": null
+  },
+  {
+    "id": "4860d98d-503b-4da5-bebb-2c7be9c44b30",
+    "capture_level": "DIGEST_ONLY",
+    "new_policy_visible": null
+  },
+  {
+    "id": "11593439-c14a-4a5c-aa71-65293321cb99",
+    "capture_level": "DIGEST_ONLY",
+    "new_policy_visible": null
+  }
+]

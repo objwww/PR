@@ -1,0 +1,38 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "rpc_method": "oteldemo.PaymentService/Charge",
+          "rpc_response_status_code": "UNAVAILABLE"
+        },
+        "value": [
+          1789446273,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "rpc_method": "oteldemo.ProductCatalogService/GetProduct",
+          "rpc_response_status_code": "NOT_FOUND"
+        },
+        "value": [
+          1789446273,
+          "0"
+        ]
+      },
+      {
+        "metric": {
+          "rpc_method": "oteldemo.PaymentService/Charge",
+          "rpc_response_status_code": "UNKNOWN"
+        },
+        "value": [
+          1789446273,
+          "1.1111111111111112"
+        ]
+      }
+    ]
+  }
+}

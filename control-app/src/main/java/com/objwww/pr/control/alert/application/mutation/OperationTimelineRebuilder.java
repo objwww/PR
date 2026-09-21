@@ -32,7 +32,9 @@ public final class OperationTimelineRebuilder {
             Map.entry("OPERATION_UNKNOWN", OperationStatus.UNKNOWN),
             Map.entry("OPERATION_RECONCILING", OperationStatus.RECONCILING),
             Map.entry("OPERATION_RETRYABLE", OperationStatus.RETRYABLE),
-            Map.entry("OPERATION_ESCALATED", OperationStatus.ESCALATED));
+            Map.entry("OPERATION_ESCALATED", OperationStatus.ESCALATED),
+            // BA-191：真执行确定性判败（DISPATCHED→FAILED_CONFIRMED 直落终态）
+            Map.entry("OPERATION_FAILED", OperationStatus.FAILED_CONFIRMED));
 
     public record Rebuild(Map<UUID, OperationStatus> finalStatuses,
             List<String> unmappedEvents) {

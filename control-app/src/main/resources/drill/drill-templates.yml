@@ -1,7 +1,7 @@
 # =====================================================================================
 # DR-02 故障演练场景模板目录（发布展示 DTO 面；方案 §7.1"复用版本化场景模板；发布展示
 #   DTO，不把完整答案注册表交给调查 Agent"）
-# 派生自 deploy/alert/eval/eval-scenarios.yml（registry v6）：只含公开面——id/名称/
+# 派生自 deploy/alert/eval/eval-scenarios.yml（registry v8）：只含公开面——id/名称/
 #   类型/故障源/驱动/症状（可观测面）/影响范围/时间参数/参数白名单。
 # GT 纪律：expected_root_cause / 注入控制细节 / labels_frozen 指纹面不属于本文件，
 #   禁止回填（§7.3：GT 仅评测执行域可读；调查 Agent 不得经任何面拿到标准答案）。
@@ -13,8 +13,13 @@
 # BA-179：S17~S22/S24/S25 八场景入目录（F10~F17 流量配方同批接入
 #   ArenaChaosScenarioDriver，配方=各 ma-drill/ma-t9 脚本 195 实测家法，各模板
 #   reason 注明出处）；S23 复合激活依赖 M-b C3 未落地，维持不入。
+# BA-185：S27 变更回归场景入目录（registry v7）——flagd paymentFailure 配置发布
+#   致扣款失败，注入侧 change_ledger 同步落 change_event 发布行（真实联动），
+#   处置=service.rollback 走 R3 审批链；注入链复用 FlagdScenarioDriver 零新分派。
+# ME-T08：v8 同步——eval-scenarios.yml v8 仅追加 agent_behavior_v1 套件账
+#   （loader 忽略键），scenarios[] 零新增零改动，本目录模板面零变化只升派生锚。
 # =====================================================================================
-registry_version: 6
+registry_version: 8
 templates:
 
   - scenario_id: S1
@@ -375,3 +380,32 @@ templates:
         真实变更账本（change.query 可查），无需注入侧制造；审批观测面=
         GET /api/eval/runs/{id}/approval-chain 五表存在性（M-d T8 已上线）；
         审批 300s 有效期——批准须在窗口内完成（过期重铸不重放）
+
+  - scenario_id: S27
+    name: 变更回归-支付配置发布致扣款失败（处置=回滚）
+    scenario_type: 变更回归-审批处置链
+    fault_source: AM0 flagd + 真实变更账本（注入即发布，账本同步落行）
+    driver: FlagdScenarioDriver
+    chaos_family: null
+    target: payment（flagd paymentFailure 配置推送面）
+    symptom_codes: [checkout]
+    symptom_display: checkout 烧损率告警（page/ticket）
+    impact: >-
+      一次 payment 配置发布（paymentFailure off→50%）致支付扣款按比例失败、
+      checkout 烧损率越预算；发布事实真实落 change_event 账本（change.query/
+      change.diff 可查 service=payment 窗内 DEPLOY 行）；正确处置=回滚该发布，
+      须走 R3 人工审批链、零直接执行
+    timing: {preheat_seconds: 60, hold_seconds: 600, max_firing_wait_seconds: 1500,
+             max_resolved_wait_seconds: 2100, cleanup_timeout_seconds: 120}
+    params:
+      duration_seconds: {default: 600, min: 60, max: 600}
+      traffic_scales: [RECIPE]
+      linked_eval_version_allowed: true
+    execution:
+      ready: true
+      reason: >-
+        注入链同 S1（FlagdScenarioDriver defaultVariant 单键精确切换+DR-05 条件
+        恢复，DR-A 批接线）；change_ledger 账本联动随 BA-185 接入——激活即经
+        control_app insert 面落 change_event 发布行（source=deployment/action=
+        DEPLOY，service=payment），恢复不写反向行（append-only 历史事实）；
+        审批观测面=approval-chain 五表（300s 有效期内完成批准）

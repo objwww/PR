@@ -3,6 +3,7 @@ package com.objwww.pr.control.eval.domain.repository;
 import com.objwww.pr.control.eval.domain.EvalCaseResult;
 import com.objwww.pr.control.eval.domain.EvalRun;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +38,13 @@ public interface EvalRunRepository {
     boolean insertCaseResult(EvalCaseResult result);
 
     Optional<EvalRun> findById(UUID runId);
+
+    /**
+     * BA-192 搁浅清扫读面：RUNNING 且 started_at 早于 startedBefore、且无活体命令
+     * （eval_run_command 无该 run 的 PENDING/CLAIMED 行）的 run——命令账本（V81）
+     * 之前的老批件在命令表零行，永远进不了 findOrphanedClaims 视野。
+     */
+    List<EvalRun> findStrandedRuns(Instant startedBefore);
 
     List<EvalCaseResult> findCasesByRunId(UUID runId);
 }

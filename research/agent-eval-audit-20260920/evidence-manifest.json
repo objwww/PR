@@ -1,0 +1,79 @@
+{
+  "capturedAt": "2026-09-20T12:44:23.0236091+08:00",
+  "head": "b2f44a9ecd8ec145124cdc0a908283ee0d7bb851",
+  "scope": "working-tree including existing uncommitted changes; local audit only",
+  "files": [
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/application/SingleCaseScorer.java",
+      "sha256": "1326D55EAD76F49AA60C815AE13E595BD5F4F58B9DA9D58B00E857297AF78FC3"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/application/ScenarioEvaluator.java",
+      "sha256": "D22823F2B993AACF2A0A5061FC3CAA39D872AC896B73C8BF56DE01D7BE0045F6"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/domain/service/SixDimEvaluator.java",
+      "sha256": "C2334B2EAD229324716F65CBF6004AB2309F36A289701E24E6915DE9252D176A"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/domain/service/QualityGate.java",
+      "sha256": "87AF5C13CCC796B398101B22AE3A4A86FA73515681E8C4FA19340648A9BD8A40"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/application/EvalGateRunner.java",
+      "sha256": "A29AB8CD3492CA1798CB71CFC622A118292B32D81BE5E6E6CB8A650AA2CEC8FB"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/application/EvalCompare.java",
+      "sha256": "2BD5AB40154BA8C63781BA1FB0922F8E14A4FBAEF4FC20EC9926942C913480CD"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/eval/application/EvalQueryService.java",
+      "sha256": "8E0828061EC0C6A0A1C32BC3BC4EADA43D4FB657A5D9B8F4142159CBF5168EDC"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/application/agent/SingleToolEvidenceAgent.java",
+      "sha256": "A75F82333FF3D149B4B068AB05D3D37C46ECA0B78617BD5D985598F1AF34B4BD"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/domain/budget/DoomLoopGuard.java",
+      "sha256": "AC0F2C57A6FC74AE7D2B64C0B3161220B9016ABF7CE3F9659C074B6D96F6EB5D"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/application/agent/RoleLoopGuard.java",
+      "sha256": "97D34814970D0DC3E5896CC9BB4BBB6FFB3AD3A8E911C7A33FADF76E7D1E0E7C"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/application/agent/ContextCompactionService.java",
+      "sha256": "494986872C07D8FEAEAA7F05AC104B2A8867CD7F7AC6BC88B0F338BEEBC4FBD5"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/application/mcp/McpToolInvoker.java",
+      "sha256": "794BD104F6DD7396D09780389F1065C2AA765F5A835E36AD2531530B1D156EC3"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/alert/application/mcp/McpServerClient.java",
+      "sha256": "E154737E66E1F8F862066DEE29FD068593A0E9BA0D5EFE784750B80BC694E1C6"
+    },
+    {
+      "path": "control-app/src/main/java/com/objwww/pr/control/infrastructure/mcp/SdkMcpServerClientFactory.java",
+      "sha256": "D633D89B7D5A3285BF1F6922A6F1F8913431BF560BF52421224E96DD4E103477"
+    },
+    {
+      "path": "alert-web/src/views/EvalRunDetailView.vue",
+      "sha256": "3250167E85291A9C586E0A1893CA9B6D5C3719912B11D018C0FE479E1C4A6274"
+    },
+    {
+      "path": "deploy/alert/eval/eval-scenarios.yml",
+      "sha256": "D381602522E7E722C623F2BD15445D6E9679672DAAB4443AF96C909B28E458F5"
+    }
+  ],
+  "tests": {
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "primary": 99,
+    "boundaries": 53
+  },
+  "probes": "4 current-behavior characterizations; see probe-results.log"
+}

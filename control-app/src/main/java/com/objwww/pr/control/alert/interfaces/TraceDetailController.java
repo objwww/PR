@@ -55,6 +55,8 @@ public class TraceDetailController {
             row.put("evidenceRef", d.evidenceRef());
             row.put("evidenceType", d.evidenceType());
             row.put("evidenceSource", d.evidenceSource());
+            // BA-190（W3）：拒因具体消息随明细透出（null=无详情/旧行，如实不造）
+            row.put("reasonDetail", d.reasonDetail());
             out.add(row);
         }
         Map<String, Object> body = new LinkedHashMap<>();

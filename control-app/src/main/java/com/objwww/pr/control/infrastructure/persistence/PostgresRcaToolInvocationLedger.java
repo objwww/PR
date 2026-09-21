@@ -54,19 +54,39 @@ public class PostgresRcaToolInvocationLedger implements RcaToolInvocationLedger 
     @Override
     public boolean fail(UUID operationId, ToolInvocationState terminal,
             ToolReasonCode reasonCode) {
+        return fail(operationId, terminal, reasonCode, null);
+    }
+
+    /**
+     * BA-190（W3）：reason_detail 落列（V155）——拒因具体消息随账落档，应用侧
+     * 截断 200 字符（与 EvalBatchRunner.abbreviate 同律）；null = 无详情如实为空。
+     */
+    @Override
+    public boolean fail(UUID operationId, ToolInvocationState terminal,
+            ToolReasonCode reasonCode, String reasonDetail) {
         if (terminal != ToolInvocationState.FAILED && terminal != ToolInvocationState.UNKNOWN) {
             throw new IllegalArgumentException(
                     "fail 只接受 FAILED/UNKNOWN，实际: " + terminal);
         }
         Integer updated = tx.execute(status -> jdbc.sql("""
                         update rca_tool_invocation
-                           set state = :state, reason_code = :reason, settled_at = now()
+                           set state = :state, reason_code = :reason,
+                               reason_detail = :detail, settled_at = now()
                          where id = :id and state = 'PENDING'
                         """)
                 .param("state", terminal.name()).param("reason", reasonCode.name())
+                .param("detail", abbreviate(reasonDetail))
                 .param("id", operationId)
                 .update());
         return updated != null && updated == 1;
+    }
+
+    /** 拒因详情截断（200 字符长度防御；null 原样——无详情不落空串冒充） */
+    static String abbreviate(String detail) {
+        if (detail == null || detail.length() <= 200) {
+            return detail;
+        }
+        return detail.substring(0, 200);
     }
 
     /** EX-A4a（F16）：悬挂 PENDING 单语句回收 → UNKNOWN/TRANSPORT_UNKNOWN（CAS 语义在 WHERE state） */

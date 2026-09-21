@@ -203,6 +203,11 @@ class QualitySummaryServiceTest {
         }
 
         @Override
+        public List<EvalRun> findStrandedRuns(java.time.Instant startedBefore) {
+            return List.of();
+        }
+
+        @Override
         public List<EvalCaseResult> findCasesByRunId(UUID id) {
             return run != null && run.id().equals(id) ? List.copyOf(cases) : List.of();
         }

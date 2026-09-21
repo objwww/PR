@@ -71,7 +71,7 @@ public final class PrimaryGatewayToolPort implements BoundedLlmRoleRunner.Primar
         SingleToolEvidenceAgent.CallContext stepCtx = new SingleToolEvidenceAgent.CallContext(
                 ctx.runId(), ctx.taskId(), ctx.attemptId(), callSeq,
                 ctx.observedGeneration(), ctx.investigationInputDigest(), ctx.timeRange(),
-                ctx.controlSignal(), ctx.actionDeadline());
+                ctx.controlSignal(), ctx.actionDeadline(), ctx.freshEvidence());
         SingleToolEvidenceAgent.AgentResult result = agent.investigate(stepCtx, args);
         return switch (result.outcome()) {
             case EVIDENCE_PRODUCED -> {

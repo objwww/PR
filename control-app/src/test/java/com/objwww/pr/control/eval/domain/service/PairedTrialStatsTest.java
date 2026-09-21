@@ -135,6 +135,26 @@ class PairedTrialStatsTest {
         assertThat(report.difference().algorithmVersion()).isEqualTo("cluster-bootstrap-v1");
     }
 
+    // ---------------- STAT-01（ME-T09/D09 步骤 4）：同事故 100 round 仍是 1 簇 ----------------
+
+    @Test
+    void stat01HundredRoundsOfSameIncidentRemainOneCluster() {
+        // 同一事故复制 100 次作为不同 round：聚类键相同 → 独立簇仍为 1，
+        // 不能变成充分样本（MIN_CLUSTERS=5 之下只出 INCONCLUSIVE，区间置空）
+        List<PairedTrialStats.PairedOutcome> pairs = new java.util.ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            pairs.add(pair("incident-A", false, true));
+        }
+
+        PairedTrialStats.StatsResult result = PairedTrialStats.pairedDifference(pairs, 42L);
+
+        assertThat(result.clusterCount()).isEqualTo(1);
+        assertThat(result.verdict()).isEqualTo(PairedTrialStats.Verdict.INCONCLUSIVE);
+        assertThat(result.ciLower()).isNull();
+        assertThat(result.ciUpper()).isNull();
+        assertThat(result.pointEstimate()).isEqualTo(1.0);
+    }
+
     // ---------------- 输入契约防呆 ----------------
 
     @Test

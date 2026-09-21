@@ -31,6 +31,12 @@ import java.util.UUID;
  *
  * <p>真实性标签随记录落档（§12.2）；CONTROL_FIXTURE 的 ELIGIBLE 结论不得冒充
  * Native 质量结论（消费方责任，标签在本记录不可抵赖）。
+ *
+ * <p><b>D03 §6（ME-T02）定位声明：本类仅为领域组件，未接主链</b>——检索 src/main
+ * 无生产装配与外部调用者（仅 {@code EvalGateRunnerTest} 与本类自引用）；生产发布
+ * 资格单一门消费入口是 {@link EvalCompareService}（eval-compare-gate-v3，整合
+ * readiness/安全/运行成本可见性）。不重接两套含义相同、结果不同的通过逻辑；
+ * 若未来引入真实调用方，必须先补贯通测试再启用。
  */
 public class EvalGateRunner {
 
@@ -78,15 +84,22 @@ public class EvalGateRunner {
     public EvaluationRecordV1 gate(GateBatchRequest request) {
         List<SixDimResult> perCase = new ArrayList<>();
         List<SafetyGate.Violation> violations = new ArrayList<>();
+        boolean anyNotAssessed = false;
         for (EvalCaseInput caseInput : request.cases()) {
             SixDimResult dim = sixDimEvaluator.evaluate(caseInput);
             perCase.add(dim);
-            violations.addAll(safetyGate.check(dim, caseInput).violations());
+            SafetyGate.SafetyVerdict caseVerdict = safetyGate.check(dim, caseInput);
+            violations.addAll(caseVerdict.violations());
+            anyNotAssessed |= caseVerdict.verdict() == SafetyGate.Verdict.NOT_ASSESSED;
         }
 
+        // D03：NOT_ASSESSED 跨案传播——任一案例安全面未评，批级安全结论不得冒充 PASS
+        // （QualityGate v2 消费 → INCONCLUSIVE(SAFETY_NOT_ASSESSED)）
+        SafetyGate.Verdict aggregatedVerdict = !violations.isEmpty()
+                ? SafetyGate.Verdict.REJECT
+                : anyNotAssessed ? SafetyGate.Verdict.NOT_ASSESSED : SafetyGate.Verdict.PASS;
         SafetyGate.SafetyVerdict aggregatedSafety = new SafetyGate.SafetyVerdict(
-                violations, violations.isEmpty()
-                        ? SafetyGate.Verdict.PASS : SafetyGate.Verdict.REJECT);
+                violations, aggregatedVerdict);
         SixDimResult aggregate = aggregate(perCase);
         PairedTrialStats.StatsResult stats = request.pairs().isEmpty() ? null
                 : PairedTrialStats.pairedDifference(request.pairs(), request.statsSeed());
@@ -118,7 +131,7 @@ public class EvalGateRunner {
         long latencyMax = 0L, prompt = 0L, completion = 0L, totalTokens = 0L;
         List<String> resultRefs = new ArrayList<>(), processRefs = new ArrayList<>(),
                 toolRefs = new ArrayList<>(), costRefs = new ArrayList<>(),
-                collabRefs = new ArrayList<>(), safetyRefs = new ArrayList<>();
+                adjudicationRefs = new ArrayList<>(), safetyRefs = new ArrayList<>();
 
         for (SixDimResult d : dims) {
             DimensionCounts.Result r = d.result().rawCounts();
@@ -151,11 +164,11 @@ public class EvalGateRunner {
             usageMissing |= c.usageMissing();
             costRefs.addAll(d.cost().traceRefs());
 
-            DimensionCounts.Collaboration cb = d.collaboration().rawCounts();
+            DimensionCounts.ClaimAdjudication cb = d.claimAdjudication().rawCounts();
             claimsTrue += cb.claimsTrue();
             claimsFalse += cb.claimsFalse();
             claimsUnknown += cb.claimsUnknown();
-            collabRefs.addAll(d.collaboration().traceRefs());
+            adjudicationRefs.addAll(d.claimAdjudication().traceRefs());
 
             DimensionCounts.Safety s = d.safety().rawCounts();
             policyRejections += s.policyRejections();
@@ -172,8 +185,8 @@ public class EvalGateRunner {
                         rejected), toolRefs),
                 new SixDimResult.Dim<>(new DimensionCounts.Cost(latencyMax, prompt, completion,
                         totalTokens, usageMissing), costRefs),
-                new SixDimResult.Dim<>(new DimensionCounts.Collaboration(claimsTrue,
-                        claimsFalse, claimsUnknown), collabRefs),
+                new SixDimResult.Dim<>(new DimensionCounts.ClaimAdjudication(claimsTrue,
+                        claimsFalse, claimsUnknown), adjudicationRefs),
                 new SixDimResult.Dim<>(new DimensionCounts.Safety(policyRejections, redteam),
                         safetyRefs));
     }

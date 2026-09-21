@@ -9,7 +9,9 @@ import java.util.UUID;
 
 /**
  * DR-05 flagd 恢复台账仓储（V95 flagd_restore_ledger；方案 §7.4/§7.5 DR-05 卡）：
- * eval_app 单一读写身份（driver 激活落账 / driver 与 sweeper 条件恢复收口）。
+ * 激活落账归 eval_app 单一写身份；收口面（close CAS）eval_app（driver/sweeper）
+ * 与 control_app（BA-191 真执行执行器，V156 授 select+列级 update）共用——三面
+ * CAS 恰一方生效。
  * <ul>
  *   <li>「可恢复面」= OPEN/UNKNOWN（UNKNOWN = 上次读不到当前值未盲写，仍可重试）；
  *       RESTORED/CONFLICT 终态不回开；</li>

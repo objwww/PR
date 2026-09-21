@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jev A/B 对照 · 页面设计稿（融入现有评测页/调查详情页）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:#f3f4f8; color:#1f2329; }
+  .design-note { background:#fff8e6; border:1px solid #f0c36d; border-radius:8px; padding:10px 16px; margin:14px auto; max-width:1440px; font-size:13px; color:#7a5b12; }
+  .screen { max-width:1440px; margin:0 auto 40px; background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,.08); overflow:hidden; }
+  .screen-tag { background:#2b3a55; color:#fff; padding:10px 18px; font-size:14px; font-weight:600; }
+  .screen-tag small { font-weight:400; opacity:.75; margin-left:10px; }
+  .layout { display:flex; min-height:300px; }
+  .nav { width:150px; background:#fafbfd; border-right:1px solid #eceef3; padding:14px 0; flex-shrink:0; }
+  .nav div { padding:8px 18px; font-size:13px; color:#4a5060; }
+  .nav div.on { color:#1664d9; background:#e8f0fe; border-right:2px solid #1664d9; font-weight:600; }
+  .nav .grp { font-size:11px; color:#9aa0ae; padding:12px 18px 4px; }
+  .main { flex:1; padding:18px 22px; }
+  h3 { font-size:15px; margin-bottom:12px; }
+  .card { border:1px solid #e6e9f0; border-radius:8px; padding:14px 16px; margin-bottom:14px; background:#fff; }
+  .card.tone { background:#f8faff; border-color:#c9d8f5; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:10px; font-size:12px; margin-left:8px; }
+  .pill.blue { background:#e8f0fe; color:#1664d9; }
+  .pill.green { background:#e6f6ec; color:#1a8f4d; }
+  .pill.orange { background:#fdf0e2; color:#c26a00; }
+  .pill.gray { background:#eef0f4; color:#6a7080; }
+  .pill.red { background:#fdeaea; color:#c93434; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; color:#8a90a0; font-weight:500; padding:8px 10px; border-bottom:1px solid #eceef3; white-space:nowrap; }
+  td { padding:9px 10px; border-bottom:1px solid #f2f3f7; vertical-align:top; }
+  .num { font-variant-numeric:tabular-nums; }
+  .delta-up { color:#1a8f4d; font-weight:600; }
+  .delta-dn { color:#c93434; font-weight:600; }
+  .src { color:#9aa0ae; font-size:11px; }
+  .mono { font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .banner { background:#eef6ff; border:1px solid #bcd7f7; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:13px; line-height:1.7; }
+  .twocol { display:flex; gap:14px; }
+  .twocol > div { flex:1; min-width:0; }
+  .lane { border:1px solid #e6e9f0; border-radius:8px; overflow:hidden; }
+  .lane-head { padding:10px 14px; font-size:13px; font-weight:600; }
+  .lane-head.a { background:#f4f6fa; }
+  .lane-head.b { background:#eaf4ff; }
+  .step { display:flex; align-items:center; gap:10px; padding:7px 14px; border-top:1px solid #f2f3f7; font-size:12.5px; }
+  .step .role { width:92px; flex-shrink:0; font-size:12px; }
+  .role.primary { color:#5b4db8; }
+  .role.jev { color:#0d7a8c; font-weight:600; }
+  .bar { flex:1; height:8px; background:#f0f1f5; border-radius:4px; position:relative; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; border-radius:4px; background:#8f7fe0; display:block; }
+  .bar i.jev { background:#37b5c9; }
+  .step .meta { width:150px; text-align:right; flex-shrink:0; color:#6a7080; font-size:12px; }
+  .jev-mark { background:#e6f7fa; border-left:3px solid #37b5c9; color:#0d7a8c; font-size:12px; padding:6px 14px; }
+  .expand { background:#fafbfd; border-top:1px solid #f0f1f5; padding:10px 14px 12px 40px; font-size:12.5px; }
+  .expand h5 { font-size:12px; color:#6a7080; margin:8px 0 4px; }
+  .expand pre { background:#f4f5f8; border-radius:6px; padding:8px 10px; font-size:11.5px; white-space:pre-wrap; word-break:break-all; color:#3a4050; max-height:120px; overflow:auto; }
+  .hit { color:#1a8f4d; font-weight:600; }
+  .miss { color:#c93434; font-weight:600; }
+  .flip { background:#fff3e8; }
+  .foot { max-width:1440px; margin:0 auto 30px; color:#8a90a0; font-size:12px; line-height:1.8; }
+</style>
+</head>
+<body>
+
+<div class="design-note">
+  <b>设计稿说明（2026-09-21）</b>：本稿按"不新建 Jev 专页"的要求，把 A/B 双臂对照能力嵌入现有 <b>评测页</b>（实验列表+实验详情）与 <b>调查详情页</b>（双 run 并排对比）。
+  屏内数据取自 195 库真实记录（取证时间 2026-09-21 19:55+08）：批 fbd6baa6（90 轮基线 F1=0.9545、92 案 84 命中）、Jev 真实调用账（jev-selector 55 次/153,811 tok/均 629ms 全 SUCCESS；jev-reviewer 12 次/45,651 tok/均 583ms 全 SUCCESS）、
+  选材台账 49 行/8 个 run、最新 run a497bc97 真实选材（池 5→选 4 裁 1，概率 0.24~0.90，延迟 423/535ms）。今晚 22:02 A/B 双批终态后，屏 2 的对照数值区由真实批数据自动填充（设计稿中标注「排期中」的单元格即绑定位）。
+</div>
+
+<!-- ============ 屏 1：评测页·实验列表 ============ -->
+<div class="screen">
+  <div class="screen-tag">屏 1 / 评测页 · 实验列表<small>新增「对照实验」类型卡——A/B 批与普通评测批并列展示，一眼可辨</small></div>
+  <div class="layout">
+    <div class="nav">
+      <div>值班</div><div>通知预览</div><div>通知</div><div>故障演练</div>
+      <div class="grp">质量</div>
+      <div class="on">评测</div><div>Prompt 工作台</div><div>提示词草稿</div>
+      <div class="grp">系统</div>
+      <div>配置中心</div><div>监控</div><div>数据分析</div><div>版本中心</div><div>审计</div><div>服务目录</div><div>复盘</div><div>账号</div>
+    </div>
+    <div class="main">
+      <h3>评测实验</h3>
+      <div class="card tone">
+        <b>Jev A/B 对照 · 20260921 夜批</b>
+        <span class="pill blue">对照实验</span><span class="pill orange">排期 22:02 自动执行</span>
+        <table style="margin-top:10px">
+          <tr><th>臂</th><th>链路</th><th>面板 / 轮次</th><th>模型 · 提示词 · 数据集</th><th>状态</th></tr>
+          <tr><td><b>A（对照）</b></td><td>完全不接触 Jev 的告警→根因分析链路</td><td>SMOKE（S3/S4/S5/S17/S18）× 5 轮 = 25 案</td><td class="mono">deepseek-v3 · am4-native-v5 · eval-ds-1</td><td><span class="pill gray">待执行</span></td></tr>
+          <tr><td><b>B（实验）</b></td><td>走 Jev 选材+复核的同一链路</td><td>同上（同场景同轮次逐对配对）</td><td class="mono">同上（单变量：仅 jev_enhanced 旗标）</td><td><span class="pill gray">待执行</span></td></tr>
+        </table>
+        <div class="src" style="margin-top:8px">单变量声明：双臂仅切换 alert_runtime_flag.jev_enhanced（A=f / B=t），模型、提示词版本、数据集版本、场景、轮次、worker 镜像（V167）全部一致。来源：POST /api/eval/runs idempotencyKey=ab-armA/ab-armB-20260921</div>
+      </div>
+      <div class="card">
+        <b>批 fbd6baa6 · 90 轮基线（Jev 未介入）</b>
+        <span class="pill green">已完成</span>
+        <span class="num" style="margin-left:14px">F1 <b>0.9545</b> · 92 案 84 命中（91.3%，剔除断链窗口径 96.6%）</span>
+        <div class="src" style="margin-top:6px">来源：eval_run / eval_case_result（verdict, root_cause_hit）——此批即 A/B 对照的历史基线参照</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 屏 2：对照实验详情 ============ -->
+<div class="screen">
+  <div class="screen-tag">屏 2 / 评测页 · 对照实验详情<small>双臂指标对比 + 配对统计结论 + 逐场景配对明细——所有数字行内标注来源表</small></div>
+  <div class="layout">
+    <div class="nav">
+      <div>值班</div><div>通知预览</div><div>通知</div><div>故障演练</div>
+      <div class="grp">质量</div>
+      <div class="on">评测</div><div>Prompt 工作台</div><div>提示词草稿</div>
+      <div class="grp">系统</div>
+      <div>配置中心</div><div>监控</div><div>数据分析</div><div>版本中心</div><div>审计</div><div>服务目录</div><div>复盘</div><div>账号</div>
+    </div>
+    <div class="main">
+      <h3>Jev A/B 对照 · 20260921<span class="pill blue">对照实验</span><span class="pill orange">数值区待 22:02 批终态填充</span></h3>
+
+      <div class="banner">
+        <b>配对统计结论（口径置顶，先讲怎么算再讲结果）</b><br>
+        配对单位 =（场景 × 轮次），双臂各 25 案一一对应。根因命中为二值指标 → <b>McNemar 检验</b>（只看"A 对 B 错"与"B 对 A 错"的不一致对）；连续指标差值 → 场景簇 cluster bootstrap 1000 次取 95% CI（≥5 簇可判，本实验 S3/S4/S5/S17/S18 恰 5 簇）；不足时如实报 INCONCLUSIVE 并给描述统计，<b>不编显著性</b>。多重比较做 Holm 校正。
+      </div>
+
+      <div class="card">
+        <b>双臂指标对比</b>
+        <table style="margin-top:8px">
+          <tr><th>指标</th><th>A 臂 · 无 Jev</th><th>B 臂 · 有 Jev</th><th>Δ（B−A）</th><th>数据来源（库表）</th></tr>
+          <tr><td>根因命中率</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">eval_case_result.root_cause_hit</td></tr>
+          <tr><td>F1 / 精确率 / 召回率</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">eval_case_result（TP/FP/FN 聚合）</td></tr>
+          <tr><td>三维评分（定因/路径/结论）</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">eval_case_result 三维列</td></tr>
+          <tr><td>未决率（诚实降级占比）</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">eval_case_result.verdict</td></tr>
+          <tr><td>Token 总量（分角色）</td><td class="num">primary 排期中</td><td class="num">primary + jev-selector + jev-reviewer 排期中</td><td class="num">Jev 附加成本单列</td><td class="src">rca_model_call.usage（jsonb）按 role_id 分组</td></tr>
+          <tr><td>每案均 Token / 估算成本</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">rca_model_call.cost_micros + usage</td></tr>
+          <tr><td>端到端耗时（均值 / P95）</td><td class="num">排期中</td><td class="num">排期中</td><td class="num">—</td><td class="src">run 起止 + rca_model_call.latency_ms</td></tr>
+          <tr><td>工具调用正确性</td><td class="num" colspan="2">参数合法率（INVALID_ARGS 占比）· NO_DATA 率 · 死循环率（DOOM_LOOP）双臂对比，排期中</td><td class="num">—</td><td class="src">rca_tool_invocation.state 分布</td></tr>
+          <tr><td>上下文漂移</td><td class="num" colspan="2">压缩关闭期如实显示「无漂移数据（NO_SUMMARY）」，不编造</td><td class="num">—</td><td class="src">eval_case_drift（无行即如实说明）</td></tr>
+          <tr><td>Jev 侧账（仅 B 臂）</td><td class="num">—</td><td class="num">选材决策数 · 池规模分布 · 选中/被裁比 · 平均概率 · reviewer 触发与 GAPS 数</td><td class="num">—</td><td class="src">rca_jev_selection（A 臂应为 0 行——反向佐证单变量成立）</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <b>逐场景配对明细</b><span class="src">（不一致对整行高亮：橙=B 翻盘，红=B 翻车——McNemar 只看这两类）</span>
+        <table style="margin-top:8px">
+          <tr><th>场景</th><th>轮次</th><th>A 判定</th><th>B 判定</th><th>A 根因</th><th>B 根因</th><th>不一致类型</th></tr>
+          <tr><td>S3 幂等失效</td><td>1</td><td class="hit">命中</td><td class="hit">命中</td><td class="mono">IDEMPOTENCY_BYPASS</td><td class="mono">IDEMPOTENCY_BYPASS</td><td>—</td></tr>
+          <tr class="flip"><td>S17 掉单</td><td>2</td><td class="miss">未命中</td><td class="hit">命中</td><td class="mono">（误报变更）</td><td class="mono">CALLBACK_DROP</td><td><span class="pill orange">B 翻盘（示例版式）</span></td></tr>
+          <tr><td colspan="7" class="src">版式示例——真实行由 22:02 批的 eval_case_result 按 (scenario_id, round_no) 配对生成；A 臂 rca_jev_selection 必须为 0 行，否则对照被污染，页面顶部红条告警</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 屏 3：调查详情页·双 run 并排对比 ============ -->
+<div class="screen">
+  <div class="screen-tag">屏 3 / 调查详情页 · 双 run 并排对比模式<small>同场景同轮次的 A/B 两个 run：调用链瀑布并排，每步可展开模型输入 / 模型推理输出 / 工具调用结果</small></div>
+  <div class="main">
+    <div class="banner" style="margin-bottom:14px">
+      <b>配对上下文</b>：场景 S17 掉单 · 第 2 轮 · 数据集 eval-ds-1 · 提示词 am4-native-v5 · 模型 deepseek-v3（双臂相同）。
+      左 A=无 Jev 链路，右 B=Jev 链路。每步行内：序号 / 角色 / 耗时 / token / 状态；点击展开三层证据：<b>模型输入</b>（rca_model_input，redacted 掩敏原文）、<b>模型输出·推理</b>（rca_model_output，V167 起落库）、<b>工具调用与结果</b>（rca_tool_invocation：参数+状态+返回摘要）。
+    </div>
+    <div class="twocol">
+      <div class="lane">
+        <div class="lane-head a">A 臂 · 无 Jev（run 示例：基线批链路）</div>
+        <div class="step"><span class="role primary">primary 序 0</span><div class="bar"><i style="width:6%"></i></div><span class="meta num">1.7 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 1</span><div class="bar"><i style="width:10%"></i></div><span class="meta num">3.0 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 2</span><div class="bar"><i style="width:8%"></i></div><span class="meta num">2.3 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 3</span><div class="bar"><i style="width:32%"></i></div><span class="meta num">9.5 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 4</span><div class="bar"><i style="width:52%"></i></div><span class="meta num">15.9 秒 · 成功</span></div>
+        <div class="expand">
+          <h5>展开示例 · primary 序 4（三层证据，全部真表直读）</h5>
+          <h5>① 模型输入（rca_model_input · redacted）</h5>
+          <pre>[系统] 你是告警根因分析 Agent……[证据窗口] logs.query 返回 42 行：payment 服务 Invalid token 报错 49 次……（原文留库，敏感串已掩敏）</pre>
+          <h5>② 模型输出 · 推理（rca_model_output · V167）</h5>
+          <pre>观察：支付失败率 48.5% 集中在回调路径；变更记录显示 09-19 有一次规则发布，但报错签名先于变更出现——排除变更归因，倾向 CALLBACK_DROP。下一步：prometheus.query 验证回调成功率曲线。</pre>
+          <h5>③ 工具调用与结果（rca_tool_invocation）</h5>
+          <pre>prometheus.query({"expr":"callback_success_rate[15m]"}) → SUCCESS · 返回 15 点序列，成功率 0.51 → 0.03（与告警窗对齐）</pre>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-head b">B 臂 · 有 Jev（run 示例：a497bc97 真实数据）</div>
+        <div class="step"><span class="role primary">primary 序 0</span><div class="bar"><i style="width:6%"></i></div><span class="meta num">1.7 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 1</span><div class="bar"><i style="width:10%"></i></div><span class="meta num">3.0 秒 · 成功</span></div>
+        <div class="jev-mark">— Jev 生效：选材结果已注入主模型输入（池 5 → 选 4 裁 1，决策延迟 535ms 真实） —</div>
+        <div class="step"><span class="role primary">primary 序 2</span><div class="bar"><i style="width:9%"></i></div><span class="meta num">2.6 秒 · 成功</span></div>
+        <div class="step"><span class="role jev">jev-selector</span><div class="bar"><i class="jev" style="width:3%"></i></div><span class="meta num">0.54 秒 · 成功</span></div>
+        <div class="expand">
+          <h5>展开示例 · jev-selector（真实选材决策 run a497bc97 · 2026-09-21 19:55+08）</h5>
+          <h5>逐证据概率（rca_jev_selection.probabilities 真实值）</h5>
+          <pre>选中 ✓ 61b9672b…  0.90   选中 ✓ eff4f644…  0.76   选中 ✓ c2a1a2e2…  0.72   选中 ✓ a9a4f2cd…  0.59
+被裁 ✗ 686fa9f4…  0.24（原文留 rca_evidence 可回查，不丢）</pre>
+          <h5>② 模型输出 · 推理（rca_model_output）</h5>
+          <pre>各证据与当前假设相关度打分：回调失败日志（0.90）与成功率曲线（0.76）直接支撑掉单假设；部署变更记录（0.24）时间先于报错签名、与症状无因果链——裁出主窗口。</pre>
+          <h5>账：本次决策输入 2,902 tok / 总计 3,145 tok / 延迟 535ms / applied=true（rca_jev_selection + rca_model_call 联查）</h5>
+        </div>
+        <div class="step"><span class="role jev">jev-reviewer</span><div class="bar"><i class="jev" style="width:2%"></i></div><span class="meta num">0.58 秒 · 成功</span></div>
+        <div class="step"><span class="role primary">primary 序 3</span><div class="bar"><i style="width:30%"></i></div><span class="meta num">9.1 秒 · 成功</span></div>
+      </div>
+    </div>
+    <div class="src" style="margin-top:10px">交互：点击任意步整行展开/收起三层证据；A/B 两侧同序号步可「对齐比较」——并排 diff 模型输入（B 臂窗口=Jev 选材后，A 臂=原始证据全集）。jev 段（青绿色）只出现在 B 臂；若 A 臂出现 jev 行即对照污染，页面红条告警。</div>
+  </div>
+</div>
+
+<div class="foot">
+  <b>绑定关系总表（实现时照此接数，无一列假数据）</b>：<br>
+  屏1 实验卡 → eval_run（state/面板/轮次）+ alert_runtime_flag（臂标识）；屏2 指标 → eval_case_result / rca_model_call / rca_tool_invocation / eval_case_drift / rca_jev_selection；配对统计 → PairedTrialStats（cluster=scenario_family，bootstrap 1000）；屏3 瀑布 → rca_model_call（latency_ms/usage/role_id）+ rca_model_input（V90 redacted）+ rca_model_output（V167 redacted）+ rca_tool_invocation + rca_jev_selection。<br>
+  诚实口径：无数据的单元格显示「排期中/无漂移数据（NO_SUMMARY）」并注明原因与何时有数，绝不显示 0% 或编造值。设计稿 2026-09-21 · 数据取证 195 库 19:55+08。
+</div>
+
+</body>
+</html>

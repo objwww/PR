@@ -230,4 +230,31 @@ class EnMigrationContractTest {
                 .contains("revoke all on rca_context_summary from publisher_app")
                 .contains("revoke all on rca_context_summary from public");
     }
+
+    /**
+     * V167（ME 输出捕获）：R2 输入捕获（V90）对称面——列族/CHECK 两向钉/append-only
+     * 授权面逐条对齐；OFF 零行档不落库（不进 CHECK 值域）；失败调用无输出不落行
+     * （仅 SUCCESS 有行，头注钉定）。Docker 不可用时的本地静态门（真 PG 行为由
+     * PostgresRcaModelOutputIT 覆盖，195 补真证据）。
+     */
+    @Test
+    void v167OutputCaptureMirrorsV90ShapeAndAppendOnlyFace() throws IOException {
+        Path v167 = Path.of(
+                "src/main/resources/db/migration/V167__me_model_output_capture.sql");
+        String sql = normalized(v167);
+
+        assertThat(sql)
+                .contains("create table rca_model_output")
+                .contains("model_call_id uuid not null references rca_model_call(id)")
+                .contains("capture_level text not null")
+                .contains("output_digest char(64) not null")
+                .contains("constraint ck_rca_model_output_capture check")
+                .contains("capture_level in ('full','redacted','digest_only')")
+                .contains("(capture_level <> 'digest_only' or output_text is null)")
+                .contains("(capture_level <> 'full' or output_text is not null)")
+                // append-only：control_app 只 select,insert
+                .contains("grant select, insert on rca_model_output to control_app")
+                .contains("revoke all on rca_model_output from publisher_app")
+                .contains("revoke all on rca_model_output from public");
+    }
 }

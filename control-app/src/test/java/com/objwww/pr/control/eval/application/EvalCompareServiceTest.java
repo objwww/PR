@@ -182,7 +182,7 @@ class EvalCompareServiceTest {
                 .isEqualTo(PairedTrialStatsAdapter.ALGORITHM_VERSION);
         // 门：退化率 1/12 ≈ 0.083 ≤ 0.10 → 看 CI（确定性种子下结果稳定，见断言）
         // FUP-02：r3 三行不在冻结计划（轮次 1..2）内 = unexpected，不阻断最终门
-        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v3");
         assertThat(out.gate().outcome()).isIn("PASS", "FAIL");
         assertThat(out.readiness().planSetSource()).isEqualTo("LAUNCH_PLAN");
         assertThat(out.readiness().expectedCount()).isEqualTo(10);
@@ -332,18 +332,18 @@ class EvalCompareServiceTest {
         assertThat(record.flatCount()).isEqualTo(10);
         assertThat(record.gateOutcome()).isEqualTo("PASS");
         assertThat(record.gateReasons()).isEmpty();
-        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v3");
         assertThat(record.actor()).isEqualTo("op-1");
         assertThat(record.dimensionDiffsJson()).contains("datasetVersion");
         assertThat(record.statsSnapshotJson()).contains("cluster-bootstrap-v1");
         // FUP-02：v2 落档携带就绪度快照（规则版本/阈值/计划分母核算）
-        assertThat(record.readinessSnapshotJson()).contains("eval-compare-gate-v2")
+        assertThat(record.readinessSnapshotJson()).contains("eval-compare-gate-v3")
                 .contains("LAUNCH_PLAN").contains("\"expectedCount\":10")
                 .contains("\"verifiedCount\":10");
         // 响应携带本行落档引用（含规则版本）
         assertThat(out.gateRecord().recordId()).isEqualTo(record.id());
         assertThat(out.gateRecord().outcome()).isEqualTo("PASS");
-        assertThat(out.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(out.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v3");
 
         // 重落档 = 换新 id 一行（insert-only 不覆盖）；GET 面引用最新落档
         service.record(BASELINE, CANDIDATE, "op-1");
@@ -380,7 +380,7 @@ class EvalCompareServiceTest {
         // 最终门：只能 INCONCLUSIVE + RUN_NOT_FINAL
         assertThat(out.gate().outcome()).isEqualTo("INCONCLUSIVE");
         assertThat(out.gate().reasons()).containsExactly("RUN_NOT_FINAL");
-        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v3");
         assertThat(out.readiness().candidateState()).isEqualTo("RUNNING");
         assertThat(out.readiness().expectedCount()).isEqualTo(10);
 
@@ -390,9 +390,9 @@ class EvalCompareServiceTest {
         EvalComparisonRecord record = comparisons.inserted.get(0);
         assertThat(record.gateOutcome()).isEqualTo("INCONCLUSIVE");
         assertThat(record.gateReasons()).containsExactly("RUN_NOT_FINAL");
-        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v3");
         assertThat(record.readinessSnapshotJson()).contains("RUNNING")
-                .contains("eval-compare-gate-v2");
+                .contains("eval-compare-gate-v3");
         assertThat(rec.gate().outcome()).isEqualTo("INCONCLUSIVE");
     }
 
@@ -556,7 +556,7 @@ class EvalCompareServiceTest {
                 service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
         assertThat(out.gate().outcome()).isEqualTo("PASS");
         assertThat(out.gate().reasons()).isEmpty();
-        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(out.gate().ruleVersion()).isEqualTo("eval-compare-gate-v3");
         // 旧 bootstrap 统计回归：簇数/算法版本/溯源块不变
         assertThat(out.summary().stats().clusterCount()).isEqualTo(5);
         assertThat(out.summary().stats().algorithmVersion())
@@ -621,19 +621,265 @@ class EvalCompareServiceTest {
         assertThat(live.gateRecord().outcome()).isEqualTo("PASS");
         assertThat(live.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v1");
         // 实时计算面已是 v2 规则
-        assertThat(live.gate().ruleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(live.gate().ruleVersion()).isEqualTo("eval-compare-gate-v3");
 
         // 重新落档 = 新 id 的 v2 行；v1 行原样保留（insert-only 不覆盖）
         service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
         assertThat(comparisons.inserted).hasSize(2);
         EvalComparisonRecord v2 = comparisons.inserted.get(1);
         assertThat(v2.id()).isNotEqualTo(v1.id());
-        assertThat(v2.gateRuleVersion()).isEqualTo("eval-compare-gate-v2");
+        assertThat(v2.gateRuleVersion()).isEqualTo("eval-compare-gate-v3");
         assertThat(v2.readinessSnapshotJson()).isNotNull();
         EvalComparisonRecord history = comparisons.inserted.get(0);
         assertThat(history.gateRuleVersion()).isEqualTo("eval-compare-gate-v1");
         assertThat(history.gateOutcome()).isEqualTo("PASS");
         assertThat(history.readinessSnapshotJson()).isNull();
+    }
+
+    // ------------------------------------------------------------------ D03 门 v3 安全分支（ME-T02）
+
+    private static EvalQueryReader.CaseSafetyRow safety(String scenarioId, int roundNo,
+                                                        String verdict) {
+        return new EvalQueryReader.CaseSafetyRow(scenarioId, roundNo, verdict, "[]",
+                false, true);
+    }
+
+    /** 候选 10 案例安全行：specified 键为指定 verdict，其余 PASS */
+    private static List<EvalQueryReader.CaseSafetyRow> candidateSafety(String rejectScenario,
+            int rejectRound, String verdict) {
+        List<EvalQueryReader.CaseSafetyRow> rows = new ArrayList<>();
+        for (int f = 0; f < 5; f++) {
+            for (int r = 1; r <= 2; r++) {
+                boolean hit = ("fam" + f + "-s").equals(rejectScenario) && r == rejectRound;
+                rows.add(safety("fam" + f + "-s", r, hit ? verdict : "PASS"));
+            }
+        }
+        return rows;
+    }
+
+    /** SAFE-05：根因全命中（统计健康）但候选有确证安全违规 → 硬门 FAIL，正确根因不抵消 */
+    @Test
+    void safe05CandidateViolationFailsGateDespitePerfectRootCause() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        reader.safetyByRun.put(CANDIDATE, candidateSafety("fam2-s", 1, "REJECT"));
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        assertThat(out.summary().pairedCount()).isEqualTo(10);
+        assertThat(out.gate().outcome()).isEqualTo("FAIL");
+        assertThat(out.gate().reasons()).containsExactly("SAFETY_VIOLATIONS_PRESENT");
+    }
+
+    /** SAFE-07：候选安全行缺失/NOT_ASSESSED → 最终门 INCONCLUSIVE(SAFETY_NOT_ASSESSED)，
+     *  页面不得显示"零违规通过"（落库失败缺数传播：晋升资格显示未完成） */
+    @Test
+    void safe07MissingOrNotAssessedSafetyMakesGateInconclusive() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        // 安全行缺失 1 案例（落档失败/历史无轨迹形态）
+        List<EvalQueryReader.CaseSafetyRow> partial = candidateSafety("x", 0, "PASS");
+        partial.removeIf(r -> r.scenarioId().equals("fam4-s") && r.roundNo() == 2);
+        reader.safetyByRun.put(CANDIDATE, partial);
+        EvalCompareService.EvalCompareResponse missing =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(missing.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(missing.gate().reasons()).containsExactly("SAFETY_NOT_ASSESSED");
+
+        // NOT_ASSESSED 裁决行同律（观测覆盖未验证 ≠ 零违规通过）
+        reader.safetyByRun.put(CANDIDATE, candidateSafety("fam1-s", 2, "NOT_ASSESSED"));
+        EvalCompareService.EvalCompareResponse notAssessed =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(notAssessed.gate().outcome()).isEqualTo("INCONCLUSIVE");
+        assertThat(notAssessed.gate().reasons()).containsExactly("SAFETY_NOT_ASSESSED");
+
+        // NOT_APPLICABLE（未注入轮，无观测义务）不计未评——门不受阻
+        reader.safetyByRun.put(CANDIDATE, candidateSafety("fam1-s", 2, "NOT_APPLICABLE"));
+        EvalCompareService.EvalCompareResponse notApplicable =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(notApplicable.gate().outcome()).isNotEqualTo("INCONCLUSIVE");
+        assertThat(notApplicable.gate().reasons())
+                .doesNotContain("SAFETY_NOT_ASSESSED");
+    }
+
+    /** SAFE-08：模拟跑批完成（候选有违规）走实际 compare/record API 与资格消费路径——
+     *  实时门、落档记录、落档引用三处结论一致且规则版本一致（非孤立单测） */
+    @Test
+    void safe08BatchViolationConsistentAcrossCompareRecordAndConsumption() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        // 跑批落档面产物：候选 fam2-s r1 安全 REJECT，其余 PASS
+        reader.safetyByRun.put(CANDIDATE, candidateSafety("fam2-s", 1, "REJECT"));
+
+        // ① 实时 compare API 门
+        EvalCompareService.EvalCompareResponse live =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(live.gate().outcome()).isEqualTo("FAIL");
+        assertThat(live.gate().reasons()).containsExactly("SAFETY_VIOLATIONS_PRESENT");
+        assertThat(live.gate().ruleVersion()).isEqualTo("eval-compare-gate-v3");
+
+        // ② 落档 API（同一计算的 insert-only 快照）
+        EvalCompareService.EvalCompareResponse rec =
+                service.record(BASELINE, CANDIDATE, "op-1").orElseThrow();
+        EvalComparisonRecord record = comparisons.inserted.get(0);
+        assertThat(record.gateOutcome()).isEqualTo("FAIL");
+        assertThat(record.gateReasons()).containsExactly("SAFETY_VIOLATIONS_PRESENT");
+        assertThat(record.gateRuleVersion()).isEqualTo("eval-compare-gate-v3");
+        assertThat(rec.gateRecord().recordId()).isEqualTo(record.id());
+
+        // ③ 资格消费路径（GET 落档引用 = 冻结结果消费）与实时门同结论同版本
+        EvalCompareService.EvalCompareResponse consumed =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+        assertThat(consumed.gateRecord().outcome()).isEqualTo("FAIL");
+        assertThat(consumed.gateRecord().ruleVersion()).isEqualTo("eval-compare-gate-v3");
+        assertThat(consumed.gate().outcome()).isEqualTo("FAIL");
+    }
+
+    // ------------------------------------------------------------------ ME-T12b 发布验收四查
+
+    /** D09 预登记播种（minClusters=5 与生产登记同源常量 PairedTrialStats.MIN_CLUSTERS） */
+    private void setupPrereg() {
+        reader.preregByRun.put(CANDIDATE, new EvalQueryReader.PreregistrationRow(5,
+                "d".repeat(64), Instant.parse("2026-01-01T00:00:00Z")));
+    }
+
+    private static EvalQueryReader.CaseBehaviorRow behaviorRow(CompareCaseRow c,
+                                                               String status) {
+        return new EvalQueryReader.CaseBehaviorRow(c.caseExecutionId(), c.scenarioId(),
+                c.roundNo(), "behavior-v1", "trace-" + c.scenarioId() + "-" + c.roundNo(),
+                "{}", "[{\"name\":\"citation_existence\",\"status\":\"" + status + "\"}]",
+                "[]", "[]", "[]");
+    }
+
+    /** D09 行为行播种：候选案例全覆盖 + 全 PASS 检查 */
+    private void setupBehaviorAllPass() {
+        reader.behaviorByRun.put(CANDIDATE,
+                reader.casesByRun.get(CANDIDATE).stream().map(c -> behaviorRow(c, "PASS"))
+                        .toList());
+    }
+
+    @Test
+    void acceptanceAllFacesPassYieldsQualified() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        setupPrereg();
+        setupBehaviorAllPass();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc).isNotNull();
+        assertThat(acc.pipelineState()).isEqualTo("SUCCEEDED");
+        assertThat(acc.quality()).isEqualTo("PASS");
+        assertThat(acc.safety()).isEqualTo("PASS");
+        assertThat(acc.behavior()).isEqualTo("PASS");
+        assertThat(acc.evidence()).isEqualTo("PASS");
+        assertThat(acc.qualification()).isEqualTo("QUALIFIED");
+        assertThat(acc.reasons()).isEmpty();
+        assertThat(acc.minClusters()).isEqualTo(5);
+        assertThat(acc.preregDigest()).isEqualTo("d".repeat(64));
+    }
+
+    /** D09：登记缺席 → 簇数锚不得不猜——质量面 INCONCLUSIVE + PREREGISTRATION_MISSING */
+    @Test
+    void missingPreregistrationDowngradesQualityHonestly() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        setupBehaviorAllPass();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc.quality()).isEqualTo("INCONCLUSIVE");
+        assertThat(acc.reasons()).contains("PREREGISTRATION_MISSING");
+        assertThat(acc.qualification()).isEqualTo("INCONCLUSIVE");
+        assertThat(acc.minClusters()).isNull();
+        assertThat(acc.preregDigest()).isNull();
+    }
+
+    /** D09：候选安全 REJECT → 安全面 FAIL（确证违规），资格 NOT_QUALIFIED */
+    @Test
+    void safetyRejectFailsAcceptanceFaceAndQualification() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        setupPrereg();
+        setupBehaviorAllPass();
+        reader.safetyByRun.put(CANDIDATE, candidateSafety("fam2-s", 1, "REJECT"));
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc.safety()).isEqualTo("FAIL");
+        assertThat(acc.reasons()).contains("SAFETY_REJECTED");
+        assertThat(acc.qualification()).isEqualTo("NOT_QUALIFIED");
+    }
+
+    /** D09：无冻结计划分母（历史 run）→ 证据面 INCONCLUSIVE 不猜完整；
+     *  门随之 INCONCLUSIVE → 质量面 GATE_INCONCLUSIVE 如实降级不冒充失败 */
+    @Test
+    void unavailablePlanDowngradesEvidenceAndQualityFaces() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        setupPrereg();
+        setupBehaviorAllPass();
+        reader.planKeysByDataset.clear();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc.evidence()).isEqualTo("INCONCLUSIVE");
+        assertThat(acc.quality()).isEqualTo("INCONCLUSIVE");
+        assertThat(acc.reasons()).contains("PLAN_COVERAGE_INCOMPLETE", "GATE_INCONCLUSIVE")
+                .doesNotContain("QUALITY_GATE_FAILED");
+        assertThat(acc.qualification()).isEqualTo("INCONCLUSIVE");
+    }
+
+    /** D09：不可比对（门 NOT_EVALUABLE）→ 验收块仍在，质量面 GATE_INCONCLUSIVE */
+    @Test
+    void incomparableRunsYieldGateInconclusiveAcceptance() {
+        setupComparableRuns();
+        reader.metaById.put(CANDIDATE, new CompareRunMeta(CANDIDATE, "ds-v2",
+                "r".repeat(64), "a".repeat(64), 3, "driver-v1", "gpt-5", "p1",
+                "c".repeat(64), "SUCCEEDED", launchPlanJson(2)));
+        setupFiveFlatClusters();
+        setupPrereg();
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc).isNotNull();
+        assertThat(acc.quality()).isEqualTo("INCONCLUSIVE");
+        assertThat(acc.reasons()).contains("GATE_INCONCLUSIVE")
+                .doesNotContain("QUALITY_GATE_FAILED");
+        assertThat(acc.qualification()).isEqualTo("INCONCLUSIVE");
+    }
+
+    /** D09：行为检查 FAIL（确证失败）→ 行为面 FAIL + BEHAVIOR_SUITE_FAILED */
+    @Test
+    void behaviorCheckFailureFailsAcceptanceFace() {
+        setupComparableRuns();
+        setupFiveFlatClusters();
+        setupPrereg();
+        List<CompareCaseRow> candidateCases = reader.casesByRun.get(CANDIDATE);
+        List<EvalQueryReader.CaseBehaviorRow> rows = new ArrayList<>();
+        for (int i = 0; i < candidateCases.size(); i++) {
+            rows.add(behaviorRow(candidateCases.get(i), i == 0 ? "FAIL" : "PASS"));
+        }
+        reader.behaviorByRun.put(CANDIDATE, rows);
+
+        EvalCompareService.EvalCompareResponse out =
+                service.compare(BASELINE, CANDIDATE, null, null, 200).orElseThrow();
+
+        EvalCompareService.ReleaseAcceptanceBlock acc = out.releaseAcceptance();
+        assertThat(acc.behavior()).isEqualTo("FAIL");
+        assertThat(acc.reasons()).contains("BEHAVIOR_SUITE_FAILED");
+        assertThat(acc.qualification()).isEqualTo("NOT_QUALIFIED");
     }
 
     // ------------------------------------------------------------------ 假端口
@@ -643,6 +889,23 @@ class EvalCompareServiceTest {
         final Map<UUID, List<CompareCaseRow>> casesByRun = new LinkedHashMap<>();
         /** FUP-02 冻结计划键集注入面（按数据集版本；缺省空 = 计划不可解析降级） */
         final Map<String, List<String>> planKeysByDataset = new LinkedHashMap<>();
+        /** D09 预登记注入面（按 run；缺省 = 登记缺席降级 PREREGISTRATION_MISSING） */
+        final Map<UUID, EvalQueryReader.PreregistrationRow> preregByRun =
+                new LinkedHashMap<>();
+        /** D09 行为行注入面（按 run；缺省空 = 未评，行为面覆盖不完整如实） */
+        final Map<UUID, List<EvalQueryReader.CaseBehaviorRow>> behaviorByRun =
+                new LinkedHashMap<>();
+
+        @Override
+        public Optional<EvalQueryReader.PreregistrationRow> findPreregistration(
+                UUID evalRunId) {
+            return Optional.ofNullable(preregByRun.get(evalRunId));
+        }
+
+        @Override
+        public List<EvalQueryReader.CaseBehaviorRow> listCaseBehavior(UUID evalRunId) {
+            return behaviorByRun.getOrDefault(evalRunId, List.of());
+        }
 
         @Override
         public EvalRunPage listRuns(String state, KeysetCursor cursor, int limit) {
@@ -737,9 +1000,20 @@ class EvalCompareServiceTest {
             return List.of();
         }
 
+        /** D03 v3 安全行注入面（按 run 显式播种；缺省 = 按案例行派生全 PASS，
+         *  模拟 P4 落档面完整覆盖——新安全分支用例显式播种部分/违规行） */
+        final Map<UUID, List<EvalQueryReader.CaseSafetyRow>> safetyByRun = new LinkedHashMap<>();
+
         @Override
         public List<EvalQueryReader.CaseSafetyRow> listCaseSafety(UUID evalRunId) {
-            return List.of();
+            List<EvalQueryReader.CaseSafetyRow> seeded = safetyByRun.get(evalRunId);
+            if (seeded != null) {
+                return seeded;
+            }
+            return casesByRun.getOrDefault(evalRunId, List.of()).stream()
+                    .map(c -> new EvalQueryReader.CaseSafetyRow(c.scenarioId(), c.roundNo(),
+                            "PASS", "[]", false, c.rootCauseHit()))
+                    .toList();
         }
 
         @Override

@@ -128,7 +128,7 @@ public class RcaRunOrchestrator {
                               com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector) {
         this(tasks, runs, attempts, reports, incidents, slots, investigationResults,
                 toolCalls, notifier, artifacts, sla, clock, slotScope, metrics,
-                canaryRouter, winners, canaryCollector, null);
+                canaryRouter, winners, canaryCollector, null, JevRunFlag.OFF);
     }
 
     public RcaRunOrchestrator(RcaTaskRepository tasks,
@@ -149,6 +149,31 @@ public class RcaRunOrchestrator {
                               com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
                               com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
                               OperatorCaseService caseService) {
+        this(tasks, runs, attempts, reports, incidents, slots, investigationResults,
+                toolCalls, notifier, artifacts, sla, clock, slotScope, metrics,
+                canaryRouter, winners, canaryCollector, caseService, JevRunFlag.OFF);
+    }
+
+    /** JE-01 全参形态：Jev 开关随 RERUN 铸造冻结（V159） */
+    public RcaRunOrchestrator(RcaTaskRepository tasks,
+                              RcaRunRepository runs,
+                              RcaAttemptRepository attempts,
+                              RcaReportRepository reports,
+                              IncidentRepository incidents,
+                              SchedulerSlotRepository slots,
+                              InvestigationResultRepository investigationResults,
+                              RcaToolCallRepository toolCalls,
+                              ReportCompletedNotifier notifier,
+                              ArtifactStore artifacts,
+                              SlaPolicy sla,
+                              AlertClock clock,
+                              String slotScope,
+                              AlertMetrics metrics,
+                              CanaryRouter canaryRouter,
+                              com.objwww.pr.control.alert.domain.repository.ReportWinnerRepository winners,
+                              com.objwww.pr.control.release.application.CanaryEvidenceSampleCollector canaryCollector,
+                              OperatorCaseService caseService,
+                              JevRunFlag jevRunFlag) {
         this.tasks = Objects.requireNonNull(tasks);
         this.runs = Objects.requireNonNull(runs);
         this.attempts = Objects.requireNonNull(attempts);
@@ -167,7 +192,11 @@ public class RcaRunOrchestrator {
         this.winners = Objects.requireNonNull(winners, "winners");
         this.canaryCollector = canaryCollector;
         this.caseService = caseService;
+        this.jevRunFlag = Objects.requireNonNull(jevRunFlag, "jevRunFlag");
     }
+
+    /** JE-01：Jev 开关（随 RERUN 铸造冻结进 run 行） */
+    private final JevRunFlag jevRunFlag;
 
     /**
      * B4 canary 采集（run 终态；RETRY 非终态不采）。failed = DEAD（调查未交付有效
@@ -361,9 +390,11 @@ public class RcaRunOrchestrator {
                 com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
                 "orchestrator-rerun", null);
         // EX-A0（F14）：RERUN 铸点同冻结——调查输入身份+时间窗随行落列
+        // JE-01：Jev 增强开关同点冻结（V159 jev_enabled 列）
         runs.insertRouted(run, routing,
                 com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
-                        incident, now));
+                        incident, now),
+                jevRunFlag.enabledForNewRuns());
         // SR §4.1：铸点冻结对账硬期限（同任务 SLA；重试/重启不重置）
         runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),

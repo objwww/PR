@@ -212,7 +212,11 @@ public class EvalRunnerConfig {
         // fail-closed 不落行（HttpEvalReportJudge 内部 empty），缺席=未评如实；
         // 证据回退：NATIVE 链过程计数先回退 rca_evidence 面（evidenceRepository
         // 自持装配，BA-172）、再回退 rca_tool_invocation 账本，不恒 0；
-        // M-d T5：六要素检出版库面（eval_case_six_parts，V152）——缺席=未评如实
+        // M-d T5：六要素检出版库面（eval_case_six_parts，V152）——缺席=未评如实；
+        // ME-T04：行为评测落库面（eval_case_behavior，V160）——案例行 persist 后
+        // 由 EvalBatchRunner 回调落档（case_result_id 外键次序），缺席=未评如实；
+        // ME-T12：死循环评测落库面（eval_case_loop，V162）同键面次序与 fail-soft 纪律；
+        // ME-T12a：协作评测落库面（eval_case_collab，V163）同律
         return new SingleCaseScorer(runs, reports, investigations, toolCalls, evaluator,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSafetySink(jdbc),
@@ -222,7 +226,15 @@ public class EvalRunnerConfig {
                 evidence,
                 new com.objwww.pr.control.infrastructure.persistence
                         .PostgresEvalCaseSixPartsSink(jdbc),
-                jdbc);
+                jdbc,
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseBehaviorSink(jdbc),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseLoopSink(jdbc),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseCollabSink(jdbc),
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresEvalCaseDriftSink(jdbc));
     }
 
     /** P7 LLM-judge（OpenAI 兼容面；195=litellm-am3 代理）。base-url/api-key 缺席 =
@@ -360,6 +372,13 @@ public class EvalRunnerConfig {
     }
 
     @Bean
+    public com.objwww.pr.control.eval.domain.repository.EvalPreregistrationSink
+            evalPreregistrationSink(JdbcClient jdbc) {
+        return new com.objwww.pr.control.infrastructure.persistence
+                .PostgresEvalPreregistrationSink(jdbc);
+    }
+
+    @Bean
     public EvalBatchRunner evalBatchRunner(GoldenScenarioRegistry registry,
                                            FlagdScenarioDriver flagd,
                                            ArenaChaosScenarioDriver arena,
@@ -372,6 +391,8 @@ public class EvalRunnerConfig {
                                            EvalRunRepository evalRuns,
                                            BaselineReportGenerator generator,
                                            EvalRunMetadata metadata,
+                                           com.objwww.pr.control.eval.domain.repository
+                                                   .EvalPreregistrationSink preregistrationSink,
                                            @Value("${app.eval.rounds:2}") int rounds,
                                            @Value("${app.alert.eval.run-tag:}")
                                            String runTag) {
@@ -381,7 +402,7 @@ public class EvalRunnerConfig {
                         "InfrastructureScenarioDriver", infra,
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator, metadata,
-                rounds, systemClock(), runTag);
+                rounds, systemClock(), runTag, preregistrationSink);
     }
 
     // ---------------- EV-04 持久化命令 + worker（eval_run_command 写面 = eval_app 列级授权） ----------------
@@ -434,6 +455,8 @@ public class EvalRunnerConfig {
             EvalRunMetadata metadata,
             EvalLaunchGate gate,
             EvalComparisonAutoRecorder evalComparisonAutoRecorder,
+            com.objwww.pr.control.eval.domain.repository
+                    .EvalPreregistrationSink preregistrationSink,
             @Value("${app.alert.eval.worker.id:eval-worker-1}") String workerId,
             @Value("${app.eval.rounds:2}") int defaultRounds,
             @Value("${app.alert.eval.run-tag:}") String runTag) {
@@ -444,7 +467,7 @@ public class EvalRunnerConfig {
                         "ReplayScenarioDriver", replay),
                 alertProbe, incidentProbe, resolver, scorer, evalRuns, generator,
                 phaseSink, commands, metadata, defaultRounds, systemClock(), workerId, gate,
-                evalComparisonAutoRecorder, runTag);
+                evalComparisonAutoRecorder, runTag, preregistrationSink);
     }
 
     // ---------------- EV-07 终态自动落档（eval_comparison；eval_app 授权面 V149） ----------------

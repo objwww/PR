@@ -1,0 +1,139 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 84 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.691 s -- in com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillPrecheckTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.034 s -- in com.objwww.pr.control.drill.application.DrillPrecheckTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillTimelineTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.objwww.pr.control.drill.application.DrillTimelineTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillWorkerInjectionTest
+12:19:24.732 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=9763ce2a-0a98-4bdf-974f-d8b93ab99d8d scenario=S3 env=arena-195
+12:19:27.778 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill 9763ce2a-0a98-4bdf-974f-d8b93ab99d8d �ѽ��� OBSERVING����֢״�ȴ�/�ָ�/�����ƽ��� DR-03/04 ���߽��������ĵ���Ϊֹ����ҵ���ֻռλ��
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.091 s -- in com.objwww.pr.control.drill.application.DrillWorkerInjectionTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillWorkerTest
+12:19:27.798 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=cb625f56-f6fb-4318-8a5c-a785ffdbe2b5 scenario=T1 env=arena-195
+12:19:27.799 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill cb625f56-f6fb-4318-8a5c-a785ffdbe2b5 �ѽ��� OBSERVING����֢״�ȴ�/�ָ�/�����ƽ��� DR-03/04 ���߽��������ĵ���Ϊֹ����ҵ���ֻռλ��
+12:19:27.807 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=d74a413f-0fac-4924-98a0-ff7766ed5156 scenario=T1 env=arena-195
+12:19:27.814 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=975db3af-86a3-4d07-8958-1c8d1728045a scenario=T1 env=arena-195
+12:19:27.818 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=7f7ee77a-e752-4a07-8712-f111ded4433c scenario=T1 env=arena-195
+12:19:27.825 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill 244c041b-f0bc-40ab-8ca9-19cc68d63ed1 �� RECOVERY_FAILED��worker_lost������ռλ��
+12:19:27.830 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill d166754f-4e85-4b06-a38f-3f7eadfde2eb ���Ŷӣ�state=PRECHECK��
+12:19:27.834 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=b710c34b-da16-470d-ba9e-f01dcced9da4 scenario=T1 env=arena-195
+12:19:27.840 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=27fae5ad-985a-44d4-949b-9d9650eedc4d scenario=T1 env=arena-195
+12:19:27.845 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill 3d6204fc-ab18-48c5-940d-0186c186612d �� RECOVERY_FAILED��worker_lost������ռλ��
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.055 s -- in com.objwww.pr.control.drill.application.DrillWorkerTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+12:19:27.888 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- ���� S1 �� 1 ��ע��ʧ��: flagd admin down
+12:19:27.949 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- ���� S1 ע��ǰ incident δ resolved��alertname=checkout��Ԥ�� 10s �ľ������������� prev_round_not_resolved ������
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.101 s -- in com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.038 s -- in com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCompareServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.093 s -- in com.objwww.pr.control.eval.application.EvalCompareServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalReviewServiceTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.067 s -- in com.objwww.pr.control.eval.application.EvalReviewServiceTest
+[INFO] Running com.objwww.pr.control.eval.domain.model.EvalLaunchPlanTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.objwww.pr.control.eval.domain.model.EvalLaunchPlanTest
+[INFO] Running com.objwww.pr.control.ops.application.AgentOpsSummaryServiceTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.objwww.pr.control.ops.application.AgentOpsSummaryServiceTest
+[INFO] Running com.objwww.pr.control.ops.application.MetricsWhitelistServiceTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.objwww.pr.control.ops.application.MetricsWhitelistServiceTest
+[INFO] Running com.objwww.pr.control.ops.interfaces.MetricsQueryControllerTest
+12:19:28.901 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:28.901 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:28.904 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 2 ms
+12:19:29.061 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.061 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.061 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+12:19:29.073 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.073 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.073 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+12:19:29.157 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.157 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.157 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+12:19:29.194 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.194 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.194 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+12:19:29.200 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.203 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.204 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+12:19:29.224 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+12:19:29.225 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+12:19:29.225 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.983 s -- in com.objwww.pr.control.ops.interfaces.MetricsQueryControllerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 91, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.046 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.674 s]
+[INFO] control-app ........................................ SUCCESS [ 24.006 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  25.149 s
+[INFO] Finished at: 2026-09-14T12:19:29+08:00
+[INFO] ------------------------------------------------------------------------

@@ -124,6 +124,8 @@ class EvalRunWorkerTest {
 
     private static final class FakeEvalRuns implements EvalRunRepository {
         final Map<UUID, EvalRun> runs = new HashMap<>();
+        /** 搁浅谓词的命令面（setUp 接线；与真库 NOT EXISTS 同语义） */
+        FakeCommands commands;
 
         @Override
         public void insertRunning(EvalRun running) {
@@ -132,6 +134,10 @@ class EvalRunWorkerTest {
 
         @Override
         public boolean finalizeOnce(EvalRun terminal) {
+            EvalRun existing = runs.get(terminal.id());
+            if (existing == null || existing.state() != EvalRun.EvalRunState.RUNNING) {
+                return false;
+            }
             runs.put(terminal.id(), terminal);
             return true;
         }
@@ -155,6 +161,18 @@ class EvalRunWorkerTest {
         @Override
         public Optional<EvalRun> findById(UUID runId) {
             return Optional.ofNullable(runs.get(runId));
+        }
+
+        @Override
+        public List<EvalRun> findStrandedRuns(java.time.Instant startedBefore) {
+            return runs.values().stream()
+                    .filter(r -> r.state() == EvalRun.EvalRunState.RUNNING
+                            && r.startedAt().isBefore(startedBefore)
+                            && commands.byId.values().stream().noneMatch(c ->
+                                    c.evalRunId().equals(r.id())
+                                    && (c.state() == EvalRunCommand.State.PENDING
+                                        || c.state() == EvalRunCommand.State.CLAIMED)))
+                    .toList();
         }
 
         @Override
@@ -202,6 +220,7 @@ class EvalRunWorkerTest {
     void setUp() {
         commands = new FakeCommands();
         evalRuns = new FakeEvalRuns();
+        evalRuns.commands = commands;
         clock = new StepClock();
         // 账本桩：evalRuns findCasesByRunId 空 → 对账走 UNMATCHED 降级面（不触网）
         ledger = new UsageLedgerService(evalRuns,
@@ -352,6 +371,72 @@ class EvalRunWorkerTest {
         assertThat(handled).isEqualTo(1);
         assertThat(commands.byId.get(claimed.id()).state())
                 .isEqualTo(EvalRunCommand.State.DONE);
+    }
+
+    // ------------------------------------------------------------------ 搁浅清扫（BA-192）
+
+    @Test
+    @DisplayName("搁浅清扫：RUNNING 超龄且命令账本零行（V81 前老批件）→ FAILED 终态化，"
+            + "卡因 worker_lost;no_command_ledger（mode 不可考如实标注）")
+    void strandedRunWithoutCommandsFinalizesFailed() {
+        UUID runId = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(runId, metadata(),
+                BASE.minusSeconds(3600)));
+
+        int handled = worker().sweepStrandedRuns();
+
+        assertThat(handled).isEqualTo(1);
+        EvalRun terminal = evalRuns.findById(runId).orElseThrow();
+        assertThat(terminal.state()).isEqualTo(EvalRun.EvalRunState.FAILED);
+        assertThat(terminal.terminalReason()).isEqualTo("worker_lost;no_command_ledger");
+        assertThat(terminal.finishedAt()).isEqualTo(BASE);
+    }
+
+    @Test
+    @DisplayName("搁浅清扫：RUNNING 超龄但有活体命令（PENDING/CLAIMED）→ 不动"
+            + "（命令面自有孤儿/领取路径处置）")
+    void strandedRunWithLiveCommandUntouched() {
+        UUID runId = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(runId, metadata(),
+                BASE.minusSeconds(3600)));
+        commands.enqueue(EvalRunCommand.pending(UUID.randomUUID(),
+                EvalRunCommand.Type.LAUNCH, runId, "k-live",
+                "{\"mode\":\"E\"}", Digest.sha256Of("k-live").value(), "operator",
+                BASE.minusSeconds(3600)));
+
+        int handled = worker().sweepStrandedRuns();
+
+        assertThat(handled).isZero();
+        assertThat(evalRuns.findById(runId).orElseThrow().state())
+                .isEqualTo(EvalRun.EvalRunState.RUNNING);
+    }
+
+    @Test
+    @DisplayName("搁浅清扫：新近 RUNNING（started_at 未超 staleClaim 窗）→ 不动")
+    void freshRunningRunUntouched() {
+        UUID runId = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(runId, metadata(),
+                BASE.minusSeconds(STALE_SECONDS - 60)));
+
+        assertThat(worker().sweepStrandedRuns()).isZero();
+        assertThat(evalRuns.findById(runId).orElseThrow().state())
+                .isEqualTo(EvalRun.EvalRunState.RUNNING);
+    }
+
+    @Test
+    @DisplayName("搁浅清扫：已终态 run → 不动（清扫只触 RUNNING）")
+    void terminalRunUntouched() {
+        UUID runId = UUID.randomUUID();
+        evalRuns.runs.put(runId, EvalRun.terminal(runId, metadata(),
+                EvalRun.EvalRunState.SUCCEEDED, BASE.minusSeconds(3600),
+                BASE.minusSeconds(3500),
+                new com.objwww.pr.control.eval.domain.ScenarioMetrics.Snapshot(
+                        1, 1, 1, 0, 0, 0, 1.0, 1.0, 1.0, 0.0),
+                new EvalRun.SymptomCounts(1, 0, 0), Digest.sha256Of("report")));
+
+        assertThat(worker().sweepStrandedRuns()).isZero();
+        assertThat(evalRuns.findById(runId).orElseThrow().state())
+                .isEqualTo(EvalRun.EvalRunState.SUCCEEDED);
     }
 
     @Test

@@ -70,6 +70,10 @@ export const SCENARIO_ZH = {
     name: '全工具复合（F9 掉单+变更归因诱导+审批收口）',
     desc: '掉单故障叠加窗内真实发布变更，考变更相关性≠因果性的鉴别与全工具链取证；处置建议须走人工审批链，零直接执行。',
   },
+  S27: {
+    name: '变更回归-支付配置发布致扣款失败（处置=回滚）',
+    desc: '一次 payment 配置发布（paymentFailure off→50%）致支付失败率飙升，发布事实真实落变更账本可查；正确定因=变更回归，正确处置=经人工审批链回滚该发布。',
+  },
 }
 
 /** 告警名（alertname → 中文名；来源 deploy/alert/prometheus/rules/*.yml） */

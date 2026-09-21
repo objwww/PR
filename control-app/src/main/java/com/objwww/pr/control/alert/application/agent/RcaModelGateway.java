@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.domain.agent.RcaModelCallFenceException;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger;
 import com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture;
 import com.objwww.pr.control.alert.domain.agent.RcaModelOutcome;
+import com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture;
 import com.objwww.pr.control.domain.ai.CostCalculation;
 import com.objwww.pr.control.domain.ai.ModelBudgetExceededException;
 import com.objwww.pr.control.domain.ai.ModelCallContext;
@@ -39,6 +40,10 @@ import java.util.UUID;
  *   <li>DEFERRED/BUDGET/确定性失败 → FAILED+原因码；平台 LEDGER_WRITE_FAILED →
  *       UNKNOWN（是否已执行不确定，保守占预算，恢复对账不盲重发）。</li>
  * </ol>
+ * 输出捕获（V167，R2 对称面）：成功响应在手即落 rca_model_output（先于成功
+ * 终态结算）——与输入捕获同律"捕获不可写 = 回放链断裂不放行"，账记
+ * LEDGER_WRITE_FAILED；差异仅在已触网（zeroNetwork=false 如实，预算不退款）。
+ * FAILED/TIMEOUT 无输出产出 → 不落行（诚实"无输出"，见 RcaModelOutputCapture）。
  * 预算预留/结算（TOOL_CALL/TOKEN 维的 reserve/commit/release）归 ActionGuard
  * （R7a-2，§六固定顺序），本类只携带 budgetReservationId 入账。
  *
@@ -59,23 +64,34 @@ public class RcaModelGateway {
     private final RcaModelCallLedger ledger;
     private final PricingService pricing;
     private final RcaModelInputCapture inputCapture;
+    private final RcaModelOutputCapture outputCapture;
     private final Clock clock;
     /** 可变材料硬限 V（token 估算上限；V=C−R−H−M 首期静态折算配置，待 MC34 评测调参） */
     private final int maxInputTokens;
 
-    /** RCA 侧组装（gateway 必须挂 RcaModelEventSink 事件汇——由装配点保证） */
+    /** RCA 侧组装（gateway 必须挂 RcaModelEventSink 事件汇——由装配点保证）；
+     *  无输出捕获参 = OFF 零行档（存量装配/测试零行为漂移，V167 加式扩展） */
     public RcaModelGateway(ModelGateway gateway, RcaModelCallLedger ledger,
             PricingService pricing, RcaModelInputCapture inputCapture, Clock clock) {
-        this(gateway, ledger, pricing, inputCapture, clock, Integer.MAX_VALUE);
+        this(gateway, ledger, pricing, inputCapture, RcaModelOutputCapture.OFF,
+                clock, Integer.MAX_VALUE);
     }
 
     public RcaModelGateway(ModelGateway gateway, RcaModelCallLedger ledger,
             PricingService pricing, RcaModelInputCapture inputCapture, Clock clock,
             int maxInputTokens) {
+        this(gateway, ledger, pricing, inputCapture, RcaModelOutputCapture.OFF,
+                clock, maxInputTokens);
+    }
+
+    public RcaModelGateway(ModelGateway gateway, RcaModelCallLedger ledger,
+            PricingService pricing, RcaModelInputCapture inputCapture,
+            RcaModelOutputCapture outputCapture, Clock clock, int maxInputTokens) {
         this.gateway = Objects.requireNonNull(gateway, "gateway");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.pricing = Objects.requireNonNull(pricing, "pricing");
         this.inputCapture = Objects.requireNonNull(inputCapture, "inputCapture");
+        this.outputCapture = Objects.requireNonNull(outputCapture, "outputCapture");
         this.clock = Objects.requireNonNull(clock, "clock");
         if (maxInputTokens <= 0) {
             throw new IllegalArgumentException("max-input-tokens 须为正: " + maxInputTokens);
@@ -159,6 +175,23 @@ public class RcaModelGateway {
         try {
             RoutedModelResult r = gateway.complete(
                     new ModelRequest(prompt, maxTokens, requestTimeout), platform);
+            // V167 输出捕获：响应在手即落 rca_model_output（先于成功终态结算，
+            // append-only）；OFF 零行档跳过。与输入捕获同律——捕获不可写 = 回放链
+            // 断裂不放行（账记 LEDGER_WRITE_FAILED，步级不重试）；差异仅在此时已
+            // 触网（zeroNetwork=false 如实，预算不退款，usage 未结算走对账收口）。
+            if (outputCapture.level() != RcaModelOutputCapture.Level.OFF) {
+                try {
+                    outputCapture.capture(RcaModelOutputCapture.buildRow(
+                            operationId, outputCapture.level(), r.result().content()));
+                } catch (RuntimeException e) {
+                    log.warn("rca_model_output 捕获写失败，成功结果不放行（{}）: {}",
+                            ctx.roleId(), e.getClass().getSimpleName());
+                    ledger.fail(operationId, "LEDGER_WRITE_FAILED");
+                    throw new RcaModelCallException("LEDGER_WRITE_FAILED",
+                            "输出捕获不可写，成功结果不放行（已触网，账记失败由对账收口）",
+                            false, false, e);
+                }
+            }
             CostCalculation cost = pricing.calculate(r.route().requestedModel(),
                     r.result().tokenUsage(), r.usageMissing());
             boolean settled = ledger.succeed(operationId,

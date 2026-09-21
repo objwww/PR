@@ -39,6 +39,14 @@ import java.util.UUID;
  * （调用方终止/升级，不进重试循环）。数据源响应契约：{@code status=success} + data.result
  * 序列；status=error → 账本 REMOTE_4XX 记账 FAILED；空序列 = NO_DATA（调用成功零证据，
  * 无故障不制造证据 E2E-M4-00 同纪律）。
+ *
+ * <p>ME-T05（D05 第 2/4 条）：①<code>progressed</code> 从「非空成功返回」收紧为可观察
+ * 新状态——证据落库前比对本 run 既有证据的 payload_digest（canonical 业务内容摘要），
+ * 相同业务内容（重复 evidence UUID 同族：换措辞/换签名拿到同一份材料）不再记进展；
+ * 摘要口径之外的纯噪声（顶层新时间戳若进入 payload 则摘要必变——本侧不删时间范围/
+ * 租户/对象 ID 等语义字段，该边界如实保留）。②新结果与成功复用两分支都经
+ * {@link CallTelemetry} 记录逻辑调用/物理调用/是否带来新证据内容（复用=物理 0、
+ * 非新证据；默认 NOOP 零漂移）。
  */
 public class SingleToolEvidenceAgent {
 
@@ -56,7 +64,19 @@ public class SingleToolEvidenceAgent {
             long observedGeneration,
             com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest
                     investigationInputDigest, String timeRange,
-            Runnable controlSignal, java.time.Instant actionDeadline) {
+            Runnable controlSignal, java.time.Instant actionDeadline, boolean freshEvidence) {
+
+        public CallContext(UUID runId, UUID taskId, UUID attemptId, long callSeq,
+                long observedGeneration,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputDigest digest,
+                String timeRange, Runnable signal, java.time.Instant deadline) {
+            this(runId,taskId,attemptId,callSeq,observedGeneration,digest,timeRange,signal,deadline,false);
+        }
+
+        public CallContext withFreshEvidence() {
+            return new CallContext(runId,taskId,attemptId,callSeq,observedGeneration,
+                    investigationInputDigest,timeRange,controlSignal,actionDeadline,true);
+        }
 
         public CallContext(UUID runId, UUID taskId, UUID attemptId, long callSeq,
                 long observedGeneration,
@@ -78,6 +98,24 @@ public class SingleToolEvidenceAgent {
 
     /** 执行结局（FAILED 时 errorClass = 模型可见原因码名） */
     public record AgentResult(AgentOutcome outcome, List<UUID> evidenceIds, String errorClass) {
+    }
+
+    /**
+     * D05 第 4 条：单次 investigate 调用计量（观测面，默认 {@link #NOOP} 零漂移）。
+     * 每次调用恰记一条：逻辑调用恒真（每次 investigate 都是一次逻辑调用）；
+     * physicalCall = 是否真实触网（复用/熔断直拒/预算准入拒 = false）；
+     * newEvidenceContent = 是否带来本 run 新证据内容（D05 收紧后的进展口径）。
+     */
+    public record CallObservation(UUID runId, UUID taskId, String toolName,
+            String actionDigest, boolean physicalCall, boolean newEvidenceContent,
+            AgentOutcome outcome, String errorClass) {
+    }
+
+    /** 调用计量接收口（可空语义由构造期 NOOP 缺省消除——热路径无 null 判） */
+    public interface CallTelemetry {
+        CallTelemetry NOOP = observation -> { };
+
+        void record(CallObservation observation);
     }
 
     /** Agent 的单工具身份三元组（工具钉版本 + 证据类型 + 来源标签） */
@@ -104,6 +142,7 @@ public class SingleToolEvidenceAgent {
     private final ObjectMapper mapper;
     private final com.objwww.pr.control.alert.application.RunBudgetGate budgetGate;
     private final com.objwww.pr.control.alert.domain.budget.DoomLoopGuard doomLoopGuard;
+    private final CallTelemetry callTelemetry;
 
     protected SingleToolEvidenceAgent(AgentProfile profile, ToolSpec spec,
             ToolRegistry registry, ToolInvoker gateway, EvidenceRepository evidence,
@@ -125,6 +164,17 @@ public class SingleToolEvidenceAgent {
             RcaToolInvocationLedger ledger, ObjectMapper mapper,
             com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
             com.objwww.pr.control.alert.domain.budget.DoomLoopGuard doomLoopGuard) {
+        this(profile, spec, registry, gateway, evidence, ledger, mapper, budgetGate,
+                doomLoopGuard, CallTelemetry.NOOP);
+    }
+
+    /** ME-T05 全参形态：在 EX-A1 双门之上接调用计量（D05 第 4 条观测面） */
+    protected SingleToolEvidenceAgent(AgentProfile profile, ToolSpec spec,
+            ToolRegistry registry, ToolInvoker gateway, EvidenceRepository evidence,
+            RcaToolInvocationLedger ledger, ObjectMapper mapper,
+            com.objwww.pr.control.alert.application.RunBudgetGate budgetGate,
+            com.objwww.pr.control.alert.domain.budget.DoomLoopGuard doomLoopGuard,
+            CallTelemetry callTelemetry) {
         this.spec = Objects.requireNonNull(spec);
         this.registry = Objects.requireNonNull(registry);
         this.gateway = Objects.requireNonNull(gateway);
@@ -133,6 +183,7 @@ public class SingleToolEvidenceAgent {
         this.mapper = Objects.requireNonNull(mapper);
         this.budgetGate = Objects.requireNonNull(budgetGate, "budgetGate");
         this.doomLoopGuard = Objects.requireNonNull(doomLoopGuard, "doomLoopGuard");
+        this.callTelemetry = Objects.requireNonNull(callTelemetry, "callTelemetry");
         if (!profile.toolAllowlist().equals(Set.of(spec.toolName()))) {
             throw new IllegalArgumentException(
                     "Agent allowlist 必须恰为 {" + spec.toolName() + "}（只做一种只读查询），"
@@ -174,7 +225,12 @@ public class SingleToolEvidenceAgent {
         // 复用面在熔断闸之前：熔断封的是重复物理执行，既有证据回喂本就是零执行。
         // 复用台账行 = open → markResultRef(既有证据) → succeed，call_seq 照常
         // 推进（账本唯一键不撞；复用性质由行内 result_ref 早于本行成功时刻可辨）。
-        UUID reused = ledger.findSuccessfulByRun(ctx.runId()).stream()
+        if(ctx.freshEvidence() && registry.find(spec.toolName(),spec.toolVersion()).orElseThrow()
+                .definition().risk()!=com.objwww.pr.control.alert.domain.tool.ToolRisk.R0) {
+            throw new ToolModelVisibleException(ToolModelVisibleReason.TOOL_NOT_ALLOWED,
+                    "Jev 重新取证只允许 R0 只读工具，不允许重复提交处置动作");
+        }
+        UUID reused = ctx.freshEvidence() ? null : ledger.findSuccessfulByRun(ctx.runId()).stream()
                 .filter(r -> r.actionDigest().equals(actionDigest)
                         && r.resultRef() != null)
                 .map(RcaToolInvocationLedger.InvocationRecovery::resultRef)
@@ -198,15 +254,20 @@ public class SingleToolEvidenceAgent {
                                         .of(1L)),
                         e -> true);
             } catch (com.objwww.pr.control.alert.domain.budget.BudgetExhaustedException e) {
+                observe(ctx, actionDigest, false, false, AgentOutcome.FAILED,
+                        "BUDGET_EXHAUSTED");
                 return new AgentResult(AgentOutcome.FAILED, List.of(), "BUDGET_EXHAUSTED");
             }
             log.info("MC24 查询复用 run={} task={} tool={} evidence={}（零新工具执行）",
                     ctx.runId(), ctx.taskId(), spec.toolName(), reused);
+            // D05 第 4 条：复用=逻辑调用 1 / 物理 0 / 非新证据（反复读同一证据仍计量）
+            observe(ctx, actionDigest, false, false, AgentOutcome.EVIDENCE_PRODUCED, null);
             return new AgentResult(AgentOutcome.EVIDENCE_PRODUCED, List.of(reused), null);
         }
 
         // EX-A1 前置闸：已熔断签名零预留零触网零落账（确定性直拒）
         if (!doomLoopGuard.isOpen(ctx.taskId(), spec.toolName(), actionDigest)) {
+            observe(ctx, actionDigest, false, false, AgentOutcome.FAILED, "DOOM_LOOP_TRIPPED");
             return new AgentResult(AgentOutcome.FAILED, List.of(), "DOOM_LOOP_TRIPPED");
         }
 
@@ -244,10 +305,13 @@ public class SingleToolEvidenceAgent {
                         ctx.runId(), ctx.taskId(), spec.evidenceType(),
                         EvidenceEnvelope.SCHEMA_VERSION, ctx.observedGeneration(),
                         spec.source(), scopeOf(ctx), null, null, pending);
+                boolean newContent = isNewContent(ctx.runId(), envelope);
                 evidence.insert(envelope);
                 ledger.markResultRef(operationId, envelope.evidenceId());
                 ledger.succeed(operationId);
-                doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, true);
+                doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, newContent);
+                observe(ctx, actionDigest, true, newContent, AgentOutcome.EVIDENCE_PRODUCED,
+                        null);
                 return new AgentResult(AgentOutcome.EVIDENCE_PRODUCED,
                         List.of(envelope.evidenceId()), null);
             }
@@ -257,6 +321,8 @@ public class SingleToolEvidenceAgent {
                 // 数据源拒绝查询（status=error）——账本按源侧 4xx 归因（V15 十码精度保留）
                 ledger.fail(operationId, ToolInvocationState.FAILED, ToolReasonCode.REMOTE_4XX);
                 doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, false);
+                observe(ctx, actionDigest, true, false, AgentOutcome.FAILED,
+                        "REMOTE_UNAVAILABLE");
                 return new AgentResult(AgentOutcome.FAILED, List.of(), "REMOTE_UNAVAILABLE");
             }
             List<?> series = dataSeries(payload);
@@ -267,17 +333,23 @@ public class SingleToolEvidenceAgent {
             if (series.isEmpty()) {
                 ledger.succeed(operationId);
                 doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, false);
+                observe(ctx, actionDigest, true, false, AgentOutcome.NO_DATA, null);
                 return new AgentResult(AgentOutcome.NO_DATA, List.of(), null);
             }
             EvidenceEnvelope envelope = EvidenceEnvelope.create(UUID.randomUUID(), ctx.runId(),
                     ctx.taskId(), spec.evidenceType(), EvidenceEnvelope.SCHEMA_VERSION,
                     ctx.observedGeneration(), spec.source(), scopeOf(ctx), null, null, payload);
+            // D05 第 2 条（F07 收紧）：进展 = 本 run 可观察新状态——payload_digest
+            // （canonical 业务内容）未在本 run 既有证据中出现才算新证据内容；同材料
+            // 换签名/换措辞重取不再记进展（A/B 乒乓同材料由此可被既有 ping-pong 承接）
+            boolean newContent = isNewContent(ctx.runId(), envelope);
             evidence.insert(envelope);
             // F16：结果引用先落库，账本 SUCCESS 后置——缝隙窗崩溃=PENDING 悬挂+证据在账
             // EX-A3（F09）：result_ref 随账落档（checkpoint 面，阶段③恢复的判定依据）
             ledger.markResultRef(operationId, envelope.evidenceId());
             ledger.succeed(operationId);
-            doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, true);
+            doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, newContent);
+            observe(ctx, actionDigest, true, newContent, AgentOutcome.EVIDENCE_PRODUCED, null);
             return new AgentResult(AgentOutcome.EVIDENCE_PRODUCED, List.of(envelope.evidenceId()),
                     null);
         } catch (ToolModelVisibleException e) {
@@ -288,27 +360,60 @@ public class SingleToolEvidenceAgent {
                 // 端口再折 REMOTE_UNAVAILABLE → 模型听到"传输故障可重试"同形重试×3
                 // 烧穿 tool-calls 预算——NO_DATA 必须按原名透传（"换指标名重试"）。
                 ledger.succeed(operationId);
+                observe(ctx, actionDigest, true, false, AgentOutcome.NO_DATA, null);
                 return new AgentResult(AgentOutcome.NO_DATA, List.of(), null);
             }
-            ledger.fail(operationId, ToolInvocationState.FAILED, ledgerCode(e.reason()));
+            // BA-190（W3）：拒因具体消息随账落档（reason_detail）——模型可见族文案
+            // 为固定脱敏文案，可落账可事后考察
+            ledger.fail(operationId, ToolInvocationState.FAILED, ledgerCode(e.reason()),
+                    e.getMessage());
+            observe(ctx, actionDigest, true, false, AgentOutcome.FAILED, e.reason().name());
             return new AgentResult(AgentOutcome.FAILED, List.of(), e.reason().name());
         } catch (ToolControlPlaneException e) {
             doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, false);
-            ledger.fail(operationId, ToolInvocationState.FAILED, ledgerCode(e.reason()));
+            // BA-190（W3）：INVALID_ARGS 等控制面拒绝的具体消息（字段/格式/取值域）
+            // 落 reason_detail——事后"为什么被拒"不再只靠随容器丢失的 WARN 日志
+            ledger.fail(operationId, ToolInvocationState.FAILED, ledgerCode(e.reason()),
+                    e.getMessage());
+            observe(ctx, actionDigest, true, false, AgentOutcome.FAILED, e.reason().name());
             throw e;
         } catch (com.objwww.pr.control.alert.domain.budget.BudgetExhaustedException e) {
             // 准入先于 remote：open 未发生，无账本行可收敛
+            observe(ctx, actionDigest, false, false, AgentOutcome.FAILED, "BUDGET_EXHAUSTED");
             return new AgentResult(AgentOutcome.FAILED, List.of(), "BUDGET_EXHAUSTED");
         } catch (RuntimeException e) {
             // F16：未分类段失败=结果未知（可能已发送）→ UNKNOWN 语义，不假 FAILED；
             // 预算门对非模型可见族已全额退款（releaseOn 语义不变）
+            // BA-190（W3）：未分类异常消息落 reason_detail（审计面，不透模型）——
+            // TRANSPORT_UNKNOWN 事后可考
             doomLoopGuard.record(ctx.taskId(), spec.toolName(), actionDigest, false);
-            ledger.fail(operationId, ToolInvocationState.UNKNOWN, ToolReasonCode.TRANSPORT_UNKNOWN);
+            ledger.fail(operationId, ToolInvocationState.UNKNOWN,
+                    ToolReasonCode.TRANSPORT_UNKNOWN, e.getMessage());
+            observe(ctx, actionDigest, true, false, AgentOutcome.FAILED,
+                    ToolReasonCode.TRANSPORT_UNKNOWN.name());
             throw e;
         }
     }
 
     // ------------------------------------------------------------------ 内部
+
+    /** D05 第 4 条计量出口（一次 investigate 恰一条；NOOP 缺省热路径零成本） */
+    private void observe(CallContext ctx, String actionDigest, boolean physicalCall,
+            boolean newEvidenceContent, AgentOutcome outcome, String errorClass) {
+        callTelemetry.record(new CallObservation(ctx.runId(), ctx.taskId(), spec.toolName(),
+                actionDigest, physicalCall, newEvidenceContent, outcome, errorClass));
+    }
+
+    /**
+     * D05 第 2 条：本 run 内容新鲜度——新证据的 payload_digest（canonical 业务内容
+     * 摘要，不含证据行 ID/落库时间）未在本 run 既有证据中出现才算新状态。读面失败
+     * 按仓储契约抛错（不假新不假旧）。口径边界：payload 内业务值的时间戳变化会改变
+     * 摘要（视为新数据点）；时间范围/租户/对象 ID 属语义身份，不在此删除。
+     */
+    private boolean isNewContent(UUID runId, EvidenceEnvelope envelope) {
+        return evidence.findByRunId(runId).stream()
+                .noneMatch(e -> e.payloadDigest().equals(envelope.payloadDigest()));
+    }
 
     private Map<String, Object> parsePayload(byte[] body) {
         try {

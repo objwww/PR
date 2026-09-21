@@ -24,7 +24,8 @@ public class PostgresRcaToolSpanDetailReader implements RcaToolSpanDetailReader 
                    left(e.payload, 500) AS result_summary,
                    ti.result_ref::text  AS evidence_ref,
                    e.evidence_type      AS evidence_type,
-                   e.source             AS evidence_source
+                   e.source             AS evidence_source,
+                   ti.reason_detail     AS reason_detail
               FROM rca_tool_invocation ti
               LEFT JOIN rca_evidence e ON e.id = ti.result_ref
              WHERE ti.run_id = :runId
@@ -50,7 +51,8 @@ public class PostgresRcaToolSpanDetailReader implements RcaToolSpanDetailReader 
                         rs.getString("result_summary"),
                         rs.getString("evidence_ref"),
                         rs.getString("evidence_type"),
-                        rs.getString("evidence_source")))
+                        rs.getString("evidence_source"),
+                        rs.getString("reason_detail")))
                 .list();
     }
 }

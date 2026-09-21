@@ -242,6 +242,20 @@ public interface EvalQueryReader {
     /** 对比 run 元数据；未知 id → empty（controller 404 面） */
     Optional<CompareRunMeta> findCompareMeta(UUID runId);
 
+    /** ME-T12b（D09）预登记行（V165 eval_preregistration）：批起始冻结的判定锚
+     *  快照——min_clusters 簇数下限 + prereg_digest 登记内容自证锚 + 登记时刻。 */
+    record PreregistrationRow(int minClusters, String preregDigest, Instant registeredAt) {
+    }
+
+    /**
+     * run 的预登记行（验收面质量锚来源）：一 run 一登记（uq），无登记 → empty
+     * （调用方按"登记缺席"降级——质量面 INCONCLUSIVE/PREREGISTRATION_MISSING
+     * 不猜阈值）。default empty 供测试桩免改（渐进采纳，既有桩零漂移）。
+     */
+    default Optional<PreregistrationRow> findPreregistration(UUID evalRunId) {
+        return Optional.empty();
+    }
+
     /**
      * EV-07 自动落档 baseline 解析（终态钩子用）：同一 dataset_version + 同 panel
      * （launch_plan->>'panel'，缺省/无快照同视 = 全量原表面）的上一个终态 run
@@ -360,9 +374,11 @@ public interface EvalQueryReader {
 
     /**
      * 场景轮次聚合行（EV-09 稳定性一级指标，对标 IBM ITBench run-to-run
-     * consistency / RCAEval Avg@k）：逐 (run, scenario) 聚合——rounds = 已落档轮次，
+     * consistency / RCAEval Avg@k）：逐 (run, scenario) 聚合——rounds = 已终态
+     * 落档轮次（eval_case_result 行只在案例终态结清时写入，天然不含在途轮），
      * hits = DECIDABLE 且根因命中的轮次，distinct 判定/实际根因三元组供轮间
-     * 一致性装配（三件套 RatioStat 装配归应用服务）。
+     * 一致性装配。D01：冻结 launch plan 的每场景 plannedRounds 对照（进度/
+     * 完整性/固定 k 判定）归应用服务装配，本行只供实际终态观测。
      */
     record ScenarioRoundStatRow(UUID evalRunId, String scenarioId, long rounds, long hits,
                                 int distinctVerdicts, int distinctActualCauses) {
@@ -390,13 +406,134 @@ public interface EvalQueryReader {
      * 案例安全裁决行（P4）：eval_case_safety 投影 + 红队归属（案例键经
      * (dv.version=run.dataset_version, case_key) 精确键解析到的 REDTEAM 分区）
      * + 该案例根因命中（诱饵采纳判定——红队案例 hit=true=被劫持）。
+     * ME-T02（V158）起 verdict 为五态（PASS/REJECT/NOT_ASSESSED/NOT_APPLICABLE/ERROR），
+     * tallyJson = tally jsonb ::text 原文（attempted/blocked/executedViolations/
+     * assessedFaces/notAssessedFaces；null = 旧行或无计数面路径如实为空，聚合归应用服务）。
      */
     record CaseSafetyRow(String scenarioId, int roundNo, String verdict,
-                         String violationsJson, boolean redteam, Boolean rootCauseHit) {
+                         String violationsJson, boolean redteam, Boolean rootCauseHit,
+                         String tallyJson) {
+
+        /** ME-T02 前兼容构造（6 参原形）：tally = null（旧口径如实缺席） */
+        public CaseSafetyRow(String scenarioId, int roundNo, String verdict,
+                             String violationsJson, boolean redteam, Boolean rootCauseHit) {
+            this(scenarioId, roundNo, verdict, violationsJson, redteam, rootCauseHit, null);
+        }
     }
 
     /** run 全部安全裁决行（单查询 join，禁 N+1）；无裁决 → 空表 */
     List<CaseSafetyRow> listCaseSafety(UUID evalRunId);
+
+    // ------------------------------------------------------------------ M-e T11 行为评测投影
+
+    /**
+     * 逐案行为评测行（ME-T04/V160 eval_case_behavior 投影）：jsonb 四列
+     * （coverage/checks/metrics/failure_labels/evidence_refs）以 ::text 原文上抛，
+     * 解析与聚合归应用服务（纯函数可测）。traceDigest 可空 = 观测读失败 ERROR 行。
+     * 同案例多 grader 版本行并存（uq(case_result_id, grader_version)），不去重不取
+     * "最新"——聚合口径与展示归应用服务如实呈现。
+     */
+    record CaseBehaviorRow(UUID caseResultId, String scenarioId, int roundNo,
+                           String graderVersion, String traceDigest, String coverageJson,
+                           String checksJson, String metricsJson, String failureLabelsJson,
+                           String evidenceRefsJson) {
+    }
+
+    /** run 全部行为评测行（单查询禁 N+1）；未评 run → 空表（缺席=未评如实）。
+     *  default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseBehaviorRow> listCaseBehavior(UUID evalRunId) {
+        return List.of();
+    }
+
+    /** 单案例行为评测行（案例详情抽屉用；case_result_id 直键定位）；
+     *  无落档 → 空表。default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseBehaviorRow> listCaseBehaviorForCase(UUID caseResultId) {
+        return List.of();
+    }
+
+    // ------------------------------------------------------------------ ME-T12 死循环评测投影
+
+    /**
+     * 逐案死循环评测行（ME-T12/V162 eval_case_loop 投影）：观测标量直读（可空 =
+     * 观测读失败 ERROR 行或数据缺失如实），jsonb 三列（checks/metrics/
+     * failure_labels）以 ::text 原文上抛，解析与聚合归应用服务（纯函数可测）。
+     * 同案例多 grader 版本行并存（uq(case_result_id, grader_version)），不去重
+     * 不取"最新"——聚合口径与展示归应用服务如实呈现。
+     */
+    record CaseLoopRow(UUID caseResultId, String scenarioId, int roundNo,
+                       String graderVersion, String stopReason,
+                       Integer detectionEventIndex, Integer firstNoProgressEventIndex,
+                       int postStopNewActions, Long physicalCallsFromOnset,
+                       Long tokensFromOnset, Long secondsFromOnset,
+                       String checksJson, String metricsJson, String failureLabelsJson) {
+    }
+
+    /** run 全部死循环评测行（单查询禁 N+1）；未评 run → 空表（缺席=未评如实）。
+     *  default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseLoopRow> listCaseLoop(UUID evalRunId) {
+        return List.of();
+    }
+
+    /** 单案例死循环评测行（案例详情抽屉用；case_result_id 直键定位）；
+     *  无落档 → 空表。default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseLoopRow> listCaseLoopForCase(UUID caseResultId) {
+        return List.of();
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 协作评测投影
+
+    /**
+     * 逐案多 Agent 协作评测行（ME-T12a/V163 eval_case_collab 投影）：观测标量
+     * （edge_count/admitted_count/token_cost_total）直读（可空 = 观测读失败
+     * ERROR 行或 trace 缺失如实），jsonb 五列（checks/metrics/failure_labels/
+     * suspected_attributions/supported_attributions）以 ::text 原文上抛，解析与
+     * 聚合归应用服务（纯函数可测）。归因双轨分列不混（suspected=疑似无干预对照，
+     * supported=重放改善因果归因）。同案例多 grader 版本行并存，不去重不取
+     * "最新"——聚合口径与展示归应用服务如实呈现。
+     */
+    record CaseCollabRow(UUID caseResultId, String scenarioId, int roundNo,
+                         String graderVersion, Integer edgeCount, Integer admittedCount,
+                         Long tokenCostTotal, String checksJson, String metricsJson,
+                         String failureLabelsJson, String suspectedAttributionsJson,
+                         String supportedAttributionsJson) {
+    }
+
+    /** run 全部协作评测行（单查询禁 N+1）；未评 run → 空表（缺席=未评如实）。
+     *  default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseCollabRow> listCaseCollab(UUID evalRunId) {
+        return List.of();
+    }
+
+    /** 单案例协作评测行（案例详情抽屉用；case_result_id 直键定位）；
+     *  无落档 → 空表。default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseCollabRow> listCaseCollabForCase(UUID caseResultId) {
+        return List.of();
+    }
+
+    /**
+     * 逐案上下文漂移评测行（ME-T12a/V164 eval_case_drift 投影）：summary_digest
+     * 可空 = 无压缩事件或观测读失败 ERROR 行如实；jsonb 五列（consumption/
+     * checks/metrics/failure_labels/deferred）以 ::text 原文上抛，解析与聚合归
+     * 应用服务（纯函数可测）。consumption 无消费观测如实 json null。同案例多
+     * grader 版本行并存，不去重不取"最新"——聚合口径与展示归应用服务如实呈现。
+     */
+    record CaseDriftRow(UUID caseResultId, String scenarioId, int roundNo,
+                        String graderVersion, String summaryDigest,
+                        String consumptionJson, String checksJson, String metricsJson,
+                        String failureLabelsJson, String deferredJson) {
+    }
+
+    /** run 全部漂移评测行（单查询禁 N+1）；未评 run → 空表（缺席=未评如实）。
+     *  default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseDriftRow> listCaseDrift(UUID evalRunId) {
+        return List.of();
+    }
+
+    /** 单案例漂移评测行（案例详情抽屉用；case_result_id 直键定位）；
+     *  无落档 → 空表。default 空表供测试桩免改（渐进采纳，既有桩零漂移）。 */
+    default List<CaseDriftRow> listCaseDriftForCase(UUID caseResultId) {
+        return List.of();
+    }
 
     /**
      * LLM-judge 裁决投影行（P6-G7）：answers 为 jsonb ::text 原文（逐题二元答案），

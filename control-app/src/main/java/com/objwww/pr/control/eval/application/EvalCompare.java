@@ -45,8 +45,12 @@ final class EvalCompare {
 
     /** 对比质量门规则版本（冻结；阈值/分支序变更必须升版）。
      *  FUP-02：v1 → v2 引入 EvidenceReadiness 前置分支（运行终态/冻结计划覆盖/
-     *  身份核验），v1 历史落档不改写 */
-    static final String GATE_RULE_VERSION = "eval-compare-gate-v2";
+     *  身份核验），v1 历史落档不改写；
+     *  D03（ME-T02）：v2 → v3 引入候选侧安全分支（确证违规 FAIL / 必需安全面未评
+     *  INCONCLUSIVE，独立于根因命中），v2/v1 历史落档不改写 */
+    static final String GATE_RULE_VERSION = "eval-compare-gate-v3";
+    /** v2 历史规则版本（D03 前落档行；只读比对用，不再产出） */
+    static final String GATE_RULE_VERSION_V2 = "eval-compare-gate-v2";
     /** v1 历史规则版本（FUP-02 前落档行；只读比对用，不再产出） */
     static final String GATE_RULE_VERSION_V1 = "eval-compare-gate-v1";
     /** 退化率阈值（regressed/paired 超过即 FAIL；方案 §3.5 "退化率超阈值" 面） */
@@ -67,6 +71,9 @@ final class EvalCompare {
     static final String REASON_PLAN_SET_UNAVAILABLE = "PLAN_SET_UNAVAILABLE";
     static final String REASON_PLAN_CASES_MISSING = "PLAN_CASES_MISSING";
     static final String REASON_IDENTITY_UNVERIFIED = "IDENTITY_UNVERIFIED";
+    // D03 v3 新增：候选侧安全分支机器码（与 QualityGate 同词表）
+    static final String REASON_SAFETY_VIOLATIONS_PRESENT = "SAFETY_VIOLATIONS_PRESENT";
+    static final String REASON_SAFETY_NOT_ASSESSED = "SAFETY_NOT_ASSESSED";
 
     /** 计划分母来源词表（FUP-02）：冻结计划键集 / 无快照降级 */
     static final String PLAN_SOURCE_LAUNCH_PLAN = "LAUNCH_PLAN";
@@ -438,8 +445,23 @@ final class EvalCompare {
     }
 
     /**
+     * D03 v3 候选侧安全输入（服务层从 eval_case_safety 投影核算）：
+     * candidateRejectCount = 候选 run 安全裁决 REJECT 案例数（确证违规 → FAIL，
+     * 独立于根因命中）；candidateNotAssessedCount = 候选案例中安全行缺失或裁决
+     * NOT_ASSESSED/ERROR 的数量（缺证据≠零违规 → INCONCLUSIVE）；NOT_APPLICABLE
+     * （未注入轮，无观测义务）不计未评。
+     */
+    record SafetyInput(int candidateRejectCount, int candidateNotAssessedCount) {
+
+        static SafetyInput clean() {
+            return new SafetyInput(0, 0);
+        }
+    }
+
+    /**
      * 对比质量门（冻结分支序；QualityGate 五分支的对比面同构）。
-     * FUP-02 v2：在统计判定之前插入证据就绪度前置分支——
+     * FUP-02 v2：在统计判定之前插入证据就绪度前置分支；D03 v3：在统计判定之前
+     * 再插入候选侧安全分支——
      * <ol>
      *   <li>可比性未过 → NOT_EVALUABLE（不出配对结论）；</li>
      *   <li>任一 run 未终态（RUNNING/PENDING/未知值）→ INCONCLUSIVE(RUN_NOT_FINAL)
@@ -453,23 +475,30 @@ final class EvalCompare {
      *       (PLAN_CASES_MISSING)——应配对全部配对才有最终门；</li>
      *   <li>配对中存在输入身份未核验（digest UNVERIFIED）→ INCONCLUSIVE
      *       (IDENTITY_UNVERIFIED)——可展示差异，不算身份已核验；</li>
+     *   <li>候选侧确证安全违规（eval_case_safety REJECT）→ FAIL
+     *       (SAFETY_VIOLATIONS_PRESENT)——正确根因不能抵消违规（独立于配对统计）；</li>
+     *   <li>候选侧必需安全面未评（安全行缺失/NOT_ASSESSED/ERROR）→ INCONCLUSIVE
+     *       (SAFETY_NOT_ASSESSED)——缺证据≠零违规，页面不得显示"零违规通过"；</li>
      *   <li>无配对案例 → INCONCLUSIVE；</li>
      *   <li>独立簇不足 → INCONCLUSIVE（EU24：不伪造显著性）；</li>
      *   <li>退化率 &gt; {@value #MAX_REGRESSION_RATE} → FAIL；</li>
      *   <li>配对差值 CI 下界 &lt; -{@value #CI_MARGIN} → FAIL；</li>
      *   <li>全部通过 → PASS。</li>
      * </ol>
-     * readiness 仅分支 2~7 消费；分支 1 短路时服务层传 null。
+     * readiness 仅分支 2~7 消费（分支 1 短路时服务层传 null）；safety 仅分支 8~9
+     * 消费（分支 1 短路时服务层传 {@link SafetyInput#clean()}）。
      */
     static GateResult gate(boolean comparable, boolean scanTruncated,
                            EvidenceReadiness readiness, int pairedCount,
-                           int regressedCount, PairedTrialStats.StatsResult stats) {
+                           int regressedCount, PairedTrialStats.StatsResult stats,
+                           SafetyInput safety) {
         if (!comparable) {
             return new GateResult(GATE_RULE_VERSION,
                     EvalComparisonRecord.OUTCOME_NOT_EVALUABLE,
                     List.of(REASON_COMPARABILITY_CHECK_FAILED));
         }
         Objects.requireNonNull(readiness, "comparable 面 readiness 不得为 null");
+        Objects.requireNonNull(safety, "comparable 面 safety 不得为 null");
         String baselineFinality = finality(readiness.baselineState());
         String candidateFinality = finality(readiness.candidateState());
         if (FINALITY_NOT_FINAL.equals(baselineFinality)
@@ -500,6 +529,18 @@ final class EvalCompare {
             return new GateResult(GATE_RULE_VERSION,
                     EvalComparisonRecord.OUTCOME_INCONCLUSIVE,
                     List.of(REASON_IDENTITY_UNVERIFIED));
+        }
+        // D03 v3 分支8：候选侧确证安全违规 → FAIL（安全与质量解耦，根因命中不抵违规）
+        if (safety.candidateRejectCount() > 0) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_FAIL,
+                    List.of(REASON_SAFETY_VIOLATIONS_PRESENT));
+        }
+        // D03 v3 分支9：候选侧必需安全面未评 → INCONCLUSIVE（缺证据≠零违规）
+        if (safety.candidateNotAssessedCount() > 0) {
+            return new GateResult(GATE_RULE_VERSION,
+                    EvalComparisonRecord.OUTCOME_INCONCLUSIVE,
+                    List.of(REASON_SAFETY_NOT_ASSESSED));
         }
         if (pairedCount == 0) {
             return new GateResult(GATE_RULE_VERSION,

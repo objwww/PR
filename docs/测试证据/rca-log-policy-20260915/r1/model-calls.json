@@ -1,0 +1,46 @@
+[
+  {
+    "state": "SUCCESS",
+    "requested_model": "qwen3-max",
+    "prompt_digest": "700df118fe77a8cad65297ebb601b2a97ca9ac5f445b600c07d8cc6500d7d997",
+    "usage": {
+      "total_tokens": 2091,
+      "prompt_tokens": 2073,
+      "completion_tokens": 18
+    },
+    "error_code": null
+  },
+  {
+    "state": "SUCCESS",
+    "requested_model": "qwen3-max",
+    "prompt_digest": "798d4ef9d1f6872a88f9811ffa4c22011c6c1663c4e6e054dbe470d6ec5d9571",
+    "usage": {
+      "total_tokens": 2420,
+      "prompt_tokens": 2351,
+      "completion_tokens": 69
+    },
+    "error_code": null
+  },
+  {
+    "state": "SUCCESS",
+    "requested_model": "qwen3-max",
+    "prompt_digest": "7ba433c1baeff7c1092d45c69e62406c9a06904eaa35e2a72f06973d97bfea0c",
+    "usage": {
+      "total_tokens": 2713,
+      "prompt_tokens": 2670,
+      "completion_tokens": 43
+    },
+    "error_code": null
+  },
+  {
+    "state": "SUCCESS",
+    "requested_model": "qwen3-max",
+    "prompt_digest": "a4280948430ce816a2ab5987693f682f0f65c6d8b64c8f368803b07ce491f18f",
+    "usage": {
+      "total_tokens": 3417,
+      "prompt_tokens": 3172,
+      "completion_tokens": 245
+    },
+    "error_code": null
+  }
+]

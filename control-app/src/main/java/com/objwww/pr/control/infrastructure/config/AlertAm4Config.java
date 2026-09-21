@@ -143,7 +143,7 @@ public class AlertAm4Config {
     private static final String TOOL_RESULT_LIMIT_KEY =
             "${app.alert.am4.tool.result-limit-bytes:65536}";
     private static final String PROMPT_VERSION_KEY =
-            "${app.alert.am4.agent.prompt-version:am4-native-v9}";
+            "${app.alert.am4.agent.prompt-version:am4-native-v11}";
     private static final String BUDGET_STEP_KEY = "${app.alert.am4.budget.step:8}";
     private static final String BUDGET_TOOL_CALLS_KEY =
             "${app.alert.am4.budget.tool-calls:4}";
@@ -181,7 +181,7 @@ public class AlertAm4Config {
     private static final String R7_PRIMARY_PROMPT_KEY = "${app.alert.r7.primary.prompt:}";
 
     /**
-     * 主 Agent 缺省 prompt（am4-native-v9，业界提示词规范重写：角色→目标→环境→
+     * 主 Agent 缺省 prompt（am4-native-v11，业界提示词规范重写：角色→目标→环境→
      * 调查路径→收敛标准→诚实纪律→写类工具→写作要求→输出协议→示例 十段分层，
      * 协议键与 {@code PrimaryDecision.parse} 逐字对齐不变）：
      * 决策协议明示（分支键 tool_call/delegate/final 恰选一、claim 行键
@@ -211,6 +211,18 @@ public class AlertAm4Config {
      * SixElementsChecker 的检出锚，prompt 与评分同源防口径漂移）；【推荐调查路径】
      * 第 4 步扩为变更与历史工具直查（change.query/change.diff/alert.history/
      * rca_history.search 随本版 allowlist 放行）。
+     * v10（BA-184）仍不改任何协议键：S26 静默故障五连跑实证（技术指标全绿、
+     * 日志零 ERROR、change 无记录，模型 12 步烧光零 claim）——【收敛标准】补
+     * 静默故障双源口径（prometheus.rules 告警表达式 + alert.history 本告警
+     * firing/resolved 台账即两个独立来源，可闭环 ROOT_CAUSE）；【推荐调查路径】
+     * 第 4 步补"日志零数据不要原地重试同参查询（撞熔断烧步），改查 alert.history
+     * 与 rca_history.search，证据够就果断 final（HYPOTHESIS 也是合法收敛）"。
+     * v11（BA-185）仍不改任何协议键：S27 变更回归场景要求审批链真实触发——
+     * 【写类工具（人工审批链）】段补"处置落地形态"一条：确认根因后认为该重启/
+     * 回滚时必须实际调用 service.restart/service.rollback 铸审批意图（调用即
+     * 铸单、不直接执行），只在 statement 写"建议重启/建议回滚"不进审批链=
+     * 没有处置；根因确认为变更回归（change.diff 证实窗内发布与故障机理因果
+     * 对上）时正确处置=调用 service.rollback 回滚该发布。
      */
     private static final String R7_PRIMARY_DEFAULT_PROMPT = """
             # 角色
@@ -226,11 +238,12 @@ public class AlertAm4Config {
             1. 读告警：从 alert.alertname 与注解判断症状属于哪一层（流量/延迟/错误率/资源/业务）。
             2. 指标取证（必须先做）：先用 metrics.rules 找到本告警规则的表达式，再用 metrics.query_range 拉取冻结窗内的指标曲线——确认症状真实存在、幅度与起止点（得到 prometheus 来源证据）。
             3. 日志取证（必须先做）：用 logs.query 查告警服务在冻结窗内的 WARN/ERROR 日志——找第一条异常与错误模式（得到 logs 来源证据）。
-            4. 变更与历史佐证（需要时）：用 change.query 查冻结窗内的发布/配置变更清单，用 change.diff 核对单次变更的具体内容——变更相关性≠因果性，变更内容必须与故障机理对得上才算因果；用 alert.history 查本告警的历史触发与处置，用 rca_history.search 找同类故障的历史结论作旁证（历史结论是参考不是证据，正文引用以本次取证为准）。需要深挖变更面时也可委派 change 角色，question 写清你要验证的假设。
+            4. 变更与历史佐证（需要时）：用 change.query 查冻结窗内的发布/配置变更清单，用 change.diff 核对单次变更的具体内容——变更相关性≠因果性，变更内容必须与故障机理对得上才算因果；用 alert.history 查本告警的历史触发与处置，用 rca_history.search 找同类故障的历史结论作旁证（历史结论是参考不是证据，正文引用以本次取证为准）。需要深挖变更面时也可委派 change 角色，question 写清你要验证的假设。日志零数据时不要原地重试同参查询（会被熔断烧步）——改查 alert.history 取本告警台账（告警 firing 本身就是证据）、rca_history.search 找历史判例旁证；证据够就果断走 final（HYPOTHESIS 也是合法收敛），不要把步数烧光。
             5. 交叉印证：把指标曲线、日志模式、变更时间线对齐到同一时间轴，能互相解释的才下结论。
 
             # 收敛标准（全部满足才允许在 final 里标 ROOT_CAUSE）
             - 指标面与日志面两类取证都已完成，且指向同一结论——缺一类即视为证据不足；
+            - 静默故障口径：日志面零数据不等于缺类——静默故障（技术指标全绿、日志无 ERROR）下，告警规则表达式（metrics.rules 证据，source=prometheus）+ 本告警 firing/resolved 台账（alert.history 证据，source=alert_event）即两个独立来源，可构成双源闭环；业务对账/业务症状类告警按此口径收敛 ROOT_CAUSE；
             - ROOT_CAUSE claim 的 SUPPORTS 引用覆盖至少两个不同来源的证据行（以证据行 source 标签为准）；
             - root_cause 的 component/fault_type/reason_code 三字段逐字取自信封 root_cause_catalog 的同一行——禁止跨行混搭、禁止自造词；信封无 root_cause_catalog 键或无法确定取值时省略 root_cause 键（如实降级，不拿服务名/claim_key 冒充）。
 
@@ -243,6 +256,7 @@ public class AlertAm4Config {
             # 写类工具（人工审批链）
             tool_allowlist 里的 service.restart / service.rollback 是写类高危工具：调用不会直接执行，而是创建一张人工审批单（工具结果会返回审批编号），审批通过后由系统异步执行。纪律：
             - 取证结论不得依赖尚未执行的写操作——root_cause 的证据链只能引用只读取证拿到的证据行；
+            - 处置落地形态：确认根因后认为该重启/回滚时，必须实际调用对应工具铸审批意图（调用即铸单、不直接执行）——只在 statement 里写"建议重启/建议回滚"不会进入审批链，等于没有处置；根因确认为变更回归（change.diff 证实窗内发布与故障机理因果对上）时，正确处置=调用 service.rollback 回滚该发布；
             - 同一写操作提交一次即可，请勿重试同一写调用（重复提交不会加速审批）；
             - 是否建议写操作由你判断，是否执行永远由人类审批者决定；审批结果异步生效，不要原地等待或反复查询。
 
@@ -897,7 +911,8 @@ public class AlertAm4Config {
             @Value("${app.worker.max-lease-seconds:600}") int maxLeaseSeconds,
             @Value("${app.alert.r7.max-input-tokens:24000}") int maxInputTokens,
             com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger rcaModelCallLedger,
-            com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture rcaModelInputCapture) {
+            com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture rcaModelInputCapture,
+            com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture rcaModelOutputCapture) {
         if (!enabled) {
             return null;
         }
@@ -915,7 +930,7 @@ public class AlertAm4Config {
                         provider, contractVersion, maxLeaseSeconds);
         return new com.objwww.pr.control.alert.application.agent.RcaModelGateway(rcaFace,
                 rcaModelCallLedger, pricingService, rcaModelInputCapture,
-                Clock.systemUTC(), maxInputTokens);
+                rcaModelOutputCapture, Clock.systemUTC(), maxInputTokens);
     }
 
     /** 主 Agent 受限取证口（R7-X6）：allowlist 工具对位既有受控单工具 Agent 面；
@@ -1016,6 +1031,8 @@ public class AlertAm4Config {
             org.springframework.beans.factory.ObjectProvider<
                     com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort>
                     am4RootCauseCatalog,
+            @Value("${app.alert.r7.compaction.replace-omitted:false}")
+            boolean replaceOmittedSummaries,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -1053,6 +1070,8 @@ public class AlertAm4Config {
                 alertMaterialPort, workingMemoryPort, delegationReceiptRepository,
                 operatorMaterialPort, skillPort, summaryMaterialPort,
                 am4RootCauseCatalog.getIfAvailable(),
+                // JE-01：摘要替换消费开关（默认 false = 附加注入语义零漂移）
+                replaceOmittedSummaries,
                 Clock.systemUTC(), objectMapper);
     }
 
@@ -1080,9 +1099,83 @@ public class AlertAm4Config {
     }
 
     /**
+     * JE-01：TypeSafe Jev HTTP 客户端。mode=OFF 或 base-url/api-key 缺件 → null
+     * （NullBean 零装配——缺密钥绝不启用真实请求，方案 §5"OFF 模式零调用"）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.JevClient am4JevClient(
+            @Value("${app.alert.r7.jev.mode:OFF}") String jevMode,
+            @Value("${app.alert.r7.jev.base-url:}") String baseUrl,
+            @Value("${app.alert.r7.jev.api-key:}") String apiKey,
+            @Value("${app.alert.r7.jev.model:jev-1.13.0}") String model,
+            @Value("${app.alert.r7.jev.timeout-ms:10000}") long timeoutMs,
+            ObjectMapper objectMapper) {
+        if (jevMode == null || jevMode.isBlank()
+                || "OFF".equalsIgnoreCase(jevMode.trim())
+                || baseUrl == null || baseUrl.isBlank()
+                || apiKey == null || apiKey.isBlank()) {
+            return null;
+        }
+        return new com.objwww.pr.control.infrastructure.model.HttpJevClient(
+                objectMapper, baseUrl, apiKey, model, timeoutMs);
+    }
+
+    /**
+     * JE-01：Jev 增强服务（选材 + FINAL 复核）。mode=OFF → null（运行器缝零注入）；
+     * 客户端缺件但 mode 非 OFF → 服务照建（选材/复核调用面内部 noop + 有界回退，
+     * 不阻断调查）。预算/账本/围栏与主模型调用同律（独立 roleId + 保留段动作序）。
+     */
+    @Bean
+    public com.objwww.pr.control.alert.application.agent.JevEnhancementPort
+            am4JevEnhancement(
+            @Value("${app.alert.r7.jev.mode:OFF}") String jevMode,
+            @Value("${app.alert.r7.jev.model:jev-1.13.0}") String model,
+            @Value("${app.alert.r7.jev.select-threshold:0.5}") double selectThreshold,
+            @Value("${app.alert.r7.jev.review-enabled:true}") boolean reviewEnabled,
+            @Value("${app.alert.r7.jev.input-usd-per-m:0.042}") double inputUsdPerMillion,
+            @Value("${app.alert.r7.jev.min-pool-size:20}") int minPoolSize,
+            @Value("${app.alert.r7.jev.max-selected:20}") int maxSelected,
+            RcaRunRepository rcaRunRepository,
+            RcaTaskRepository rcaTaskRepository,
+            com.objwww.pr.control.alert.application.RunBudgetGate runBudgetGate,
+            com.objwww.pr.control.alert.domain.agent.RcaModelCallLedger ledger,
+            com.objwww.pr.control.alert.domain.repository.WorkingMemoryPort
+                    workingMemoryPort,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent.JevClient>
+                    am4JevClient,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.domain.repository.RcaJevSelectionPort>
+                    rcaJevSelectionPort,
+            ObjectMapper objectMapper) {
+        com.objwww.pr.control.alert.application.agent.JevEnhancementService.Mode mode =
+                parseJevMode(jevMode);
+        if (mode == com.objwww.pr.control.alert.application.agent.JevEnhancementService.Mode.OFF) {
+            return null;
+        }
+        return new com.objwww.pr.control.alert.application.agent.JevEnhancementService(
+                rcaRunRepository, rcaTaskRepository, runBudgetGate, ledger,
+                workingMemoryPort, am4JevClient.getIfAvailable(), objectMapper,
+                Clock.systemUTC(), mode, model, selectThreshold, reviewEnabled,
+                inputUsdPerMillion, minPoolSize, maxSelected,
+                rcaJevSelectionPort.getIfAvailable());
+    }
+
+    /** JE-01：模式解析（OFF/SHADOW/SELECT；非法值启动即 fail-fast 不静默归 OFF） */
+    private static com.objwww.pr.control.alert.application.agent.JevEnhancementService.Mode
+    parseJevMode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return com.objwww.pr.control.alert.application.agent.JevEnhancementService.Mode.OFF;
+        }
+        return com.objwww.pr.control.alert.application.agent.JevEnhancementService.Mode
+                .valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+    }
+
+    /**
      * 受控 LLM 运行器（R7-X6）：守卫（§六固定顺序，ActionGuard 组装点）+ 主 Runner
      * + 取证口三位一体；enabled=false 返回 null（运行器目录只含兼容单工具面）。
      * R11：默认关的一步边界压缩（compaction.* 配置族，放量前提 MC34 三臂对照）。
+     * JE-01：Jev 增强缝（可空=null 零漂移）随全参构造接入。
      */
     @Bean
     public com.objwww.pr.control.alert.application.agent.BoundedLlmRoleRunner
@@ -1124,6 +1217,10 @@ public class AlertAm4Config {
                     com.objwww.pr.control.alert.application.agent
                             .PrimaryCheckpointCommitService> checkpointCommitFenceProvider,
             com.objwww.pr.control.alert.application.agent.RoleLoopGuard am4RoleLoopGuard,
+            org.springframework.beans.factory.ObjectProvider<
+                    com.objwww.pr.control.alert.application.agent.JevEnhancementPort>
+                    am4JevEnhancement,
+            JdbcClient jdbc,
             ObjectMapper objectMapper) {
         if (!enabled) {
             return null;
@@ -1190,7 +1287,10 @@ public class AlertAm4Config {
                 java.util.Objects.requireNonNull(
                         checkpointCommitFenceProvider.getIfAvailable(),
                         "检查点提交围栏缺件（CL-01 运行路径必要件）"),
-                stepMaxTokens, am4RoleLoopGuard);
+                stepMaxTokens, am4RoleLoopGuard, am4JevEnhancement.getIfAvailable(),
+                // ME-T12/D08：压缩消费观测 append 口（V164；写入身份 control_app 主链数据源）
+                new com.objwww.pr.control.infrastructure.persistence
+                        .PostgresCompactionConsumptionPort(jdbc));
     }
 
     /**

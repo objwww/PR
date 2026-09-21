@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.application.EvalQueryService;
 import com.objwww.pr.control.eval.application.EvalRubricRegistry;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader;
+import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CaseBehaviorRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalPhaseEventPage;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalPhaseEventRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.EvalRunRow;
@@ -97,6 +98,12 @@ class EvalQueryControllerTest {
                     public Optional<com.objwww.pr.control.eval.domain.EvalRun> findById(
                             UUID id) {
                         return Optional.empty();
+                    }
+
+                    @Override
+                    public List<com.objwww.pr.control.eval.domain.EvalRun> findStrandedRuns(
+                            java.time.Instant startedBefore) {
+                        return List.of();
                     }
 
                     @Override
@@ -326,6 +333,56 @@ class EvalQueryControllerTest {
                 .andExpect(jsonPath("$.modelOverride").value(false));
     }
 
+    // ------------------------------------------------------------------ M-e 行为评测端点
+
+    @Test
+    @DisplayName("M-e：/behavior 有行 → run 级聚合（五态计数/分子分母/标签分布）")
+    void behaviorEndpointAggregatesRows() throws Exception {
+        UUID caseId = UUID.randomUUID();
+        reader.behaviorRows = List.of(new EvalQueryReader.CaseBehaviorRow(
+                caseId, "S1", 1, "behavior-v1", "d".repeat(64),
+                "{\"textCovered\":1,\"textTotal\":2,"
+                        + "\"evidenceCovered\":1,\"evidenceTotal\":2}",
+                "[{\"name\":\"citation_attachment\",\"status\":\"PASS\","
+                        + "\"reasonCode\":\"ATTACHMENT_FULL\",\"evidenceRefs\":[]}]",
+                "[{\"name\":\"citation_attachment_rate\",\"numerator\":1,\"denominator\":1}]",
+                "[\"CITATION_DANGLING\"]", "[\"e1\"]"));
+
+        mvc.perform(get("/api/eval/runs/" + runId + "/behavior"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.runId").value(runId.toString()))
+                .andExpect(jsonPath("$.assessed").value(1))
+                .andExpect(jsonPath("$.rows").value(1))
+                .andExpect(jsonPath("$.graderVersions[0]").value("behavior-v1"))
+                .andExpect(jsonPath("$.coverage.textCovered").value(1))
+                .andExpect(jsonPath("$.coverage.evidenceAssessed").value(1))
+                .andExpect(jsonPath("$.checks[0].name").value("citation_attachment"))
+                .andExpect(jsonPath("$.checks[0].statusCounts.PASS").value(1))
+                .andExpect(jsonPath("$.metrics[0].numerator").value(1))
+                .andExpect(jsonPath("$.failureLabels[0].label").value("CITATION_DANGLING"));
+    }
+
+    @Test
+    @DisplayName("M-e：/behavior 无行 → assessed=0 如实缺席（沿 six-parts 口径，不 404）")
+    void behaviorEndpointNoRowsYieldsAssessedZero() throws Exception {
+        mvc.perform(get("/api/eval/runs/" + runId + "/behavior"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assessed").value(0))
+                .andExpect(jsonPath("$.checks.length()").value(0))
+                .andExpect(jsonPath("$.coverage.textCovered").value(nullValue()));
+    }
+
+    @Test
+    @DisplayName("M-e：/behavior 未知 run → 404；非法 runId → 400")
+    void behaviorEndpointUnknownRun404AndBadId400() throws Exception {
+        mvc.perform(get("/api/eval/runs/" + UUID.randomUUID() + "/behavior"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("eval run 不存在"));
+        mvc.perform(get("/api/eval/runs/not-a-uuid/behavior"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("runId 非法"));
+    }
+
     private static EvalRunRow runRow(UUID id) {
         return new EvalRunRow(id, "ds-v1", "reg-digest", "model-x", "pv1", "cfg",
                 "RUNNING", T0, null,
@@ -339,9 +396,15 @@ class EvalQueryControllerTest {
     private static final class StubReader implements EvalQueryReader {
         EvalRunRow run;
         EvalPhaseEventPage page = new EvalPhaseEventPage(List.of(), false);
+        List<CaseBehaviorRow> behaviorRows = List.of();
         UUID lastRunId;
         KeysetCursor lastCursor;
         int lastLimit = -1;
+
+        @Override
+        public List<CaseBehaviorRow> listCaseBehavior(UUID evalRunId) {
+            return behaviorRows;
+        }
 
         @Override
         public Optional<EvalRunRow> findRun(UUID runId) {

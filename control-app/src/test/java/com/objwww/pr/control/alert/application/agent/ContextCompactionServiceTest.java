@@ -580,4 +580,100 @@ class ContextCompactionServiceTest {
         assertThat(service.policyView().get("chars_per_token_estimate"))
                 .isEqualTo(ContextCompactionService.CHARS_PER_TOKEN);
     }
+
+    // ------------------------------------------------------------- D06 观测面（CTX-12）
+
+    @Test
+    @DisplayName("D06/CTX-12：CONSUME 成功——观测面记录实际被消费（consumed=true）与策略指纹")
+    void consumptionObservationRecordsConsumedAndPolicy() {
+        ContextCompactionService consuming = serviceOf(Mode.CONSUME_VALIDATED,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> true);
+        model.script.add(candidateJson("消费观测摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                consuming.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind()).isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+        var obs = outcome.consumption();
+        assertThat(obs.mode()).isEqualTo("CONSUME_VALIDATED");
+        assertThat(obs.consumerInvoked()).isTrue();
+        assertThat(obs.consumed()).isTrue();
+        assertThat(obs.policyDigest()).as("策略指纹同源 V102 台账，非空").isNotBlank();
+    }
+
+    @Test
+    @DisplayName("D06/CTX-12：SHADOW 只生成不消费——consumerInvoked=false，不得计入消费效果")
+    void shadowObservationRecordsNotConsumed() {
+        ContextCompactionService shadow = serviceOf(Mode.SHADOW_GENERATE,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> true);
+        model.script.add(candidateJson("影子观测摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                shadow.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind()).isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+        assertThat(outcome.consumption().mode()).isEqualTo("SHADOW_GENERATE");
+        assertThat(outcome.consumption().consumerInvoked())
+                .as("SHADOW_GENERATE 只留档不换输入（REPORT 步骤 7）").isFalse();
+        assertThat(outcome.consumption().consumed()).isNull();
+    }
+
+    @Test
+    @DisplayName("D06/CTX-12：生成成功但消费围栏拒绝——consumed=false 不计入消费效果，原路径继续成本仍计")
+    void consumeFenceRejectionNotCountedAsConsumedEffect() {
+        ContextCompactionService rejected = serviceOf(Mode.CONSUME_VALIDATED,
+                new AlertInMemoryStores.CompactionAttempts(),
+                (r, t, owner, leaseEpoch, configEpoch, expectedRevision, actionKey,
+                        summaryId) -> false);
+        model.script.add(candidateJson("拒消费观测摘要", List.of(requiredRef())));
+
+        ContextCompactionService.CompactionOutcome outcome =
+                rejected.afterToolResults(request(), checkpoint(), assembly());
+
+        assertThat(outcome.kind()).as("候选已提交，原路径继续")
+                .isEqualTo(ContextCompactionService.OutcomeKind.COMMITTED);
+        assertThat(outcome.consumption().consumerInvoked()).isTrue();
+        assertThat(outcome.consumption().consumed())
+                .as("KEPT_OLD_POINTER：不得计入摘要消费后效果（CTX-12）").isFalse();
+        assertThat(model.calls).as("摘要成本仍计入").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("D06：非提交路径无消费观测（闸/拒绝/作废 consumption=null）")
+    void nonCommittedOutcomesCarryNoConsumptionObservation() {
+        ContextCompactionService.CompactionOutcome disabled =
+                service.afterToolResults(request(), checkpoint(), assembly());
+        assertThat(disabled.consumption()).isNull();
+
+        model.script.add(candidateJson("长".repeat(APPROX_OVER * 2), List.of(requiredRef())));
+        ContextCompactionService.CompactionOutcome noSavings = attempt();
+        assertThat(noSavings.kind())
+                .isEqualTo(ContextCompactionService.OutcomeKind.REJECTED_NO_SAVINGS);
+        assertThat(noSavings.consumption()).isNull();
+    }
+
+    @Test
+    @DisplayName("D06：策略指纹随旋钮变化（同旋钮同指纹——模式/预算即逻辑动作身份）")
+    void policyDigestTracksKnobs() {
+        ContextCompactionService shadow = serviceOf(Mode.SHADOW_GENERATE,
+                new AlertInMemoryStores.CompactionAttempts(), null);
+        ContextCompactionService other = new ContextCompactionService(model, summaries,
+                stores.checkpoints, evidence, MAPPER, CLOCK, Mode.SHADOW_GENERATE,
+                0.8, 0.55, 2, V, new AlertInMemoryStores.CompactionAttempts(), null);
+        model.script.add(candidateJson("指纹摘要一", List.of(requiredRef())));
+        String digestA = shadow.afterToolResults(request(), checkpoint(), assembly())
+                .consumption().policyDigest();
+
+        stores.checkpoints.upsert(checkpoint()
+                .withStepAdvanced("src-digest-2", null, null, null, NOW));
+        model.script.add(candidateJson("指纹摘要二", List.of(requiredRef())));
+        String digestB = other.afterToolResults(request(), checkpoint(), assembly())
+                .consumption().policyDigest();
+
+        assertThat(digestA).as("软阈值不同即不同策略指纹").isNotEqualTo(digestB);
+    }
 }

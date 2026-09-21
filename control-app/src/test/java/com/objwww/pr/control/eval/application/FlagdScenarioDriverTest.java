@@ -3,6 +3,7 @@ package com.objwww.pr.control.eval.application;
 import com.objwww.pr.control.alert.domain.model.TypedRootCause;
 import com.objwww.pr.control.drill.domain.model.FlagdRestoreRecord;
 import com.objwww.pr.control.drill.domain.model.FlagdState;
+import com.objwww.pr.control.drill.domain.repository.ChangeEventLedger;
 import com.objwww.pr.control.drill.domain.repository.FlagdRestoreLedger;
 import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.shared.Digest;
@@ -154,6 +155,20 @@ class FlagdScenarioDriverTest {
         }
     }
 
+    /** BA-185 变更事实台账记录件（ChangeEventLedger 假件） */
+    private static final class RecordingChangeLedger implements ChangeEventLedger {
+        final List<ChangeEventLedger.DeployFact> deploys = new ArrayList<>();
+        boolean failWrite;
+
+        @Override
+        public void recordDeploy(ChangeEventLedger.DeployFact fact) {
+            if (failWrite) {
+                throw new IllegalStateException("change_event 不可写");
+            }
+            deploys.add(fact);
+        }
+    }
+
     private StubFlagAdmin client;
     private InMemoryLedger ledger;
     private MutableClock clock;
@@ -268,5 +283,68 @@ class FlagdScenarioDriverTest {
                 List.of("checkout"), Map.of(),
                 new GoldenCase.Injection("paymentFailure", "50%", "off"),
                 new GoldenCase.Timing(60, 600, 1500, 2100, 120));
+    }
+
+    /** BA-185 S27 变更回归：injection 带 change_ledger 块（service/actor） */
+    private static GoldenCase s27Case() {
+        return new GoldenCase("S27", "变更回归-支付配置发布", "FlagdScenarioDriver", null,
+                "payment",
+                new TypedRootCause("payment", "BUSINESS_ERROR_RATE",
+                        "PAYMENT_CHARGE_FAILURE"),
+                List.of("checkout"), Map.of(),
+                new GoldenCase.Injection("paymentFailure", "50%", "off",
+                        new GoldenCase.Injection.ChangeLedger(
+                                "payment", "release-bot:s27")),
+                new GoldenCase.Timing(60, 600, 1500, 2100, 120));
+    }
+
+    // ------------------------------------------------------------------ BA-185 变更账本联动
+
+    @Test
+    @DisplayName("BA-185：change_ledger 块在场 → 激活即落发布事实（service/actor/"
+            + "内容指纹/deploy_id 前缀/生效时刻）；无块场景（S1）零联动")
+    void activateRecordsDeployFactWhenChangeLedgerPresent() {
+        RecordingChangeLedger changes = new RecordingChangeLedger();
+        FlagdScenarioDriver driver = new FlagdScenarioDriver(client, new StubProbe(),
+                ledger, clock, changes);
+        client.seed("paymentFailure", "off");
+
+        driver.activate(s27Case(), 1);
+        assertThat(changes.deploys).hasSize(1);
+        ChangeEventLedger.DeployFact fact = changes.deploys.get(0);
+        assertThat(fact.deployId()).startsWith("eval-s27-");
+        assertThat(fact.service()).isEqualTo("payment");
+        assertThat(fact.environment()).isEqualTo("production");
+        assertThat(fact.actor()).isEqualTo("release-bot:s27");
+        assertThat(fact.configDigest()).isEqualTo(Digest.sha256Of(
+                "flagd:paymentFailure:off->50%").value());
+        assertThat(fact.effectiveAt()).isEqualTo(BASE);
+
+        // 恢复不写反向 ROLLBACK 行（append-only 历史事实，不虚构未发生的回滚）
+        ScenarioDriver.ActivationReceipt receipt = new ScenarioDriver.ActivationReceipt(
+                "S27", "digest", 0L, "alert");
+        driver.deactivate(s27Case(), receipt);
+        assertThat(changes.deploys).hasSize(1);
+
+        // 无 change_ledger 块的既有场景（S1）零行为变化
+        driver.activate(S1, 1);
+        assertThat(changes.deploys).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("BA-185：账本写失败 = 激活判败（生效而无证据不静默）；恢复台账 "
+            + "OPEN 行已先落、恢复面完整")
+    void activateFailsClosedWhenChangeLedgerWriteFails() {
+        RecordingChangeLedger changes = new RecordingChangeLedger();
+        changes.failWrite = true;
+        FlagdScenarioDriver driver = new FlagdScenarioDriver(client, new StubProbe(),
+                ledger, clock, changes);
+        client.seed("paymentFailure", "off");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> driver.activate(s27Case(), 1))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("change_event 不可写");
+        assertThat(ledger.only().state()).isEqualTo(FlagdRestoreRecord.State.OPEN);
+        assertThat(changes.deploys).isEmpty();
     }
 }

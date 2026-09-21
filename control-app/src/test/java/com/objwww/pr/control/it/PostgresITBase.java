@@ -129,7 +129,9 @@ public abstract class PostgresITBase {
             // V103/V104/V105（OP 批：报告反馈/回归候选/动作分析）——BA-41 同律：
             // PostgresOpBatchIT 起成为真 PG 消费者
             "report_feedback", "rca_regression_candidate", "rca_regression_review",
-            "rca_action_assessment");
+            "rca_action_assessment",
+            // V167（ME 输出捕获档）——BA-41 同律：PostgresRcaModelOutputIT 起成为真 PG 消费者
+            "rca_model_output");
 
     @SuppressWarnings("resource") // 容器由 ryuk 回收；静态生命周期贯穿整个 IT JVM
     protected static final PostgreSQLContainer<?> PG =

@@ -47,6 +47,8 @@ public class IncidentWaitingRedrive {
     private final AlertClock clock;
     private final Duration pollInterval;
     private final TransactionOperations tx;
+    /** JE-01：Jev 开关（重驱补铸同样随点冻结） */
+    private final JevRunFlag jevRunFlag;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread worker;
 
@@ -59,6 +61,21 @@ public class IncidentWaitingRedrive {
                                   AlertClock clock,
                                   Duration pollInterval,
                                   TransactionOperations tx) {
+        this(incidents, runs, tasks, canaryRouter, deferredPolicy, sla, clock,
+                pollInterval, tx, JevRunFlag.OFF);
+    }
+
+    /** JE-01：Jev 开关随重驱铸造冻结（V159） */
+    public IncidentWaitingRedrive(IncidentRepository incidents,
+                                  RcaRunRepository runs,
+                                  RcaTaskRepository tasks,
+                                  CanaryRouter canaryRouter,
+                                  DeferredPolicy deferredPolicy,
+                                  SlaPolicy sla,
+                                  AlertClock clock,
+                                  Duration pollInterval,
+                                  TransactionOperations tx,
+                                  JevRunFlag jevRunFlag) {
         this.incidents = Objects.requireNonNull(incidents);
         this.runs = Objects.requireNonNull(runs);
         this.tasks = Objects.requireNonNull(tasks);
@@ -72,6 +89,7 @@ public class IncidentWaitingRedrive {
         // 放行实证）；本类被内部 worker 线程直接调 redriveOnce()，@Transactional 代理
         // 不可达，必须显式 TransactionOperations（AlertInboxProcessor 同律）
         this.tx = Objects.requireNonNull(tx);
+        this.jevRunFlag = Objects.requireNonNull(jevRunFlag, "jevRunFlag");
     }
 
     /** 单轮重驱：返回本轮补铸的 run 数 */
@@ -128,7 +146,9 @@ public class IncidentWaitingRedrive {
                 // SR §3.1：重驱铸 run 也是生产准入（铸造点三处同闸）
                 com.objwww.pr.control.alert.domain.model.RunPurpose.PRODUCTION,
                 "incident-waiting-redrive", null);
-        runs.insertRouted(run, routing, InvestigationInputs.freezeAt(incident, now));
+        // JE-01：重驱补铸同样冻结 Jev 开关（铸造点三处同闸，V159）
+        runs.insertRouted(run, routing, InvestigationInputs.freezeAt(incident, now),
+                jevRunFlag.enabledForNewRuns());
         int priority = sla.priority(null);
         // SR §4.1：铸点冻结对账硬期限
         runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));

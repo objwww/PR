@@ -44,6 +44,8 @@ services:
       - ./prometheus/rules:/etc/prometheus/rules:ro
     ports:
       - "127.0.0.1:9090:9090"
+      # MIG-127（2026-09-21）：127 eval-worker 注入面需探针 /api/v1/rules（WG 隧道面）
+      - "10.250.250.1:9090:9090"
     networks:
       - opentelemetry-demo
       # G0-10 E2E 修正(BA-14 后续)的历史动机=holmes 的 Prometheus 工具集需可达
@@ -114,6 +116,8 @@ services:
     ports:
       # 仅绑 loopback（业务 API 供 DP-C02/E2E 取证走 SSH 隧道；与 control-app 同纪律）
       - "${ARENA_BIND:-127.0.0.1}:${ARENA_PORT:-8081}:8080"
+      # MIG-127（2026-09-21）：127 eval-worker 评测流量注入需直连订单 API（WG 隧道面）
+      - "10.250.250.1:8082:8080"
     read_only: true
     tmpfs:
       - /tmp
@@ -146,6 +150,8 @@ services:
       CHAOS_ADMIN_DB_PASSWORD: "${CHAOS_ADMIN_DB_PASSWORD:?}"
       CHAOS_ADMIN_TOKEN: "${CHAOS_ADMIN_TOKEN:?}"
     # 无 ports：管理面零宿主端口（M2-17 断言面之一）；可达性只经 eval-mgmt
+    # MIG-127 注：127 worker 的跨机访问不经本服务直挂端口（internal 网不可发布），
+    # 改由独立中继容器 chaos-wg-relay（wg-relay-net + eval-mgmt 双网，仅绑 wg0 18099）转发
     read_only: true
     tmpfs:
       - /tmp
@@ -213,6 +219,7 @@ services:
       - litellm-logs:/app/logs                        # 日志卷：卷面 chmod 600 纪律（README）
     ports:
       - "127.0.0.1:4100:4000"                         # 仅 loopback：operator 铸 per-EvalRun 虚拟 key 用（host 4000 被 flagd-ui 占用）
+      - "10.250.250.1:4100:4000"                      # MIG-127：127 eval-worker 模型调用出口——仅绑 WireGuard 隧道面
     mem_limit: 1536m                                  # §6.8 冻结值 512M 与 litellm 1.89.0 实测冲突：
                                                       # 启动峰值 1013MiB（M3-30 部署实测，512M 下 OOM-137 循环）→ 放宽至 1.5G，台账已记
     mem_reservation: 512m

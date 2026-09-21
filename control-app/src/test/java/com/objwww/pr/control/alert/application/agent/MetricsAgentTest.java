@@ -439,11 +439,22 @@ class MetricsAgentTest {
                 new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard(
                         new com.objwww.pr.control.alert.domain.budget.DoomLoopGuard.Policy(
                                 2, "doom-test", java.util.Set.of()));
+        // ME-T05（D05/F07）收紧：进展=可观察新状态（本 run 新内容）——本用例每轮
+        // 返回不同业务内容 → 有进展不熔断（同内容重取记无进展的边界见
+        // SingleToolEvidenceAgentLoopTest）
+        java.util.concurrent.atomic.AtomicInteger round =
+                new java.util.concurrent.atomic.AtomicInteger();
         MetricsAgent agent = gatedAgent(
                 new com.objwww.pr.control.alert.application.RunBudgetGate(
                         new com.objwww.pr.control.alert.infrastructure.FixtureSeededBudgetLedger()),
                 guard,
-                args -> fixtureBytes());
+                args -> {
+                    int n = round.incrementAndGet();
+                    return ("{\"status\":\"success\",\"data\":{\"resultType\":\"vector\","
+                            + "\"result\":[{\"metric\":{\"round\":\"" + n
+                            + "\"},\"value\":[1757059260,\"0.42\"]}]}}")
+                            .getBytes(StandardCharsets.UTF_8);
+                });
 
         // 三次物理请求（各自 callSeq——生产重试铸造新 callSeq；同参数=同 doom 签名跨重试稳定）
         assertThat(agent.investigate(context(1), query()).outcome())

@@ -91,6 +91,30 @@
           </template>
         </el-tab-pane>
 
+        <!-- ============ 调查增强（Jev，JE-01） ============ -->
+        <el-tab-pane label="调查增强" name="jev">
+          <div class="hint-row">
+            Jev 增强路径开关：开启后<b>新铸造的调查</b>由主模型配合 Jev 选材、摘要与复核完成，复核发现缺口时在剩余预算内重新取证，
+            所有新增模型调用计入该次调查的调用账目；关闭时沿用现有链路。开关状态在调查创建时冻结——切换<b>不影响正在运行的调查</b>。
+            需同时在部署环境配置 Jev API（app.alert.r7.jev.*）；仅有开关而缺 API 配置时，调查照常进行（选材/复核自动跳过）。
+          </div>
+          <div class="zone-head">
+            <h3 class="sec-title">Jev 增强路径（对新调查生效）</h3>
+            <el-switch v-model="jevOn" :loading="jevSaving" @change="toggleJev" />
+            <el-tag :type="jevOn ? 'success' : 'info'" size="small" disable-transitions>
+              {{ jevOn ? '增强路径开' : '现有链路' }}
+            </el-tag>
+          </div>
+          <div class="kv-line"><span class="k">运行中调查</span><span class="dim">不受本开关影响（增强模式随调查创建冻结，见调查详情页「Jev 增强」标识）</span></div>
+          <div v-if="jevFlag" class="kv-line">
+            <span class="k">最近变更</span>
+            <span class="dim">
+              {{ jevFlag.updatedBy || '—' }} · {{ jevFlag.updatedAt ? fmtTime(jevFlag.updatedAt) : '—' }}
+              <template v-if="jevFlag.reason">· {{ jevFlag.reason }}</template>
+            </span>
+          </div>
+        </el-tab-pane>
+
         <!-- ============ 通知渠道 ============ -->
         <el-tab-pane label="通知渠道" name="channels">
           <div class="hint-row">
@@ -260,6 +284,9 @@ const users = ref([])
 const routing = ref(null)
 const testLoading = ref(false)
 const testResult = ref('')
+const jevOn = ref(false)
+const jevFlag = ref(null)
+const jevSaving = ref(false)
 
 function catZh(c) { return CATEGORY_ZH[c] ?? c }
 function decZh(d) { return ROUTE_DECISION_ZH[d] ?? d }
@@ -320,8 +347,31 @@ async function loadRouting() {
     if (res?.status === 'OK') routing.value = res
   } catch { /* 路由账本缺席如实留空 */ }
 }
+// JE-01：Jev 增强路径开关（写面 = /api/v1/jev-enhanced PUT；行缺席 = 配置默认）
+async function loadJev() {
+  try {
+    const res = await api('/v1/jev-enhanced')
+    jevFlag.value = res?.row ?? null
+    jevOn.value = res?.row?.enabled === true
+  } catch { /* 开关面缺席如实留空 */ }
+}
+async function toggleJev(v) {
+  jevSaving.value = true
+  try {
+    const res = await api('/v1/jev-enhanced', {
+      method: 'PUT',
+      body: { enabled: v, reason: v ? '配置中心开启 Jev 增强' : '配置中心关闭 Jev 增强' },
+    })
+    jevFlag.value = res?.row ?? null
+    jevOn.value = res?.row?.enabled === true
+    ElMessage.success(v ? '已开启：新调查将走 Jev 增强路径' : '已关闭：新调查沿用现有链路')
+  } catch {
+    jevOn.value = !v
+    ElMessage.error('切换失败，请重试')
+  } finally { jevSaving.value = false }
+}
 
-onMounted(() => { loadCategory(); loadIntake(); loadChannels(); loadUsers(); loadRouting() })
+onMounted(() => { loadCategory(); loadIntake(); loadChannels(); loadUsers(); loadRouting(); loadJev() })
 </script>
 
 <script>

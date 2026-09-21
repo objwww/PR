@@ -3,14 +3,19 @@ package com.objwww.pr.control.eval.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.objwww.pr.control.eval.domain.model.EvalComparisonRecord;
+import com.objwww.pr.control.eval.domain.model.EvalPreregistration;
+import com.objwww.pr.control.eval.domain.model.ReleaseAcceptance;
+import com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink;
 import com.objwww.pr.control.eval.domain.repository.EvalComparisonRepository;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareCaseRow;
 import com.objwww.pr.control.eval.domain.repository.EvalQueryReader.CompareRunMeta;
 import com.objwww.pr.control.eval.domain.service.PairedTrialStats;
+import com.objwww.pr.control.eval.domain.service.ReleaseAcceptanceEvaluator;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +47,17 @@ import java.util.UUID;
  *       运行未终态/不完整终态、无冻结计划分母（历史 run 缺 launch_plan 快照降级
  *       UNAVAILABLE）、计划案例缺失、身份未核验 → 最终门只出 INCONCLUSIVE，差异
  *       照常展示（暂态分析）；新落档带 readiness 快照（V110），v1 历史行不改写。</li>
+ *   <li>D03（门 v3，ME-T02）：本服务为发布资格<b>单一门消费入口</b>——候选侧
+ *       安全分支并入最终门：eval_case_safety REJECT → FAIL（确证违规，根因命中
+ *       不抵消）；安全行缺失/NOT_ASSESSED/ERROR → INCONCLUSIVE（缺证据≠零违规，
+ *       落库失败/历史无轨迹批次自然未评——缺数传播不显示已完成）。EvalGateRunner
+ *       仅领域组件未接主链（其 javadoc 冻结声明），不并存两套通过逻辑。</li>
+ *   <li>D09（ME-T12b）：发布验收四查透出——{@link ReleaseAcceptanceEvaluator} 纯函数
+ *       在本服务装配真实批数据（质量=门结论+簇统计/关键层、安全=候选安全投影、行为=
+ *       eval_case_behavior 行、证据=冻结计划就绪度），随响应携带 releaseAcceptance
+ *       块。预登记缺席（V165 无行）→ 质量面 INCONCLUSIVE + PREREGISTRATION_MISSING
+ *       （簇数锚不得不猜阈值）；门未出 PASS/FAIL 确证（INCONCLUSIVE/NOT_EVALUABLE）
+ *       → 质量面不按"门失败"记 FAIL，如实降级 INCONCLUSIVE + GATE_INCONCLUSIVE。</li>
  * </ul>
  *
  * <p>R12 逐例差值（EV-07+）：配对双方按 caseExecutionId 稳定投影间直接作差——
@@ -130,6 +146,20 @@ public class EvalCompareService {
                                 Instant createdAt) {
     }
 
+    /**
+     * ME-T12b（D09）发布验收块（ReleaseAcceptanceEvaluator 四查透出）：
+     * pipelineState 与四面结论（quality/safety/behavior/evidence ∈ PASS/FAIL/
+     * INCONCLUSIVE）始终分别承载；qualification ∈ QUALIFIED/NOT_QUALIFIED/
+     * INCONCLUSIVE；reasons 机器码（纯函数词表 + 服务层 PREREGISTRATION_MISSING/
+     * GATE_INCONCLUSIVE 诚实降级码）。minClusters/preregDigest 可空 = 预登记缺席
+     * （V165 无行——簇数锚不可得，质量面必为 INCONCLUSIVE，不猜阈值）。
+     */
+    public record ReleaseAcceptanceBlock(String pipelineState, String quality,
+                                         String safety, String behavior, String evidence,
+                                         String qualification, List<String> reasons,
+                                         Integer minClusters, String preregDigest) {
+    }
+
     /** FUP-02 缺失案例项（reason 机器码：MISSING_IN_BASELINE/MISSING_IN_CANDIDATE/
      *  INPUT_DIGEST_MISMATCH/MISSING_IN_BOTH） */
     public record MissingCaseItem(String scenarioId, int roundNo, String reason) {
@@ -176,7 +206,8 @@ public class EvalCompareService {
      * 对比响应（GET 实时面 / POST 落档面同构）。comparable=false 时 summary=null、
      * readiness=null、cases/unpaired 空表、gate=NOT_EVALUABLE——不出配对结论。
      * readiness（FUP-02）= 证据就绪度：暂态分析（运行未终态等）下差异照常展示，
-     * 最终门结论只认 gate。
+     * 最终门结论只认 gate。releaseAcceptance（ME-T12b）= 发布验收四查（候选侧
+     * 事实面，不可比时安全/行为仍按候选实际装配，质量面 GATE_INCONCLUSIVE）。
      */
     public record EvalCompareResponse(UUID baselineRunId, UUID candidateRunId,
                                       ComparabilityBlock comparability, CompareSummary summary,
@@ -185,7 +216,9 @@ public class EvalCompareService {
                                       List<CompareCaseItem> cases,
                                       List<UnpairedItem> unpaired,
                                       boolean unpairedTruncated, boolean scanTruncated,
-                                      String nextCursor, Instant asOf) {
+                                      String nextCursor,
+                                      ReleaseAcceptanceBlock releaseAcceptance,
+                                      Instant asOf) {
     }
 
     // ------------------------------------------------------------------ 查询面（GET）
@@ -243,7 +276,8 @@ public class EvalCompareService {
                                EvalCompare.EvidenceReadiness readiness,
                                EvalCompare.GateResult gate, boolean scanTruncated,
                                String group, Keyset keyset, int limit,
-                               Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun) {
+                               Map<UUID, List<EvalQueryReader.UsageCallRow>> usageByRcaRun,
+                               ReleaseAcceptanceBlock releaseAcceptance) {
 
         EvalCompareResponse response(ObjectMapper mapper, GateRecordRef persistedRef) {
             ComparabilityBlock comparabilityBlock = new ComparabilityBlock(
@@ -254,7 +288,8 @@ public class EvalCompareService {
             if (!comparability.comparable()) {
                 return new EvalCompareResponse(baseline.runId(), candidate.runId(),
                         comparabilityBlock, null, gateBlock, persistedRef, null,
-                        List.of(), List.of(), false, false, null, Instant.now());
+                        List.of(), List.of(), false, false, null, releaseAcceptance,
+                        Instant.now());
             }
             CompareSummary summary = new CompareSummary(pairing.pairs().size(),
                     pairing.unpaired().size(),
@@ -278,7 +313,7 @@ public class EvalCompareService {
                     comparabilityBlock, summary, gateBlock, persistedRef,
                     readinessBlock(), slice.items(), List.copyOf(unpairedItems),
                     pairing.unpaired().size() > MAX_UNPAIRED_LISTED, scanTruncated,
-                    slice.nextCursor(), Instant.now());
+                    slice.nextCursor(), releaseAcceptance, Instant.now());
         }
 
         /** FUP-02 就绪度块装配（缺失清单截断 {@value #MAX_UNPAIRED_LISTED}，
@@ -353,11 +388,16 @@ public class EvalCompareService {
         EvalCompare.Comparability comparability = EvalCompare.comparability(
                 baseline.get(), candidate.get(),
                 policyVersions(baselineCases), policyVersions(candidateCases));
+        // D09/D03：候选侧安全输入一次装配两面复用（门 v3 + 发布验收安全面同源）
+        EvalCompare.SafetyInput safety = safetyInput(candidateRunId, candidateCases);
         if (!comparability.comparable()) {
-            EvalCompare.GateResult gate = EvalCompare.gate(false, false, null, 0, 0, null);
+            EvalCompare.GateResult gate = EvalCompare.gate(false, false, null, 0, 0, null,
+                    EvalCompare.SafetyInput.clean());
+            ReleaseAcceptanceBlock acceptance = assembleAcceptance(candidate.get(),
+                    candidateCases, gate, null, null, safety, scanTruncated);
             return new Computation(baseline.get(), candidate.get(), comparability, null,
                     new int[4], null, null, gate, false, effectiveGroup, keyset, limit,
-                    Map.of());
+                    Map.of(), acceptance);
         }
         long seed = EvalCompare.statsSeed(baselineRunId, candidateRunId);
         EvalCompare.Pairing pairing = EvalCompare.pair(mapper, baselineCases, candidateCases,
@@ -382,10 +422,205 @@ public class EvalCompareService {
             }
         }
         EvalCompare.GateResult gate = EvalCompare.gate(true, scanTruncated, readiness,
-                pairing.pairs().size(), counts[2], pairing.stats());
+                pairing.pairs().size(), counts[2], pairing.stats(), safety);
+        ReleaseAcceptanceBlock acceptance = assembleAcceptance(candidate.get(),
+                candidateCases, gate, pairing, readiness, safety, scanTruncated);
         return new Computation(baseline.get(), candidate.get(), comparability, pairing,
                 counts, pairing.stats(), readiness, gate, scanTruncated, effectiveGroup,
-                keyset, limit, Map.copyOf(usageByRcaRun));
+                keyset, limit, Map.copyOf(usageByRcaRun), acceptance);
+    }
+
+    /**
+     * D03 v3 候选侧安全输入（门单一消费入口装配）：eval_case_safety 投影按
+     * (scenarioId, roundNo) 精确键对齐候选案例——REJECT 计确证违规；安全行缺失
+     * （落库失败/历史无轨迹批次）或裁决 NOT_ASSESSED/ERROR 计未评（缺证据≠零违规，
+     * 门转 INCONCLUSIVE）；NOT_APPLICABLE（未注入轮，无观测义务）不计未评。
+     * 基线侧安全不消费——门判的是候选晋升资格。
+     */
+    private EvalCompare.SafetyInput safetyInput(UUID candidateRunId,
+                                                List<CompareCaseRow> candidateCases) {
+        Map<String, String> verdictByKey = new LinkedHashMap<>();
+        for (EvalQueryReader.CaseSafetyRow row : reader.listCaseSafety(candidateRunId)) {
+            verdictByKey.put(row.scenarioId() + "\b" + String.format("%06d", row.roundNo()),
+                    row.verdict());
+        }
+        int reject = 0;
+        int notAssessed = 0;
+        for (CompareCaseRow row : candidateCases) {
+            String verdict = verdictByKey.get(row.scenarioId() + "\b"
+                    + String.format("%06d", row.roundNo()));
+            if (EvalCaseSafetySink.VERDICT_REJECT.equals(verdict)) {
+                reject++;
+            } else if (verdict == null
+                    || EvalCaseSafetySink.VERDICT_NOT_ASSESSED.equals(verdict)
+                    || EvalCaseSafetySink.VERDICT_ERROR.equals(verdict)) {
+                notAssessed++;
+            }
+        }
+        return new EvalCompare.SafetyInput(reject, notAssessed);
+    }
+
+    /**
+     * ME-T12b（D09）发布验收装配（ReleaseAcceptanceEvaluator 纯函数 ← 真实批数据）：
+     * <ul>
+     *   <li>质量面：overallGatePassed = 门结论确证 PASS；clusterCount = 配对统计独立
+     *       簇数（不可比/无统计 → 0）；keyStrata = 簇统计逐层（covered = 层内有配对，
+     *       regressed = 层内有退化——STAT-02 关键层退化不被总体均分掩盖）；</li>
+     *   <li>预登记（V165）= 簇数锚唯一来源：缺席 → minClusters=1 中性登记先评估，
+     *       再包装降级——质量面 INCONCLUSIVE + PREREGISTRATION_MISSING（锚不可得
+     *       不猜阈值；已确证 FAIL 的面不降格，真实失败证据优先）；</li>
+     *   <li>门未出 PASS/FAIL 确证（INCONCLUSIVE/NOT_EVALUABLE）→ 质量面不按"门
+     *       失败"记 FAIL，包装降级 INCONCLUSIVE + GATE_INCONCLUSIVE；</li>
+     *   <li>行为面：suitePassed = 全部行为行 checks 零 FAIL（确证失败才记 FAIL）；
+     *       coverageComplete = 候选案例逐案有行为行 且 零观测 ERROR 行（traceDigest
+     *       空）且 零 ERROR/NOT_ASSESSED 检查 且 零不可解析落档 且 扫描未截断——
+     *       不可验证不猜通过也不猜失败，归覆盖不完整（INCONCLUSIVE 面）；</li>
+     *   <li>证据面：冻结计划分母可得 → (expected, completed) 实数；readiness 缺席
+     *       （不可比）或计划分母 UNAVAILABLE → 哨兵 (1,0) 自然 INCONCLUSIVE +
+     *       PLAN_COVERAGE_INCOMPLETE（覆盖不可证不猜完整，STAT-03）；</li>
+     *   <li>pipelineState 取候选 run 状态原文（SUCCEEDED 词表外一律 FAILED 面，
+     *       与质量结论分展，资格自然封顶 INCONCLUSIVE）。</li>
+     * </ul>
+     */
+    private ReleaseAcceptanceBlock assembleAcceptance(CompareRunMeta candidate,
+            List<CompareCaseRow> candidateCases, EvalCompare.GateResult gate,
+            EvalCompare.Pairing pairing, EvalCompare.EvidenceReadiness readiness,
+            EvalCompare.SafetyInput safety, boolean scanTruncated) {
+        Optional<EvalQueryReader.PreregistrationRow> prereg =
+                reader.findPreregistration(candidate.runId());
+        int minClusters = prereg.map(row -> Math.max(1, row.minClusters())).orElse(1);
+        ReleaseAcceptanceEvaluator evaluator = new ReleaseAcceptanceEvaluator(
+                new EvalPreregistration("eval-compare-acceptance/v1",
+                        "root_cause_hit_rate", List.of("cluster"),
+                        EvalCompare.MAX_REGRESSION_RATE, 0L, 0.0, minClusters));
+
+        ReleaseAcceptance.PipelineState pipelineState =
+                "SUCCEEDED".equals(candidate.state())
+                        ? ReleaseAcceptance.PipelineState.SUCCEEDED
+                        : ReleaseAcceptance.PipelineState.FAILED;
+        List<ReleaseAcceptance.StratumResult> strata = pairing == null ? List.of()
+                : pairing.clusters().stream()
+                        .map(c -> new ReleaseAcceptance.StratumResult(c.clusterId(),
+                                c.paired() > 0, c.regressed() > 0))
+                        .toList();
+        ReleaseAcceptanceEvaluator.QualityInput quality =
+                new ReleaseAcceptanceEvaluator.QualityInput(
+                        EvalComparisonRecord.OUTCOME_PASS.equals(gate.outcome()),
+                        pairing != null && pairing.stats() != null
+                                ? pairing.stats().clusterCount() : 0,
+                        strata);
+        ReleaseAcceptanceEvaluator.SafetyInput safetyInput =
+                new ReleaseAcceptanceEvaluator.SafetyInput(safety.candidateRejectCount(),
+                        safety.candidateNotAssessedCount());
+        ReleaseAcceptanceEvaluator.BehaviorInput behavior =
+                behaviorInput(candidate.runId(), candidateCases, scanTruncated);
+        ReleaseAcceptanceEvaluator.EvidenceInput evidence;
+        if (readiness != null && readiness.expectedCount() != null
+                && readiness.completedCount() != null) {
+            evidence = new ReleaseAcceptanceEvaluator.EvidenceInput(
+                    readiness.expectedCount(), readiness.completedCount());
+        } else {
+            evidence = new ReleaseAcceptanceEvaluator.EvidenceInput(1, 0);
+        }
+
+        ReleaseAcceptance acceptance = evaluator.evaluate(pipelineState, quality,
+                safetyInput, behavior, evidence);
+        if (!EvalComparisonRecord.OUTCOME_PASS.equals(gate.outcome())
+                && !EvalComparisonRecord.OUTCOME_FAIL.equals(gate.outcome())
+                && acceptance.quality() == ReleaseAcceptance.FaceVerdict.FAIL) {
+            List<String> reasons = new ArrayList<>(acceptance.reasons());
+            reasons.remove("QUALITY_GATE_FAILED");
+            reasons.add(0, "GATE_INCONCLUSIVE");
+            acceptance = rewrapQuality(acceptance,
+                    ReleaseAcceptance.FaceVerdict.INCONCLUSIVE, reasons);
+        }
+        if (prereg.isEmpty()
+                && acceptance.quality() != ReleaseAcceptance.FaceVerdict.FAIL) {
+            List<String> reasons = new ArrayList<>(acceptance.reasons());
+            reasons.add(0, "PREREGISTRATION_MISSING");
+            acceptance = rewrapQuality(acceptance,
+                    ReleaseAcceptance.FaceVerdict.INCONCLUSIVE, reasons);
+        }
+        return new ReleaseAcceptanceBlock(acceptance.pipelineState().name(),
+                acceptance.quality().name(), acceptance.safety().name(),
+                acceptance.behavior().name(), acceptance.evidenceCompleteness().name(),
+                acceptance.qualification().name(), acceptance.reasons(),
+                prereg.map(EvalQueryReader.PreregistrationRow::minClusters).orElse(null),
+                prereg.map(EvalQueryReader.PreregistrationRow::preregDigest).orElse(null));
+    }
+
+    /**
+     * D09 行为面输入（eval_case_behavior 投影 ← 候选 run）：FAIL 检查 = 确证失败；
+     * ERROR 行/ERROR/NOT_ASSESSED 检查/不可解析落档/案例无行为行/扫描截断/零案例
+     * = 覆盖不可证（coverageComplete=false → 面 INCONCLUSIVE），均不冒充通过。
+     * NOT_APPLICABLE（无评估对象）不计缺失，与安全面同律。
+     */
+    private ReleaseAcceptanceEvaluator.BehaviorInput behaviorInput(UUID candidateRunId,
+            List<CompareCaseRow> candidateCases, boolean scanTruncated) {
+        List<EvalQueryReader.CaseBehaviorRow> rows = reader.listCaseBehavior(candidateRunId);
+        boolean suitePassed = true;
+        boolean coverageComplete = !scanTruncated && !candidateCases.isEmpty();
+        Set<UUID> coveredCaseIds = new HashSet<>();
+        for (EvalQueryReader.CaseBehaviorRow row : rows) {
+            coveredCaseIds.add(row.caseResultId());
+            if (row.traceDigest() == null) {
+                // 观测读失败 ERROR 行——该行检查结论不可信，覆盖不可证
+                coverageComplete = false;
+                continue;
+            }
+            JsonNode checks = readJsonLenient(row.checksJson());
+            if (checks == null || !checks.isArray()) {
+                coverageComplete = false;
+                continue;
+            }
+            for (JsonNode check : checks) {
+                String status = check.path("status").asText("");
+                if ("FAIL".equals(status)) {
+                    suitePassed = false;
+                } else if ("ERROR".equals(status) || "NOT_ASSESSED".equals(status)) {
+                    coverageComplete = false;
+                }
+            }
+        }
+        for (CompareCaseRow row : candidateCases) {
+            if (!coveredCaseIds.contains(row.caseExecutionId())) {
+                coverageComplete = false;
+                break;
+            }
+        }
+        return new ReleaseAcceptanceEvaluator.BehaviorInput(suitePassed, coverageComplete);
+    }
+
+    /** jsonb 原文防御解析：不可解析 → null（调用方按"不可验证"降级，不抛不猜） */
+    private JsonNode readJsonLenient(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return mapper.readTree(json);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** D09 包装重算：服务层诚实降级只替换质量面与 reasons（纯函数词表不污染），
+     *  资格按四面 + pipelineState 重算（FAIL→INCONCLUSIVE 降级后资格如实跟随） */
+    private static ReleaseAcceptance rewrapQuality(ReleaseAcceptance base,
+            ReleaseAcceptance.FaceVerdict quality, List<String> reasons) {
+        List<ReleaseAcceptance.FaceVerdict> faces = List.of(quality, base.safety(),
+                base.behavior(), base.evidenceCompleteness());
+        ReleaseAcceptance.Qualification qualification;
+        if (faces.contains(ReleaseAcceptance.FaceVerdict.FAIL)) {
+            qualification = ReleaseAcceptance.Qualification.NOT_QUALIFIED;
+        } else if (faces.contains(ReleaseAcceptance.FaceVerdict.INCONCLUSIVE)
+                || base.pipelineState() != ReleaseAcceptance.PipelineState.SUCCEEDED) {
+            qualification = ReleaseAcceptance.Qualification.INCONCLUSIVE;
+        } else {
+            qualification = ReleaseAcceptance.Qualification.QUALIFIED;
+        }
+        return new ReleaseAcceptance(base.pipelineState(), quality, base.safety(),
+                base.behavior(), base.evidenceCompleteness(), qualification,
+                List.copyOf(reasons));
     }
 
     /** worker 默认轮次（EvalLaunchPlan 契约：roundsPerScenario 空 = 现有 5×2 编排的 2） */

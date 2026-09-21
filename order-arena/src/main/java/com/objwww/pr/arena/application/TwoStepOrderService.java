@@ -134,6 +134,10 @@ public class TwoStepOrderService {
         // INV-AM2-1：故障只对 chaos- 前缀生效（live 流量永不跳过幂等）
         boolean f1Active = correlationId.startsWith("chaos-")
                 && faultGate.active(FaultType.F1, correlationId);
+        if (f1Active) {
+            log.warn("F1 幂等闸旁路：跳过幂等 claim，同 intent 可重复创单: intent={} correlation={}",
+                    intentId, correlationId);
+        }
 
         long epoch = -1;
         if (!f1Active) {

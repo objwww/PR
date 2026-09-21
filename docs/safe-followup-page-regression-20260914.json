@@ -1,0 +1,86 @@
+{
+  "kind": "post-fix-acceptance",
+  "noNetwork": true,
+  "count": 8,
+  "results": [
+    {
+      "id": "PAGE-01",
+      "pass": true,
+      "evidence": {
+        "uris": [
+          "/api/drills/a",
+          "/api/drills/a/stop",
+          "/api/drills/a/events?afterSeq=7",
+          "/api/release-assets?limit=50",
+          "/api/release-assets/bundles",
+          "/api/release-assets/prompt/abc",
+          "/api/rca-runs/r/config-epochs"
+        ],
+        "note": "exactly one /api prefix; method/body/cursor via real axios adapter"
+      }
+    },
+    {
+      "id": "PAGE-02",
+      "pass": true,
+      "evidence": "classify/ApiNotReadyError preserve HTTP status; 403 vs 404 messages distinct"
+    },
+    {
+      "id": "PAGE-04",
+      "pass": true,
+      "evidence": {
+        "attempts": 2,
+        "key": "2c8eeed8-0927-4ead-a0f8-da76fb08453d",
+        "bodyFrozen": true
+      }
+    },
+    {
+      "id": "PAGE-05",
+      "pass": true,
+      "evidence": {
+        "displayed": "B",
+        "submittedTo": "/eval/reviews/assignments/B/submit",
+        "draftIsolated": true,
+        "lateSubmitIgnored": true
+      }
+    },
+    {
+      "id": "PAGE-06",
+      "pass": true,
+      "evidence": {
+        "invalidatedOn": [
+          "durationSeconds",
+          "trafficScale",
+          "targetEnv",
+          "linkedEvalVersion"
+        ],
+        "launchBlocked": true
+      }
+    },
+    {
+      "id": "PAGE-07",
+      "pass": true,
+      "evidence": {
+        "firstTickDuringLoadingKeptPolling": true,
+        "pollingAfterSuccess": true
+      }
+    },
+    {
+      "id": "PAGE-08",
+      "pass": true,
+      "evidence": {
+        "workerError": true,
+        "trendError": true,
+        "perSeriesStale": true,
+        "allNanUnknown": true
+      }
+    },
+    {
+      "id": "PAGE-09",
+      "pass": true,
+      "evidence": {
+        "retainedOutsideRecent": true,
+        "trulyMissingCleared": true
+      }
+    }
+  ]
+}

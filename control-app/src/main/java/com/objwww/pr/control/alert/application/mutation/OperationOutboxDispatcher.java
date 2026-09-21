@@ -22,6 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * EXECUTED：       PREPARED/RETRYABLE → DISPATCHED → ACKNOWLEDGED → VERIFIED
  *                  （VERIFIED 即过释放闸释放资源锁）→ COMPLETED
  * TIMEOUT_UNKNOWN：→ UNKNOWN（锁保持 BUSY；RECONCILING 裁决归 B5 reconcile）
+ * FAILED（BA-191）：→ FAILED_CONFIRMED（真执行确定性判败终态——副作用未发生或
+ *                  已证伪，中文原因随 OPERATION_FAILED 留痕；锁按释放矩阵放行，
+ *                  不自动重试、不假装成功）
  * </pre>
  *
  * <p>崩溃语义：claim 后崩溃 → 租约过期回收重领（at-least-once）+ operation 幂等
@@ -138,11 +141,12 @@ public class OperationOutboxDispatcher {
             return;
         }
         emit(operation, "OPERATION_DISPATCHED", Map.of("resource_uid", operation.resourceUid()
-                == null ? "" : operation.resourceUid()));
+                == null ? "" : operation.resourceUid(),
+                "dry_run", String.valueOf(operation.dryRun())));
         // PD-D1：dry_run 分流——真执行面缺席时 UNKNOWN（reconcile → ESCALATED，
         // 不静默丢）；present 则真派发
         ActionRunner chosen = operation.dryRun() ? runner : realRunner;
-        ActionRunner.Outcome outcome;
+        ActionRunner.Result result;
         if (chosen == null) {
             operations.transition(operation.operationId(), OperationStatus.DISPATCHED,
                     OperationStatus.UNKNOWN, clock.instant());
@@ -151,23 +155,40 @@ public class OperationOutboxDispatcher {
             return;
         }
         try {
-            outcome = chosen.run(operation);
+            result = chosen.runDetailed(operation);
         } catch (RuntimeException e) {
             log.error("Runner 执行异常（按 timeout≠failed 处理）: op={}",
                     operation.operationId(), e);
-            outcome = ActionRunner.Outcome.TIMEOUT_UNKNOWN;
+            result = ActionRunner.Result.of(ActionRunner.Outcome.TIMEOUT_UNKNOWN);
         }
-        walk(operation.operationId(), operation.resourceUid(), outcome);
+        walk(operation.operationId(), operation.resourceUid(), result);
     }
 
-    private void walk(UUID operationId, String resourceUid, ActionRunner.Outcome outcome) {
-        if (outcome == ActionRunner.Outcome.TIMEOUT_UNKNOWN) {
+    private void walk(UUID operationId, String resourceUid, ActionRunner.Result result) {
+        if (result.outcome() == ActionRunner.Outcome.TIMEOUT_UNKNOWN) {
             if (operations.transition(operationId, OperationStatus.DISPATCHED,
                     OperationStatus.UNKNOWN, clock.instant())) {
                 emitById(operationId, "OPERATION_UNKNOWN",
-                        Map.of("note", "timeout!=failed; 锁保持 BUSY; reconcile 裁决"));
+                        Map.of("note", (result.detail() == null ? "timeout!=failed"
+                                : result.detail()) + "; 锁保持 BUSY; reconcile 裁决"));
             }
             return; // 锁不动——RECONCILING 才有裁决权（B5）
+        }
+        if (result.outcome() == ActionRunner.Outcome.FAILED) {
+            // BA-191：真执行确定性判败——直落 FAILED_CONFIRMED 终态（不猜不重试），
+            // 锁按释放矩阵放行；中文判败原因如实留痕，不落 change_event ROLLBACK 行
+            if (operations.transition(operationId, OperationStatus.DISPATCHED,
+                    OperationStatus.FAILED_CONFIRMED, clock.instant())) {
+                emitById(operationId, "OPERATION_FAILED",
+                        Map.of("note", result.detail() == null
+                                ? "REAL_EXECUTION_FAILED: 真执行确定性判败" : result.detail()));
+                if (resourceUid != null) {
+                    boolean released = locks.releaseOnTerminalState(resourceUid, operationId);
+                    emitById(operationId, "OPERATION_LOCK_RELEASED",
+                            Map.of("released", String.valueOf(released)));
+                }
+            }
+            return;
         }
         // EXECUTED 全链：ACK → VERIFIED（释放闸）→ COMPLETED
         advance(operationId, OperationStatus.DISPATCHED, OperationStatus.ACKNOWLEDGED,

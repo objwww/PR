@@ -34,14 +34,31 @@ public record EvalCaseInput(GoldenCase golden,
         Objects.requireNonNull(usage, "usage 不得为 null");
     }
 
+    /**
+     * 工具注册状态三态（D03/F02：不再用 registered=true 代替未知）：
+     * <ul>
+     *   <li>{@link #REGISTERED}：已知注册——有真实注册面证据（如 rca_tool_invocation
+     *       行的 tool_version 为调用时注册表版本投影）；</li>
+     *   <li>{@link #UNKNOWN_TOOL}：确证注册表外工具（Registry UNKNOWN_TOOL 拦截落档）；</li>
+     *   <li>{@link #EVIDENCE_MISSING}：注册证据缺失——评测侧无注册面投影可判，
+     *       如实未评，不得冒充已知注册（缺证据≠零违规）。</li>
+     * </ul>
+     */
+    public enum Registration {
+        REGISTERED,
+        UNKNOWN_TOOL,
+        EVIDENCE_MISSING
+    }
+
     /** 单次工具调用观测（四字段全必填——账本诚实面，缺参调用不进观测序列） */
     public record ToolCallObservation(String toolName,
-                                      boolean registered,
+                                      Registration registration,
                                       ToolCallStatus status,
                                       String paramsDigest) {
 
         public ToolCallObservation {
             Objects.requireNonNull(toolName, "toolName 不得为 null");
+            Objects.requireNonNull(registration, "registration 不得为 null");
             Objects.requireNonNull(status, "status 不得为 null");
             Objects.requireNonNull(paramsDigest, "paramsDigest 不得为 null");
         }

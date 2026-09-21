@@ -188,4 +188,30 @@ class AlertAm4ConfigTest {
         assertThat(java.nio.file.Path.of("src/main/resources/am4").toFile().exists())
                 .as("main 资源零 am4 假件目录（logs 已删、change 已迁 test 资源）").isFalse();
     }
+
+    /** BA-184/BA-185 钉版：缺省 prompt 升 am4-native-v11——v10 静默故障双源口径
+     *  （alert_event）+ 零数据不原地重试指引保留；v11 写类工具段补"处置落地形态"
+     *  （文字建议不进审批链；变更回归正确处置=调用 service.rollback）；
+     *  协议键一字未动，只钉版本键与新增表述 */
+    @Test
+    void defaultPromptCarriesV10SilentFaultClause() throws Exception {
+        java.lang.reflect.Field versionKey =
+                AlertAm4Config.class.getDeclaredField("PROMPT_VERSION_KEY");
+        versionKey.setAccessible(true);
+        assertThat((String) versionKey.get(null))
+                .as("prompt 版本键缺省值升 v11").contains("am4-native-v11");
+
+        java.lang.reflect.Field prompt =
+                AlertAm4Config.class.getDeclaredField("R7_PRIMARY_DEFAULT_PROMPT");
+        prompt.setAccessible(true);
+        String text = (String) prompt.get(null);
+        assertThat(text).as("收敛标准补静默故障双源口径（v10 保留）").contains("静默故障口径");
+        assertThat(text).as("静默口径点名 alert_event 第二源（v10 保留）").contains("alert_event");
+        assertThat(text).as("调查路径补零数据不原地重试指引（v10 保留）")
+                .contains("日志零数据时不要原地重试同参查询");
+        assertThat(text).as("v11 处置落地形态：文字建议不进审批链")
+                .contains("不会进入审批链，等于没有处置");
+        assertThat(text).as("v11 变更回归正确处置=调用 service.rollback")
+                .contains("正确处置=调用 service.rollback 回滚该发布");
+    }
 }

@@ -1,0 +1,71 @@
+== com\objwww\pr\control\alert\application\agent\BoundedLlmRoleRunner.java
+   136 public RoleRunner.RoleDriveResult drive(RoleRunner.RoleDriveRequest request) {
+   211 private RoleRunner.RoleDriveResult driveToolCall(RoleRunner.RoleDriveRequest request,
+   226 evidenceId = toolPort.invoke(request.callContext(), tool.toolId(), tool.args());
+   263 private RoleRunner.RoleDriveResult driveDelegate(RoleRunner.RoleDriveRequest request,
+   296 private RoleRunner.RoleDriveResult driveFinal(RoleRunner.RoleDriveRequest request,
+   324 private RoleRunner.RoleDriveResult deterministicFinal(RoleRunner.RoleDriveRequest request,
+   348 private void maybeCompact(RoleRunner.RoleDriveRequest request,
+   374 */    private void advanceStep(RoleRunner.RoleDriveRequest request,
+   394 private void commitCheckpoint(RoleRunner.RoleDriveRequest request,
+   407 private RcaActionGuard.ModelAction actionOf(RoleRunner.RoleDriveRequest request,
+   412 request.callContext().attemptId(), checkpoint.decisionSeq(),
+   414 binding.roleDigest(), request.callContext().observedGeneration(),
+== com\objwww\pr\control\alert\application\agent\ContextAssembler.java
+   270 public Assembly assemble(RoleRunner.RoleDriveRequest request,
+   331 private Map<String, Object> alertOf(RoleRunner.RoleDriveRequest request,
+   361 private String objectiveOf(RoleRunner.RoleDriveRequest request, AlertMaterial material) {
+   369 private Map<String, Object> budgetOf(RoleRunner.RoleDriveRequest request,
+   384 private EvidenceWindow evidenceOf(RoleRunner.RoleDriveRequest request,
+   706 MemoryCommit candidateMemory(RoleRunner.RoleDriveRequest request,
+   746 Map<String, List<String>> rebuildMemorySlots(RoleRunner.RoleDriveRequest request,
+   772 private ReceiptSection receiptsOf(RoleRunner.RoleDriveRequest request,
+   827 private Map<String, Object> skillOf(RoleRunner.RoleDriveRequest request,
+   872 private List<Map<String, Object>> materialsOf(RoleRunner.RoleDriveRequest request) {
+   905 private List<Map<String, Object>> trajectoryOf(RoleRunner.RoleDriveRequest request) {
+   946 private Set<String> validRefsOf(RoleRunner.RoleDriveRequest request,
+== com\objwww\pr\control\alert\application\agent\ContextCompactionService.java
+   190 public CompactionOutcome afterToolResults(RoleRunner.RoleDriveRequest request,
+   262 runId, taskId, request.callContext().attemptId(),
+   266 request.callContext().observedGeneration(),
+   353 private void consumeIfValidated(RoleRunner.RoleDriveRequest request,
+== com\objwww\pr\control\alert\application\agent\RoleRunner.java
+   26 RoleDriveResult drive(RoleDriveRequest request);
+   29 record RoleDriveRequest(
+   37 public RoleDriveRequest {
+== com\objwww\pr\control\alert\application\agent\SingleToolRoleRunner.java
+   45 public RoleRunner.RoleDriveResult drive(RoleRunner.RoleDriveRequest request) {
+   55 request.callContext(), request.startEpoch(), request.endEpoch());
+== com\objwww\pr\control\alert\application\RcaRunOrchestrator.java
+   69 *       PostgresRcaTaskRepository）、heartbeat/requireCurrentLease（LEASED 租约原地续期，无状态迁移）。</li>
+== com\objwww\pr\control\alert\application\RcaTaskExecutor.java
+   33 * @param heartbeat 长调查期间的心跳续租回调（实现方在等待外部响应的循环里周期调用）
+   36 Runnable heartbeat);
+== com\objwww\pr\control\alert\application\ReportFinalizeExecutor.java
+   59 RcaAttempt attempt, Runnable heartbeat) {
+== com\objwww\pr\control\alert\application\SseStreamService.java
+   79 void heartbeat();
+   96 sink.heartbeat();
+== com\objwww\pr\control\alert\domain\repository\RcaTaskRepository.java
+   40 void heartbeat(UUID id, String owner, long leaseEpoch, Instant now, Duration extend);
+== com\objwww\pr\control\alert\domain\repository\SchedulerSlotRepository.java
+   23 /** 领取结果（epoch 随槽返回——release/heartbeat 栅栏输入） */
+   37 void heartbeat(String scope, int slotNo, String owner, long leaseEpoch, Instant now, Duration extend);
+== com\objwww\pr\control\alert\interfaces\EventQueryController.java
+   121 * 空转 → heartbeat。
+   174 public void heartbeat() {
+== com\objwww\pr\control\infrastructure\config\AlertFlowConfig.java
+   487 @Value("${app.alert.worker.heartbeat-interval:PT30S}") Duration heartbeatInterval,
+   505 AlertClock.system(), owner, slotScope, taskLease, heartbeatInterval, pollInterval,
+== com\objwww\pr\control\infrastructure\nativeexec\NativeInvestigationExecutor.java
+   198 RcaAttempt attempt, Runnable heartbeat) {
+   249 heartbeat.run();
+   260 routing, heartbeat);
+   384 Runnable heartbeat) {
+   416 heartbeat.run();
+   561 RoleRunner.RoleDriveRequest request = new RoleRunner.RoleDriveRequest(dagTask,
+   644 RoleRunner.RoleDriveRequest request) {
+== com\objwww\pr\control\infrastructure\persistence\PostgresRcaTaskRepository.java
+   143 public void heartbeat(UUID id, String owner, long leaseEpoch, Instant now, Duration extend) {
+== com\objwww\pr\control\infrastructure\persistence\PostgresSchedulerSlotRepository.java
+   71 public void heartbeat(String scope, int slotNo, String owner, long leaseEpoch,

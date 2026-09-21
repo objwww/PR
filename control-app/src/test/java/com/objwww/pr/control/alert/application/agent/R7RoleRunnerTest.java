@@ -7,6 +7,7 @@ import com.objwww.pr.control.alert.application.PlanCompiler;
 import com.objwww.pr.control.alert.application.RunBudgetGate;
 import com.objwww.pr.control.alert.domain.agent.AgentPhase;
 import com.objwww.pr.control.alert.domain.agent.AgentProfile;
+import com.objwww.pr.control.alert.domain.agent.ContextSummary;
 import com.objwww.pr.control.alert.domain.agent.PrimaryCheckpoint;
 import com.objwww.pr.control.alert.domain.agent.PrimaryDecision;
 import com.objwww.pr.control.alert.domain.agent.RcaModelCallException;
@@ -612,6 +613,116 @@ class R7RoleRunnerTest {
                 null, commitFence(), 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("stepMaxTokens");
+    }
+
+    // ------------------------------------------------- ME-T12a/D08 消费观测 append 回调
+
+    /** 消费观测捕获口（record 八件逐一如实） */
+    private static final class CapturingConsumptionPort implements CompactionConsumptionPort {
+        final List<List<Object>> records = new ArrayList<>();
+
+        @Override
+        public void record(UUID runId, UUID taskId, String summaryDigest, String mode,
+                           boolean summaryCommitted, boolean consumerInvoked,
+                           Boolean consumed, String policyDigest) {
+            records.add(List.of(runId, taskId, summaryDigest, mode, summaryCommitted,
+                    consumerInvoked, String.valueOf(consumed),
+                    String.valueOf(policyDigest)));
+        }
+    }
+
+    /** 固定 COMMITTED 消费观测的压缩桩（afterToolResults 返回封闭结果，零模型调用） */
+    private ContextCompactionService committedConsumptionStub(ContextSummary summary,
+                                                              ContextCompactionService.ConsumptionObservation obs) {
+        return new ContextCompactionService((action, prompt, maxTokens) -> null,
+                new AlertInMemoryStores.ContextSummaries(), stores.checkpoints, evidence,
+                MAPPER, CLOCK, ContextCompactionService.Mode.OFF, 0.7, 0.55, 2, 1000,
+                null, null) {
+            @Override
+            public CompactionOutcome afterToolResults(RoleRunner.RoleDriveRequest request,
+                    PrimaryCheckpoint checkpoint, ContextAssembler.Assembly assembly) {
+                return new CompactionOutcome(OutcomeKind.COMMITTED, summary, "stub", obs);
+            }
+        };
+    }
+
+    private ContextSummary fixedSummary(UUID taskId) {
+        return ContextSummary.of(UUID.randomUUID(), runId, taskId, 1, "src-digest-1",
+                0, 10, "prompt-digest", "model-rca", 100, 40, List.of(), List.of(),
+                "摘要正文", "OK", "test", null, NOW);
+    }
+
+    @Test
+    void 压缩消费观测非空_端口回调八件如实() {
+        CapturingConsumptionPort port = new CapturingConsumptionPort();
+        UUID primaryId = startPrimary();
+        ContextSummary summary = fixedSummary(primaryId);
+        ContextCompactionService stub = committedConsumptionStub(summary,
+                new ContextCompactionService.ConsumptionObservation(
+                        "CONSUME_VALIDATED", true, true, "policy-1"));
+        BoundedLlmRoleRunner runner = new BoundedLlmRoleRunner(guardRef, supervisor,
+                stores.checkpoints, evidence, assemblerRef, toolPort, MAPPER, CLOCK,
+                stub, commitFence(), 1000, RoleLoopGuard.permissive(), null, port);
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"query\":\"error\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-c1",
+                Duration.ofMillis(5)));
+
+        runner.drive(request(primaryId, primaryProfile()));
+
+        assertThat(port.records).hasSize(1);
+        List<Object> rec = port.records.getFirst();
+        assertThat(rec.get(0)).isEqualTo(runId);
+        assertThat(rec.get(1)).isEqualTo(primaryId);
+        assertThat(rec.get(2)).isEqualTo(summary.summaryDigest());
+        assertThat(rec.get(3)).isEqualTo("CONSUME_VALIDATED");
+        assertThat(rec.get(4)).isEqualTo(true);   // summaryCommitted=outcome.committed()
+        assertThat(rec.get(5)).isEqualTo(true);   // consumerInvoked
+        assertThat(rec.get(6)).isEqualTo("true"); // consumed
+        assertThat(rec.get(7)).isEqualTo("policy-1");
+    }
+
+    @Test
+    void 压缩消费观测缺席_端口零回调() {
+        CapturingConsumptionPort port = new CapturingConsumptionPort();
+        UUID primaryId = startPrimary();
+        // consumption=null 的 COMMITTED 结果（旧兼容形）→ 不回调
+        ContextCompactionService stub = committedConsumptionStub(fixedSummary(primaryId),
+                null);
+        BoundedLlmRoleRunner runner = new BoundedLlmRoleRunner(guardRef, supervisor,
+                stores.checkpoints, evidence, assemblerRef, toolPort, MAPPER, CLOCK,
+                stub, commitFence(), 1000, RoleLoopGuard.permissive(), null, port);
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"query\":\"error\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-c2",
+                Duration.ofMillis(5)));
+
+        runner.drive(request(primaryId, primaryProfile()));
+
+        assertThat(port.records).isEmpty();
+    }
+
+    @Test
+    void 端口抛异常_不打断主路径() {
+        UUID primaryId = startPrimary();
+        ContextCompactionService stub = committedConsumptionStub(fixedSummary(primaryId),
+                new ContextCompactionService.ConsumptionObservation(
+                        "SHADOW_GENERATE", false, null, null));
+        CompactionConsumptionPort down = (r, t, d, m, c, i, u, p) -> {
+            throw new IllegalStateException("consumption store down");
+        };
+        BoundedLlmRoleRunner runner = new BoundedLlmRoleRunner(guardRef, supervisor,
+                stores.checkpoints, evidence, assemblerRef, toolPort, MAPPER, CLOCK,
+                stub, commitFence(), 1000, RoleLoopGuard.permissive(), null, down);
+        client.enqueue(new RouteCallOutcome.Ok(
+                "{\"tool_call\":{\"tool_id\":\"logs.query\",\"args\":{\"query\":\"error\"}}}",
+                new TokenUsage(5, 0, 5), false, "model-rca", "req-c3",
+                Duration.ofMillis(5)));
+
+        RoleRunner.RoleDriveResult result = runner.drive(request(primaryId,
+                primaryProfile()));
+
+        assertThat(result.outcome()).isEqualTo(RoleRunner.RoleDriveOutcome.EVIDENCE_PRODUCED);
     }
 
     // ------------------------------------------------- 夹具

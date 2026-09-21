@@ -88,6 +88,23 @@ public class IncidentProjector {
                              CanaryRouter canaryRouter,
                              IncidentClassifier classifier,
                              IncidentCategoryRepository categories) {
+        this(events, incidents, runs, tasks, identity, deferredPolicy, sla, clock,
+                canaryRouter, classifier, categories, JevRunFlag.OFF);
+    }
+
+    /** JE-01：Jev 开关随铸造冻结（V159）——开关在铸点读"当前意愿"，run 行存事实 */
+    public IncidentProjector(AlertEventRepository events,
+                             IncidentRepository incidents,
+                             RcaRunRepository runs,
+                             RcaTaskRepository tasks,
+                             AlertIdentityFactory identity,
+                             DeferredPolicy deferredPolicy,
+                             SlaPolicy sla,
+                             AlertClock clock,
+                             CanaryRouter canaryRouter,
+                             IncidentClassifier classifier,
+                             IncidentCategoryRepository categories,
+                             JevRunFlag jevRunFlag) {
         this.events = Objects.requireNonNull(events);
         this.incidents = Objects.requireNonNull(incidents);
         this.runs = Objects.requireNonNull(runs);
@@ -99,7 +116,10 @@ public class IncidentProjector {
         this.canaryRouter = Objects.requireNonNull(canaryRouter);
         this.classifier = Objects.requireNonNull(classifier);
         this.categories = Objects.requireNonNull(categories);
+        this.jevRunFlag = Objects.requireNonNull(jevRunFlag, "jevRunFlag");
     }
+
+    private final JevRunFlag jevRunFlag;
 
     /**
      * 整组投影。BA-13③：backlog 计数在组首查一次，组内用增量估算
@@ -352,9 +372,11 @@ public class IncidentProjector {
                 "incident-projector", null);
         // EX-A0（F14）：调查输入身份+冻结时间窗随铸造一次落列（Run 创建时冻结，
         // 执行期只读——禁止静默改取"执行时最近十分钟"）
+        // JE-01：Jev 增强开关同点冻结（V159 jev_enabled 列）——切换开关不改在跑调查
         runs.insertRouted(run, routing,
                 com.objwww.pr.control.alert.domain.identity.InvestigationInputs.freezeAt(
-                        incident, now));
+                        incident, now),
+                jevRunFlag.enabledForNewRuns());
         // SR §4.1：铸点冻结对账硬期限（首记不覆盖；重启/重试不重置；旧 Run 无值不追溯）
         runs.fixReconcileDeadlineIfAbsent(run.id(), sla.deadline(now, priority));
         RcaTask task = new RcaTask(UUID.randomUUID(), run.id(), RcaTask.taskKeyFor(routing.engine()),

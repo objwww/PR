@@ -48,9 +48,16 @@ public class SdkMcpServerClientFactory implements McpClientFactory {
 
         private final ServerSpec spec;
         private volatile McpSyncClient client;
+        /** D02-6：list_changed 回调（connect 装配进 SDK toolsChangeConsumer） */
+        private volatile Runnable toolsChangedHandler;
 
         private SdkClient(ServerSpec spec) {
             this.spec = spec;
+        }
+
+        @Override
+        public void setToolsChangedHandler(Runnable handler) {
+            this.toolsChangedHandler = handler;
         }
 
         @Override
@@ -75,6 +82,18 @@ public class SdkMcpServerClientFactory implements McpClientFactory {
                         .requestTimeout(requestTimeout)
                         .initializationTimeout(requestTimeout)
                         .clientInfo(new McpSchema.Implementation("control-app", "1"))
+                        .toolsChangeConsumer(tools -> {
+                            Runnable handler = toolsChangedHandler;
+                            if (handler == null) {
+                                return;
+                            }
+                            try {
+                                handler.run();
+                            } catch (RuntimeException e) {
+                                log.warn("MCP list_changed 触发候选重检失败 server={}（{}）",
+                                        spec.name(), e.getClass().getSimpleName());
+                            }
+                        })
                         .build();
                 client.initialize();
             } catch (Exception e) {
@@ -90,29 +109,52 @@ public class SdkMcpServerClientFactory implements McpClientFactory {
                         .map(tool -> new ToolDescriptor(tool.name(),
                                 tool.description() == null ? "" : tool.description(),
                                 tool.inputSchema() == null
-                                        ? Map.of("type", "object") : tool.inputSchema()))
+                                        ? Map.of("type", "object") : tool.inputSchema(),
+                                tool.outputSchema()))
                         .toList();
             } catch (Exception e) {
                 throw classify(e);
             }
         }
 
+        /**
+         * D02-2 SDK 边界映射：structured payload 完整传出（空对象 {} 合法，不归一化掉）；
+         * 多文本块按显式分隔符 "\n" 组合；null/empty content 归一化（合法结构化结果不当畸形）；
+         * 非文本内容类型显式登记（能力缺口由派发面拒绝，不在此吞掉或 NPE）。
+         */
         @Override
         public McpToolResult callTool(String toolName, Map<String, Object> arguments) {
-            McpSchema.CallToolResult result = client.callTool(
-                    new McpSchema.CallToolRequest(toolName, arguments));
-            Object structuredContent = result.structuredContent();
-            boolean structured = structuredContent != null
-                    && (!(structuredContent instanceof Map<?, ?> map) || !map.isEmpty());
-            StringBuilder text = null;
-            for (McpSchema.Content item : result.content()) {
-                if (item instanceof McpSchema.TextContent textContent) {
-                    text = text == null ? new StringBuilder() : text;
-                    text.append(textContent.text());
+            try {
+                McpSchema.CallToolResult result = client.callTool(
+                        new McpSchema.CallToolRequest(toolName, arguments));
+                Object structuredContent = result.structuredContent();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> structured = structuredContent instanceof Map<?, ?> map
+                        ? (Map<String, Object>) map : null;
+                if (structuredContent != null && structured == null) {
+                    log.debug("MCP structuredContent 非 JSON 对象（{}），按缺席处理 tool={}",
+                            structuredContent.getClass().getSimpleName(), toolName);
                 }
+                List<McpSchema.Content> content = result.content() == null
+                        ? List.of() : result.content();
+                StringBuilder text = null;
+                List<String> unsupported = new java.util.ArrayList<>();
+                for (McpSchema.Content item : content) {
+                    if (item instanceof McpSchema.TextContent textContent) {
+                        text = text == null ? new StringBuilder() : text.append('\n');
+                        text.append(textContent.text());
+                    } else {
+                        unsupported.add(item == null ? "null" : item.type());
+                    }
+                }
+                return new McpToolResult(Boolean.TRUE.equals(result.isError()),
+                        text == null ? null : text.toString(), structured,
+                        List.copyOf(unsupported));
+            } catch (McpServerClient.AuthException e) {
+                throw e;
+            } catch (Exception e) {
+                throw classify(e);
             }
-            return new McpToolResult(Boolean.TRUE.equals(result.isError()),
-                    text == null ? null : text.toString(), structured);
         }
 
         @Override

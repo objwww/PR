@@ -241,4 +241,41 @@ class PostgresEvalLifecycleIT extends PostgresITBase {
         assertThat(stored.terminalReason()).isEqualTo("worker_lost;recovery_unverified");
         assertThat(reader.findRun(runB).orElseThrow().recoveryState()).isNull();
     }
+
+    // ------------------------------------------------------------------ 搁浅清扫（BA-192）
+
+    @Test
+    @DisplayName("BA-192 搁浅扫描：RUNNING 超龄且命令账本零活体行入选；"
+            + "活体命令（PENDING/CLAIMED）/新近 RUNNING/已终态均排除")
+    void strandedRunScanFilters() {
+        Instant old = Instant.now().minusSeconds(7200);
+        // A：搁浅（命令表零行，模拟 V81 前老批件）→ 入选
+        UUID stranded = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(stranded, metadata(), old));
+        // B：RUNNING 超龄但有 PENDING 命令（活体）→ 排除
+        UUID live = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(live, metadata(), old));
+        controlCommands.insert(launchCommand(live, "k-live-run", "{\"mode\":\"E\"}"));
+        // C：新近 RUNNING（未超窗）→ 排除
+        UUID fresh = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(fresh, metadata(), Instant.now()));
+        // D：已终态 → 排除
+        UUID done = UUID.randomUUID();
+        evalRuns.insertRunning(EvalRun.running(done, metadata(), old));
+        evalRuns.finalizeOnce(EvalRun.terminal(done, metadata(),
+                EvalRun.EvalRunState.FAILED, old, old.plusSeconds(60),
+                null, null, null, "batch_error:it"));
+
+        var found = evalRuns.findStrandedRuns(Instant.now().minusSeconds(900))
+                .stream().map(EvalRun::id).toList();
+        assertThat(found).contains(stranded).doesNotContain(live, fresh, done);
+
+        // 搁浅终态化闭环：worker_lost;no_command_ledger 落账（mode 不可考如实标注）
+        evalRuns.finalizeOnce(EvalRun.terminal(stranded, metadata(),
+                EvalRun.EvalRunState.FAILED, old, Instant.now(),
+                null, null, null, EvalRunLifecycle.strandedTerminalReason()));
+        EvalRun closed = evalRuns.findById(stranded).orElseThrow();
+        assertThat(closed.state()).isEqualTo(EvalRun.EvalRunState.FAILED);
+        assertThat(closed.terminalReason()).isEqualTo("worker_lost;no_command_ledger");
+    }
 }

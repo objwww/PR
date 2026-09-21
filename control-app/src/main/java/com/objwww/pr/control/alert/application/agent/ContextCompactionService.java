@@ -100,13 +100,32 @@ public class ContextCompactionService {
                 UUID summaryId);
     }
 
-    /** 一步边界结果：kind + 已提交摘要（仅 COMMITTED 非 null）+ 机器可读细节 */
+    /** 一步边界结果：kind + 已提交摘要（仅 COMMITTED 非 null）+ 机器可读细节
+     * + 消费观测（仅 COMMITTED 非 null） */
     public record CompactionOutcome(OutcomeKind kind, ContextSummary summary,
-            String detail) {
+            String detail, ConsumptionObservation consumption) {
+
+        /** 非提交路径兼容形（无消费观测） */
+        public CompactionOutcome(OutcomeKind kind, ContextSummary summary, String detail) {
+            this(kind, summary, detail, null);
+        }
 
         public boolean committed() {
             return kind == OutcomeKind.COMMITTED;
         }
+    }
+
+    /**
+     * D06（REPORT 步骤 6/7）观测面：记录实际被消费的内容与策略——OFF/
+     * SHADOW_GENERATE/CONSUME_VALIDATED 是运行模式不是实验臂：consumerInvoked=
+     * false（OFF/SHADOW）即"只生成留档不换输入"；consumed=false（CONSUME 围栏
+     * 拒绝 KEPT_OLD_POINTER）的候选不得计入"摘要消费后效果"，原路径继续、成本
+     * 仍计（CTX-12）。policyDigest 与 V102 台账策略指纹同源。tokenBefore/After
+     * 是 summaryText.length()/2 近似（CHARS_PER_TOKEN），不能证明模型总输入
+     * 下降——真实发送面 token 统计归后续专项。
+     */
+    public record ConsumptionObservation(String mode, boolean consumerInvoked,
+            Boolean consumed, String policyDigest) {
     }
 
     /**
@@ -347,8 +366,16 @@ public class ContextCompactionService {
                         + "required={} omitted={}", runId, taskId, source,
                 eventSeqFrom, eventSeqTo, row.tokenBefore(), row.tokenAfter(),
                 requiredRefs.size(), omitted.size());
-        consumeIfValidated(request, checkpoint, committed);
-        return new CompactionOutcome(OutcomeKind.COMMITTED, committed, null);
+        ConsumptionObservation consumption = consumeIfValidated(request, checkpoint,
+                committed);
+        return new CompactionOutcome(OutcomeKind.COMMITTED, committed, null, consumption);
+    }
+
+    /** Per-run opt-in variant. Existing compaction mode and disabled-run behavior remain unchanged. */
+    public ContextCompactionService forJevRun() {
+        return new ContextCompactionService(model, summaries, checkpoints, evidence, mapper, clock,
+                Mode.CONSUME_VALIDATED, 0.01, targetRatio, Math.min(2,maxPerRun), maxInputTokens,
+                attempts, consumer);
     }
 
     /**
@@ -357,10 +384,11 @@ public class ContextCompactionService {
      * （失租/revision 漂移/REPLAYED 收敛）一律保留旧指针不打断主路径——§6.4
      * "候选超时/失租/无收益均保留旧指针"。全量旧正文替换消费仍待 MC34 三臂对照。
      */
-    private void consumeIfValidated(RoleRunner.RoleDriveRequest request,
+    private ConsumptionObservation consumeIfValidated(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, ContextSummary committed) {
         if (mode != Mode.CONSUME_VALIDATED || consumer == null) {
-            return;
+            // OFF/SHADOW_GENERATE：只生成留档不换输入（观测面如实记录未消费）
+            return new ConsumptionObservation(mode.name(), false, null, policyDigest());
         }
         String actionKey = "summary-consumed:" + committed.id();
         boolean consumed = consumer.consume(committed.runId(), committed.taskId(),
@@ -378,6 +406,7 @@ public class ContextCompactionService {
             log.warn("摘要消费围栏拒绝（保留旧指针）run={} task={} summary={} action={}",
                     committed.runId(), committed.taskId(), committed.id(), actionKey);
         }
+        return new ConsumptionObservation(mode.name(), true, consumed, policyDigest());
     }
 
     /** 台账终态化（无台账装配零副作用；CAS 败=他人已终态化，留 warn 不覆盖） */

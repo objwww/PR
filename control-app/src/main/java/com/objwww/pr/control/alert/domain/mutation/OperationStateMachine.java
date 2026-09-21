@@ -12,7 +12,9 @@ import java.util.Set;
  * PREPARED    → DISPATCHED | CANCELLED_BEFORE_DISPATCH | ESCALATED
  *               （ESCALATED = §2.8 PREPARED 悬挂：outbox 长期未派发，reconcile
  *                 发现后升级人工——不静默丢、不自动重执）
- * DISPATCHED  → ACKNOWLEDGED | UNKNOWN
+ * DISPATCHED  → ACKNOWLEDGED | UNKNOWN | FAILED_CONFIRMED
+ *               （FAILED_CONFIRMED = BA-191 真执行确定性判败：副作用未发生或已证伪，
+ *                 执行器显式判败直落终态——不猜、不经 UNKNOWN，锁按释放矩阵放行）
  * ACKNOWLEDGED→ VERIFIED | UNKNOWN
  * UNKNOWN     → RECONCILING            （中间态必须被显式穿越，不跳越——§3.3 同律）
  * RECONCILING → VERIFIED | RETRYABLE | ESCALATED | FAILED_CONFIRMED
@@ -34,7 +36,8 @@ public final class OperationStateMachine {
                             OperationStatus.CANCELLED_BEFORE_DISPATCH,
                             OperationStatus.ESCALATED)),
             Map.entry(OperationStatus.DISPATCHED,
-                    Set.of(OperationStatus.ACKNOWLEDGED, OperationStatus.UNKNOWN)),
+                    Set.of(OperationStatus.ACKNOWLEDGED, OperationStatus.UNKNOWN,
+                            OperationStatus.FAILED_CONFIRMED)),
             Map.entry(OperationStatus.ACKNOWLEDGED,
                     Set.of(OperationStatus.VERIFIED, OperationStatus.UNKNOWN)),
             Map.entry(OperationStatus.UNKNOWN, Set.of(OperationStatus.RECONCILING)),

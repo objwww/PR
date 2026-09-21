@@ -148,10 +148,12 @@ public class ContextAssembler {
             Clock clock, ObjectMapper mapper) {
         this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
                 delegationReceipts, operatorMaterials, skillPort, summaryMaterials,
-                null, clock, mapper);
+                null, false, clock, mapper);
     }
 
-    /** 全参构造 + 根因码表面（root_cause_catalog 键；可空=信封省略该键） */
+    /** 全参构造 + 根因码表面（root_cause_catalog 键；可空=信封省略该键）。
+     * JE-01：replaceOmittedSummaries=true 时，已验证摘要 omitted 的证据以存根
+     * 呈现（替换消费——原文留库供回读）；false = 既有附加注入语义零漂移。 */
     public ContextAssembler(EvidenceRepository evidence,
             RcaToolInvocationLedger toolLedger,
             DelegationDecisionRepository delegations,
@@ -160,6 +162,7 @@ public class ContextAssembler {
             OperatorMaterialPort operatorMaterials,
             SkillPort skillPort, SummaryMaterialPort summaryMaterials,
             com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort rootCauseCatalog,
+            boolean replaceOmittedSummaries,
             Clock clock, ObjectMapper mapper) {
         this.evidence = Objects.requireNonNull(evidence, "evidence");
         this.toolLedger = Objects.requireNonNull(toolLedger, "toolLedger");
@@ -171,9 +174,28 @@ public class ContextAssembler {
         this.skillPort = skillPort;
         this.summaryMaterials = summaryMaterials;
         this.rootCauseCatalog = rootCauseCatalog;
+        this.replaceOmittedSummaries = replaceOmittedSummaries;
         this.clock = Objects.requireNonNull(clock, "clock");
         this.mapper = Objects.requireNonNull(mapper, "mapper");
     }
+
+    /** 旧 12 参形态兼容（替换消费缺省 false = 附加注入语义零漂移） */
+    public ContextAssembler(EvidenceRepository evidence,
+            RcaToolInvocationLedger toolLedger,
+            DelegationDecisionRepository delegations,
+            AlertMaterialPort alertMaterials, WorkingMemoryPort workingMemory,
+            DelegationReceiptRepository delegationReceipts,
+            OperatorMaterialPort operatorMaterials,
+            SkillPort skillPort, SummaryMaterialPort summaryMaterials,
+            com.objwww.pr.control.alert.domain.agent.RootCauseCatalogPort rootCauseCatalog,
+            Clock clock, ObjectMapper mapper) {
+        this(evidence, toolLedger, delegations, alertMaterials, workingMemory,
+                delegationReceipts, operatorMaterials, skillPort, summaryMaterials,
+                rootCauseCatalog, false, clock, mapper);
+    }
+
+    /** 摘要替换消费开关（JE-01）：true = 摘要 omitted 的证据渲染为存根而非全载荷 */
+    private final boolean replaceOmittedSummaries;
 
     /** 一步的模型输入装配结果 */
     public record Assembly(String prompt, String snapshotDigest, int approxTokens,
@@ -230,30 +252,50 @@ public class ContextAssembler {
     }
 
     /**
-     * validated_summary 槽（CL-08 最小消费面）：经三闸验证的已提交摘要受控投影。
-     * 只在检查点钉了消费指针且行可读时入信封——kept_refs 须为 validRefs 子集
-     * （宿主生成时已保证，模型不得经摘要扩权）。
+     * CL-08 摘要行单读（assemble 前置读面）：按检查点 current_summary_id 读已提交
+     * 摘要。行缺失 → null 并留 warn（原材料继续——消费是增益不是依赖）。
      */
-    private void putValidatedSummary(Map<String, Object> envelope,
+    private com.objwww.pr.control.alert.domain.agent.ContextSummary currentSummaryRow(
             PrimaryCheckpoint checkpoint) {
         if (summaryMaterials == null || checkpoint.currentSummaryId() == null) {
+            return null;
+        }
+        return summaryMaterials.byId(checkpoint.currentSummaryId())
+                .orElseGet(() -> {
+                    log.warn("current_summary_id 无已提交摘要行（原材料继续）"
+                            + "run={} id={}", checkpoint.runId(),
+                            checkpoint.currentSummaryId());
+                    return null;
+                });
+    }
+
+    /**
+     * validated_summary 槽（CL-08 最小消费面）：经三闸验证的已提交摘要受控投影。
+     * 只在检查点钉了消费指针且行可读时入信封——kept_refs 须为 validRefs 子集
+     * （宿主生成时已保证，模型不得经摘要扩权）。row 由 assemble 预读传入（单读）。
+     */
+    private void putValidatedSummary(Map<String, Object> envelope,
+            PrimaryCheckpoint checkpoint,
+            com.objwww.pr.control.alert.domain.agent.ContextSummary row, boolean enhanced) {
+        if (row == null) {
             return;
         }
-        summaryMaterials.byId(checkpoint.currentSummaryId()).ifPresentOrElse(row -> {
-            Map<String, Object> slot = new LinkedHashMap<>();
-            slot.put("summary_id", row.id().toString());
-            slot.put("source_snapshot_digest", row.sourceSnapshotDigest());
-            slot.put("event_seq", List.of(row.eventSeqFrom(), row.eventSeqTo()));
-            Frag text = clip(row.summaryText(), SUMMARY_LIMIT);
-            slot.put("summary", text.text());
-            slot.put("summary_truncated", text.truncated());
-            slot.put("kept_refs", row.requiredRefs());
-            slot.put("omitted_refs", row.omittedRefs());
-            slot.put("note", "经三闸验证的已提交摘要（CL-07 CONSUME_VALIDATED）；"
-                    + "全量旧正文替换消费待 MC34 三臂对照后启用");
-            envelope.put("validated_summary", slot);
-        }, () -> log.warn("current_summary_id 无已提交摘要行（原材料继续）run={} id={}",
-                checkpoint.runId(), checkpoint.currentSummaryId()));
+        Map<String, Object> slot = new LinkedHashMap<>();
+        slot.put("summary_id", row.id().toString());
+        slot.put("source_snapshot_digest", row.sourceSnapshotDigest());
+        slot.put("event_seq", List.of(row.eventSeqFrom(), row.eventSeqTo()));
+        // Enhanced summaries are already output-budget bounded; do not silently cut off counterevidence.
+        Frag text = enhanced ? new Frag(row.summaryText(), false) : clip(row.summaryText(), SUMMARY_LIMIT);
+        slot.put("summary", text.text());
+        slot.put("summary_truncated", text.truncated());
+        slot.put("kept_refs", row.requiredRefs());
+        slot.put("omitted_refs", row.omittedRefs());
+        slot.put("note", replaceOmittedSummaries
+                ? "经三闸验证的已提交摘要（CL-07 CONSUME_VALIDATED）；"
+                  + "omitted 证据已按 JE-01 替换消费渲染为存根"
+                : "经三闸验证的已提交摘要（CL-07 CONSUME_VALIDATED）；"
+                  + "全量旧正文替换消费待 MC34 三臂对照后启用");
+        envelope.put("validated_summary", slot);
     }
 
     /**
@@ -293,17 +335,66 @@ public class ContextAssembler {
      * 产候选行（memory 字段），append 副作用迁至 PrimaryCheckpointCommitService
      * 的 STEP_COMPLETED 提交事务（模型未执行不落记忆，§3.1"不在 assemble 抢先 append"）。
      */
+    /**
+     * 一步的模型输入装配（兼容形）：快照/材料由本方法单次读入，无选材（既有调用方
+     * 零漂移；JE-01 运行器缝请改用全参重载）。
+     */
     public Assembly assemble(RoleRunner.RoleDriveRequest request,
             PrimaryCheckpoint checkpoint, int delegationBatchesRemaining) {
-        Objects.requireNonNull(request, "request");
-        Objects.requireNonNull(checkpoint, "checkpoint");
-        // CL-03 单次快照：证据集合与告警材料各恰一次读库，本步内不漂移（§3.1）
-        List<EvidenceEnvelope> evidenceRows = new ArrayList<>(
-                evidence.findByRunId(request.task().runId()));
+        return assemble(request, checkpoint, delegationBatchesRemaining,
+                evidenceSnapshot(request.task().runId()),
+                alertMaterial(request.task().runId()), null);
+    }
+
+    /** JE-01：证据池单读快照（timeEnd 倒序 + evidenceId 倒序稳定排序，成员冻结） */
+    public EvidenceSnapshot evidenceSnapshot(UUID runId) {
+        List<EvidenceEnvelope> evidenceRows = new ArrayList<>(evidence.findByRunId(runId));
         evidenceRows.sort(Comparator.comparing(EvidenceEnvelope::timeEnd,
                         Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(Comparator.comparing(EvidenceEnvelope::evidenceId).reversed()));
-        AlertMaterial material = alertMaterials.byRun(request.task().runId());
+        return new EvidenceSnapshot(List.copyOf(evidenceRows));
+    }
+
+    /** JE-01：告警材料单读投影（run→incident→最新告警事件的确定性投影） */
+    public AlertMaterial alertMaterial(UUID runId) {
+        return alertMaterials.byRun(runId);
+    }
+
+    /** JE-01：证据池快照（选材在冻结快照上做——读库方法零触网，方案 §5 步骤2） */
+    public record EvidenceSnapshot(List<EvidenceEnvelope> rows) {
+    }
+
+    /**
+     * JE-01：Jev 选材应用面——pinned = 保护项 ∪ 选中项（≤{@value #EVIDENCE_LIMIT}）；
+     * apply=false（SHADOW）只记档不替换窗口。选材决策由运行器缝传入，装配器不触网。
+     */
+    public record EvidenceSelection(java.util.Set<String> pinnedRefs, boolean apply,
+            String source) {
+    }
+
+    /**
+     * 一步的模型输入装配（JE-01 全参形）：快照/材料由调用方单次读库后传入（CL-03
+     * 单读纪律不破——本方法零读库零触网）；selection=null = 既有确定性窗口零漂移。
+     */
+    public Assembly assemble(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, int delegationBatchesRemaining,
+            EvidenceSnapshot snapshot, AlertMaterial material,
+            EvidenceSelection selection) {
+        return assemble(request,checkpoint,delegationBatchesRemaining,snapshot,material,selection,false);
+    }
+
+    public Assembly assemble(RoleRunner.RoleDriveRequest request,
+            PrimaryCheckpoint checkpoint, int delegationBatchesRemaining,
+            EvidenceSnapshot snapshot, AlertMaterial material,
+            EvidenceSelection selection, boolean enhanced) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(checkpoint, "checkpoint");
+        Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(material, "material");
+        List<EvidenceEnvelope> evidenceRows = snapshot.rows();
+        // CL-08：摘要行提前单读（先于证据窗，替换存根需要 omitted 集合）
+        com.objwww.pr.control.alert.domain.agent.ContextSummary summaryRow =
+                currentSummaryRow(checkpoint);
 
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("role", roleOf(request.profile()));
@@ -313,7 +404,8 @@ public class ContextAssembler {
         envelope.put("alert", alertOf(request, material));
         envelope.put("objective", objectiveOf(request, material));
         envelope.put("budget", budgetOf(request, checkpoint, delegationBatchesRemaining));
-        EvidenceWindow window = evidenceOf(request, evidenceRows);
+        EvidenceWindow window = evidenceOf(request, evidenceRows, selection,
+                enhanced ? null : summaryRow);
         envelope.put("evidence", window.rows);
         ReceiptSection receiptSection = receiptsOf(request, checkpoint);
         envelope.put("child_receipts", receiptSection.rows());
@@ -329,7 +421,7 @@ public class ContextAssembler {
         MemoryCommit memory = candidateMemory(request, checkpoint, receiptSection);
         envelope.put("working_memory", memory.slots());
         envelope.put("trajectory", trajectoryOf(request));
-        putValidatedSummary(envelope, checkpoint);
+        putValidatedSummary(envelope, checkpoint, summaryRow, enhanced);
         envelope.put("tool_allowlist", request.profile().toolAllowlist().stream()
                 .sorted().toList());
         // BA-112：args JSON Schema 钉版下发（Profile inputSchema 进 digest）
@@ -419,8 +511,10 @@ public class ContextAssembler {
     /**
      * 调查目标（一句话，宿主铸定非模型自撰）：从冻结材料确定性导出——
      * 装配时点无独立 objective 列，告警身份+冻结窗即目标身份（偏差登记执行日志）。
+     * static 同包可见（JE-01：Jev 选材 state 复用同一目标铸面，不另造措辞漂移）。
      */
-    private String objectiveOf(RoleRunner.RoleDriveRequest request, AlertMaterial material) {
+    static String objectiveOf(RoleRunner.RoleDriveRequest request,
+            AlertMaterial material) {
         String subject = material.alertname() != null ? material.alertname() : "告警事故";
         String scope = material.service() != null ? "（service=" + material.service() + "）" : "";
         return "调查" + subject + scope + "在冻结窗 " + request.startEpoch() + "/"
@@ -439,25 +533,54 @@ public class ContextAssembler {
     }
 
     /**
-     * 证据窗（CL-03 §3.2 有效信息投影）：倒序 ≤{@value #EVIDENCE_LIMIT} 条分型投影
-     * （日志聚合保频次、指标保数值/单位、变更保前后差异、RAG 标 REFERENCE、未知形状
-     * 诚实有界投影）+ 溢出留痕。投影源 = 本步成员快照（单次读库，§3.1）。
+     * 证据窗（CL-03 §3.2 有效信息投影）：既有语义 = 倒序 ≤{@value #EVIDENCE_LIMIT}
+     * 条分型投影 + 溢出留痕。JE-01 选材形（selection 非 null 且 apply）= pinned 成员
+     * 集过滤（保护项 ∪ 选中项，顺序保持池序——不引入阅读顺序混淆）+ 防御性条数上限
+     * 不破 MC09 界限。summaryRow 非 null 且替换消费开 = 被摘要省略的证据渲染存根
+     * （JE-01，原文留库供回读）。
      */
     private EvidenceWindow evidenceOf(RoleRunner.RoleDriveRequest request,
-            List<EvidenceEnvelope> rows) {
+            List<EvidenceEnvelope> rows, EvidenceSelection selection,
+            com.objwww.pr.control.alert.domain.agent.ContextSummary summaryRow) {
+        java.util.Set<String> pinned = selection != null && selection.apply()
+                ? selection.pinnedRefs() : null;
         List<Map<String, Object>> summarized = new ArrayList<>();
         List<String> included = new ArrayList<>();
         List<String> omitted = new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
             EvidenceEnvelope row = rows.get(i);
-            if (i >= EVIDENCE_LIMIT) {
-                omitted.add(row.evidenceId().toString());
+            String ref = row.evidenceId().toString();
+            boolean take = pinned != null
+                    ? pinned.contains(ref) && included.size() < EVIDENCE_LIMIT
+                    : i < EVIDENCE_LIMIT;
+            if (!take) {
+                omitted.add(ref);
                 continue;
             }
-            included.add(row.evidenceId().toString());
-            summarized.add(projectEvidence(row));
+            included.add(ref);
+            if (replaceOmittedSummaries && summaryRow != null
+                    && summaryRow.omittedRefs() != null
+                    && summaryRow.omittedRefs().contains(ref)) {
+                summarized.add(summaryStub(row, summaryRow));
+            } else {
+                summarized.add(projectEvidence(row));
+            }
         }
         return new EvidenceWindow(summarized, included, omitted);
+    }
+
+    /** JE-01：被已验证摘要覆盖省略的证据存根（ref/型/digest 保留，载荷不重复下发） */
+    private Map<String, Object> summaryStub(EvidenceEnvelope row,
+            com.objwww.pr.control.alert.domain.agent.ContextSummary summary) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("ref", row.evidenceId().toString());
+        item.put("type", row.evidenceType());
+        item.put("source_digest", row.payloadDigest());
+        item.put("summarized", true);
+        item.put("summary_id", summary.id().toString());
+        item.put("note", "原文已由经三闸验证的摘要覆盖（JE-01 替换消费）；"
+                + "全量原文留证据库，可按 ref 回读");
+        return item;
     }
 
     private record EvidenceWindow(List<Map<String, Object>> rows,

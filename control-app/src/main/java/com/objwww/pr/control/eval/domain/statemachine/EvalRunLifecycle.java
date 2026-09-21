@@ -36,6 +36,12 @@ public final class EvalRunLifecycle {
     public static final String REASON_CANCELLED = "cancelled_by_operator";
     public static final String REASON_WORKER_LOST = "worker_lost";
 
+    /** 搁浅 run 终态卡因（BA-192）：RUNNING 超龄且命令账本零活体行（V81 前的老
+     *  批件在 eval_run_command 无账可查）——worker 已失联但 mode 不可考，
+     *  不冒充已知 mode 的恢复核验口径 */
+    public static final String REASON_WORKER_LOST_NO_LEDGER =
+            "worker_lost;no_command_ledger";
+
     private static final Set<String> MODES = Set.of("E", "B", "L");
 
     private EvalRunLifecycle() {
@@ -62,5 +68,10 @@ public final class EvalRunLifecycle {
         return requiresRecovery(mode)
                 ? REASON_WORKER_LOST + ";recovery_unverified"
                 : REASON_WORKER_LOST;
+    }
+
+    /** 搁浅 run 的终态卡因（无命令账本可读，mode 不可考——如实标注，不套孤儿口径） */
+    public static String strandedTerminalReason() {
+        return REASON_WORKER_LOST_NO_LEDGER;
     }
 }

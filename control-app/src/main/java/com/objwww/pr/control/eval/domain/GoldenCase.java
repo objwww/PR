@@ -133,12 +133,29 @@ public record GoldenCase(
     }
 
     /** 注入参数（注册表 injection 块；S1/S2 flag 面，靶场场景为 null） */
-    public record Injection(String flag, String variant, String baselineVariant) {
+    public record Injection(String flag, String variant, String baselineVariant,
+                            ChangeLedger changeLedger) {
 
         public Injection {
             Objects.requireNonNull(flag, "injection.flag");
             Objects.requireNonNull(variant, "injection.variant");
             Objects.requireNonNull(baselineVariant, "injection.baseline_variant");
+        }
+
+        /** 兼容三参形态（无变更账本联动——S1/S2 等既有场景） */
+        public Injection(String flag, String variant, String baselineVariant) {
+            this(flag, variant, baselineVariant, null);
+        }
+
+        /** BA-185 变更账本联动（S27 变更回归）：注入即发布——flag 翻转是真实配置
+         *  变更，发布事实必须随激活如实落 change_event（195 实证 flagd 翻转自身
+         *  零账本行，不落 = change.query 查无此发布 = 假联动） */
+        public record ChangeLedger(String service, String actor) {
+
+            public ChangeLedger {
+                Objects.requireNonNull(service, "injection.change_ledger.service");
+                Objects.requireNonNull(actor, "injection.change_ledger.actor");
+            }
         }
     }
 

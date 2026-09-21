@@ -63,11 +63,13 @@
               <div class="cell-sub">样本数：{{ fmtCount(row.totalScenarios) }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="执行阶段 / 已结清案例" width="170">
+          <el-table-column label="执行阶段 / 已结清案例" width="230">
             <template #default="{ row }">
               <div class="cell-main"><StatusBadge :status="badgeState(row.state)" /></div>
               <div class="cell-sub">阶段：{{ fmtPhase(row.facets?.phase) }}</div>
               <div class="cell-sub">已结清案例：{{ fmtPair(row.caseCount, row.totalScenarios) }}</div>
+              <!-- BA-190 W4：失败卡因中文解读（worker_lost 等经 zh.js 字典；其余原文） -->
+              <div v-if="row.state === 'FAILED' && row.terminalReason" class="cell-sub reason">{{ evalTerminalReasonZh(row.terminalReason) }}</div>
             </template>
           </el-table-column>
           <el-table-column label="质量摘要" width="150">
@@ -86,9 +88,9 @@
           </el-table-column>
           <el-table-column label="稳定性（EV-09）" width="150">
             <template #default="{ row }">
-              <div class="cell-main">pass@1：{{ fmtRatioStat(row.stability?.passAt1) }}</div>
+              <div class="cell-main">micro 逐轮：{{ fmtRatioStat(row.stability?.passAt1) }}</div>
               <div class="cell-sub">
-                全轮命中 {{ fmtRatioStat(row.stability?.passAllRounds) }}
+                全计划轮成功 {{ fmtRatioStat(row.stability?.passAllRounds) }}
                 · 轮间一致 {{ fmtRatioStat(row.stability?.scenarioConsistency) }}
               </div>
             </template>
@@ -172,7 +174,7 @@ import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import StatusBadge from '../components/common/StatusBadge.vue'
-import { GOV_TAG_ZH } from '../dict/zh.js'
+import { GOV_TAG_ZH, evalTerminalReasonZh } from '../dict/zh.js'
 import { fmtCount, fmtDuration, fmtPair, fmtPct, fmtPhase, fmtRatioStat, fmtRatioStatOr, fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -399,6 +401,7 @@ onMounted(() => { loadList(); loadGovTags() })
 .table-zone { padding: 8px var(--card-pad) 12px; }
 .cell-main { font-size: var(--fs-body); line-height: 1.4; }
 .cell-sub { font-size: var(--fs-aux); color: var(--ink-2); line-height: 1.4; }
+.cell-sub.reason { color: var(--danger, #c0392b); }
 .mono { font-family: var(--mono, monospace); }
 .pager { display: flex; align-items: center; justify-content: center; gap: 16px; padding: 12px 0 4px; }
 .muted { color: var(--ink-2); font-size: var(--fs-aux); }

@@ -458,6 +458,28 @@ public final class AlertInMemoryStores {
                     inputs.windowStart(), inputs.windowEnd()));
         }
 
+        /** JE-01：Jev 开关随铸造冻结（fake 与 Postgres 读写语义对齐） */
+        private final Map<UUID, Boolean> jevEnabled = new LinkedHashMap<>();
+
+        @Override
+        public synchronized void insertRouted(RcaRun run,
+                com.objwww.pr.control.alert.domain.model.RcaRunRouting routing,
+                com.objwww.pr.control.alert.domain.identity.InvestigationInputs inputs,
+                boolean runJevEnabled) {
+            insertRouted(run, routing, inputs);
+            jevEnabled.put(run.id(), runJevEnabled);
+        }
+
+        @Override
+        public synchronized boolean jevEnabledById(UUID id) {
+            return jevEnabled.getOrDefault(id, false);
+        }
+
+        /** JE-01 测试面：不经铸造直设旗标（等价 4 参 insertRouted 的冻结结果） */
+        public synchronized void markJevEnabled(UUID id, boolean enabled) {
+            jevEnabled.put(id, enabled);
+        }
+
         private static com.objwww.pr.control.alert.domain.repository.RcaRunRepository.RoutingView
         view(com.objwww.pr.control.alert.domain.model.RcaRunRouting routing,
                 String investigationInputDigest, java.time.Instant windowStart,
@@ -2026,6 +2048,43 @@ public final class AlertInMemoryStores {
         }
 
         public List<com.objwww.pr.control.alert.domain.agent.RcaModelInputCapture.CaptureRow> all() {
+            return List.copyOf(captured);
+        }
+    }
+
+    // --------------------------------- 输出捕获假件（V167，append-only 同构）
+
+    /** rca_model_output 同构假件：档位钉定 + failure 注入面（捕获写失败成功结果不放行测试） */
+    public static final class OutputCaptures implements
+            com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture {
+
+        /** 注入即 capture 抛出（模拟 rca_model_output 不可写） */
+        public volatile RuntimeException failure;
+
+        private final com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level level;
+        private final List<com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.CaptureRow>
+                captured = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        public OutputCaptures(
+                com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level level) {
+            this.level = level;
+        }
+
+        @Override
+        public com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.Level level() {
+            return level;
+        }
+
+        @Override
+        public void capture(com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.CaptureRow row) {
+            RuntimeException boom = failure;
+            if (boom != null) {
+                throw boom;
+            }
+            captured.add(row);
+        }
+
+        public List<com.objwww.pr.control.alert.domain.agent.RcaModelOutputCapture.CaptureRow> all() {
             return List.copyOf(captured);
         }
     }

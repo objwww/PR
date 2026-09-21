@@ -219,4 +219,218 @@ class McpToolInvokerTest {
         assertThat(fresh.content()).isEqualTo("ok:new_tool");
         assertThat(client.listToolsCalls.get()).as("派发前完成 TTL 重校验").isEqualTo(2);
     }
+
+    @Test
+    @DisplayName("MCP-01/D02-1（探针 MCP_STRUCTURED_ONLY 迁移）：structured-only 结果 SUCCESS 传递——不 NPE、不落虚假远程故障账")
+    void structuredOnlyResultSucceedsWithoutNpeOrFakeRemoteFault() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("query"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, Map.of("count", 3), List.of()));
+        McpToolInvoker.McpInvokeResult result = invoker.invoke("audit", "query",
+                Map.of(), RUN, TASK, ATTEMPT, 1);
+
+        assertThat(result.structuredContent()).containsEntry("count", 3);
+        assertThat(result.content()).as("结构化结果的确定性 JSON 投影").isEqualTo("{\"count\":3}");
+        assertThat(result.resultSelection())
+                .isEqualTo(McpToolInvoker.SELECTION_STRUCTURED_JSON);
+        assertThat(ledger.rows).hasSize(1);
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.SUCCESS);
+        assertThat(ledger.rows.get(0).reason())
+                .as("不落 REMOTE_5XX/TRANSPORT_UNKNOWN 虚假故障账").isNull();
+    }
+
+    @Test
+    @DisplayName("MCP-02/D02-3：文本与结构化并存——结构化为准、字段不丢、策略落账，不拼成含糊文本")
+    void textAndStructuredBothPresentStructuredWinsWithStrategyRecorded() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("query"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, "alerts: 3 firing", Map.of("count", 3, "server", "a"), List.of()));
+        McpToolInvoker.McpInvokeResult result = invoker.invoke("audit", "query",
+                Map.of(), RUN, TASK, ATTEMPT, 1);
+
+        assertThat(result.resultSelection())
+                .isEqualTo(McpToolInvoker.SELECTION_STRUCTURED_JSON);
+        assertThat(result.structuredContent())
+                .containsEntry("count", 3).containsEntry("server", "a");
+        assertThat(result.content()).as("投影字段不丢").contains("\"count\":3", "\"server\":\"a\"");
+        assertThat(result.content()).as("不与文本拼成含糊文本").doesNotContain("firing");
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("MCP-03/D02-4：合法 schema 的空对象按 schema 判定通过；缺必需字段显式 schema 错误（与网络失败分类分开）")
+    void outputSchemaJudgesEmptyObjectAndMissingRequiredField() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        Map<String, Object> objectSchema = Map.of("type", "object");
+        Map<String, Object> requiringCount = Map.of("type", "object", "required", List.of("count"));
+        FakeClient client = new FakeClient(
+                new McpServerClient.ToolDescriptor("relaxed", "d", Map.of("type", "object"), objectSchema),
+                new McpServerClient.ToolDescriptor("strict", "d", Map.of("type", "object"), requiringCount));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, Map.of(), List.of()));
+        McpToolInvoker.McpInvokeResult empty = invoker.invoke("audit", "relaxed",
+                Map.of(), RUN, TASK, ATTEMPT, 1);
+        assertThat(empty.content()).as("空对象 {} 合法，不因 Map 为空认定畸形").isEqualTo("{}");
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, Map.of(), List.of()));
+        ToolControlPlaneException violation = catchThrowableOfType(
+                () -> invoker.invoke("audit", "strict", Map.of(), RUN, TASK, ATTEMPT, 2),
+                ToolControlPlaneException.class);
+        assertThat(violation.reason()).isEqualTo(ToolControlReason.QUERY_FAILED);
+        assertThat(violation.getMessage()).contains("OUTPUT_SCHEMA_VIOLATION").contains("count");
+
+        assertThat(ledger.rows).extracting(MemLedger.Row::state)
+                .containsExactly(ToolInvocationState.SUCCESS, ToolInvocationState.FAILED);
+        assertThat(ledger.rows.get(1).reason())
+                .as("schema 校验失败=上游契约缺陷，与网络失败 TRANSPORT_UNKNOWN 分开")
+                .isEqualTo(ToolReasonCode.REMOTE_5XX);
+    }
+
+    @Test
+    @DisplayName("MCP-04/D02-3（派发面）：结果仅含图像等不支持类型——明确能力错误，不发生未分类 NPE，不伪装远程故障")
+    void unsupportedContentOnlyResultRejectedAsExplicitCapabilityError() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("snapshot"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, null, List.of("image")));
+        ToolControlPlaneException rejected = catchThrowableOfType(
+                () -> invoker.invoke("audit", "snapshot", Map.of(), RUN, TASK, ATTEMPT, 1),
+                ToolControlPlaneException.class);
+
+        assertThat(rejected.reason()).isEqualTo(ToolControlReason.QUERY_FAILED);
+        assertThat(rejected.getMessage()).contains("UNSUPPORTED_CONTENT").contains("image");
+        assertThat(ledger.rows).hasSize(1);
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.FAILED);
+        assertThat(ledger.rows.get(0).reason())
+                .as("能力缺口不落 TRANSPORT_UNKNOWN 远程故障账")
+                .isEqualTo(ToolReasonCode.POLICY_DENIED);
+    }
+
+    @Test
+    @DisplayName("MCP-05/D02-5：isError 且正文指出参数字段错误——模型收到脱敏限长可修正信息，账本 INVALID_INPUT")
+    void isErrorWithArgumentDetailClassifiedAsCorrectableInvalidArgs() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("query"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(true,
+                "Invalid arguments: field 'severity' is required", null, List.of()));
+        ToolControlPlaneException argError = catchThrowableOfType(
+                () -> invoker.invoke("audit", "query", Map.of(), RUN, TASK, ATTEMPT, 1),
+                ToolControlPlaneException.class);
+        assertThat(argError.reason()).isEqualTo(ToolControlReason.INVALID_ARGS);
+        assertThat(argError.getMessage())
+                .as("模型可修正信息（脱敏限长摘录上游错误正文）").contains("severity");
+
+        client.callResults.offer(new McpServerClient.McpToolResult(true,
+                "upstream internal boom", null, List.of()));
+        ToolModelVisibleException remote = catchThrowableOfType(
+                () -> invoker.invoke("audit", "query", Map.of("severity", "P1"),
+                        RUN, TASK, ATTEMPT, 2),
+                ToolModelVisibleException.class);
+        assertThat(remote.reason()).isEqualTo(ToolModelVisibleReason.REMOTE_UNAVAILABLE);
+        assertThat(remote.getMessage()).as("错误正文摘录保留").contains("upstream internal boom");
+
+        assertThat(ledger.rows).extracting(MemLedger.Row::state)
+                .containsExactly(ToolInvocationState.FAILED, ToolInvocationState.FAILED);
+        assertThat(ledger.rows).extracting(MemLedger.Row::reason)
+                .as("参数错误 INVALID_INPUT（可修正）与远端故障 REMOTE_5XX 分类分开")
+                .containsExactly(ToolReasonCode.INVALID_INPUT, ToolReasonCode.REMOTE_5XX);
+    }
+
+    @Test
+    @DisplayName("MCP-06/D02-4：结构化 payload 超限与文本超限受同一字节预算——拒绝不静默截断")
+    void structuredPayloadOversizeSharesTextByteBudget() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("query"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, Map.of("blob", "x".repeat(MAX_RESULT_BYTES + 1)), List.of()));
+        ToolControlPlaneException oversize = catchThrowableOfType(
+                () -> invoker.invoke("audit", "query", Map.of(), RUN, TASK, ATTEMPT, 1),
+                ToolControlPlaneException.class);
+        assertThat(oversize.reason()).isEqualTo(ToolControlReason.RESULT_OVERSIZE);
+        assertThat(ledger.rows.get(0).state()).isEqualTo(ToolInvocationState.FAILED);
+
+        client.callResults.offer(new McpServerClient.McpToolResult(
+                false, null, Map.of("blob", "y".repeat(100)), List.of()));
+        McpToolInvoker.McpInvokeResult ok = invoker.invoke("audit", "query",
+                Map.of(), RUN, TASK, ATTEMPT, 2);
+        assertThat(ok.content()).as("有界结构化结果完整投影，不静默截断").contains("y".repeat(100));
+        assertThat(ledger.rows).extracting(MemLedger.Row::state)
+                .containsExactly(ToolInvocationState.FAILED, ToolInvocationState.SUCCESS);
+    }
+
+    @Test
+    @DisplayName("MCP-07/D02-6（机制面）：list_changed 重校验后新 schema 生效——被移除的旧工具不能绕过 freshness 检查")
+    void removedToolRejectedAfterToolsChangedRevalidation() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("old_tool"));
+        McpMountManager manager = mount(repo, factory, "alert-kit", client);
+        client.currentTools = List.of(McpTestFixtures.tool("new_tool"));
+
+        manager.onToolsChanged("alert-kit");
+
+        McpToolInvoker invoker = invoker(manager);
+        ToolControlPlaneException removed = catchThrowableOfType(
+                () -> invoker.invoke("alert-kit", "old_tool", Map.of(), RUN, TASK, ATTEMPT, 1),
+                ToolControlPlaneException.class);
+        assertThat(removed.reason()).isEqualTo(ToolControlReason.UNKNOWN_TOOL);
+
+        client.callResults.offer(McpServerClient.McpToolResult.text("ok:new_tool"));
+        McpToolInvoker.McpInvokeResult fresh = invoker.invoke("alert-kit", "new_tool",
+                Map.of(), RUN, TASK, ATTEMPT, 2);
+        assertThat(fresh.content()).isEqualTo("ok:new_tool");
+        assertThat(client.listToolsCalls.get())
+                .as("注册校验 1 次 + list_changed 重检 1 次").isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("MCP-10/D02-5（调用面）：401/403 归 AUTH_FAILED 不盲目重试；瞬态故障归 TRANSPORT_UNKNOWN 由重试预算处理")
+    void authFailureAndTransientFailureClassifiedSeparately() {
+        MemRegistry repo = new MemRegistry();
+        FakeFactory factory = new FakeFactory();
+        FakeClient client = new FakeClient(McpTestFixtures.tool("query"));
+        McpToolInvoker invoker = invoker(mount(repo, factory, "audit", client));
+
+        client.callResults.offer(new McpServerClient.AuthException("401 token=sk-secret-9"));
+        ToolControlPlaneException auth = catchThrowableOfType(
+                () -> invoker.invoke("audit", "query", Map.of(), RUN, TASK, ATTEMPT, 1),
+                ToolControlPlaneException.class);
+        assertThat(auth.reason()).isEqualTo(ToolControlReason.AUTH_FAILED);
+        assertThat(auth.getMessage()).as("异常文案不泄密").doesNotContain("sk-secret-9");
+
+        client.callResults.offer(new IllegalStateException("connection reset"));
+        ToolModelVisibleException transientFailure = catchThrowableOfType(
+                () -> invoker.invoke("audit", "query", Map.of(), RUN, TASK, ATTEMPT, 2),
+                ToolModelVisibleException.class);
+        assertThat(transientFailure.reason()).isEqualTo(ToolModelVisibleReason.REMOTE_UNAVAILABLE);
+
+        assertThat(ledger.rows).extracting(MemLedger.Row::state)
+                .containsExactly(ToolInvocationState.FAILED, ToolInvocationState.FAILED);
+        assertThat(ledger.rows).extracting(MemLedger.Row::reason)
+                .as("401/403 与瞬态故障账本归因分开")
+                .containsExactly(ToolReasonCode.AUTH_FAILED, ToolReasonCode.TRANSPORT_UNKNOWN);
+        assertThat(client.receivedTools).as("无自动重试——每次 invoke 恰一次上游调用")
+                .containsExactly("query", "query");
+    }
 }

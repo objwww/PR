@@ -171,6 +171,8 @@ public class RunQueryService {
                 head.put("engine", null);
                 head.put("config", null);
             });
+            // JE-01：本次调查是否 Jev 增强路径（铸造冻结事实，执行期只读）
+            head.put("jev", runs.jevEnabledById(runId));
             head.put("progress", progress(runTasks));
             head.put("budget", null);
             // SR §3.1：详情头透出可信身份与完成语义（影子取证完成展示依据）

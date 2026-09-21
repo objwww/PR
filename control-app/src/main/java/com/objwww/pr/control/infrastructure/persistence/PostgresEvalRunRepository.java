@@ -244,6 +244,22 @@ public class PostgresEvalRunRepository implements EvalRunRepository {
     }
 
     @Override
+    public List<EvalRun> findStrandedRuns(Instant startedBefore) {
+        return jdbc.sql("""
+                        SELECT r.* FROM eval_run r
+                        WHERE r.state = 'RUNNING' AND r.started_at < :before
+                          AND NOT EXISTS (
+                              SELECT 1 FROM eval_run_command c
+                              WHERE c.eval_run_id = r.id
+                                AND c.state IN ('PENDING', 'CLAIMED'))
+                        ORDER BY r.started_at, r.id
+                        """)
+                .param("before", Timestamp.from(startedBefore))
+                .query(this::mapRun)
+                .list();
+    }
+
+    @Override
     public List<EvalCaseResult> findCasesByRunId(UUID runId) {
         return jdbc.sql("SELECT * FROM eval_case_result"
                         + " WHERE eval_run_id = :runId ORDER BY scenario_id, round_no")

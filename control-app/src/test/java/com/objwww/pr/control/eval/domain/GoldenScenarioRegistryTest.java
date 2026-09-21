@@ -126,4 +126,60 @@ class GoldenScenarioRegistryTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("S99");
     }
+
+    /** BA-185 S27 同构样本：injection + change_ledger 扩展块 */
+    private static final String S27_REGISTRY = """
+            registry_version: 7
+            schema_version: 1
+            lexicon_binding: "synonym-lexicon-v1.yml (lexicon_version: 2)"
+            scenarios:
+              - scenario_id: S27
+                name: 变更回归-支付配置发布致扣款失败（处置=回滚该发布）
+                driver: FlagdScenarioDriver
+                chaos_family: null
+                target: payment
+                injection:
+                  flag: paymentFailure
+                  variant: "50%"
+                  baseline_variant: "off"
+                  change_ledger:
+                    service: payment
+                    actor: release-bot:s27
+                expected_root_cause:
+                  component: payment
+                  fault_type: BUSINESS_ERROR_RATE
+                  reason_code: PAYMENT_CHARGE_FAILURE
+                expected_symptom_codes:
+                  - checkout
+                timing:
+                  preheat_seconds: 60
+                  hold_seconds: 600
+                  max_firing_wait_seconds: 1500
+                  max_resolved_wait_seconds: 2100
+                  cleanup_timeout_seconds: 120
+            """;
+
+    @Test
+    @DisplayName("BA-185：change_ledger 扩展块解析（service/actor 入 Injection）；"
+            + "缺块 = null 不联动；半配（缺 actor）= 注册缺陷 fail-fast")
+    void changeLedgerBlockParsedAndHalfConfigRejected() {
+        GoldenCase s27 = GoldenScenarioRegistry.load(S27_REGISTRY).byScenarioId("S27");
+        assertThat(s27.injection().flag()).isEqualTo("paymentFailure");
+        assertThat(s27.injection().changeLedger()).isNotNull();
+        assertThat(s27.injection().changeLedger().service()).isEqualTo("payment");
+        assertThat(s27.injection().changeLedger().actor()).isEqualTo("release-bot:s27");
+
+        // 缺块（既有 S1 形态）= null 不联动
+        String noLedger = S27_REGISTRY.replace(
+                "\n      change_ledger:\n        service: payment"
+                        + "\n        actor: release-bot:s27", "");
+        assertThat(GoldenScenarioRegistry.load(noLedger).byScenarioId("S27")
+                .injection().changeLedger()).isNull();
+
+        // 半配 = 注册缺陷，fail-fast 不猜
+        String half = S27_REGISTRY.replace("actor: release-bot:s27", "");
+        assertThatThrownBy(() -> GoldenScenarioRegistry.load(half))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("change_ledger");
+    }
 }

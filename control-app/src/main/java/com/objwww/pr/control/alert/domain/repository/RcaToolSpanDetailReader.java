@@ -25,10 +25,13 @@ public interface RcaToolSpanDetailReader {
      * scopeSummary = 证据信封 scope（查询范围参数面，canonical JSON 截断 300 字）；
      * resultSummary = 证据 payload（工具返回体 canonical JSON 截断 500 字）；
      * evidenceRef/evidenceType/evidenceSource = 证据引用（result_ref 为 null 时三值
-     * 全 null——调用未产出证据，如 VALIDATE_ONLY 受理或失败调用，如实不造数）。
+     * 全 null——调用未产出证据，如 VALIDATE_ONLY 受理或失败调用，如实不造数）；
+     * reasonDetail = BA-190 拒因具体消息（V155 reason_detail；null = 无详情/旧行，
+     * 与瀑布 span 的 errorCode=reason_code 配套，前端按 invocationId 关联展示）。
      */
     record ToolSpanDetail(UUID invocationId, UUID taskId, String toolName, long callSeq,
                           String scopeSummary, String resultSummary,
-                          String evidenceRef, String evidenceType, String evidenceSource) {
+                          String evidenceRef, String evidenceType, String evidenceSource,
+                          String reasonDetail) {
     }
 }

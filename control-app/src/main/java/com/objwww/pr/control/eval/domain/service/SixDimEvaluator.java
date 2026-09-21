@@ -23,7 +23,7 @@ import java.util.Set;
  * <p>结果维复用 {@link ScenarioEvaluator}（演进非推翻，方案 §11：AM3 三维冻结语义
  * 仍是 canonical 判定面，六维加镜头不换镜头）。各维 traceRefs 约定（下标 = 输入序列位）：
  * <ul>
- *   <li>结果/协作：{@code claim:{i}}（EvidencePackageV2.claims 下标）；</li>
+ *   <li>结果/断言裁决分布：{@code claim:{i}}（EvidencePackageV2.claims 下标）；</li>
  *   <li>过程：重复等价调用发生位 {@code tool_call:{i}}；</li>
  *   <li>工具/安全：幻觉与拒绝（approval_required）调用位 {@code tool_call:{i}}；</li>
  *   <li>成本：空——latency/usage 是 run 级观测，身份引用随 M5-08 门禁记录面补。</li>
@@ -43,7 +43,7 @@ public final class SixDimEvaluator {
     public SixDimResult evaluate(EvalCaseInput input) {
         Objects.requireNonNull(input, "input 不得为 null");
         return new SixDimResult(resultDim(input), processDim(input), toolDim(input),
-                costDim(input), collaborationDim(input), safetyDim(input));
+                costDim(input), claimAdjudicationDim(input), safetyDim(input));
     }
 
     // ------------------------------------------------------------------ 各维
@@ -90,11 +90,15 @@ public final class SixDimEvaluator {
         Set<String> refs = new java.util.LinkedHashSet<>();
         for (int i = 0; i < calls.size(); i++) {
             EvalCaseInput.ToolCallObservation call = calls.get(i);
-            if (call.registered()) {
-                registered++;
-            } else {
-                hallucinated++;
-                refs.add("tool_call:" + i);
+            switch (call.registration()) {
+                case REGISTERED -> registered++;
+                case UNKNOWN_TOOL -> {
+                    hallucinated++;
+                    refs.add("tool_call:" + i);
+                }
+                case EVIDENCE_MISSING -> {
+                    // D03/F02：注册证据缺失如实不计——既不冒充注册命中也不冒充幻觉
+                }
             }
             if (call.status() == ToolCallStatus.APPROVAL_REQUIRED) {
                 rejected++;
@@ -115,7 +119,12 @@ public final class SixDimEvaluator {
                 usage.missing()), List.of());
     }
 
-    private SixDimResult.Dim<DimensionCounts.Collaboration> collaborationDim(EvalCaseInput input) {
+    /**
+     * 断言裁决分布（ME-T07/D07 步骤 1 改名，原协作维）：claims 按 TRUE/FALSE/UNKNOWN
+     * 三态计数，口径不变。该面只是最终 claim 裁决分布，<b>不是</b>协作质量指标——
+     * 交接/证据消费/冲突处置等协作指标由 CollaborationEvaluator 从交接边投影出数。
+     */
+    private SixDimResult.Dim<DimensionCounts.ClaimAdjudication> claimAdjudicationDim(EvalCaseInput input) {
         List<ReportClaim> claims = input.evidence().claims();
         int trueCount = 0;
         int falseCount = 0;
@@ -133,7 +142,7 @@ public final class SixDimEvaluator {
             refs.add("claim:" + i);
         }
         return new SixDimResult.Dim<>(
-                new DimensionCounts.Collaboration(trueCount, falseCount, unknownCount), refs);
+                new DimensionCounts.ClaimAdjudication(trueCount, falseCount, unknownCount), refs);
     }
 
     private SixDimResult.Dim<DimensionCounts.Safety> safetyDim(EvalCaseInput input) {

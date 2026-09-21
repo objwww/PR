@@ -1,0 +1,133 @@
+
+> alert-web@0.7.0 build
+> vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 2500 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                0.39 kB │ gzip:   0.30 kB
+dist/assets/el-tooltip-tn0RQdqM.css            0.00 kB │ gzip:   0.02 kB
+dist/assets/StatusBadge-BLOfP9Z5.css           0.05 kB │ gzip:   0.07 kB
+dist/assets/KvTable-DOyEgPIc.css               0.12 kB │ gzip:   0.12 kB
+dist/assets/el-overlay-Wv38huFO.css            0.16 kB │ gzip:   0.14 kB
+dist/assets/EvalDatasetsView-DeoaNyIu.css      0.24 kB │ gzip:   0.18 kB
+dist/assets/PageHeader-SFjBPhCu.css            0.43 kB │ gzip:   0.25 kB
+dist/assets/HistoryView-DBFJB58W.css           0.61 kB │ gzip:   0.29 kB
+dist/assets/IncidentTable-BO9OM5BJ.css         0.76 kB │ gzip:   0.25 kB
+dist/assets/EvalView-CyeAOMxX.css              0.76 kB │ gzip:   0.36 kB
+dist/assets/DrillsView-DFW0gZTz.css            1.09 kB │ gzip:   0.43 kB
+dist/assets/IncidentDetailView-Cnwibb9I.css    1.10 kB │ gzip:   0.38 kB
+dist/assets/format-Veq0LjJT.css                1.20 kB │ gzip:   0.48 kB
+dist/assets/CategoryBadge-CeE5VdZc.css         1.29 kB │ gzip:   0.41 kB
+dist/assets/el-popover-Ciemdyvv.css            1.35 kB │ gzip:   0.42 kB
+dist/assets/el-result-CF-sYK2h.css             1.46 kB │ gzip:   0.38 kB
+dist/assets/EvalNewView-_h97IU1n.css           1.50 kB │ gzip:   0.53 kB
+dist/assets/VersionsView-Bu6f0yAD.css          1.53 kB │ gzip:   0.54 kB
+dist/assets/el-loading-BtuTnLzD.css            1.62 kB │ gzip:   0.55 kB
+dist/assets/RunsView-yDCuhEzU.css              1.67 kB │ gzip:   0.60 kB
+dist/assets/OverviewView-B3XEslk0.css          1.78 kB │ gzip:   0.61 kB
+dist/assets/EvalAssetsView-GoFhEvR2.css        1.90 kB │ gzip:   0.57 kB
+dist/assets/MonitorView-Di3aoGev.css           2.02 kB │ gzip:   0.61 kB
+dist/assets/el-collapse-item-BvmEG8Qn.css      2.09 kB │ gzip:   0.58 kB
+dist/assets/EvalRunsView-DT4WH_rh.css          2.17 kB │ gzip:   0.70 kB
+dist/assets/NotificationsView-DvF5lSPK.css     2.56 kB │ gzip:   0.80 kB
+dist/assets/EvalReviewView-DeC1U1wg.css        2.59 kB │ gzip:   0.80 kB
+dist/assets/AlertsView-DWc8M3R-.css            2.76 kB │ gzip:   0.79 kB
+dist/assets/el-descriptions-BpDzfuC8.css       3.42 kB │ gzip:   0.61 kB
+dist/assets/el-alert-B6UgayC7.css              3.47 kB │ gzip:   0.74 kB
+dist/assets/CasesView-DDqzTzAI.css             3.52 kB │ gzip:   0.97 kB
+dist/assets/el-dialog-DUbGnqO_.css             3.54 kB │ gzip:   0.97 kB
+dist/assets/DrillCreateView-BJdSknHs.css       3.69 kB │ gzip:   0.92 kB
+dist/assets/DutyChatView-AcheNfzU.css          4.05 kB │ gzip:   1.29 kB
+dist/assets/DetailDrawer-BmQQuU66.css          4.08 kB │ gzip:   1.06 kB
+dist/assets/DrillDetailView-BWWM191x.css       4.23 kB │ gzip:   0.99 kB
+dist/assets/EvalCompareView-Ii0E-D5w.css       4.31 kB │ gzip:   1.05 kB
+dist/assets/el-input-number-DExoAqKP.css       4.35 kB │ gzip:   0.90 kB
+dist/assets/el-timeline-item-C3hWMI-V.css      4.39 kB │ gzip:   0.85 kB
+dist/assets/el-step-DtA3_m5y.css               4.65 kB │ gzip:   1.15 kB
+dist/assets/el-message-box-amIz9eLF.css        4.76 kB │ gzip:   1.15 kB
+dist/assets/el-message-B2GHqN2t.css            5.16 kB │ gzip:   1.11 kB
+dist/assets/EvalRunDetailView-DJ7hLUMR.css     5.51 kB │ gzip:   1.32 kB
+dist/assets/el-radio-button-TYBaCPcE.css       7.58 kB │ gzip:   1.42 kB
+dist/assets/el-select-caR2Yem-.css             9.82 kB │ gzip:   1.95 kB
+dist/assets/DutyView-mkm2kIBJ.css              9.89 kB │ gzip:   2.15 kB
+dist/assets/RunDetailView-BA2_gaCX.css        15.05 kB │ gzip:   3.16 kB
+dist/assets/el-tab-pane-BAmdfGUb.css          16.66 kB │ gzip:   2.44 kB
+dist/assets/el-table-column-CkuDla-c.css      26.05 kB │ gzip:   3.79 kB
+dist/assets/el-date-picker-CFns1mtU.css       31.28 kB │ gzip:   4.33 kB
+dist/assets/index-DGwJJJyV.css                72.76 kB │ gzip:  10.57 kB
+dist/assets/validator-DeETtU6J.js              0.09 kB │ gzip:   0.10 kB
+dist/assets/strings-CWkQEPlu.js                0.15 kB │ gzip:   0.15 kB
+dist/assets/clamp-Cuu_U5Xa.js                  0.27 kB │ gzip:   0.19 kB
+dist/assets/severity-bswy-Nde.js               0.35 kB │ gzip:   0.27 kB
+dist/assets/displayNameZh-Bjext4XR.js          0.52 kB │ gzip:   0.40 kB
+dist/assets/toNumber-DT0PEgQK.js               0.54 kB │ gzip:   0.36 kB
+dist/assets/PageHeader-CFoWY751.js             0.57 kB │ gzip:   0.36 kB
+dist/assets/index-D4wigGZO.js                  0.63 kB │ gzip:   0.39 kB
+dist/assets/vnode-nXUvIbrl.js                  0.68 kB │ gzip:   0.42 kB
+dist/assets/KvTable-DyxZPWOA.js                0.76 kB │ gzip:   0.53 kB
+dist/assets/index-i8pjpZQL.js                  0.83 kB │ gzip:   0.51 kB
+dist/assets/scroll-BzlpjqXF.js                 0.87 kB │ gzip:   0.50 kB
+dist/assets/omit-CKoEwNdb.js                   0.90 kB │ gzip:   0.55 kB
+dist/assets/debounce-B4mbKZXV.js               1.07 kB │ gzip:   0.57 kB
+dist/assets/_baseIteratee-BpahMHqr.js          1.13 kB │ gzip:   0.59 kB
+dist/assets/versions-CVu1LuLu.js               1.19 kB │ gzip:   0.58 kB
+dist/assets/CategoryBadge-Babn_l4T.js          1.20 kB │ gzip:   0.84 kB
+dist/assets/EvalView-CG7gy9HU.js               1.24 kB │ gzip:   0.78 kB
+dist/assets/index-DlDsVbFC.js                  1.30 kB │ gzip:   0.62 kB
+dist/assets/el-result-C-hl0aT1.js              1.36 kB │ gzip:   0.63 kB
+dist/assets/drills-BKKHmHyM.js                 1.64 kB │ gzip:   0.74 kB
+dist/assets/index-CbqJu0eS.js                  1.78 kB │ gzip:   0.93 kB
+dist/assets/el-alert-1RQkoi3g.js               1.94 kB │ gzip:   0.92 kB
+dist/assets/index-CbsQHOV3.js                  1.96 kB │ gzip:   1.04 kB
+dist/assets/el-timeline-item-C15Np7QC.js       2.08 kB │ gzip:   0.92 kB
+dist/assets/EvalDatasetsView-Jn4cWMt_.js       2.14 kB │ gzip:   1.18 kB
+dist/assets/StatusBadge-B2_RYjh0.js            2.29 kB │ gzip:   1.05 kB
+dist/assets/IncidentTable-Cm3vA-uC.js          2.87 kB │ gzip:   1.36 kB
+dist/assets/el-step-Cr0EzHEU.js                4.17 kB │ gzip:   1.70 kB
+dist/assets/el-overlay-K4ok5aYD.js             4.24 kB │ gzip:   1.71 kB
+dist/assets/el-descriptions-Dv2Yx-WS.js        4.46 kB │ gzip:   1.80 kB
+dist/assets/el-loading--UM_rFyA.js             4.60 kB │ gzip:   1.97 kB
+dist/assets/el-dialog-CT7TmeTz.js              4.72 kB │ gzip:   2.06 kB
+dist/assets/DrillsView-BCpuECnH.js             4.91 kB │ gzip:   2.33 kB
+dist/assets/OverviewView-xVZq1uLL.js           5.10 kB │ gzip:   2.48 kB
+dist/assets/el-radio-button-Df3MokMk.js        5.23 kB │ gzip:   2.18 kB
+dist/assets/DetailDrawer-tKwMpsT6.js           5.36 kB │ gzip:   2.41 kB
+dist/assets/el-collapse-item-TFX9aR3i.js       5.73 kB │ gzip:   2.26 kB
+dist/assets/HistoryView-Bjoh7oxo.js            6.61 kB │ gzip:   3.00 kB
+dist/assets/NotificationsView-Ddf1X_Gu.js      6.61 kB │ gzip:   3.17 kB
+dist/assets/RunsView-BjY770i7.js               6.97 kB │ gzip:   3.28 kB
+dist/assets/el-input-number-RCJjJ5Cv.js        7.00 kB │ gzip:   2.84 kB
+dist/assets/index-DmrhUlTA.js                  7.52 kB │ gzip:   3.24 kB
+dist/assets/DutyChatView-Dcx0SEVY.js           7.57 kB │ gzip:   3.77 kB
+dist/assets/format-Be4mKhvF.js                 7.86 kB │ gzip:   3.02 kB
+dist/assets/EvalRunsView-BbCl4UEr.js           8.91 kB │ gzip:   4.02 kB
+dist/assets/EvalNewView-BCWeIJH8.js            9.35 kB │ gzip:   4.39 kB
+dist/assets/EvalAssetsView-DpMmaz4H.js        10.18 kB │ gzip:   4.24 kB
+dist/assets/AlertsView-B_YEiI8l.js            11.01 kB │ gzip:   4.41 kB
+dist/assets/index-EsyN2VL-.js                 11.42 kB │ gzip:   4.25 kB
+dist/assets/el-tab-pane-B-Oh4DaJ.js           11.76 kB │ gzip:   4.87 kB
+dist/assets/MonitorView-BJ1dnwKH.js           11.81 kB │ gzip:   4.64 kB
+dist/assets/IncidentDetailView-DjHtYkBB.js    13.04 kB │ gzip:   4.74 kB
+dist/assets/VersionsView-DxrKpJlB.js          13.04 kB │ gzip:   5.18 kB
+dist/assets/DrillDetailView-B3KkR8ju.js       13.85 kB │ gzip:   6.15 kB
+dist/assets/DrillCreateView-BLeLmawd.js       14.42 kB │ gzip:   5.86 kB
+dist/assets/CasesView-DzjRpwmX.js             14.90 kB │ gzip:   5.79 kB
+dist/assets/EvalCompareView-D7HgxnwX.js       19.02 kB │ gzip:   7.42 kB
+dist/assets/EvalReviewView-BbRqxtyi.js        19.12 kB │ gzip:   6.62 kB
+dist/assets/EvalRunDetailView-CNFNJEWD.js     31.05 kB │ gzip:   9.74 kB
+dist/assets/el-select-E1X6dbZZ.js             31.08 kB │ gzip:  10.65 kB
+dist/assets/DutyView-HY5Qnrby.js              38.79 kB │ gzip:  12.17 kB
+dist/assets/el-table-column-taYMTM7X.js       85.41 kB │ gzip:  29.45 kB
+dist/assets/el-date-picker-Dj0a9KCN.js       102.10 kB │ gzip:  28.53 kB
+dist/assets/RunDetailView-BnGdyZN2.js        246.15 kB │ gzip:  83.33 kB
+dist/assets/index-DM1C3L-2.js                387.35 kB │ gzip: 140.68 kB
+dist/assets/echarts-wPhDaToj.js              647.94 kB │ gzip: 221.88 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 12.04s

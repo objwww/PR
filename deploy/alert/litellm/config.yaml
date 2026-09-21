@@ -19,6 +19,21 @@ model_list:
       input_cost_per_token: 0.0000005        # 成本记账补丁（spike §三.3）：缺失则 holmes 侧 cost 记 0
       output_cost_per_token: 0.000001
 
+  # 2026-09-17 BA-150 自救：glm-5/qwen3-max 免费额度耗尽（DashScope 按模型独立额度），
+  # 实测 deepseek-v3 额度可用（AM0 选型回归）——新增模型组，control-app AGENT_MODEL 切此
+  # 2026-09-21 A/B 窗口：上游 api.deepseek.com 目录变更（400：supported=deepseek-flash/
+  # deepseek-v4-pro），deepseek-v3 型号下架；别名不动只换上游型号（下游 worker/judge/
+  # fingerprint 全部免改），实际模型身份=deepseek-flash，A/B 双臂同型可比、与历史基线
+  # （真 v3 时代）不可直接比——如实标注
+  - model_name: deepseek-v3
+    litellm_params:
+      model: openai/deepseek-flash
+      api_base: os.environ/UPSTREAM_BASE
+      api_key: os.environ/UPSTREAM_KEY
+      api_key: os.environ/UPSTREAM_KEY
+      input_cost_per_token: 0.0000005        # 费率占位同上 TODO（刊例价校准前保守沿用）
+      output_cost_per_token: 0.000001
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY  # master key 仅 env 注入（INV-AM3-3 同纪律）
 

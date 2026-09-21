@@ -22,4 +22,14 @@ public interface RcaRunResolver {
 
     Optional<UUID> resolve(GoldenCase golden, int roundNo, Instant activatedAt,
                            int timeoutSeconds);
+
+    /**
+     * BA-190 run-tag 空值兜底：返回使用本批有效 run-tag 的解析器实例。run-tag 敏感
+     * 实现（PostgresRcaRunResolver 的 scenario_map 匹配面）返回带新 tag 的拷贝；
+     * 其余实现默认原样返回 this（零行为变化）。runner 注入面与本面必须用同一份
+     * 有效 tag（{@link EvalRunTags#effective}），否则 run 匹配断裂。
+     */
+    default RcaRunResolver withRunTag(String effectiveRunTag) {
+        return this;
+    }
 }

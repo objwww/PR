@@ -132,4 +132,33 @@ class FivePatternLoopGuardsTest {
         assertThat(new RoleLoopGuard(new RoleLoopGuard.Policy(2, 3, "r7-monologue-v1"))
                 .policy().version()).isEqualTo("r7-monologue-v1");
     }
+
+    // ------------------------------------------------ ME-T05（D05）局部边界
+
+    @Test
+    void d05_taskIdRotationResetsTaskLevelObservation_runLevelDeferredToOffline() {
+        // D05 第 5 条边界钉：task 级守卫按 (taskId, tool, digest) 计数——主/子任务
+        // 换 ID 即新计数（LOOP-07 整案级识别由 LoopTraceEvaluator 离线测量承担，
+        // 在线 run 级守卫接入 BoundedLlmRoleRunner/supervisor 边界为如实遗留）
+        DoomLoopGuard g = guard(2, 2, 4, 6);
+        UUID subTask = UUID.randomUUID();
+        assertThat(g.record(TASK, "q", "d1", false)).isFalse();
+        assertThat(g.record(subTask, "q", "d1", false))
+                .as("换 taskId 即新签名——task 级不累计").isFalse();
+        assertThat(g.isOpen(TASK, "q", "d1")).isTrue();
+        assertThat(g.noProgressCount(TASK, "q", "d1")).isEqualTo(1);
+        assertThat(g.noProgressCount(subTask, "q", "d1")).isEqualTo(1);
+    }
+
+    @Test
+    void d05_trippedSignatureAndPolicyVersionTraceableForStopReason() {
+        // D05 第 7 条：检出原因可追溯——熔断签名清单 + 策略版本随审计面可考
+        DoomLoopGuard g = guard(2, 2, 4, 6);
+        g.record(TASK, "q", "d1", false);
+        assertThat(g.record(TASK, "q", "d1", false)).isTrue();
+        assertThat(g.trippedSignatures()).hasSize(1);
+        assertThat(g.isOpen(TASK, "q", "d1"))
+                .as("熔断签名前置门直拒——stop_reason 可由签名+策略版本追溯").isFalse();
+        assertThat(g.policy().version()).isEqualTo("ut");
+    }
 }

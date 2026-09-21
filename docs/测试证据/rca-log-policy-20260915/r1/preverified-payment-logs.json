@@ -1,0 +1,532 @@
+{
+  "status": "success",
+  "data": {
+    "resultType": "streams",
+    "result": [
+      {
+        "stream": {
+          "container_id": "f73772c5f882b009a0d72af41c58100f539788987ad5c733c7afab39819f15f3",
+          "detected_level": "info",
+          "docker_cli_cobra_command_path": "docker compose",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446210295000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/index.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/index.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "@opentelemetry/instrumentation-pino",
+          "scope_version": "0.67.0",
+          "service_criticality": "critical",
+          "service_instance_id": "4d75bd76-f312-4c8d-bed4-b1eb9bee3b89",
+          "service_name": "payment",
+          "severity_number": "9",
+          "severity_text": "info",
+          "span_id": "354f5d7bc7127d2a",
+          "telemetry_sdk_language": "nodejs",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "2.10.0",
+          "trace_id": "0da32a75dd3e031714e4da74536684ba"
+        },
+        "values": [
+          [
+            "1789446210295000000",
+            "Charge request received."
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "container_id": "f73772c5f882b009a0d72af41c58100f539788987ad5c733c7afab39819f15f3",
+          "detected_level": "info",
+          "docker_cli_cobra_command_path": "docker compose",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446249973000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/index.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/index.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "@opentelemetry/instrumentation-pino",
+          "scope_version": "0.67.0",
+          "service_criticality": "critical",
+          "service_instance_id": "4d75bd76-f312-4c8d-bed4-b1eb9bee3b89",
+          "service_name": "payment",
+          "severity_number": "9",
+          "severity_text": "info",
+          "span_id": "dd522f2d95c34ec6",
+          "telemetry_sdk_language": "nodejs",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "2.10.0",
+          "trace_id": "d284046419cef393014c5a1397e87c7b"
+        },
+        "values": [
+          [
+            "1789446249973000000",
+            "Charge request received."
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "container_id": "f73772c5f882b009a0d72af41c58100f539788987ad5c733c7afab39819f15f3",
+          "detected_level": "warn",
+          "docker_cli_cobra_command_path": "docker compose",
+          "exception_message": "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold",
+          "exception_stacktrace": "Error: Payment request failed. Invalid token. demo.user_context.loyalty_level=gold\n    at module.exports.charge (/usr/src/app/charge.js:47:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.chargeServiceHandler [as charge] (/usr/src/app/index.js:22:22)",
+          "exception_type": "Error",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446210299000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/index.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/index.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "@opentelemetry/instrumentation-pino",
+          "scope_version": "0.67.0",
+          "service_criticality": "critical",
+          "service_instance_id": "4d75bd76-f312-4c8d-bed4-b1eb9bee3b89",
+          "service_name": "payment",
+          "severity_number": "13",
+          "severity_text": "warn",
+          "span_id": "354f5d7bc7127d2a",
+          "telemetry_sdk_language": "nodejs",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "2.10.0",
+          "trace_id": "0da32a75dd3e031714e4da74536684ba"
+        },
+        "values": [
+          [
+            "1789446210299000000",
+            "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold"
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "container_id": "f73772c5f882b009a0d72af41c58100f539788987ad5c733c7afab39819f15f3",
+          "detected_level": "warn",
+          "docker_cli_cobra_command_path": "docker compose",
+          "exception_message": "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold",
+          "exception_stacktrace": "Error: Payment request failed. Invalid token. demo.user_context.loyalty_level=gold\n    at module.exports.charge (/usr/src/app/charge.js:47:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.chargeServiceHandler [as charge] (/usr/src/app/index.js:22:22)",
+          "exception_type": "Error",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446249974000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/index.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/index.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "@opentelemetry/instrumentation-pino",
+          "scope_version": "0.67.0",
+          "service_criticality": "critical",
+          "service_instance_id": "4d75bd76-f312-4c8d-bed4-b1eb9bee3b89",
+          "service_name": "payment",
+          "severity_number": "13",
+          "severity_text": "warn",
+          "span_id": "dd522f2d95c34ec6",
+          "telemetry_sdk_language": "nodejs",
+          "telemetry_sdk_name": "opentelemetry",
+          "telemetry_sdk_version": "2.10.0",
+          "trace_id": "d284046419cef393014c5a1397e87c7b"
+        },
+        "values": [
+          [
+            "1789446249974000000",
+            "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold"
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "detected_level": "info",
+          "docker_cli_cobra_command_path": "docker compose",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446210296000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/node_modules/thread-stream/lib/worker.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/node_modules/thread-stream/lib/worker.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "payment-logger",
+          "scope_version": "1.0.0",
+          "service_criticality": "critical",
+          "service_instance_id": "edde6a24-0d6d-4477-9f8f-95e1f6f318f2",
+          "service_name": "payment",
+          "severity_number": "9",
+          "severity_text": "info",
+          "span_id": "354f5d7bc7127d2a",
+          "trace_id": "0da32a75dd3e031714e4da74536684ba"
+        },
+        "values": [
+          [
+            "1789446210295000000",
+            "Charge request received."
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "detected_level": "info",
+          "docker_cli_cobra_command_path": "docker compose",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446249976000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/node_modules/thread-stream/lib/worker.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/node_modules/thread-stream/lib/worker.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "payment-logger",
+          "scope_version": "1.0.0",
+          "service_criticality": "critical",
+          "service_instance_id": "edde6a24-0d6d-4477-9f8f-95e1f6f318f2",
+          "service_name": "payment",
+          "severity_number": "9",
+          "severity_text": "info",
+          "span_id": "dd522f2d95c34ec6",
+          "trace_id": "d284046419cef393014c5a1397e87c7b"
+        },
+        "values": [
+          [
+            "1789446249973000000",
+            "Charge request received."
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "detected_level": "warn",
+          "docker_cli_cobra_command_path": "docker compose",
+          "err_message": "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold",
+          "err_stack": "Error: Payment request failed. Invalid token. demo.user_context.loyalty_level=gold\n    at module.exports.charge (/usr/src/app/charge.js:47:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.chargeServiceHandler [as charge] (/usr/src/app/index.js:22:22)",
+          "err_type": "Error",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446210301000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/node_modules/thread-stream/lib/worker.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/node_modules/thread-stream/lib/worker.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "payment-logger",
+          "scope_version": "1.0.0",
+          "service_criticality": "critical",
+          "service_instance_id": "edde6a24-0d6d-4477-9f8f-95e1f6f318f2",
+          "service_name": "payment",
+          "severity_number": "13",
+          "severity_text": "warn",
+          "span_id": "354f5d7bc7127d2a",
+          "trace_id": "0da32a75dd3e031714e4da74536684ba"
+        },
+        "values": [
+          [
+            "1789446210299000000",
+            "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold"
+          ]
+        ]
+      },
+      {
+        "stream": {
+          "detected_level": "warn",
+          "docker_cli_cobra_command_path": "docker compose",
+          "err_message": "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold",
+          "err_stack": "Error: Payment request failed. Invalid token. demo.user_context.loyalty_level=gold\n    at module.exports.charge (/usr/src/app/charge.js:47:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async Object.chargeServiceHandler [as charge] (/usr/src/app/index.js:22:22)",
+          "err_type": "Error",
+          "flags": "1",
+          "host_arch": "amd64",
+          "host_cpu_cache_l2_size": "512",
+          "host_cpu_family": "23",
+          "host_cpu_model_id": "49",
+          "host_cpu_model_name": "AMD EPYC 7K62 48-Core Processor",
+          "host_cpu_stepping": "0",
+          "host_cpu_vendor_id": "AuthenticAMD",
+          "host_name": "VM-0-4-centos",
+          "observed_timestamp": "1789446249976000000",
+          "os_description": "Linux 8641f84b6008 3.10.0-1160.119.1.el7.x86_64 #1 SMP Tue Jun 4 14:43:51 UTC 2024 x86_64",
+          "os_type": "linux",
+          "os_version": "3.10.0-1160.119.1.el7.x86_64",
+          "process_command": "/usr/src/app/node_modules/thread-stream/lib/worker.js",
+          "process_command_args": "[\"/nodejs/bin/node\",\"/usr/src/app/node_modules/thread-stream/lib/worker.js\"]",
+          "process_executable_name": "/nodejs/bin/node",
+          "process_executable_path": "/nodejs/bin/node",
+          "process_owner": "nonroot",
+          "process_pid": "1",
+          "process_runtime_description": "Node.js",
+          "process_runtime_name": "nodejs",
+          "process_runtime_version": "22.22.0",
+          "scope_name": "payment-logger",
+          "scope_version": "1.0.0",
+          "service_criticality": "critical",
+          "service_instance_id": "edde6a24-0d6d-4477-9f8f-95e1f6f318f2",
+          "service_name": "payment",
+          "severity_number": "13",
+          "severity_text": "warn",
+          "span_id": "dd522f2d95c34ec6",
+          "trace_id": "d284046419cef393014c5a1397e87c7b"
+        },
+        "values": [
+          [
+            "1789446249974000000",
+            "Payment request failed. Invalid token. demo.user_context.loyalty_level=gold"
+          ]
+        ]
+      }
+    ],
+    "stats": {
+      "summary": {
+        "bytesProcessedPerSecond": 287960,
+        "linesProcessedPerSecond": 884,
+        "totalBytesProcessed": 2604,
+        "totalLinesProcessed": 8,
+        "execTime": 0.009043,
+        "queueTime": 0.000143,
+        "subqueries": 0,
+        "totalEntriesReturned": 8,
+        "splits": 0,
+        "shards": 1,
+        "totalPostFilterLines": 8,
+        "totalStructuredMetadataBytesProcessed": 2208
+      },
+      "querier": {
+        "store": {
+          "totalChunksRef": 0,
+          "totalChunksDownloaded": 0,
+          "chunksDownloadTime": 0,
+          "queryReferencedStructuredMetadata": false,
+          "chunk": {
+            "headChunkBytes": 0,
+            "headChunkLines": 0,
+            "decompressedBytes": 0,
+            "decompressedLines": 0,
+            "compressedBytes": 0,
+            "totalDuplicates": 0,
+            "postFilterLines": 0,
+            "headChunkStructuredMetadataBytes": 0,
+            "decompressedStructuredMetadataBytes": 0
+          },
+          "chunkRefsFetchTime": 0,
+          "congestionControlLatency": 0,
+          "pipelineWrapperFilteredLines": 0
+        }
+      },
+      "ingester": {
+        "totalReached": 1,
+        "totalChunksMatched": 2,
+        "totalBatches": 2,
+        "totalLinesSent": 8,
+        "store": {
+          "totalChunksRef": 0,
+          "totalChunksDownloaded": 0,
+          "chunksDownloadTime": 0,
+          "queryReferencedStructuredMetadata": false,
+          "chunk": {
+            "headChunkBytes": 2604,
+            "headChunkLines": 8,
+            "decompressedBytes": 0,
+            "decompressedLines": 0,
+            "compressedBytes": 0,
+            "totalDuplicates": 0,
+            "postFilterLines": 8,
+            "headChunkStructuredMetadataBytes": 2208,
+            "decompressedStructuredMetadataBytes": 0
+          },
+          "chunkRefsFetchTime": 183366,
+          "congestionControlLatency": 0,
+          "pipelineWrapperFilteredLines": 0
+        }
+      },
+      "cache": {
+        "chunk": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "index": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "result": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "statsResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "volumeResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "seriesResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "labelResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        },
+        "instantMetricResult": {
+          "entriesFound": 0,
+          "entriesRequested": 0,
+          "entriesStored": 0,
+          "bytesReceived": 0,
+          "bytesSent": 0,
+          "requests": 0,
+          "downloadTime": 0,
+          "queryLengthServed": 0
+        }
+      },
+      "index": {
+        "totalChunks": 0,
+        "postFilterChunks": 0,
+        "shardsDuration": 0,
+        "usedBloomFilters": false
+      }
+    }
+  }
+}

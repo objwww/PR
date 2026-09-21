@@ -6,7 +6,9 @@ import com.objwww.pr.control.eval.domain.EvalRunMetadata;
 import com.objwww.pr.control.eval.domain.GoldenCase;
 import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.ScenarioMetrics;
+import com.objwww.pr.control.eval.domain.repository.EvalCaseSafetySink;
 import com.objwww.pr.control.eval.domain.repository.EvalPhaseEventSink;
+import com.objwww.pr.control.eval.domain.repository.EvalPreregistrationSink;
 import com.objwww.pr.control.eval.domain.repository.EvalRunRepository;
 import com.objwww.pr.control.eval.domain.statemachine.EvalRunLifecycle;
 import com.objwww.pr.shared.Digest;
@@ -45,6 +47,14 @@ import java.util.UUID;
  *   <li><b>EV-04 生命周期</b>：{@link RunLifecycle} 挂点承载 worker 形态的发起身份
  *       回填、eval_phase_event 阶段事件、案例边界取消检查点与 L 模式恢复核验；
  *       {@link #runBatch()}（noop 挂点）保持 M3 一次性跑批语义不变。</li>
+ *   <li><b>BA-190 run-tag 空值兜底</b>：批开始计算有效 run-tag（配置非空 = 配置值；
+ *       空 = "r"+evalRunId 前 12 位 hex（BA-191 由 8 位加宽），{@link EvalRunTags}），
+ *       注入面与解析面共用；
+ *       <b>零注入全灭诚实终态</b>：全批无一轮真实激活（全 gate_blocked/activate_failed）
+ *       → FAILED + 中文卡因，不伪装 SUCCEEDED（efde9e17/44f220ef 假绿定谳）。</li>
+ *   <li><b>D03 缺席案例安全终态</b>：未注入轮（gate_blocked/prev_round_not_resolved/
+ *       activate_failed）落 NOT_APPLICABLE（合理 NA）；已注入但无 trace
+ *       （alerts_not_firing/run_not_found）落 NOT_ASSESSED——缺证据不冒充零违规。</li>
  * </ul>
  */
 public class EvalBatchRunner {
@@ -62,6 +72,10 @@ public class EvalBatchRunner {
     private final EvalRunMetadata metadata;
     private final int roundsPerScenario;
     private final EvalClock clock;
+    /** BA-190：启动方注入的 run-tag（env 静态值）；空 = 批开始时按 evalRunId 派生兜底 */
+    private final String configuredRunTag;
+    /** ME-T12b：预登记落库面（可空 = 不登记，旧装配零漂移；验收面缺席如实 INCONCLUSIVE） */
+    private final EvalPreregistrationSink preregistrationSink;
 
     /** 测试可拨的钟（真栈 = 系统钟；sleep 是评测时间参数的执行面） */
     public interface EvalClock {
@@ -161,6 +175,44 @@ public class EvalBatchRunner {
                            EvalRunMetadata metadata,
                            int roundsPerScenario,
                            EvalClock clock) {
+        this(registry, driversByRole, alertProbe, incidentProbe, rcaRunResolver, scorer,
+                evalRuns, reportGenerator, metadata, roundsPerScenario, clock, "");
+    }
+
+    /** BA-190 全参形态：configuredRunTag = 启动方注入的 run-tag（可空/空串 = 批开始
+     *  时按 evalRunId 派生逐批唯一兜底 tag，见 {@link EvalRunTags}） */
+    public EvalBatchRunner(GoldenScenarioRegistry registry,
+                           Map<String, ScenarioDriver> driversByRole,
+                           AlertProbe alertProbe,
+                           IncidentResolutionProbe incidentProbe,
+                           RcaRunResolver rcaRunResolver,
+                           SingleCaseScorer scorer,
+                           EvalRunRepository evalRuns,
+                           BaselineReportGenerator reportGenerator,
+                           EvalRunMetadata metadata,
+                           int roundsPerScenario,
+                           EvalClock clock,
+                           String configuredRunTag) {
+        this(registry, driversByRole, alertProbe, incidentProbe, rcaRunResolver, scorer,
+                evalRuns, reportGenerator, metadata, roundsPerScenario, clock,
+                configuredRunTag, null);
+    }
+
+    /** ME-T12b 全参形态：preregistrationSink = 预登记落库面（V165；null = 不登记，
+     *  旧装配/测试兼容——验收面读不到登记时质量面如实 INCONCLUSIVE 不猜） */
+    public EvalBatchRunner(GoldenScenarioRegistry registry,
+                           Map<String, ScenarioDriver> driversByRole,
+                           AlertProbe alertProbe,
+                           IncidentResolutionProbe incidentProbe,
+                           RcaRunResolver rcaRunResolver,
+                           SingleCaseScorer scorer,
+                           EvalRunRepository evalRuns,
+                           BaselineReportGenerator reportGenerator,
+                           EvalRunMetadata metadata,
+                           int roundsPerScenario,
+                           EvalClock clock,
+                           String configuredRunTag,
+                           EvalPreregistrationSink preregistrationSink) {
         this.registry = Objects.requireNonNull(registry);
         this.driversByRole = Objects.requireNonNull(driversByRole);
         this.alertProbe = Objects.requireNonNull(alertProbe);
@@ -172,6 +224,8 @@ public class EvalBatchRunner {
         this.metadata = Objects.requireNonNull(metadata);
         this.roundsPerScenario = roundsPerScenario;
         this.clock = Objects.requireNonNull(clock);
+        this.configuredRunTag = configuredRunTag == null ? "" : configuredRunTag;
+        this.preregistrationSink = preregistrationSink;
     }
 
     /** 旧 CLI 一次性跑批（M3 语义原样）：随机 id、零生命周期挂点 */
@@ -186,22 +240,38 @@ public class EvalBatchRunner {
     public BatchResult runBatch(UUID evalRunId, RunLifecycle lifecycle) {
         Instant startedAt = clock.now();
         evalRuns.insertRunning(EvalRun.running(evalRunId, metadata, startedAt));
+        recordPreregistration(evalRunId);
         lifecycle.onRunStarted(evalRuns, evalRunId, clock.now());
+
+        // BA-190 run-tag 空值兜底：配置 tag 空 → 按 evalRunId 派生逐批唯一有效 tag，
+        // 注入面（driver 拷贝）与解析面（resolver 拷贝）共用同一值——空 tag 退化的
+        // chaos-eval-{sid}-r{round} 撞 uq_chaos_scenario 永存台账的链路自此封死
+        // （2026-09-19 批件 efde9e17/44f220ef 全灭假绿定谳）
+        String effectiveRunTag = EvalRunTags.effective(configuredRunTag, evalRunId);
+        if (!effectiveRunTag.equals(configuredRunTag)) {
+            log.info("run-tag 未注入或剔除后为空：批 {} 按 evalRunId 派生有效 run-tag {}",
+                    evalRunId, effectiveRunTag);
+        }
+        Map<String, ScenarioDriver> effectiveDrivers = new java.util.LinkedHashMap<>();
+        driversByRole.forEach((role, driver) ->
+                effectiveDrivers.put(role, driver.withRunTag(effectiveRunTag)));
+        RcaRunResolver effectiveResolver = rcaRunResolver.withRunTag(effectiveRunTag);
 
         List<GoldenCase> scenarios = registry.scenarios();
         // 防假绿预检：批件用到的驱动器逐个自检（如 chaos token 未注入），不满足
         // 在首案注入前抛错 → catch 面落 FAILED（batch_error:preflight…），
         // 不允许全案 TIMEOUT_OR_ABSENT 后零分"SUCCEEDED"
-        scenarios.stream().map(golden -> driversByRole.get(golden.driver()))
+        scenarios.stream().map(golden -> effectiveDrivers.get(golden.driver()))
                 .filter(Objects::nonNull).distinct()
                 .forEach(ScenarioDriver::preflight);
         List<EvalCaseResult> results = new ArrayList<>();
         List<BaselineReportGenerator.CaseFailure> failures = new ArrayList<>();
         boolean gateOpen = true;
         boolean cancelled = false;
+        boolean anyActivated = false;
         try {
             for (GoldenCase golden : scenarios) {
-                ScenarioDriver driver = driversByRole.get(golden.driver());
+                ScenarioDriver driver = effectiveDrivers.get(golden.driver());
                 if (driver == null) {
                     throw new IllegalStateException(
                             "未装配的驱动器: " + golden.driver() + "（场景 " + golden.scenarioId() + "）");
@@ -218,6 +288,10 @@ public class EvalBatchRunner {
                         EvalCaseResult blocked = gateBlocked(evalRunId, golden, round);
                         results.add(blocked);
                         persist(blocked);
+                        // D03：未注入轮无观测义务 → 安全面 NOT_APPLICABLE（合理 NA，
+                        // 不计未评）
+                        scorer.recordSafetyOutcome(evalRunId, golden, round,
+                                EvalCaseSafetySink.VERDICT_NOT_APPLICABLE);
                         failures.add(new BaselineReportGenerator.CaseFailure(golden.scenarioId(),
                                 round, "TIMEOUT_OR_ABSENT", "{\"reason\":\"gate_blocked\"}"));
                         continue;
@@ -229,18 +303,22 @@ public class EvalBatchRunner {
                                 "{\"reason\":\"prev_round_not_resolved\"}");
                         results.add(blocked);
                         persist(blocked);
+                        scorer.recordSafetyOutcome(evalRunId, golden, round,
+                                EvalCaseSafetySink.VERDICT_NOT_APPLICABLE);
                         failures.add(new BaselineReportGenerator.CaseFailure(golden.scenarioId(),
                                 round, "TIMEOUT_OR_ABSENT",
                                 "{\"reason\":\"prev_round_not_resolved\"}"));
                         gateOpen = false;
                         continue;
                     }
-                    RoundOutcome outcome = runRound(evalRunId, golden, round, driver, lifecycle);
+                    RoundOutcome outcome = runRound(evalRunId, golden, round, driver,
+                            lifecycle, effectiveResolver);
                     if (outcome.result() != null) {
                         results.add(outcome.result());
                     }
                     failures.addAll(outcome.failures());
                     gateOpen = outcome.gateOpen();
+                    anyActivated = anyActivated || outcome.activated();
                 }
                 if (cancelled) {
                     break;
@@ -250,7 +328,7 @@ public class EvalBatchRunner {
                 return finalizeCancelled(evalRunId, startedAt, lifecycle, scenarios);
             }
             return finalizeSucceeded(evalRunId, startedAt, scenarios, results, failures,
-                    lifecycle);
+                    lifecycle, anyActivated);
         } catch (RuntimeException e) {
             EvalRun aborted = EvalRun.terminal(evalRunId, metadata, EvalRun.EvalRunState.FAILED,
                     startedAt, clock.now(), null, null, null,
@@ -262,8 +340,10 @@ public class EvalBatchRunner {
         }
     }
 
+    /** activated = 本轮真实注入成功（BA-190 零注入全灭判定的输入；回放载荷重投同计） */
     private record RoundOutcome(EvalCaseResult result, boolean gateOpen,
-                                List<BaselineReportGenerator.CaseFailure> failures) {
+                                List<BaselineReportGenerator.CaseFailure> failures,
+                                boolean activated) {
     }
 
     /**
@@ -303,7 +383,8 @@ public class EvalBatchRunner {
     }
 
     private RoundOutcome runRound(UUID evalRunId, GoldenCase golden, int round,
-                                  ScenarioDriver driver, RunLifecycle lifecycle) {
+                                  ScenarioDriver driver, RunLifecycle lifecycle,
+                                  RcaRunResolver resolver) {
         List<BaselineReportGenerator.CaseFailure> failures = new ArrayList<>();
         ScenarioDriver.ActivationReceipt activation;
         Instant activatedAt = clock.now();
@@ -320,12 +401,16 @@ public class EvalBatchRunner {
                     "TIMEOUT_OR_ABSENT", sample));
             EvalCaseResult result = absentCase(evalRunId, golden, round, sample);
             persist(result);
-            return new RoundOutcome(result, false, failures);
+            // D03：注入失败=未注入，安全面 NOT_APPLICABLE（无观测义务）
+            scorer.recordSafetyOutcome(evalRunId, golden, round,
+                    EvalCaseSafetySink.VERDICT_NOT_APPLICABLE);
+            return new RoundOutcome(result, false, failures, false);
         }
 
         clock.sleepSeconds(golden.timing().preheatSeconds());
         EvalCaseResult result;
         boolean gateOpen;
+        Optional<UUID> rcaRunId = Optional.empty();
         try {
             // P2 回放分支：冻结载荷已重投（activate），告警面 = DB incident 新
             // episode，不经 Prometheus——跳过 firing 探针直接等新 run 终态；
@@ -340,6 +425,10 @@ public class EvalBatchRunner {
             if (!fired) {
                 result = absentCase(evalRunId, golden, round,
                         "{\"reason\":\"alerts_not_firing\"}");
+                // D03：已注入但无告警无 trace——安全面 NOT_ASSESSED（trace 缺失，
+                // 不得显示零违规通过）
+                scorer.recordSafetyOutcome(evalRunId, golden, round,
+                        EvalCaseSafetySink.VERDICT_NOT_ASSESSED);
                 failures.add(new BaselineReportGenerator.CaseFailure(golden.scenarioId(), round,
                         "TIMEOUT_OR_ABSENT", "{\"reason\":\"alerts_not_firing\"}"));
             } else {
@@ -349,20 +438,66 @@ public class EvalBatchRunner {
                         + golden.timing().holdSeconds();
                 lifecycle.record(evalRunId, "AWAITING_RCA", clock.now(),
                         roundDetail(golden, round));
-                Optional<UUID> rcaRunId = rcaRunResolver.resolve(golden, round,
+                Optional<UUID> resolved = resolver.resolve(golden, round,
                         activatedAt, resolveTimeoutSeconds);
+                rcaRunId = resolved;
                 lifecycle.record(evalRunId, "SCORING", clock.now(),
                         roundDetail(golden, round));
-                result = rcaRunId.flatMap(id -> scorer.score(evalRunId, golden, round, id))
-                        .orElseGet(() -> absentCase(evalRunId, golden, round,
-                                "{\"reason\":\"run_not_found\"}"));
+                Optional<EvalCaseResult> scored = resolved.flatMap(
+                        id -> scorer.score(evalRunId, golden, round, id));
+                if (scored.isEmpty()) {
+                    // D03：已注入但 run 不可解析——trace 缺失 → NOT_ASSESSED
+                    scorer.recordSafetyOutcome(evalRunId, golden, round,
+                            EvalCaseSafetySink.VERDICT_NOT_ASSESSED);
+                }
+                result = scored.orElseGet(() -> absentCase(evalRunId, golden, round,
+                        "{\"reason\":\"run_not_found\"}"));
             }
         } finally {
             // 任何失败都执行 finally 清理（M3-17 冻结）：评分/解析抛出也必须解除注入
             gateOpen = deactivate(driver, golden, round, activation, failures);
         }
         persist(result);
-        return new RoundOutcome(result, gateOpen, failures);
+        // ME-T04（D04）：案例终态行为评测落档（V159 case_result_id 外键次序 =
+        // 先 persist 案例行）；rcaRunId 缺席 = 已注入但无 trace，依赖轨迹的检查
+        // NOT_ASSESSED 不猜通过（EV-05 同律）；activate_failed 未注入轮不落行为行
+        scorer.recordBehavior(evalRunId, golden, round, rcaRunId.orElse(null), result.id());
+        // ME-T12a（D05）：案例终态死循环评测落档（V162 同键面次序与 fail-soft 纪律；
+        // 未注入轮同样不落行）
+        scorer.recordLoop(evalRunId, golden, round, rcaRunId.orElse(null), result.id());
+        // ME-T12a（D07）：案例终态协作评测落档（V163 同键面次序与 fail-soft 纪律）
+        scorer.recordCollab(evalRunId, golden, round, rcaRunId.orElse(null), result.id());
+        // ME-T12a（D08）：案例终态上下文漂移评测落档（V164 同键面次序与 fail-soft 纪律；
+        // 无压缩事件 = 摘要缺席如实 NA，不猜）
+        scorer.recordDrift(evalRunId, golden, round, rcaRunId.orElse(null), result.id());
+        return new RoundOutcome(result, gateOpen, failures, true);
+    }
+
+    /**
+     * ME-T12b（D09）预登记落档：eval_run 落行后立写（判定锚跑批之前冻结——
+     * 受理 HTTP 链早于 run 行存在，外键次序决定写点只能在批起始）。min_clusters
+     * 取 {@link com.objwww.pr.control.eval.domain.service.PairedTrialStats#MIN_CLUSTERS}
+     * （比较门簇数下限同源常量——登记时刻快照，未来门阈调整不回溯旧批锚）；
+     * digest = sha256(runId|minClusters|registeredAt 截断到秒)。落库失败记 warn
+     * 不阻发批（fail-soft 同安全落档律；验收面读不到登记时质量面如实
+     * INCONCLUSIVE/PREREGISTRATION_MISSING 不猜）。
+     */
+    void recordPreregistration(UUID evalRunId) {
+        if (preregistrationSink == null) {
+            return;
+        }
+        try {
+            int minClusters =
+                    com.objwww.pr.control.eval.domain.service.PairedTrialStats.MIN_CLUSTERS;
+            Instant registeredAt = clock.now()
+                    .truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+            String digest = Digest.sha256Of("eval-prereg/v1|runId=" + evalRunId
+                    + "|minClusters=" + minClusters + "|registeredAt=" + registeredAt).value();
+            preregistrationSink.insert(evalRunId, minClusters, digest, registeredAt);
+        } catch (Exception e) {
+            log.warn("eval 预登记落档失败（不阻发批；验收面质量锚缺席如实 INCONCLUSIVE）"
+                    + " run={}：{}", evalRunId, e.toString());
+        }
     }
 
     private boolean deactivate(ScenarioDriver driver, GoldenCase golden, int round,
@@ -386,8 +521,29 @@ public class EvalBatchRunner {
                                           List<GoldenCase> scenarios,
                                           List<EvalCaseResult> results,
                                           List<BaselineReportGenerator.CaseFailure> failures,
-                                          RunLifecycle lifecycle) {
+                                          RunLifecycle lifecycle,
+                                          boolean anyActivated) {
         lifecycle.record(evalRunId, "FINALIZING", clock.now(), null);
+        if (!anyActivated && !results.isEmpty()) {
+            // BA-190 零注入全灭诚实终态（2026-09-19 批件 efde9e17/44f220ef 定谳）：
+            // 全部案例轮次都是 gate_blocked/activate_failed/prev_round_not_resolved——
+            // 零真实注入、零真实调查，测量无效，不得伪装 SUCCEEDED 假绿。与中途门关闭
+            // 的老语义严格区分：只要有一轮真实激活（部分 gate_blocked）仍走原
+            // SUCCEEDED 聚合。FAILED 不填指标/基线报告（夭折形态，不伪装完整实验）。
+            String firstSample = failures.isEmpty() ? null : failures.getFirst().failureSampleJson();
+            String reason = "全部案例注入失败（首案失败样本：" + abbreviate(firstSample)
+                    + "）——批件零真实注入、未产生任何真实调查，测量无效；"
+                    + "请检查 run-tag 唯一性或冲突会话后重发（未注入 run-tag 时系统自动按批派生唯一 tag）";
+            log.warn("批 {} 零注入全灭：{} 个案例轮次无一真实激活，终态 FAILED（{}）",
+                    evalRunId, results.size(), reason);
+            boolean finalized = evalRuns.finalizeOnce(EvalRun.terminal(evalRunId, metadata,
+                    EvalRun.EvalRunState.FAILED, startedAt, clock.now(),
+                    null, null, null, reason));
+            if (finalized) {
+                lifecycle.onTerminal(evalRunId);
+            }
+            return new BatchResult(evalRunId, null, null, null, finalized);
+        }
         List<ScenarioMetrics.ScenarioScore> scores = results.stream()
                 .map(r -> new ScenarioMetrics.ScenarioScore(r.scenarioId(), r.verdict(),
                         r.rootCauseHit()))

@@ -1,0 +1,14 @@
+.git
+.git/*
+.zcode
+.zcode/*
+node_modules
+node_modules/*
+*/node_modules/*
+target
+*/target/*
+*/target
+dist
+*/dist/*
+*.log
+*.tgz

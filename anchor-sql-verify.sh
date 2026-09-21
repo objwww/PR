@@ -1,0 +1,2 @@
+#!/bin/sh
+docker exec deploy-postgres-1 psql -U postgres -d pr_agent -tA -c "select m.run_id, m.task_id, m.attempt_id, m.lease_epoch, m.config_epoch, m.release_digest, (select coalesce(max(x.action_seq), -1) + 1 from rca_model_call x where x.run_id = m.run_id and x.task_id = m.task_id and x.attempt_id = m.attempt_id) as next_action_seq from rca_model_call m where m.run_id in (select id from rca_run where incident_id = '5781021b-735a-44ca-8281-d2ccf3de6c0c') order by m.created_at desc limit 1"

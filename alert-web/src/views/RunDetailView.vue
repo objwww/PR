@@ -19,6 +19,10 @@
       <el-tag v-if="run.completionKind === 'SHADOW_EVIDENCE_ONLY'" type="info" effect="plain" disable-transitions>
         影子取证完成（未发布）
       </el-tag>
+      <!-- JE-01：本次调查是否 Jev 增强路径（铸造冻结事实，非当前开关态） -->
+      <el-tag v-if="run.jev" type="warning" effect="plain" disable-transitions>
+        Jev 增强
+      </el-tag>
       <span class="mini">耗时 {{ listRow?.duration ?? '—' }}</span>
       <span class="mini">预算 token：{{ run.budget?.token?.used ?? '—' }}</span>
       <span class="mini" :title="costTitle">费用：{{ costText }}</span>
@@ -245,28 +249,91 @@
             <span class="trace-dur" />
           </div>
 
-          <!-- 三层 span 瀑布（同一起点时间轴，点击行展开明细） -->
+          <!-- 三层 span 瀑布（同一起点时间轴，点击行展开明细）；模型层按 Jev 生效前后分段 -->
           <template v-for="sec in traceSections" :key="sec.kind">
             <div class="trace-section-title">{{ sec.title }}（{{ sec.rows.length }}）</div>
-            <template v-for="s in sec.rows" :key="s.id">
-              <div class="trace-row span-row" @click="openSpanId = openSpanId === s.id ? null : s.id">
-                <span class="trace-row-label" :title="s.label">
-                  {{ s.label }}<em class="seq">{{ spanSeqLabel(s) }}</em>
-                </span>
-                <div class="trace-track">
-                  <i
-                    class="span-bar" :class="spanClass(s)"
-                    :style="{ left: s.pct + '%', width: Math.max(s.wPct, 0.5) + '%' }"
-                  />
+            <template v-if="sec.kind === 'model' && sec.groups">
+              <template v-for="g in sec.groups" :key="g.phase">
+                <div class="trace-phase" :class="'phase-' + g.phase">
+                  {{ g.phase === 'post' ? '── Jev 生效后：选材结果已注入主模型输入 ──' : (g.phase === 'jev' ? '── Jev 自身调用：证据评分与结论复核 ──' : '── Jev 生效前：原始证据窗口 ──') }}
                 </div>
-                <span class="trace-dur">{{ s.durLabel }}</span>
-                <el-tag size="small" :type="spanStateTagType(s.state)" disable-transitions>{{ stateZh(s) }}</el-tag>
-              </div>
-              <div v-if="openSpanId === s.id" class="trace-kv">
-                <div v-for="[k, v] in spanKv(s)" :key="k" class="kv-line">
-                  <span class="k">{{ k }}</span><span class="v">{{ v }}</span>
+                <template v-for="s in g.rows" :key="s.id">
+                  <div class="trace-row span-row" @click="openSpanId = openSpanId === s.id ? null : s.id">
+                    <span class="trace-row-label" :title="s.label">
+                      {{ s.label }}<em class="seq">{{ spanSeqLabel(s) }}</em>
+                    </span>
+                    <div class="trace-track">
+                      <i
+                        class="span-bar" :class="spanClass(s)"
+                        :style="{ left: s.pct + '%', width: Math.max(s.wPct, 0.5) + '%' }"
+                      />
+                    </div>
+                    <span class="trace-dur">{{ s.durLabel }}</span>
+                    <el-tag size="small" :type="spanStateTagType(s.state)" disable-transitions>{{ stateZh(s) }}</el-tag>
+                  </div>
+                  <div v-if="openSpanId === s.id" class="trace-kv">
+                    <div v-for="[k, v] in spanKv(s)" :key="k" class="kv-line">
+                      <span class="k">{{ k }}</span><span class="v">{{ v }}</span>
+                    </div>
+                    <!-- V167：模型步展开输入/输出捕获文（读面 /model-outputs；掩敏行标"已掩敏"） -->
+                    <div v-if="s.kind === 'model'" class="io-block">
+                      <div class="io-head">
+                        模型输入
+                        <em v-if="modelIoOf(s)?.input" class="io-meta">{{ ioSideMeta(modelIoOf(s).input) }}</em>
+                      </div>
+                      <pre v-if="modelIoOf(s)?.input?.text" class="io-text">{{ modelIoOf(s).input.text }}</pre>
+                      <div v-else class="muted io-empty">{{ ioSideEmpty(modelIoOf(s)?.input, '输入') }}</div>
+                    </div>
+                    <div v-if="s.kind === 'model'" class="io-block">
+                      <div class="io-head">
+                        模型输出
+                        <em v-if="modelIoOf(s)?.output" class="io-meta">{{ ioSideMeta(modelIoOf(s).output) }}</em>
+                      </div>
+                      <pre v-if="modelIoOf(s)?.output?.text" class="io-text">{{ modelIoOf(s).output.text }}</pre>
+                      <div v-else class="muted io-empty">{{ ioSideEmpty(modelIoOf(s)?.output, '输出') }}</div>
+                    </div>
+                  </div>
+                </template>
+              </template>
+            </template>
+            <template v-else>
+              <template v-for="s in sec.rows" :key="s.id">
+                <div class="trace-row span-row" @click="openSpanId = openSpanId === s.id ? null : s.id">
+                  <span class="trace-row-label" :title="s.label">
+                    {{ s.label }}<em class="seq">{{ spanSeqLabel(s) }}</em>
+                  </span>
+                  <div class="trace-track">
+                    <i
+                      class="span-bar" :class="spanClass(s)"
+                      :style="{ left: s.pct + '%', width: Math.max(s.wPct, 0.5) + '%' }"
+                    />
+                  </div>
+                  <span class="trace-dur">{{ s.durLabel }}</span>
+                  <el-tag size="small" :type="spanStateTagType(s.state)" disable-transitions>{{ stateZh(s) }}</el-tag>
                 </div>
-              </div>
+                <div v-if="openSpanId === s.id" class="trace-kv">
+                  <div v-for="[k, v] in spanKv(s)" :key="k" class="kv-line">
+                    <span class="k">{{ k }}</span><span class="v">{{ v }}</span>
+                  </div>
+                  <!-- V167：模型步展开输入/输出捕获文（读面 /model-outputs；掩敏行标"已掩敏"） -->
+                  <div v-if="s.kind === 'model'" class="io-block">
+                    <div class="io-head">
+                      模型输入
+                      <em v-if="modelIoOf(s)?.input" class="io-meta">{{ ioSideMeta(modelIoOf(s).input) }}</em>
+                    </div>
+                    <pre v-if="modelIoOf(s)?.input?.text" class="io-text">{{ modelIoOf(s).input.text }}</pre>
+                    <div v-else class="muted io-empty">{{ ioSideEmpty(modelIoOf(s)?.input, '输入') }}</div>
+                  </div>
+                  <div v-if="s.kind === 'model'" class="io-block">
+                    <div class="io-head">
+                      模型输出
+                      <em v-if="modelIoOf(s)?.output" class="io-meta">{{ ioSideMeta(modelIoOf(s).output) }}</em>
+                    </div>
+                    <pre v-if="modelIoOf(s)?.output?.text" class="io-text">{{ modelIoOf(s).output.text }}</pre>
+                    <div v-else class="muted io-empty">{{ ioSideEmpty(modelIoOf(s)?.output, '输出') }}</div>
+                  </div>
+                </div>
+              </template>
             </template>
           </template>
 
@@ -276,7 +343,7 @@
             <span><i class="lg lg-tool" />工具调用</span>
             <span><i class="lg lg-fail" />失败</span>
             <span><i class="lg lg-unknown" />结果未知/进行中</span>
-            <span>点击行可展开该次调用的明细（模型/Token/费用/原因码等）。</span>
+            <span>模型层按「Jev 生效前 / Jev 生效后」分段；jev-selector/jev-reviewer 为 Jev 自身的评分与复核调用。点击行可展开该次调用的明细（模型/Token/费用/原因码等）。</span>
           </div>
         </div>
       </div>
@@ -508,6 +575,57 @@
             </div>
           </template>
         </template>
+      </div>
+    </template>
+
+    <!-- ============ Jev 选材（JE-02）：每次选材决策的池/保护/选中/被裁明细 ============ -->
+    <template v-else-if="viewTab === 'jev'">
+      <div class="card panel">
+        <div class="lbl">Jev 选材决策（{{ jevSel?.count ?? 0 }} 次）</div>
+        <div v-if="!run?.jev" class="mini dim" style="margin-bottom: 8px">
+          本次调查未启用 Jev 增强（铸造时未开启）。
+        </div>
+        <div v-else-if="!jevSel?.count" class="mini dim">
+          无选材记录——证据池未达到触发线（AGENT_MODEL_JEV_MIN_POOL），或调查尚未进行到该步。
+        </div>
+        <el-table v-else :data="jevSel.rows" size="small">
+          <el-table-column label="时间" width="100">
+            <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="模式" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.applied ? 'success' : 'info'" size="small" disable-transitions>
+                {{ row.applied ? '已应用' : '仅记档' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="池" width="60" align="right">
+            <template #default="{ row }">{{ row.poolRefs.length }}</template>
+          </el-table-column>
+          <el-table-column label="保护" width="60" align="right">
+            <template #default="{ row }">{{ row.protectedRefs.length || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="选中证据" min-width="260">
+            <template #default="{ row }">
+              <template v-if="row.selectedRefs.length">
+                <code v-for="r in row.selectedRefs" :key="r" class="sel-ref" :title="r">{{ shortId(r) }}</code>
+              </template>
+              <span v-else class="dim">—（无过阈值候选）</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="被裁" width="60" align="right">
+            <template #default="{ row }">{{ row.omittedRefs.length || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="Jev Token" width="110" align="right">
+            <template #default="{ row }">{{ row.totalTokens ?? '—' }}</template>
+          </el-table-column>
+          <el-table-column label="延迟" width="80" align="right">
+            <template #default="{ row }">{{ row.latencyMs != null ? row.latencyMs + 'ms' : '—' }}</template>
+          </el-table-column>
+        </el-table>
+        <div class="mini dim" style="margin-top: 8px">
+          选中 = 概率过阈值并注入主模型输入（SELECT 模式）；被裁 = 低于阈值未入窗（原文仍在证据库，可按 ref 回查）。
+        </div>
       </div>
     </template>
 
@@ -753,6 +871,7 @@ const viewTabs = [
   { key: 'trace', label: '调用链' },
   { key: 'events', label: '事件流' },
   { key: 'claims', label: '结论与证据' },
+  { key: 'jev', label: 'Jev 选材' },
   { key: 'report', label: '报告' },
   { key: 'meta', label: '运行详情' },
 ]
@@ -782,6 +901,22 @@ const reportLoadState = ref('idle') // idle | loading | ok | error
 const reportError = ref('')
 const reportPkgOpen = ref(false) // REJECTED 原文折叠
 
+// ===== Jev 选材 tab（JE-02；GET /api/rca-runs/{id}/jev-selections；懒加载）=====
+const jevSel = ref(null)
+const jevSelState = ref('idle')
+
+async function loadJevSel() {
+  jevSelState.value = 'loading'
+  try {
+    const res = await api(`/rca-runs/${route.params.runId}/jev-selections`)
+    jevSel.value = res ?? { rows: [], count: 0 }
+    jevSelState.value = 'ok'
+  } catch {
+    jevSel.value = { rows: [], count: 0 }
+    jevSelState.value = 'error'
+  }
+}
+
 async function loadReport() {
   reportLoadState.value = 'loading'
   reportError.value = ''
@@ -805,6 +940,8 @@ const trace = ref(null)
 const traceLoadState = ref('idle') // idle | loading | ok | error
 const traceError = ref('')
 const openSpanId = ref(null)
+// V167：模型步输入/输出捕获（GET /model-outputs；键=modelCallId=模型 span id）
+const modelIoMap = ref({})
 
 async function loadTrace() {
   traceLoadState.value = 'loading'
@@ -812,12 +949,43 @@ async function loadTrace() {
   try {
     trace.value = await api(`/rca-runs/${route.params.runId}/trace`)
     traceLoadState.value = 'ok'
+    loadModelIo() // 捕获面失败不阻塞瀑布（展开行如实显"无捕获行"）
   } catch (e) {
     traceLoadState.value = 'error'
     traceError.value = e?.response?.data?.error
       ? `调用链加载失败：${e.response.data.error}`
       : '调用链加载失败（后端不可达或接口未部署）'
   }
+}
+
+async function loadModelIo() {
+  try {
+    const res = await api(`/rca-runs/${route.params.runId}/model-outputs`)
+    const m = {}
+    for (const r of res?.rows ?? []) m[r.modelCallId] = r
+    modelIoMap.value = m
+  } catch {
+    modelIoMap.value = {}
+  }
+}
+
+function modelIoOf(s) { return modelIoMap.value[s.id] ?? null }
+function ioSideMeta(side) {
+  const bits = [side.level]
+  if (side.level === 'REDACTED' || side.redactionNote) bits.push('已掩敏')
+  if (side.messageBytes != null) bits.push(`${side.messageBytes} B`)
+  return bits.join('｜')
+}
+function ioSideEmpty(side, name) {
+  if (!side) {
+    return name === '输出'
+      ? '无输出捕获行（输出捕获默认 off 档不落库；或该调用未成功——失败调用无输出产出，如实不落行）'
+      : '无输入捕获行'
+  }
+  if (side.level === 'DIGEST_ONLY') {
+    return `digest-only 档：零原文，仅存摘要 ${shortId(side.digest)}（可对账不可读文）`
+  }
+  return '捕获行无文本'
 }
 
 const TRACE_SECTIONS = [
@@ -880,21 +1048,54 @@ const traceAnchors = computed(() => {
   return out.sort((a, b) => a.ms - b.ms)
 })
 
+// JE-02：Jev 生效切换点 = 第一条 jev 自身 span 的开始时间；其前的 primary/工具
+// 调用为"Jev 生效前"（原始窗口），其后为"Jev 生效后"（选材已注入）
+const jevSwitchMs = computed(() => {
+  const times = (trace.value?.spans ?? [])
+    .filter(s => (s.roleId || '').startsWith('jev'))
+    .map(s => parseMs(s.start))
+    .filter(t => t != null)
+  return times.length ? Math.min(...times) : null
+})
+
+function spanPhase(s) {
+  if ((s.roleId || '').startsWith('jev')) return 'jev'
+  const sw = jevSwitchMs.value
+  if (sw == null) return 'pre'
+  const st = parseMs(s.start)
+  return st != null && st >= sw ? 'post' : 'pre'
+}
+
 const traceSections = computed(() => {
   const w = traceWindow.value
   if (!w) return []
-  return TRACE_SECTIONS.map(sec => ({
+  const base = TRACE_SECTIONS.map(sec => ({
     ...sec,
     rows: (trace.value?.spans ?? [])
       .filter(s => s.kind === sec.kind)
       .map(s => {
         const st = parseMs(s.start)
         const en = spanEndMs(s)
-        return { ...s, pct: posPct(st), wPct: en != null ? Math.max(posPct(en) - posPct(st), 0) : 0,
-          durLabel: en != null && st != null ? fmtDur(en - st) : '—' }
+        return {
+          ...s, _phase: spanPhase(s),
+          pct: posPct(st),
+          wPct: en != null ? Math.max(posPct(en) - posPct(st), 0) : 0,
+          durLabel: en != null && st != null ? fmtDur(en - st) : '—',
+        }
       })
       .sort((a, b) => (parseMs(a.start) ?? 0) - (parseMs(b.start) ?? 0)),
-  })).filter(sec => sec.rows.length)
+  }))
+  // JE-02：模型层按 Jev 生效前后分段（无 Jev 的 run 不分段，零漂移）
+  return base.map(sec => {
+    if (sec.kind !== 'model' || jevSwitchMs.value == null) return sec
+    const order = ['pre', 'post', 'jev']
+    return {
+      ...sec,
+      groups: order
+        .map(ph => ({ phase: ph, rows: sec.rows.filter(r => r._phase === ph) }))
+        .filter(g => g.rows.length),
+    }
+  }).filter(sec => sec.rows.length)
 })
 
 const rulerTicks = computed(() => {
@@ -1613,11 +1814,12 @@ async function submitSwitch() {
 
 // ===== 交互 =====
 function switchTab(key) {
-  viewTab.value = key
-  if (key === 'events') nextTick(scrollEvToBottom)
-  if (key === 'meta' && cfgState.value === 'idle') loadCfgEpochs() // 配置切换区懒加载
-  if (key === 'report' && reportLoadState.value === 'idle') loadReport() // 报告面懒加载
-  if (key === 'trace' && traceLoadState.value === 'idle') loadTrace() // 调用链懒加载
+viewTab.value = key
+if (key === 'events') nextTick(scrollEvToBottom)
+if (key === 'meta' && cfgState.value === 'idle') loadCfgEpochs() // 配置切换区懒加载
+if (key === 'report' && reportLoadState.value === 'idle') loadReport() // 报告懒加载
+if (key === 'trace' && traceLoadState.value === 'idle') loadTrace() // 调用链懒加载
+if (key === 'jev' && jevSelState.value === 'idle') loadJevSel() // Jev 选材懒加载
 }
 
 function onSelectTask(id) {
@@ -1715,6 +1917,10 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
   padding: 8px 14px; font-size: var(--fs-body); color: var(--ink-2);
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
+/* ===== Jev 选材（JE-02） ===== */
+.sel-ref { display: inline-block; margin: 1px 4px 1px 0; padding: 0 5px; border: 1px solid var(--line, #ddd); border-radius: 3px; font-size: 11px; }
+.trace-phase { margin: 8px 0 4px; padding: 2px 8px; font-size: 11px; color: var(--ink-2, #666); background: rgba(0,0,0,.04); border-left: 3px solid var(--brand, #4a6cf7); border-radius: 2px; }
+.trace-phase.phase-post { border-left-color: #2e7d32; color: #2e7d32; }
 .tab:hover { color: var(--brand); }
 .tab.cur { color: var(--brand); font-weight: 700; border-bottom-color: var(--brand); }
 
@@ -1886,6 +2092,18 @@ onBeforeUnmount(() => { closeStream(); stopCfgPoll() })
 .kv-line { display: flex; gap: 8px; font-size: var(--fs-aux); min-width: 0; }
 .kv-line .k { color: var(--ink-2); flex: 0 0 auto; }
 .kv-line .v { color: var(--ink); word-break: break-all; }
+
+/* V167：模型步输入/输出捕获展开面（占满 trace-kv 两列栅格） */
+.io-block { grid-column: 1 / -1; margin-top: 6px; }
+.io-head { font-size: var(--fs-aux); font-weight: 600; color: var(--ink-2); margin-bottom: 4px; }
+.io-meta { font-style: normal; font-weight: 400; color: var(--ink-3, var(--ink-2)); margin-left: 8px; }
+.io-text {
+  margin: 0; padding: 8px 10px; max-height: 260px; overflow: auto;
+  background: var(--panel-bg, #fff); border: 1px solid var(--line, #e5e7eb);
+  border-radius: var(--radius); font-size: var(--fs-aux); line-height: 1.55;
+  white-space: pre-wrap; word-break: break-all;
+}
+.io-empty { font-size: var(--fs-aux); }
 
 .trace-legend { display: flex; gap: 16px; align-items: center; margin-top: 14px; color: var(--ink-2); font-size: var(--fs-aux); flex-wrap: wrap; }
 .trace-legend .lg { display: inline-block; width: 14px; height: 8px; border-radius: 4px; margin-right: 4px; }

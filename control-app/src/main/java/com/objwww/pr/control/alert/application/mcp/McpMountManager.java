@@ -190,6 +190,7 @@ public class McpMountManager {
             McpServerClient candidate = null;
             try {
                 candidate = clientFactory.create(row.spec());
+                candidate.setToolsChangedHandler(() -> onToolsChanged(row.spec().name()));
                 candidate.connect();
                 mounted.put(row.spec().name(), new MountedServer(row, candidate,
                         List.copyOf(candidate.listTools()), nowMs()));
@@ -312,6 +313,9 @@ public class McpMountManager {
             McpServerClient candidate = null;
             try {
                 candidate = clientFactory.create(spec);
+                // D02-6：tools/list_changed 从真实 SDK 接线到候选重检（通知本体不授权，
+                // 只触发 revalidate——M04 语义不变；假件 default no-op 零漂移）
+                candidate.setToolsChangedHandler(() -> onToolsChanged(spec.name()));
                 candidate.connect();
                 List<McpServerClient.ToolDescriptor> tools =
                         List.copyOf(candidate.listTools());

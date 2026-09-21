@@ -16,7 +16,9 @@ import java.util.UUID;
 /**
  * {@link FlagdRestoreLedger} 的 Postgres 实现（DR-05，V95 flagd_restore_ledger；
  * JdbcClient 手写 SQL，沿 PostgresDrillJobRepository 惯例）。
- * eval_app 单一读写身份：insert + select + 列级 update(state/state_reason/updated_at)
+ * 授权面：insert 归 eval_app 单一写身份（激活落账）；select + 列级
+ * update(state/state_reason/updated_at) eval_app 与 control_app 共用（V156——
+ * BA-191 真执行执行器在 control-app 进程内读可恢复记录 + close CAS 收口）
  * ——正文列（flag/原值/写入值/截止）落账即冻结，零 update 开口。
  */
 public class PostgresFlagdRestoreLedger implements FlagdRestoreLedger {

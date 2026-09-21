@@ -1,0 +1,20 @@
+[
+  {
+    "id": "98be5b62-e3fd-49a5-b962-a37c7a78543d",
+    "kind": "HYPOTHESIS",
+    "claim_key": "c1",
+    "status": "UNKNOWN",
+    "evidence_basis": "MULTI_SOURCE_CONSISTENT",
+    "lifecycle": "ACTIVE",
+    "reason": "checkout 服务在调用 oteldemo.PaymentService/Charge 时出现 UNKNOWN 状态码，可能与 payment 服务返回 'Invalid token' 错误相关 {7a183bee-fdd4-462e-91fa-efed8912393c:SUPPORTS,34b5e205-f229-434d-81e2-d4b711fafa07:SUPPORTS}",
+    "scope": "primary",
+    "sources": [
+      "logs",
+      "prometheus"
+    ],
+    "evidence_refs": [
+      "34b5e205-f229-434d-81e2-d4b711fafa07",
+      "7a183bee-fdd4-462e-91fa-efed8912393c"
+    ]
+  }
+]

@@ -265,7 +265,15 @@ public class DrillWorker {
                         + "推进恢复/核验链（DR-04 已接线）", current.id());
             }
             case UNKNOWN -> {
-                // 注入结果无法判定：必先进恢复路径（§7.4）并立即按固定身份对账恢复
+                // 注入结果无法判定：必先进恢复路径（§7.4）并立即按固定身份对账恢复；
+                // 原因落 WORKER_NOTE 留痕（BA-186：此前原因随 context 形参丢弃，
+                // CLOSED FAIL 的 terminal_reason 为空、页面无理由可展示）
+                log.warn("drill {} 注入结果无法判定（{}）——按固定身份对账恢复",
+                        current.id(), outcome.reason());
+                events.insert(DrillEvent.of(current.id(), DrillEvent.EventType.WORKER_NOTE,
+                        workerId,
+                        "{\"action_unknown\":" + quote(outcome.reason()) + "}",
+                        clock.now()));
                 DrillJob recovering = advance(current, DrillJob.State.INJECTING,
                         DrillJob.State.RECOVERING, null);
                 driveRecovering(recovering,
@@ -369,9 +377,10 @@ public class DrillWorker {
         switch (outcome.kind()) {
             case VERIFIED -> {
                 String value = outcomeOf(job);
+                String terminalReason = "PASS".equals(value) ? null : failCloseReason(job);
                 Instant now = clock.now();
                 if (!jobs.finalize(job.id(), job.revision(), DrillJob.State.VERIFYING,
-                        DrillJob.State.CLOSED, null, value, now, now)) {
+                        DrillJob.State.CLOSED, terminalReason, value, now, now)) {
                     return 0; // CAS 竞争：下拍重核
                 }
                 events.insert(DrillEvent.phaseTransition(job.id(),
@@ -421,6 +430,35 @@ public class DrillWorker {
             return "INCONCLUSIVE";
         }
         return job.relatedIncidentId() != null ? "PASS" : "FAIL";
+    }
+
+    /**
+     * FAIL 闭环理由（BA-186）：优先回填注入未判定原因（注入相位已落 WORKER_NOTE
+     * 留痕），其次如实说明症状未关联——CLOSED FAIL 不得 terminal_reason 为空、
+     * 页面无理由可展示。
+     */
+    private String failCloseReason(DrillJob job) {
+        List<DrillEvent> drillEvents = events.listByDrill(job.id());
+        for (int i = drillEvents.size() - 1; i >= 0; i--) {
+            DrillEvent e = drillEvents.get(i);
+            if (e.eventType() == DrillEvent.EventType.WORKER_NOTE
+                    && e.payloadJson() != null
+                    && e.payloadJson().contains("\"action_unknown\"")) {
+                return "演练 FAIL：注入未确认生效——" + extractNoteValue(e.payloadJson())
+                        + "；恢复与症状核验已完成、现场已还原（观察窗内未关联到期望症状事件）";
+            }
+        }
+        return "演练 FAIL：观察窗内未关联到期望症状事件（related_incident 为空）——"
+                + "可能注入未生效、症状未触发或关联面断链；恢复与核验已完成，现场已还原";
+    }
+
+    /** WORKER_NOTE 单键 JSON 取值（{"action_unknown":"..."} 形态；自有产出面，键固定） */
+    private static String extractNoteValue(String payloadJson) {
+        int marker = payloadJson.indexOf(':');
+        int start = payloadJson.indexOf('"', marker + 1);
+        int end = start < 0 ? -1 : payloadJson.indexOf('"', start + 1);
+        return start >= 0 && end > start ? payloadJson.substring(start + 1, end)
+                : payloadJson;
     }
 
     /** 观察窗期满 = 注入时刻 + 冻结 durationSeconds + 模板 maxFiringWaitSeconds

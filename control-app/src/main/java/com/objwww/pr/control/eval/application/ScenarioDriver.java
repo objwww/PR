@@ -31,6 +31,15 @@ public interface ScenarioDriver {
     default void preflight() {
     }
 
+    /**
+     * BA-190 run-tag 空值兜底：返回使用本批有效 run-tag 的驱动实例。run-tag 敏感
+     * 驱动（{@code ArenaChaosScenarioDriver}）返回带新 tag 的拷贝（共享传输面，
+     * 原单例不被改写）；其余驱动与 run-tag 无关，默认原样返回 this（零行为变化）。
+     */
+    default ScenarioDriver withRunTag(String effectiveRunTag) {
+        return this;
+    }
+
     /** 注入解除 + 恢复确认（实现须执行恢复探针；解除失败同样返回回执不抛半途） */
     RecoveryReceipt deactivate(GoldenCase golden, ActivationReceipt receipt);
 

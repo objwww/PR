@@ -699,7 +699,7 @@ components:
       - checkout
 
   - code: order-arena
-    bound_scenarios: [S3, S4, S5]
+    bound_scenarios: [S3, S4, S5, S16, S17, S18, S19, S20, S21, S22, S23, S24, S25]
     description: AM2 订单靶场服务（compose 服务名 order-arena）
     source_refs:
       - docs/告警AM2-落码技术方案.md M2-01
@@ -713,6 +713,8 @@ components:
     # v2 词表（2026-09-18）：S16~S25（I 类业务交易链路）的 component 同为 order-arena——
     # 只增不改纪律下以注释标注绑定扩展，不改上方既有行；
     # 注册表 S16 注明"order-arena/payment-callback"为模块限定记法，component 值仍取 order-arena
+    # 2026-09-17 根因评分贯通修复：bound_scenarios 列表追加 S16~S25（纯追加，评分语义不变；
+    # 该面只供根因码表入模装订组件归属，评分器 root_cause_hit 匹配路径不读 bound_scenarios）
 
 # -------------------------------------------------------------------------------------
 # 全局负样本（任意维度都必须 NO_MATCH——评分器单测的回归面；防止"噪音表述"跨类误收）

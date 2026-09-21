@@ -1,0 +1,135 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] pr-agent                                                           [pom]
+[INFO] shared-kernel                                                      [jar]
+[INFO] control-app                                                        [jar]
+[INFO] 
+[INFO] -----------------------< com.objwww.pr:pr-agent >-----------------------
+[INFO] Building pr-agent 0.0.1-SNAPSHOT                                   [1/3]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --------------------< com.objwww.pr:shared-kernel >---------------------
+[INFO] Building shared-kernel 0.0.1-SNAPSHOT                              [2/3]
+[INFO]   from shared-kernel\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ shared-kernel ---
+[INFO] skip non existing resourceDirectory E:\kimiCode\shared-kernel\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ shared-kernel ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ shared-kernel ---
+[INFO] 
+[INFO] ---------------------< com.objwww.pr:control-app >----------------------
+[INFO] Building control-app 0.0.1-SNAPSHOT                                [3/3]
+[INFO]   from control-app\pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ control-app ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 84 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ control-app ---
+[INFO] Copying 7 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ control-app ---
+[WARNING]  Parameter 'compilerVersion' (user property 'maven.compiler.compilerVersion') is deprecated: This parameter is no longer evaluated by the underlying compilers, instead the actual version of the javac binary is automatically retrieved.
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ control-app ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.930 s -- in com.objwww.pr.control.drill.application.DrillJobServiceTest
+[INFO] Running com.objwww.pr.control.drill.application.DrillWorkerTest
+17:21:24.431 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=b0853c6d-3085-4a1e-ae29-847bfea688d0 scenario=T1 env=arena-195
+17:21:24.441 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill b0853c6d-3085-4a1e-ae29-847bfea688d0 �ѽ��� OBSERVING����֢״�ȴ�/�ָ�/�����ƽ��� DR-03/04 ���߽��������ĵ���Ϊֹ����ҵ���ֻռλ��
+17:21:24.470 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=e9a36926-086b-4e45-9e8b-cd0b84ee4ab8 scenario=T1 env=arena-195
+17:21:24.476 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=90bb82f6-7582-4ed2-9169-2a20a689775a scenario=T1 env=arena-195
+17:21:24.516 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=05002556-c039-4782-80d3-3d1b867addbf scenario=T1 env=arena-195
+17:21:24.535 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill 3313348d-e55d-4929-ad9d-a6c6061a5ff7 �� RECOVERY_FAILED��worker_lost������ռλ��
+17:21:24.578 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill 7a139aef-ed06-4120-89a0-8d1e67ebc343 ���Ŷӣ�state=PRECHECK��
+17:21:24.621 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=df027dee-a13b-4765-a4c5-240b60b7cd84 scenario=T1 env=arena-195
+17:21:24.638 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- drill worker drill-worker-1 ��ȡ��ҵ��drill=e7cf5bed-8c34-47fd-ad64-e14621bdbc4d scenario=T1 env=arena-195
+17:21:24.644 [main] WARN com.objwww.pr.control.drill.application.DrillWorker -- �¶� drill 5d5444ce-a5d5-45eb-b071-bc0cb7b3ed31 �� RECOVERY_FAILED��worker_lost������ռλ��
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.239 s -- in com.objwww.pr.control.drill.application.DrillWorkerTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+17:21:24.755 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- ���� S1 �� 1 ��ע��ʧ��: flagd admin down
+17:21:24.955 [main] WARN com.objwww.pr.control.eval.application.EvalBatchRunner -- ���� S1 ע��ǰ incident δ resolved��alertname=checkout��Ԥ�� 10s �ľ������������� prev_round_not_resolved ������
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.291 s -- in com.objwww.pr.control.eval.application.EvalBatchRunnerTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.057 s -- in com.objwww.pr.control.eval.application.EvalCommandServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCompareServiceTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.107 s -- in com.objwww.pr.control.eval.application.EvalCompareServiceTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalCompareTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.eval.application.EvalCompareTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalLaunchExecutorGateTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in com.objwww.pr.control.eval.application.EvalLaunchExecutorGateTest
+[INFO] Running com.objwww.pr.control.eval.application.EvalLaunchGateTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in com.objwww.pr.control.eval.application.EvalLaunchGateTest
+[INFO] Running com.objwww.pr.control.eval.domain.service.PairedTrialStatsTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.objwww.pr.control.eval.domain.service.PairedTrialStatsTest
+[INFO] Running com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+17:21:25.629 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.objwww.pr.control.ControlApplication for test class com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.5)
+
+2026-09-14T17:21:26.247+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : Starting SecurityConfigTest using Java 21.0.12 with PID 48192 (started by wangp in E:\kimiCode\control-app)
+2026-09-14T17:21:26.250+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : No active profile set, falling back to 1 default profile: "default"
+2026-09-14T17:21:28.917+08:00  WARN 48192 --- [control-app] [           main] [                                                 ] r$InitializeUserDetailsManagerConfigurer : Found 2 UserDetailsService beans, with names [authUserDetailsService, platformUserDetailsService]. Global Authentication Manager will not use a UserDetailsService for username/password login. Consider publishing a single UserDetailsService bean.
+2026-09-14T17:21:29.873+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 3 endpoints beneath base path '/actuator'
+2026-09-14T17:21:31.231+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] o.s.b.t.m.w.SpringBootMockServletContext : Initializing Spring TestDispatcherServlet ''
+2026-09-14T17:21:31.231+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Initializing Servlet ''
+2026-09-14T17:21:31.232+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] o.s.t.web.servlet.TestDispatcherServlet  : Completed initialization in 1 ms
+2026-09-14T17:21:31.325+08:00  INFO 48192 --- [control-app] [           main] [                                                 ] c.o.p.c.i.config.SecurityConfigTest      : Started SecurityConfigTest in 5.502 seconds (process running for 16.557)
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+WARNING: A Java agent has been loaded dynamically (E:\ProgramInstall\maven\apache-maven-3.9.16\maven-repository\net\bytebuddy\byte-buddy-agent\1.15.11\byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.857 s -- in com.objwww.pr.control.infrastructure.config.SecurityConfigTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 98, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for pr-agent 0.0.1-SNAPSHOT:
+[INFO] 
+[INFO] pr-agent ........................................... SUCCESS [  0.044 s]
+[INFO] shared-kernel ...................................... SUCCESS [  0.707 s]
+[INFO] control-app ........................................ SUCCESS [ 29.560 s]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  30.746 s
+[INFO] Finished at: 2026-09-14T17:21:34+08:00
+[INFO] ------------------------------------------------------------------------

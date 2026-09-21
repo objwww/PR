@@ -176,6 +176,39 @@
           <div v-if="cmp.scanTruncated" class="cmp-note">
             单侧案例扫描超上限，读面已截断：门结论如实转为 INCONCLUSIVE，部分数据不出资格结论。
           </div>
+
+          <!-- ME-T12b 发布验收四查：流程状态与四面结论分展；预登记缺席如实警示不猜阈值 -->
+          <div v-if="cmp.releaseAcceptance" class="accept-box">
+            <div class="accept-head">
+              <span class="gate-label">{{ ACC.title }}</span>
+              <el-tag
+                :type="acceptanceVerdictTagType(cmp.releaseAcceptance.qualification)"
+                disable-transitions
+              >{{ ACC.qualificationTitle }}：{{ acceptanceQualificationZh(cmp.releaseAcceptance.qualification) }}</el-tag>
+              <span class="gate-meta">
+                {{ ACC.pipelineState }}：{{ acceptancePipelineStateZh(cmp.releaseAcceptance.pipelineState) }}（{{ ACC.pipelineNote }}）
+              </span>
+            </div>
+            <div class="accept-faces">
+              <span v-for="f in acceptFaces" :key="f.key" class="accept-face">
+                {{ f.label }}
+                <el-tag size="small" :type="acceptanceVerdictTagType(f.value)" disable-transitions>
+                  {{ acceptanceVerdictZh(f.value) }}
+                </el-tag>
+              </span>
+            </div>
+            <div v-if="cmp.releaseAcceptance.reasons?.length" class="gate-reasons">
+              {{ ACC.reasonsTitle }}：{{ cmp.releaseAcceptance.reasons.map(acceptanceReasonZh).join('；') }}
+            </div>
+            <div v-if="cmp.releaseAcceptance.minClusters == null" class="accept-warn">
+              {{ ACC.preregMissingWarn }}
+            </div>
+            <div v-else class="gate-meta">
+              {{ ACC.preregTitle }}：{{ ACC.minClusters }} {{ cmp.releaseAcceptance.minClusters }}
+              · {{ ACC.preregDigest }} <span class="mono">{{ shortId(cmp.releaseAcceptance.preregDigest) }}</span>
+            </div>
+            <div class="gate-meta">{{ ACC.source }}</div>
+          </div>
         </template>
       </div>
 
@@ -318,6 +351,14 @@ import { ElMessage, ElTag } from 'element-plus'
 import { api } from '../api/client'
 import EmptyState from '../components/common/EmptyState.vue'
 import { scenarioZh } from '../dict/scenarioZh'
+import {
+  EVAL_ME_ACCEPTANCE_ZH as ACC,
+  acceptancePipelineStateZh,
+  acceptanceQualificationZh,
+  acceptanceReasonZh,
+  acceptanceVerdictTagType,
+  acceptanceVerdictZh,
+} from '../dict/evalMeZh'
 import { fmtClock, fmtRatioStat, fmtTime } from '../utils/format'
 
 const route = useRoute()
@@ -557,6 +598,18 @@ const isLegacyRecord = computed(() => {
   return !!(rec?.ruleVersion && cmp.value?.gate?.ruleVersion
     && rec.ruleVersion !== cmp.value.gate.ruleVersion)
 })
+
+// ME-T12b 发布验收四面（键序固定：质量/安全/行为/证据完整性；字典名逐面映射）
+const acceptFaces = computed(() => {
+  const a = cmp.value?.releaseAcceptance
+  if (!a) return []
+  return [
+    { key: 'quality', label: ACC.faces.quality, value: a.quality },
+    { key: 'safety', label: ACC.faces.safety, value: a.safety },
+    { key: 'behavior', label: ACC.faces.behavior, value: a.behavior },
+    { key: 'evidence', label: ACC.faces.evidence, value: a.evidence },
+  ]
+})
 const missingOpen = ref([])
 
 // 分组标签计数：三件套 OK → “分子（百分比）”；UNKNOWN/缺席 → 未统计；NOT_APPLICABLE → 不适用
@@ -771,6 +824,14 @@ onMounted(loadRuns)
 .gate-label { font-size: var(--fs-aux); color: var(--ink-2); }
 .gate-reasons { font-size: var(--fs-aux); color: var(--head); }
 .gate-meta { font-size: var(--fs-aux); color: var(--ink-2); }
+
+.accept-box { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.accept-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.accept-faces { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.accept-face { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-aux); color: var(--ink-2); }
+.accept-warn { margin-top: 8px; font-size: var(--fs-aux); color: var(--warn, #b26a00); }
+.accept-box .gate-reasons { margin-top: 8px; }
+.accept-box .gate-meta { display: block; margin-top: 6px; }
 .readiness-row { font-size: var(--fs-aux); color: var(--ink-2); margin-top: 8px; }
 .missing-link { color: var(--warn, #b26a00); cursor: pointer; text-decoration: underline; }
 

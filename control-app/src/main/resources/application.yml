@@ -40,6 +40,17 @@ app:
       bearer: ${CONTROL_WEBHOOK_BEARER_TOKEN:}
       allowed-receivers: rca-oncall
       allowed-scopes: rca_system
+    # JE-01：Jev 增强路径（TypeSafe /v1/systemone 结构化决策口）。此处只引用变量名
+    # ——key 原文只在 .env（已 gitignore）；mode 缺省 OFF 零调用，启用需显式置
+    # SHADOW/SELECT（配合页面旗标"调查增强"按 run 冻结）；base-url 缺省即官方端点
+    r7:
+      jev:
+        mode: ${AGENT_MODEL_JEV_MODE:OFF}
+        base-url: ${AGENT_MODEL_BASE_URL_JEV:https://api.typesafe.ai}
+        api-key: ${AGENT_MODEL_API_KEY_JEV:}
+        # 触发线/收缩上限（195 实测池 max 11 → 生产建议 min-pool=5 让 SHADOW 真实触发）
+        min-pool-size: ${AGENT_MODEL_JEV_MIN_POOL:20}
+        max-selected: ${AGENT_MODEL_JEV_MAX_SELECTED:20}
     # M6-07 Holmes 退场：app.alert.fallback.*（V33 铸造面 bean 已拆）、
     # app.alert.shadow.holmes.*（V34 观察面 bean 已拆）、app.alert.holmes.*（凭证桥接，
     # 服务与 .env 键已回收）三键族随之摘除——不留死闸（决策记录 §9 步骤⑦裁定）。

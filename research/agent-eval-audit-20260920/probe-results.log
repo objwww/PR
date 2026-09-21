@@ -1,0 +1,4 @@
+OBSERVED MCP_STRUCTURED_ONLY: wrapped=REMOTE_UNAVAILABLE(NullPointerException); ledger=FAILED/TRANSPORT_UNKNOWN
+OBSERVED USAGE_MISSING_GATE: usageMissing=true -> ELIGIBLE_FOR_CANARY (isolated QualityGate, not proof of production admission)
+OBSERVED SUCCESS_AS_PROGRESS: 20 progressed=true records -> open (guard contract; business novelty is caller responsibility)
+OBSERVED ARGUMENT_CHURN: 20 distinct no-progress signatures -> open (global budget/step limit remains separate)

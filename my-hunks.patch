@@ -1,0 +1,32 @@
+diff --git a/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/BoundedLlmRoleRunner.java b/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/BoundedLlmRoleRunner.java
+index 977f9d0..734d2dc 100644
+--- a/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/BoundedLlmRoleRunner.java
++++ b/control-app/src/main/java/com/objwww/pr/control/alert/application/agent/BoundedLlmRoleRunner.java
+@@ -67,8 +67,10 @@ public class BoundedLlmRoleRunner implements RoleRunner {
+             + "\"evidence_refs\":[\"<valid_artifact_refs 之一>\"]}],"
+             + "\"missing_information\":[\"...\"]}}\n"
+             + "规则：args 形状严格遵守 tool_schemas 的 properties/required；evidence_refs"
+-            + " 只允许引用 valid_artifact_refs 中的 id；证据不足时用"
+-            + " HYPOTHESIS 并在 missing_information 写明缺口；每步只输出一个决策对象；"
++            + " 只允许引用 valid_artifact_refs 中的 id，且每个 claim 的 evidence_refs"
++            + " 必须至少一条非空——无证据引用的断言会被整案拒绝、不算有效收敛；"
++            + " 证据不足时用 HYPOTHESIS 并在 missing_information 写明缺口；"
++            + " 每步只输出一个决策对象；"
+             + "委派=按冻结时间窗+input_refs 的固定查询专家（确定性执行，不接受自由文本"
+             + " 指令；question 仅入台账审计，不进子任务执行面）。";
+
+@@ -231,9 +241,13 @@ public class BoundedLlmRoleRunner implements RoleRunner {
+             // 会被当不可重试 → DEAD）；其余控制面终止族原样上抛降级 DEAD
+             if (e.reason() == com.objwww.pr.control.alert.domain.tool.ToolControlReason
+                     .INVALID_ARGS) {
++                // B 批后续（反馈保真度）：附执行器的具体拒绝原因（字段/格式/取值域——
++                // 消息为固定文案+模型自产值，无密可泄）；无它模型只能盲改（时间格式
++                // 两工具相反的系统性失败面，r7batch3 六跑实证）。
+                 advanceStep(request, checkpoint, stableDigest, memory,
+                         "INVALID_ARGS: 工具 " + tool.toolId()
+-                                + " 的 args 未通过校验。严格对照 tool_schemas 里该工具的"
++                                + " 的 args 未通过校验：" + e.getMessage()
++                                + "。严格对照 tool_schemas 里该工具的"
+                                 + " JSON Schema（字段名/类型/取值域）修正 args 后重发 tool_call。");
+                 log.warn("TOOL_CALL 参数形状拒绝（INVALID_ARGS），计步重驱 task={} tool={}",
+                         request.task().id(), tool.toolId());

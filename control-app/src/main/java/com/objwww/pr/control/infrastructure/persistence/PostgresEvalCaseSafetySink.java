@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * {@link EvalCaseSafetySink} 的 Postgres 实现（P4；V141 insert-only，
+ * {@link EvalCaseSafetySink} 的 Postgres 实现（P4；V141 insert-only，V158 扩态+tally，
  * UNIQUE 冲突返回 false——与 eval_case_result 同纪律）。
  */
 public class PostgresEvalCaseSafetySink implements EvalCaseSafetySink {
@@ -21,15 +21,17 @@ public class PostgresEvalCaseSafetySink implements EvalCaseSafetySink {
 
     @Override
     public boolean insert(UUID evalRunId, String scenarioId, int roundNo,
-                          String verdict, String violationsJson, boolean redteam) {
+                          String verdict, String violationsJson, boolean redteam,
+                          String tallyJson) {
         try {
             return jdbc.sql("""
                             insert into eval_case_safety (
                                 id, eval_run_id, scenario_id, round_no,
-                                verdict, violations, redteam
+                                verdict, violations, redteam, tally
                             ) values (
                                 :id, :evalRunId, :scenarioId, :roundNo,
-                                :verdict, cast(:violations as jsonb), :redteam
+                                :verdict, cast(:violations as jsonb), :redteam,
+                                cast(:tally as jsonb)
                             )
                             """)
                     .param("id", UUID.randomUUID())
@@ -39,6 +41,7 @@ public class PostgresEvalCaseSafetySink implements EvalCaseSafetySink {
                     .param("verdict", verdict)
                     .param("violations", violationsJson == null ? "[]" : violationsJson)
                     .param("redteam", redteam)
+                    .param("tally", tallyJson == null ? "{}" : tallyJson)
                     .update() > 0;
         } catch (DuplicateKeyException e) {
             return false;

@@ -121,13 +121,44 @@ public class EvalQueryService {
     /**
      * EV-09 稳定性分面（Agent 非确定性一级指标——业界共识：IBM ITBench
      * run-to-run consistency / Majority-at-k、RCAEval Avg@5；单轮命中率会被
-     * 幸运轮抬走，稳定性必须独立计量）：passAt1 = 命中轮次/总轮次（逐轮平均）；
-     * passAllRounds = 全轮命中场景/场景数（pass@k 严格口径，连 k 轮全过才算稳）；
-     * scenarioConsistency = 判定与实际根因三元组全轮一致的场景/场景数（结果漂移
-     * 即不一致，与对错正交）。无案例落档 → 三件套 UNKNOWN，不填 0。
+     * 幸运轮抬走，稳定性必须独立计量）。D01（F09 修正）指标命名与分母口径：
+     * <ul>
+     *   <li><b>passAt1 = micro 逐轮成功率</b>（命中轮次/已落档轮次，逐轮等权）——
+     *       与各场景等权的 macro 不是同一指标，不可混称同一个 pass@1；</li>
+     *   <li><b>macroPassRate = macro 场景等权成功率</b>（各场景命中率的算术平均，
+     *       场景轮数不同时与 micro 必然偏离，故分称）；</li>
+     *   <li><b>passAllRounds = 全部计划轮次成功场景/场景数</b>（历史字段名保留兼容；
+     *       语义是"全轮命中"即 pass^k 口径——只有固定 k 且全部计划 trial 终态完整
+     *       （planComplete=true 且 plannedRoundsPerScenario 非 null）时才允许以
+     *       pass^k 命名展示，少轮/计划身份缺失时只是暂态观测，不构成通过结论）；</li>
+     *   <li><b>passAtLeastOnce = k 次至少一次成功场景/场景数</b>（通行 pass@k 本义，
+     *       实测比例直展，不假设 trial 独立、绝不用 p^k 冒充实测）；</li>
+     *   <li><b>scenarioConsistency = 轮间一致性</b>（判定与实际根因三元组全轮一致的
+     *       场景/场景数，与对错正交——稳定地答错也一致，一致性单独不代表质量）；</li>
+     *   <li><b>roundsProgress / plannedRoundsPerScenario / planComplete</b>：冻结
+     *       launch plan 计划轮次对照面——plannedRounds 逐场景读自 launch_plan 快照
+     *       （roundsPerScenario，空值 = worker 默认 2；回放形态场景按 runner
+     *       effectiveRounds 同律裁剪为 1），对照实际终态落档轮次。运行中展示进度
+     *       与暂态结果；计划快照不可用/缺 caseKeys 身份 → 三面 null/UNKNOWN，
+     *       不猜计划、不出完整性结论。</li>
+     * </ul>
+     * 无案例落档 → 各比率 UNKNOWN，不填 0。
      */
     public record StabilityFacet(RatioStat passAt1, RatioStat passAllRounds,
-                                 RatioStat scenarioConsistency) {
+                                 RatioStat scenarioConsistency,
+                                 RatioStat passAtLeastOnce,
+                                 MacroStat macroPassRate,
+                                 RatioStat roundsProgress,
+                                 Integer plannedRoundsPerScenario,
+                                 Boolean planComplete) {
+    }
+
+    /**
+     * macro 平均率（D01：各场景等权成功率——非整数计数比，RatioStat 三件套表达不了
+     * 算术平均，单列 value ∈ [0,1] 实测均值；samples = 参与平均的场景数；
+     * 无场景落档 → UNKNOWN 且 value null）。
+     */
+    public record MacroStat(Double value, Long samples, String status) {
     }
 
     /**
@@ -191,7 +222,8 @@ public class EvalQueryService {
                                   QualityFacet quality, StabilityFacet stability,
                                   RunFacets facets,
                                   long modelCallFailures, String modelCallFailureCode,
-                                  RatioStat sixPartsRate) {
+                                  RatioStat sixPartsRate,
+                                  String terminalReason) {
     }
 
     public record EvalRunListResponse(List<EvalRunListItem> items, String nextCursor,
@@ -340,7 +372,87 @@ public class EvalQueryService {
                                          boolean silencePenalty, String failureSample,
                                          Instant createdAt, ScenarioIdentity scenarioIdentity,
                                          LinkageBlock linkage, ReportSummary report,
-                                         CaseEvidenceBlock evidence, Instant asOf) {
+                                         CaseEvidenceBlock evidence,
+                                         List<CaseBehaviorEntry> behavior,
+                                         List<CaseLoopEntry> loop,
+                                         List<CaseCollabEntry> collab,
+                                         List<CaseDriftEntry> drift, Instant asOf) {
+    }
+
+    /** 行为评测覆盖双轨（ME-T04/D04；各轨可空 = 该轨未评如实，不填 0） */
+    public record CaseBehaviorCoverage(Integer textCovered, Integer textTotal,
+                                       Integer evidenceCovered, Integer evidenceTotal) {
+    }
+
+    /** 行为评测单项检查（status = 五态名原文，中文映射归前端字典；reasonCode 裸码
+     *  就近标注成因归前端） */
+    public record CaseBehaviorCheck(String name, String status, String reasonCode,
+                                    List<String> evidenceRefs) {
+    }
+
+    /** 行为评测指标分子/分母（分母 0 = 口径内无对象如实） */
+    public record CaseBehaviorMetric(String name, long numerator, long denominator) {
+    }
+
+    /**
+     * 案例行为评测条目（ME-T04/V160；一案例一 grader 版本一条，多版本并存如实并列）。
+     * jsonb 解析失败的行如实缺席（不猜——与 safetySummary 违规明细同律）。
+     */
+    public record CaseBehaviorEntry(String graderVersion, String traceDigest,
+                                    CaseBehaviorCoverage coverage,
+                                    List<CaseBehaviorCheck> checks,
+                                    List<CaseBehaviorMetric> metrics,
+                                    List<String> failureLabels,
+                                    List<String> evidenceRefs) {
+    }
+
+    /**
+     * 案例死循环评测条目（ME-T12/V162；一案例一 grader 版本一条，多版本并存如实
+     * 并列）。观测标量可空 = 观测读失败 ERROR 行或数据缺失如实不出数；jsonb 解析
+     * 失败的行如实缺席（不猜——与 behaviorEntries 同律）。
+     */
+    public record CaseLoopEntry(String graderVersion, String stopReason,
+                                Integer detectionEventIndex,
+                                Integer firstNoProgressEventIndex,
+                                int postStopNewActions, Long physicalCallsFromOnset,
+                                Long tokensFromOnset, Long secondsFromOnset,
+                                List<CaseBehaviorCheck> checks,
+                                List<CaseBehaviorMetric> metrics,
+                                List<String> failureLabels) {
+    }
+
+    /**
+     * 案例协作评测条目（ME-T12a/V163；一案例一 grader 版本一条，多版本并存如实
+     * 并列）。观测标量可空 = 观测读失败 ERROR 行或 trace 缺失如实不出数；归因
+     * 双轨（suspected/supported）分列不混；jsonb 解析失败的行如实缺席（不猜）。
+     */
+    public record CaseCollabEntry(String graderVersion, Integer edgeCount,
+                                  Integer admittedCount, Long tokenCostTotal,
+                                  List<CaseBehaviorCheck> checks,
+                                  List<CaseBehaviorMetric> metrics,
+                                  List<String> failureLabels,
+                                  List<String> suspectedAttributions,
+                                  List<String> supportedAttributions) {
+    }
+
+    /** 漂移消费观测面（D08；整面可空 = 无消费观测如实；consumed 可空 = 未观测不猜） */
+    public record CaseDriftConsumption(String mode, boolean summaryCommitted,
+                                       boolean consumerInvoked, Boolean consumed,
+                                       String policyDigest) {
+    }
+
+    /**
+     * 案例上下文漂移评测条目（ME-T12a/V164；一案例一 grader 版本一条，多版本并存
+     * 如实并列）。summaryDigest 可空 = 无压缩事件或观测读失败 ERROR 行如实；
+     * consumption 可空 = 无消费观测面；deferred = 本 grader 不评四项如实留痕；
+     * jsonb 解析失败的行如实缺席（不猜）。
+     */
+    public record CaseDriftEntry(String graderVersion, String summaryDigest,
+                                 CaseDriftConsumption consumption,
+                                 List<CaseBehaviorCheck> checks,
+                                 List<CaseBehaviorMetric> metrics,
+                                 List<String> failureLabels,
+                                 List<String> deferred) {
     }
 
     /** 案例级证据汇总行（EV-05 Run 证据查询）：status ∈ OK / NO_REPORT / NO_REFS；
@@ -419,13 +531,28 @@ public class EvalQueryService {
                 reader.listSixPartsStatsForRuns(runIds)) {
             sixPartsByRun.put(sixPartsRow.evalRunId(), sixPartsRow);
         }
+        // D01：页内 run 的回放案例键按数据集版本去重批量取回（禁 N+1）——冻结
+        // launch plan 的每场景 plannedRounds 需要据此裁剪回放形态单轮；无快照
+        // 行不取（计划面如实 UNKNOWN，不猜）
+        Map<String, Set<String>> replayKeysByDataset = new LinkedHashMap<>();
+        for (EvalRunRow row : page.items()) {
+            String dv = row.datasetVersion();
+            if (row.launchPlanJson() != null && dv != null
+                    && !replayKeysByDataset.containsKey(dv)) {
+                replayKeysByDataset.put(dv,
+                        Set.copyOf(reader.listPlanCaseKeys(dv)));
+            }
+        }
         List<EvalRunListItem> items = new ArrayList<>(page.items().size());
         for (EvalRunRow row : page.items()) {
             items.add(toListItem(row,
                     usageByRun.getOrDefault(row.runId(), List.of()),
                     statsByRun.getOrDefault(row.runId(), List.of()),
                     failuresByRun.getOrDefault(row.runId(), List.of()),
-                    sixPartsRateOf(sixPartsByRun.get(row.runId()))));
+                    sixPartsRateOf(sixPartsByRun.get(row.runId())),
+                    plannedRoundsByScenario(row,
+                            replayKeysByDataset.getOrDefault(row.datasetVersion(),
+                                    Set.of()))));
         }
         return new EvalRunListResponse(List.copyOf(items), nextCursor, Instant.now());
     }
@@ -475,7 +602,8 @@ public class EvalQueryService {
                     precision, recall, f1,
                     row.caseCount(), row.displayName(), row.mode(), row.totalScenarios(),
                     quality,
-                    stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId))),
+                    stabilityFacet(reader.listScenarioRoundStatsForRuns(List.of(runId)),
+                            plannedRoundsByScenario(row, replayCaseKeys(row))),
                     facets(row, usageRollup(runId)), Instant.now(),
                     row.terminalReason(), parseLaunchPlan(row.launchPlanJson()),
                     sixPartsRateOf(oneSixPartsRow(reader.listSixPartsStatsForRuns(List.of(runId)))));
@@ -509,15 +637,24 @@ public class EvalQueryService {
     }
 
     /**
-     * P4 run 级安全汇总（拦截率出数面）：assessed=有裁决案例数；rejects=SafetyGate
-     * REJECT（不安全尝试被账本拦截面捕获）；redteamDecoyAdopted=红队案例
+     * P4 run 级安全汇总（拦截率出数面）：assessed=有裁决案例数；五态分列计数
+     * （ME-T02/V158：passes=verdict PASS 计数——旧二态批值不变，五态下不再等于
+     * assessed-rejects，NOT_ASSESSED 不得冒充通过）；rejects=SafetyGate REJECT
+     * （不安全尝试被账本拦截面捕获）；redteamDecoyAdopted=红队案例
      * root_cause_hit=true（Agent 采纳了诱饵根因=被注入劫持——红队取反评分）。
+     * ME-T02 tally 聚合（D03 三事实 + 覆盖分母）：attempted/blocked/executedViolations/
+     * assessedFaces/notAssessedFaces = 有 tally 行的合计；tallyCases=有 tally 行数、
+     * tallyMissingCases=无 tally 行数（旧批全缺 → 各合计 null 如实"旧口径"，不填 0）。
      * run 未知 → empty（controller 404 面）。
      */
     public record SafetySummaryResponse(UUID runId, long assessedCases,
                                         long rejects, long passes,
+                                        long notAssessed, long notApplicable, long errors,
                                         long redteamCases, long redteamDecoyAdopted,
                                         long redteamSafetyRejects,
+                                        Long attempted, Long blocked, Long executedViolations,
+                                        Long assessedFaces, Long notAssessedFaces,
+                                        long tallyCases, long tallyMissingCases,
                                         List<SafetyFaceCount> faceCounts, Instant asOf) {
     }
 
@@ -527,6 +664,10 @@ public class EvalQueryService {
         }
         List<EvalQueryReader.CaseSafetyRow> rows = reader.listCaseSafety(runId);
         long rejects = rows.stream().filter(r -> "REJECT".equals(r.verdict())).count();
+        long passes = rows.stream().filter(r -> "PASS".equals(r.verdict())).count();
+        long notAssessed = rows.stream().filter(r -> "NOT_ASSESSED".equals(r.verdict())).count();
+        long notApplicable = rows.stream().filter(r -> "NOT_APPLICABLE".equals(r.verdict())).count();
+        long errors = rows.stream().filter(r -> "ERROR".equals(r.verdict())).count();
         long redteamCases = rows.stream().filter(EvalQueryReader.CaseSafetyRow::redteam).count();
         long decoyAdopted = rows.stream()
                 .filter(EvalQueryReader.CaseSafetyRow::redteam)
@@ -535,8 +676,27 @@ public class EvalQueryService {
         long redteamRejects = rows.stream()
                 .filter(EvalQueryReader.CaseSafetyRow::redteam)
                 .filter(r -> "REJECT".equals(r.verdict())).count();
+        long attempted = 0;
+        long blocked = 0;
+        long executedViolations = 0;
+        long assessedFaces = 0;
+        long notAssessedFaces = 0;
+        long tallyCases = 0;
         Map<String, Long> faces = new java.util.TreeMap<>();
         for (EvalQueryReader.CaseSafetyRow row : rows) {
+            if (row.tallyJson() != null) {
+                try {
+                    JsonNode tally = mapper.readTree(row.tallyJson());
+                    attempted += tally.path("attempted").asLong(0);
+                    blocked += tally.path("blocked").asLong(0);
+                    executedViolations += tally.path("executedViolations").asLong(0);
+                    assessedFaces += tally.path("assessedFaces").asLong(0);
+                    notAssessedFaces += tally.path("notAssessedFaces").asLong(0);
+                    tallyCases++;
+                } catch (Exception e) {
+                    // tally 解析失败如实不计（不猜；该行归入 tallyMissing 口径之外不冒充）
+                }
+            }
             if (row.violationsJson() == null) {
                 continue;
             }
@@ -552,8 +712,14 @@ public class EvalQueryService {
         List<SafetyFaceCount> faceCounts = faces.entrySet().stream()
                 .map(e -> new SafetyFaceCount(e.getKey(), e.getValue()))
                 .toList();
-        return Optional.of(new SafetySummaryResponse(runId, rows.size(), rejects,
-                rows.size() - rejects, redteamCases, decoyAdopted, redteamRejects,
+        boolean noTally = tallyCases == 0;
+        return Optional.of(new SafetySummaryResponse(runId, rows.size(), rejects, passes,
+                notAssessed, notApplicable, errors,
+                redteamCases, decoyAdopted, redteamRejects,
+                noTally ? null : attempted, noTally ? null : blocked,
+                noTally ? null : executedViolations,
+                noTally ? null : assessedFaces, noTally ? null : notAssessedFaces,
+                tallyCases, rows.size() - tallyCases,
                 List.copyOf(faceCounts), Instant.now()));
     }
 
@@ -649,6 +815,426 @@ public class EvalQueryService {
                 rows.stream().filter(r -> "MEDIUM".equals(r.confidenceLevel())).count(),
                 rows.stream().filter(r -> "LOW".equals(r.confidenceLevel())).count(),
                 Instant.now()));
+    }
+
+    // ------------------------------------------------------------------ M-e T11 行为评测汇总
+
+    /**
+     * 覆盖双轨聚合（D04）：text* = 旧版文本覆盖（报告子串命中，原义保留）合计；
+     * evidence* = 新证据覆盖（实际 evidence/result 语料命中）合计——该轨可空
+     * （无检查点/读面缺席未评），evidenceAssessed = evidence 轨有值的行数（分母口径
+     * 如实披露：只含被评行，无值行不填 0）；全无可加值 → 对应合计 null 如实。
+     */
+    public record BehaviorCoverageStat(Long textCovered, Long textTotal,
+                                       Long evidenceCovered, Long evidenceTotal,
+                                       long evidenceAssessed) {
+    }
+
+    /** 单项检查五态计数（statusCounts 键 = BehaviorCheckStatus 五态名，TreeMap 定序） */
+    public record BehaviorCheckStat(String name, Map<String, Long> statusCounts) {
+    }
+
+    /** 指标分子/分母合计（分母 0 = 口径内无对象如实，不约分不填比率） */
+    public record BehaviorMetricStat(String name, long numerator, long denominator) {
+    }
+
+    /** 失败标签分布行（计数降序、同计数标签升序，确定性） */
+    public record BehaviorLabelCount(String label, long count) {
+    }
+
+    /**
+     * M-e run 级行为评测汇总（eval_case_behavior/V160 出数面）：assessed = 有落档行的
+     * 去重案例数（无行 → 0 如实缺席，沿 six-parts 口径——未评不冒充零问题）；
+     * rows = 总行数（同案例多 grader 版本并存时 rows > assessed，计数按行聚合如实，
+     * graderVersions 披露参与版本）。checks 按检查名聚合五态计数；metrics 按名合计
+     * 分子/分母；failureLabels 为 FAIL 机器码分布。run 未知 → empty（controller 404 面）。
+     */
+    public record BehaviorSummaryResponse(UUID runId, long assessed, long rows,
+                                          List<String> graderVersions,
+                                          BehaviorCoverageStat coverage,
+                                          List<BehaviorCheckStat> checks,
+                                          List<BehaviorMetricStat> metrics,
+                                          List<BehaviorLabelCount> failureLabels,
+                                          Instant asOf) {
+    }
+
+    public Optional<BehaviorSummaryResponse> behaviorSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseBehaviorRow> rows = reader.listCaseBehavior(runId);
+        long assessed = rows.stream().map(EvalQueryReader.CaseBehaviorRow::caseResultId)
+                .distinct().count();
+        List<String> graderVersions = rows.stream()
+                .map(EvalQueryReader.CaseBehaviorRow::graderVersion)
+                .filter(Objects::nonNull).distinct().sorted().toList();
+        // 覆盖双轨合计：各轨只加有值行（null=该轨未评，不进分母不填 0）
+        Long textCovered = null;
+        Long textTotal = null;
+        Long evidenceCovered = null;
+        Long evidenceTotal = null;
+        long evidenceAssessed = 0;
+        Map<String, Map<String, Long>> checkCounts = new TreeMap<>();
+        Map<String, long[]> metricSums = new TreeMap<>();
+        Map<String, Long> labelCounts = new TreeMap<>();
+        for (EvalQueryReader.CaseBehaviorRow row : rows) {
+            JsonNode coverage = readJson(row.coverageJson());
+            if (coverage != null && coverage.isObject()) {
+                textCovered = addNullable(textCovered, coverage.get("textCovered"));
+                textTotal = addNullable(textTotal, coverage.get("textTotal"));
+                JsonNode ec = coverage.get("evidenceCovered");
+                JsonNode et = coverage.get("evidenceTotal");
+                if (ec != null && ec.isNumber() && et != null && et.isNumber()) {
+                    evidenceAssessed++;
+                    evidenceCovered = addNullable(evidenceCovered, ec);
+                    evidenceTotal = addNullable(evidenceTotal, et);
+                }
+            }
+            JsonNode checks = readJson(row.checksJson());
+            if (checks != null && checks.isArray()) {
+                for (JsonNode check : checks) {
+                    String name = check.path("name").asText("UNKNOWN");
+                    String status = check.path("status").asText("UNKNOWN");
+                    checkCounts.computeIfAbsent(name, k -> new TreeMap<>())
+                            .merge(status, 1L, Long::sum);
+                }
+            }
+            JsonNode metrics = readJson(row.metricsJson());
+            if (metrics != null && metrics.isArray()) {
+                for (JsonNode metric : metrics) {
+                    long[] sums = metricSums.computeIfAbsent(
+                            metric.path("name").asText("UNKNOWN"), k -> new long[2]);
+                    sums[0] += metric.path("numerator").asLong(0);
+                    sums[1] += metric.path("denominator").asLong(0);
+                }
+            }
+            JsonNode labels = readJson(row.failureLabelsJson());
+            if (labels != null && labels.isArray()) {
+                for (JsonNode label : labels) {
+                    labelCounts.merge(label.asText("UNKNOWN"), 1L, Long::sum);
+                }
+            }
+        }
+        List<BehaviorCheckStat> checks = checkCounts.entrySet().stream()
+                .map(e -> new BehaviorCheckStat(e.getKey(), Map.copyOf(e.getValue())))
+                .toList();
+        List<BehaviorMetricStat> metrics = metricSums.entrySet().stream()
+                .map(e -> new BehaviorMetricStat(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+        List<BehaviorLabelCount> labels = labelCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(e -> new BehaviorLabelCount(e.getKey(), e.getValue()))
+                .toList();
+        return Optional.of(new BehaviorSummaryResponse(runId, assessed, rows.size(),
+                graderVersions,
+                new BehaviorCoverageStat(textCovered, textTotal, evidenceCovered,
+                        evidenceTotal, evidenceAssessed),
+                List.copyOf(checks), List.copyOf(metrics), List.copyOf(labels),
+                Instant.now()));
+    }
+
+    // ------------------------------------------------------------------ ME-T12 死循环评测汇总
+
+    /**
+     * ME-T12 run 级死循环评测汇总（eval_case_loop/V162 出数面）：assessed = 有落档
+     * 行的去重案例数（无行 → 0 如实缺席，沿 behavior 口径——未评不冒充零问题）；
+     * rows = 总行数（同案例多 grader 版本并存时 rows > assessed，计数按行聚合如实，
+     * graderVersions 披露参与版本）。stopReasons 为终态分布（null 终态 = 观测读
+     * 失败 ERROR 行/无可评轨迹，如实单列 NONE）；checks 按检查名聚合五态计数；
+     * metrics 按名合计分子/分母；failureLabels 为 FAIL 机器码分布。run 未知 →
+     * empty（controller 404 面）。
+     */
+    public record LoopSummaryResponse(UUID runId, long assessed, long rows,
+                                      List<String> graderVersions,
+                                      Map<String, Long> stopReasons,
+                                      List<BehaviorCheckStat> checks,
+                                      List<BehaviorMetricStat> metrics,
+                                      List<BehaviorLabelCount> failureLabels,
+                                      Instant asOf) {
+    }
+
+    public Optional<LoopSummaryResponse> loopSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseLoopRow> rows = reader.listCaseLoop(runId);
+        long assessed = rows.stream().map(EvalQueryReader.CaseLoopRow::caseResultId)
+                .distinct().count();
+        List<String> graderVersions = rows.stream()
+                .map(EvalQueryReader.CaseLoopRow::graderVersion)
+                .filter(Objects::nonNull).distinct().sorted().toList();
+        Map<String, Long> stopReasons = new TreeMap<>();
+        Map<String, Map<String, Long>> checkCounts = new TreeMap<>();
+        Map<String, long[]> metricSums = new TreeMap<>();
+        Map<String, Long> labelCounts = new TreeMap<>();
+        for (EvalQueryReader.CaseLoopRow row : rows) {
+            // null 终态 = ERROR 行/无可评轨迹，如实单列不丢弃
+            stopReasons.merge(row.stopReason() == null ? "NONE" : row.stopReason(),
+                    1L, Long::sum);
+            JsonNode checks = readJson(row.checksJson());
+            if (checks != null && checks.isArray()) {
+                for (JsonNode check : checks) {
+                    String name = check.path("name").asText("UNKNOWN");
+                    String status = check.path("status").asText("UNKNOWN");
+                    checkCounts.computeIfAbsent(name, k -> new TreeMap<>())
+                            .merge(status, 1L, Long::sum);
+                }
+            }
+            JsonNode metrics = readJson(row.metricsJson());
+            if (metrics != null && metrics.isArray()) {
+                for (JsonNode metric : metrics) {
+                    long[] sums = metricSums.computeIfAbsent(
+                            metric.path("name").asText("UNKNOWN"), k -> new long[2]);
+                    sums[0] += metric.path("numerator").asLong(0);
+                    sums[1] += metric.path("denominator").asLong(0);
+                }
+            }
+            JsonNode labels = readJson(row.failureLabelsJson());
+            if (labels != null && labels.isArray()) {
+                for (JsonNode label : labels) {
+                    labelCounts.merge(label.asText("UNKNOWN"), 1L, Long::sum);
+                }
+            }
+        }
+        List<BehaviorCheckStat> checks = checkCounts.entrySet().stream()
+                .map(e -> new BehaviorCheckStat(e.getKey(), Map.copyOf(e.getValue())))
+                .toList();
+        List<BehaviorMetricStat> metrics = metricSums.entrySet().stream()
+                .map(e -> new BehaviorMetricStat(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+        List<BehaviorLabelCount> labels = labelCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(e -> new BehaviorLabelCount(e.getKey(), e.getValue()))
+                .toList();
+        return Optional.of(new LoopSummaryResponse(runId, assessed, rows.size(),
+                graderVersions, Map.copyOf(stopReasons), List.copyOf(checks),
+                List.copyOf(metrics), List.copyOf(labels), Instant.now()));
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 协作评测汇总
+
+    /**
+     * ME-T12a run 级协作评测汇总（eval_case_collab/V163 出数面）：assessed = 有落档
+     * 行的去重案例数（无行 → 0 如实缺席，沿 loop 口径——未评不冒充零问题）；
+     * edges/admitted/tokenCostTotal 为各行合计（可空列只加有值行，全无可加值 →
+     * null 如实未观测，不填 0）；checks 按检查名聚合五态计数；metrics 按名合计
+     * 分子/分母；failureLabels 为 MAST/机制码分布；归因双轨计数分列不混
+     * （suspected=疑似无干预对照，supported=重放改善因果归因）。run 未知 →
+     * empty（controller 404 面）。
+     */
+    public record CollabSummaryResponse(UUID runId, long assessed, long rows,
+                                        List<String> graderVersions,
+                                        Long edges, Long admitted, Long tokenCostTotal,
+                                        List<BehaviorCheckStat> checks,
+                                        List<BehaviorMetricStat> metrics,
+                                        List<BehaviorLabelCount> failureLabels,
+                                        long suspectedAttributions,
+                                        long supportedAttributions,
+                                        Instant asOf) {
+    }
+
+    public Optional<CollabSummaryResponse> collabSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseCollabRow> rows = reader.listCaseCollab(runId);
+        long assessed = rows.stream().map(EvalQueryReader.CaseCollabRow::caseResultId)
+                .distinct().count();
+        List<String> graderVersions = rows.stream()
+                .map(EvalQueryReader.CaseCollabRow::graderVersion)
+                .filter(Objects::nonNull).distinct().sorted().toList();
+        Long edges = null;
+        Long admitted = null;
+        Long tokenCost = null;
+        Map<String, Map<String, Long>> checkCounts = new TreeMap<>();
+        Map<String, long[]> metricSums = new TreeMap<>();
+        Map<String, Long> labelCounts = new TreeMap<>();
+        long suspected = 0;
+        long supported = 0;
+        for (EvalQueryReader.CaseCollabRow row : rows) {
+            // 可空标量：只加有值行（null=该行未观测，不进合计不填 0）
+            if (row.edgeCount() != null) {
+                edges = (edges == null ? 0 : edges) + row.edgeCount();
+            }
+            if (row.admittedCount() != null) {
+                admitted = (admitted == null ? 0 : admitted) + row.admittedCount();
+            }
+            if (row.tokenCostTotal() != null) {
+                tokenCost = (tokenCost == null ? 0 : tokenCost) + row.tokenCostTotal();
+            }
+            JsonNode checks = readJson(row.checksJson());
+            if (checks != null && checks.isArray()) {
+                for (JsonNode check : checks) {
+                    String name = check.path("name").asText("UNKNOWN");
+                    String status = check.path("status").asText("UNKNOWN");
+                    checkCounts.computeIfAbsent(name, k -> new TreeMap<>())
+                            .merge(status, 1L, Long::sum);
+                }
+            }
+            JsonNode metrics = readJson(row.metricsJson());
+            if (metrics != null && metrics.isArray()) {
+                for (JsonNode metric : metrics) {
+                    long[] sums = metricSums.computeIfAbsent(
+                            metric.path("name").asText("UNKNOWN"), k -> new long[2]);
+                    sums[0] += metric.path("numerator").asLong(0);
+                    sums[1] += metric.path("denominator").asLong(0);
+                }
+            }
+            JsonNode labels = readJson(row.failureLabelsJson());
+            if (labels != null && labels.isArray()) {
+                for (JsonNode label : labels) {
+                    labelCounts.merge(label.asText("UNKNOWN"), 1L, Long::sum);
+                }
+            }
+            // 归因双轨：计数分列不混
+            JsonNode suspectedNode = readJson(row.suspectedAttributionsJson());
+            if (suspectedNode != null && suspectedNode.isArray()) {
+                suspected += suspectedNode.size();
+            }
+            JsonNode supportedNode = readJson(row.supportedAttributionsJson());
+            if (supportedNode != null && supportedNode.isArray()) {
+                supported += supportedNode.size();
+            }
+        }
+        List<BehaviorCheckStat> checks = checkCounts.entrySet().stream()
+                .map(e -> new BehaviorCheckStat(e.getKey(), Map.copyOf(e.getValue())))
+                .toList();
+        List<BehaviorMetricStat> metrics = metricSums.entrySet().stream()
+                .map(e -> new BehaviorMetricStat(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+        List<BehaviorLabelCount> labels = labelCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(e -> new BehaviorLabelCount(e.getKey(), e.getValue()))
+                .toList();
+        return Optional.of(new CollabSummaryResponse(runId, assessed, rows.size(),
+                graderVersions, edges, admitted, tokenCost, List.copyOf(checks),
+                List.copyOf(metrics), List.copyOf(labels), suspected, supported,
+                Instant.now()));
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 漂移评测汇总
+
+    /**
+     * ME-T12a run 级上下文漂移评测汇总（eval_case_drift/V164 出数面）：assessed =
+     * 有落档行的去重案例数（无行 → 0 如实缺席，沿 collab 口径——未评不冒充零
+     * 问题）；withSummary = summary_digest 非空行数（无压缩事件行不计入，如实
+     * 区分"评了但没压缩"）；consumption 四件计数（观测行数/committed/invoked/
+     * consumed=true——无消费观测面不计入任一项，不填 0 冒充）；checks 按检查名
+     * 聚合五态计数；metrics 按名合计分子/分母；failureLabels 计数分布；deferred
+     * 为各行不评项并集（如实留痕）。run 未知 → empty（controller 404 面）。
+     */
+    public record DriftSummaryResponse(UUID runId, long assessed, long rows,
+                                       List<String> graderVersions, long withSummary,
+                                       long consumptionObserved, long summaryCommitted,
+                                       long consumerInvoked, long consumed,
+                                       List<BehaviorCheckStat> checks,
+                                       List<BehaviorMetricStat> metrics,
+                                       List<BehaviorLabelCount> failureLabels,
+                                       List<String> deferred, Instant asOf) {
+    }
+
+    public Optional<DriftSummaryResponse> driftSummary(UUID runId) {
+        if (reader.findRun(runId).isEmpty()) {
+            return Optional.empty();
+        }
+        List<EvalQueryReader.CaseDriftRow> rows = reader.listCaseDrift(runId);
+        long assessed = rows.stream().map(EvalQueryReader.CaseDriftRow::caseResultId)
+                .distinct().count();
+        List<String> graderVersions = rows.stream()
+                .map(EvalQueryReader.CaseDriftRow::graderVersion)
+                .filter(Objects::nonNull).distinct().sorted().toList();
+        long withSummary = rows.stream().filter(r -> r.summaryDigest() != null).count();
+        long consumptionObserved = 0;
+        long summaryCommitted = 0;
+        long consumerInvoked = 0;
+        long consumed = 0;
+        Map<String, Map<String, Long>> checkCounts = new TreeMap<>();
+        Map<String, long[]> metricSums = new TreeMap<>();
+        Map<String, Long> labelCounts = new TreeMap<>();
+        Set<String> deferredSet = new TreeSet<>();
+        for (EvalQueryReader.CaseDriftRow row : rows) {
+            JsonNode face = readJson(row.consumptionJson());
+            if (face != null && face.isObject()) {
+                consumptionObserved++;
+                if (face.path("summaryCommitted").asBoolean(false)) {
+                    summaryCommitted++;
+                }
+                if (face.path("consumerInvoked").asBoolean(false)) {
+                    consumerInvoked++;
+                }
+                if (face.path("consumed").asBoolean(false)) {
+                    consumed++;
+                }
+            }
+            JsonNode checks = readJson(row.checksJson());
+            if (checks != null && checks.isArray()) {
+                for (JsonNode check : checks) {
+                    String name = check.path("name").asText("UNKNOWN");
+                    String status = check.path("status").asText("UNKNOWN");
+                    checkCounts.computeIfAbsent(name, k -> new TreeMap<>())
+                            .merge(status, 1L, Long::sum);
+                }
+            }
+            JsonNode metrics = readJson(row.metricsJson());
+            if (metrics != null && metrics.isArray()) {
+                for (JsonNode metric : metrics) {
+                    long[] sums = metricSums.computeIfAbsent(
+                            metric.path("name").asText("UNKNOWN"), k -> new long[2]);
+                    sums[0] += metric.path("numerator").asLong(0);
+                    sums[1] += metric.path("denominator").asLong(0);
+                }
+            }
+            JsonNode labels = readJson(row.failureLabelsJson());
+            if (labels != null && labels.isArray()) {
+                for (JsonNode label : labels) {
+                    labelCounts.merge(label.asText("UNKNOWN"), 1L, Long::sum);
+                }
+            }
+            JsonNode deferred = readJson(row.deferredJson());
+            if (deferred != null && deferred.isArray()) {
+                for (JsonNode d : deferred) {
+                    deferredSet.add(d.asText("UNKNOWN"));
+                }
+            }
+        }
+        List<BehaviorCheckStat> checks = checkCounts.entrySet().stream()
+                .map(e -> new BehaviorCheckStat(e.getKey(), Map.copyOf(e.getValue())))
+                .toList();
+        List<BehaviorMetricStat> metrics = metricSums.entrySet().stream()
+                .map(e -> new BehaviorMetricStat(e.getKey(), e.getValue()[0], e.getValue()[1]))
+                .toList();
+        List<BehaviorLabelCount> labels = labelCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .map(e -> new BehaviorLabelCount(e.getKey(), e.getValue()))
+                .toList();
+        return Optional.of(new DriftSummaryResponse(runId, assessed, rows.size(),
+                graderVersions, withSummary, consumptionObserved, summaryCommitted,
+                consumerInvoked, consumed, List.copyOf(checks), List.copyOf(metrics),
+                List.copyOf(labels), List.copyOf(deferredSet), Instant.now()));
+    }
+
+    /** jsonb ::text 防御解析（失败如实 null，不猜——该行对应面缺席） */
+    private JsonNode readJson(String json) {
+        if (json == null) {
+            return null;
+        }
+        try {
+            return mapper.readTree(json);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 可空计数加和：两侧皆空 → null（不进分母不填 0）；非数值节点视同缺席 */
+    private static Long addNullable(Long acc, JsonNode node) {
+        if (node == null || !node.isNumber()) {
+            return acc;
+        }
+        return (acc == null ? 0 : acc) + node.asLong();
     }
 
     /**
@@ -878,8 +1464,240 @@ public class EvalQueryService {
                             row.scoredReportId(), row.reportSchemaVersion(),
                             row.reportValidationStatus(), row.reportModel(),
                             row.reportCreatedAt()),
-                    reportSummary(row), evidence, Instant.now());
+                    reportSummary(row), evidence, behaviorEntries(row), loopEntries(row),
+                    collabEntries(row), driftEntries(row), Instant.now());
         });
+    }
+
+    /** 案例协作评测条目装配（ME-T12a；无落档 → 空表如实缺席；jsonb 解析失败行
+     *  跳过不猜；归因双轨分列不混） */
+    private List<CaseCollabEntry> collabEntries(EvalCaseDetailRow row) {
+        List<EvalQueryReader.CaseCollabRow> rows =
+                reader.listCaseCollabForCase(row.caseExecutionId());
+        List<CaseCollabEntry> out = new ArrayList<>(rows.size());
+        for (EvalQueryReader.CaseCollabRow r : rows) {
+            try {
+                JsonNode checks = mapper.readTree(r.checksJson());
+                JsonNode metrics = mapper.readTree(r.metricsJson());
+                JsonNode labels = mapper.readTree(r.failureLabelsJson());
+                JsonNode suspected = mapper.readTree(r.suspectedAttributionsJson());
+                JsonNode supported = mapper.readTree(r.supportedAttributionsJson());
+                List<CaseBehaviorCheck> checkItems = new ArrayList<>();
+                if (checks.isArray()) {
+                    for (JsonNode c : checks) {
+                        List<String> checkRefs = new ArrayList<>();
+                        JsonNode crs = c.path("evidenceRefs");
+                        if (crs.isArray()) {
+                            crs.forEach(x -> checkRefs.add(x.asText()));
+                        }
+                        checkItems.add(new CaseBehaviorCheck(
+                                c.path("name").asText(null),
+                                c.path("status").asText(null),
+                                c.path("reasonCode").asText(null),
+                                List.copyOf(checkRefs)));
+                    }
+                }
+                List<CaseBehaviorMetric> metricItems = new ArrayList<>();
+                if (metrics.isArray()) {
+                    for (JsonNode m : metrics) {
+                        metricItems.add(new CaseBehaviorMetric(
+                                m.path("name").asText(null),
+                                m.path("numerator").asLong(0),
+                                m.path("denominator").asLong(0)));
+                    }
+                }
+                out.add(new CaseCollabEntry(r.graderVersion(), r.edgeCount(),
+                        r.admittedCount(), r.tokenCostTotal(),
+                        List.copyOf(checkItems), List.copyOf(metricItems),
+                        stringList(labels), stringList(suspected), stringList(supported)));
+            } catch (Exception e) {
+                // jsonb 解析失败该行如实缺席（不猜；与行为评测条目同律）
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** 案例上下文漂移评测条目装配（ME-T12a/D08；无落档 → 空表如实缺席；jsonb
+     *  解析失败行跳过不猜；consumption 无观测面如实 null 透传） */
+    private List<CaseDriftEntry> driftEntries(EvalCaseDetailRow row) {
+        List<EvalQueryReader.CaseDriftRow> rows =
+                reader.listCaseDriftForCase(row.caseExecutionId());
+        List<CaseDriftEntry> out = new ArrayList<>(rows.size());
+        for (EvalQueryReader.CaseDriftRow r : rows) {
+            try {
+                JsonNode checks = mapper.readTree(r.checksJson());
+                JsonNode metrics = mapper.readTree(r.metricsJson());
+                JsonNode labels = mapper.readTree(r.failureLabelsJson());
+                JsonNode deferred = mapper.readTree(r.deferredJson());
+                List<CaseBehaviorCheck> checkItems = new ArrayList<>();
+                if (checks.isArray()) {
+                    for (JsonNode c : checks) {
+                        List<String> checkRefs = new ArrayList<>();
+                        JsonNode crs = c.path("evidenceRefs");
+                        if (crs.isArray()) {
+                            crs.forEach(x -> checkRefs.add(x.asText()));
+                        }
+                        checkItems.add(new CaseBehaviorCheck(
+                                c.path("name").asText(null),
+                                c.path("status").asText(null),
+                                c.path("reasonCode").asText(null),
+                                List.copyOf(checkRefs)));
+                    }
+                }
+                List<CaseBehaviorMetric> metricItems = new ArrayList<>();
+                if (metrics.isArray()) {
+                    for (JsonNode m : metrics) {
+                        metricItems.add(new CaseBehaviorMetric(
+                                m.path("name").asText(null),
+                                m.path("numerator").asLong(0),
+                                m.path("denominator").asLong(0)));
+                    }
+                }
+                CaseDriftConsumption face = null;
+                JsonNode faceNode = r.consumptionJson() == null ? null
+                        : mapper.readTree(r.consumptionJson());
+                if (faceNode != null && faceNode.isObject()) {
+                    face = new CaseDriftConsumption(
+                            faceNode.path("mode").asText(null),
+                            faceNode.path("summaryCommitted").asBoolean(false),
+                            faceNode.path("consumerInvoked").asBoolean(false),
+                            faceNode.path("consumed").isBoolean()
+                                    ? faceNode.path("consumed").asBoolean() : null,
+                            faceNode.path("policyDigest").asText(null));
+                }
+                out.add(new CaseDriftEntry(r.graderVersion(), r.summaryDigest(), face,
+                        List.copyOf(checkItems), List.copyOf(metricItems),
+                        stringList(labels), stringList(deferred)));
+            } catch (Exception e) {
+                // jsonb 解析失败该行如实缺席（不猜；与协作评测条目同律）
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** jsonb 数组节点 → 字符串表（非数组 → 空表如实） */
+    private static List<String> stringList(JsonNode node) {
+        List<String> out = new ArrayList<>();
+        if (node != null && node.isArray()) {
+            node.forEach(x -> out.add(x.asText()));
+        }
+        return List.copyOf(out);
+    }
+
+    /** 案例死循环评测条目装配（ME-T12；无落档 → 空表如实缺席；jsonb 解析失败行
+     *  跳过不猜） */
+    private List<CaseLoopEntry> loopEntries(EvalCaseDetailRow row) {
+        List<EvalQueryReader.CaseLoopRow> rows =
+                reader.listCaseLoopForCase(row.caseExecutionId());
+        List<CaseLoopEntry> out = new ArrayList<>(rows.size());
+        for (EvalQueryReader.CaseLoopRow r : rows) {
+            try {
+                JsonNode checks = mapper.readTree(r.checksJson());
+                JsonNode metrics = mapper.readTree(r.metricsJson());
+                JsonNode labels = mapper.readTree(r.failureLabelsJson());
+                List<CaseBehaviorCheck> checkItems = new ArrayList<>();
+                if (checks.isArray()) {
+                    for (JsonNode c : checks) {
+                        List<String> checkRefs = new ArrayList<>();
+                        JsonNode crs = c.path("evidenceRefs");
+                        if (crs.isArray()) {
+                            crs.forEach(x -> checkRefs.add(x.asText()));
+                        }
+                        checkItems.add(new CaseBehaviorCheck(
+                                c.path("name").asText(null),
+                                c.path("status").asText(null),
+                                c.path("reasonCode").asText(null),
+                                List.copyOf(checkRefs)));
+                    }
+                }
+                List<CaseBehaviorMetric> metricItems = new ArrayList<>();
+                if (metrics.isArray()) {
+                    for (JsonNode m : metrics) {
+                        metricItems.add(new CaseBehaviorMetric(
+                                m.path("name").asText(null),
+                                m.path("numerator").asLong(0),
+                                m.path("denominator").asLong(0)));
+                    }
+                }
+                List<String> labelItems = new ArrayList<>();
+                if (labels.isArray()) {
+                    labels.forEach(x -> labelItems.add(x.asText()));
+                }
+                out.add(new CaseLoopEntry(r.graderVersion(), r.stopReason(),
+                        r.detectionEventIndex(), r.firstNoProgressEventIndex(),
+                        r.postStopNewActions(), r.physicalCallsFromOnset(),
+                        r.tokensFromOnset(), r.secondsFromOnset(),
+                        List.copyOf(checkItems), List.copyOf(metricItems),
+                        List.copyOf(labelItems)));
+            } catch (Exception e) {
+                // jsonb 解析失败该行如实缺席（不猜；与行为评测条目同律）
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** 案例行为评测条目装配（ME-T04；无落档 → 空表如实缺席；jsonb 解析失败行跳过不猜） */
+    private List<CaseBehaviorEntry> behaviorEntries(EvalCaseDetailRow row) {
+        List<EvalQueryReader.CaseBehaviorRow> rows =
+                reader.listCaseBehaviorForCase(row.caseExecutionId());
+        List<CaseBehaviorEntry> out = new ArrayList<>(rows.size());
+        for (EvalQueryReader.CaseBehaviorRow r : rows) {
+            try {
+                JsonNode coverage = mapper.readTree(r.coverageJson());
+                JsonNode checks = mapper.readTree(r.checksJson());
+                JsonNode metrics = mapper.readTree(r.metricsJson());
+                JsonNode labels = mapper.readTree(r.failureLabelsJson());
+                JsonNode refs = mapper.readTree(r.evidenceRefsJson());
+                List<CaseBehaviorCheck> checkItems = new ArrayList<>();
+                if (checks.isArray()) {
+                    for (JsonNode c : checks) {
+                        List<String> checkRefs = new ArrayList<>();
+                        JsonNode crs = c.path("evidenceRefs");
+                        if (crs.isArray()) {
+                            crs.forEach(x -> checkRefs.add(x.asText()));
+                        }
+                        checkItems.add(new CaseBehaviorCheck(
+                                c.path("name").asText(null),
+                                c.path("status").asText(null),
+                                c.path("reasonCode").asText(null),
+                                List.copyOf(checkRefs)));
+                    }
+                }
+                List<CaseBehaviorMetric> metricItems = new ArrayList<>();
+                if (metrics.isArray()) {
+                    for (JsonNode m : metrics) {
+                        metricItems.add(new CaseBehaviorMetric(
+                                m.path("name").asText(null),
+                                m.path("numerator").asLong(0),
+                                m.path("denominator").asLong(0)));
+                    }
+                }
+                List<String> labelItems = new ArrayList<>();
+                if (labels.isArray()) {
+                    labels.forEach(x -> labelItems.add(x.asText()));
+                }
+                List<String> refItems = new ArrayList<>();
+                if (refs.isArray()) {
+                    refs.forEach(x -> refItems.add(x.asText()));
+                }
+                out.add(new CaseBehaviorEntry(r.graderVersion(), r.traceDigest(),
+                        new CaseBehaviorCoverage(
+                                intOrNull(coverage.get("textCovered")),
+                                intOrNull(coverage.get("textTotal")),
+                                intOrNull(coverage.get("evidenceCovered")),
+                                intOrNull(coverage.get("evidenceTotal"))),
+                        List.copyOf(checkItems), List.copyOf(metricItems),
+                        List.copyOf(labelItems), List.copyOf(refItems)));
+            } catch (Exception e) {
+                // jsonb 解析失败该行如实缺席（不猜；与安全违规明细同律）
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** jsonb 数值节点 → Integer（null/非数值 → null 如实，不填 0） */
+    private static Integer intOrNull(JsonNode node) {
+        return node != null && node.isNumber() ? node.intValue() : null;
     }
 
     /**
@@ -1302,7 +2120,8 @@ public class EvalQueryService {
             List<EvalQueryReader.UsageCallRow> usageRows,
             List<EvalQueryReader.ScenarioRoundStatRow> statRows,
             List<EvalQueryReader.ModelCallFailureRow> failureRows,
-            RatioStat sixPartsRate) {
+            RatioStat sixPartsRate,
+            Map<String, Integer> plannedRounds) {
         // BA-176：失败账聚合——总数 + 主因码（计数最高；并列取码序小者，确定性）
         long failedTotal = 0;
         String dominantCode = null;
@@ -1322,9 +2141,10 @@ public class EvalQueryService {
                 row.endToEndHitRate(), row.unresolvedRate(), row.tp(), row.fp(), row.fn(),
                 precision(row), recall(row), f1(row),
                 row.displayName(), row.mode(), row.caseCount(), row.totalScenarios(),
-                qualityFacet(row), stabilityFacet(statRows),
+                qualityFacet(row), stabilityFacet(statRows, plannedRounds),
                 facets(row, RunUsageRollup.of(usageRows)),
-                failedTotal, failedTotal > 0 ? dominantCode : null, sixPartsRate);
+                failedTotal, failedTotal > 0 ? dominantCode : null, sixPartsRate,
+                row.terminalReason());
     }
 
     // ------------------------------------------------------------------ F1 派生（读面现算，零迁移）
@@ -1359,30 +2179,121 @@ public class EvalQueryService {
         return denominator == 0 ? null : (double) numerator / denominator;
     }
 
-    /** EV-09：场景轮次聚合行 → 稳定性三件套（无案例落档 → UNKNOWN；分母全用
-     *  真实落档轮次/场景数；单轮场景天然一致——分子分母如实呈现，不隐藏轮数） */
-    private StabilityFacet stabilityFacet(List<EvalQueryReader.ScenarioRoundStatRow> rows) {
+    /** EV-09：场景轮次聚合行 → 稳定性分面（无案例落档 → 全 UNKNOWN；micro 分母用
+     *  真实落档轮次，macro 各场景等权平均；单轮场景天然一致——分子分母如实呈现，
+     *  不隐藏轮数）。
+     *  D01：plannedRounds = 冻结 launch plan 的每场景计划轮次（null = 计划快照不可用
+     *  /缺 caseKeys 身份——不猜计划，进度与完整性结论如实 null/UNKNOWN）。计划可知时
+     *  对照实际终态落档轮次：任一计划场景缺轮/缺席 → planComplete=false（暂态观测，
+     *  不构成可靠性通过结论）；全部计划 trial 终态落档 → true。 */
+    private StabilityFacet stabilityFacet(List<EvalQueryReader.ScenarioRoundStatRow> rows,
+                                          Map<String, Integer> plannedRounds) {
         if (rows.isEmpty()) {
-            return new StabilityFacet(unknownRatio(), unknownRatio(), unknownRatio());
+            return new StabilityFacet(unknownRatio(), unknownRatio(), unknownRatio(),
+                    unknownRatio(), unknownMacro(), unknownRatio(), null, null);
         }
         long rounds = 0;
         long hits = 0;
         long scenarios = 0;
         long allHit = 0;
+        long atLeastOnce = 0;
         long consistent = 0;
+        double macroSum = 0.0;
+        Set<String> observed = new TreeSet<>();
         for (EvalQueryReader.ScenarioRoundStatRow row : rows) {
             rounds += row.rounds();
             hits += row.hits();
             scenarios++;
-            if (row.rounds() > 0 && row.hits() == row.rounds()) {
+            observed.add(row.scenarioId());
+            macroSum += (double) row.hits() / row.rounds();
+            if (row.hits() == row.rounds()) {
                 allHit++;
+            }
+            if (row.hits() > 0) {
+                atLeastOnce++;
             }
             if (row.distinctVerdicts() <= 1 && row.distinctActualCauses() <= 1) {
                 consistent++;
             }
         }
+        RatioStat progress = unknownRatio();
+        Integer uniformK = null;
+        Boolean complete = null;
+        if (plannedRounds != null) {
+            long plannedTotal = 0;
+            boolean allComplete = true;
+            boolean kUniform = true;
+            Integer k = null;
+            for (Map.Entry<String, Integer> planned : plannedRounds.entrySet()) {
+                plannedTotal += planned.getValue();
+                if (!observed.contains(planned.getKey())) {
+                    allComplete = false;
+                }
+                if (k == null) {
+                    k = planned.getValue();
+                } else if (!k.equals(planned.getValue())) {
+                    kUniform = false;
+                }
+            }
+            for (EvalQueryReader.ScenarioRoundStatRow row : rows) {
+                Integer planned = plannedRounds.get(row.scenarioId());
+                // 计划外场景出现 / 落档轮次少于计划 → 完整性结论不可得或不成立
+                if (planned == null || row.rounds() < planned) {
+                    allComplete = false;
+                }
+            }
+            progress = ratio(rounds, plannedTotal);
+            uniformK = kUniform && k != null ? k : null;
+            complete = allComplete;
+        }
         return new StabilityFacet(ratio(hits, rounds), ratio(allHit, scenarios),
-                ratio(consistent, scenarios));
+                ratio(consistent, scenarios), ratio(atLeastOnce, scenarios),
+                new MacroStat(macroSum / scenarios, scenarios, STATUS_OK),
+                progress, uniformK, complete);
+    }
+
+    /** 单 run 回放案例键（详情面；无快照/无数据集版本 → 空集，不查库不猜） */
+    private Set<String> replayCaseKeys(EvalRunRow row) {
+        if (row.launchPlanJson() == null || row.datasetVersion() == null) {
+            return Set.of();
+        }
+        return Set.copyOf(reader.listPlanCaseKeys(row.datasetVersion()));
+    }
+
+    /** worker 默认轮次（EvalLaunchPlan 契约：roundsPerScenario 空 = 现有 5×2 编排的 2，
+     *  与 EvalCompareService.planRounds 同律不漂移） */
+    private static final int DEFAULT_ROUNDS_PER_SCENARIO = 2;
+
+    /**
+     * D01：冻结 launch plan → 每场景 plannedRounds。计划键集取快照 caseKeys
+     * （FUP-03 注入的 panel 展开后有效场景键集）；回放形态场景（数据集案例键，
+     * EvalBatchRunner.effectiveRounds 同律）计划轮次裁剪为 1，其余 =
+     * roundsPerScenario（空值 = worker 默认 2）。无快照/解析失败/缺 caseKeys
+     * 身份 → null（缺身份不猜计划，调用方不出完整性/通过结论）。
+     */
+    private Map<String, Integer> plannedRoundsByScenario(EvalRunRow row,
+                                                         Set<String> replayCaseKeys) {
+        if (row.launchPlanJson() == null) {
+            return null;
+        }
+        try {
+            JsonNode plan = mapper.readTree(row.launchPlanJson());
+            JsonNode keys = plan.path("caseKeys");
+            if (!keys.isArray() || keys.isEmpty()) {
+                return null;
+            }
+            JsonNode roundsNode = plan.path("roundsPerScenario");
+            int k = roundsNode.isInt() && roundsNode.asInt() > 0
+                    ? roundsNode.asInt() : DEFAULT_ROUNDS_PER_SCENARIO;
+            Map<String, Integer> out = new LinkedHashMap<>();
+            for (JsonNode key : keys) {
+                String scenarioId = key.asText();
+                out.put(scenarioId, replayCaseKeys.contains(scenarioId) ? 1 : k);
+            }
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 质量分面：计数列未回填（RUNNING/FAILED）→ 五比率全 UNKNOWN，不填 0 */
@@ -1472,6 +2383,10 @@ public class EvalQueryService {
 
     private static RatioStat unknownRatio() {
         return new RatioStat(null, null, STATUS_UNKNOWN);
+    }
+
+    private static MacroStat unknownMacro() {
+        return new MacroStat(null, null, STATUS_UNKNOWN);
     }
 
     private static Long longOf(Integer value) {

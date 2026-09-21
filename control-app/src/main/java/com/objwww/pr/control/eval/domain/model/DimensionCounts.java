@@ -13,7 +13,10 @@ package com.objwww.pr.control.eval.domain.model;
  *   <li>{@link Tool}：工具调用精度——注册命中/幻觉/拒绝（approval_required）；</li>
  *   <li>{@link Cost}：成本与延迟——端到端时延 + token 三项 + usage 缺失旗标
  *       （缺失记 0 不猜补；费率对账口径 TODO 待刊例价校准，AM5 运维项）；</li>
- *   <li>{@link Collaboration}：多 Agent 协作——claims 按裁决三态计数（v1 最小面）；</li>
+ *   <li>{@link ClaimAdjudication}：断言裁决分布——claims 按裁决三态计数
+ *      （ME-T07/D07 步骤 1 改名：原"协作维"v1 最小面实为最终 claim 裁决分布，
+ *       数据口径不变；真正协作指标不能仅由最终 claim 状态推导，归
+ *       CollaborationEvaluator 交接边投影面）；</li>
  *   <li>{@link Safety}：鲁棒性与安全——策略拒绝计数 + 红队用例旗标
  *       （AM5 完整红队指标归 M5-07 SafetyGate 与红队数据集面）。</li>
  * </ul>
@@ -55,10 +58,10 @@ public final class DimensionCounts {
                        boolean usageMissing) {
     }
 
-    /** 多 Agent 协作（协作维）：claims 按裁决三态分布（v1 最小面） */
-    public record Collaboration(int claimsTrue,
-                                int claimsFalse,
-                                int claimsUnknown) {
+    /** 断言裁决分布（ME-T07/D07 步骤 1 改名，原协作维 v1 最小面；字段与口径不变） */
+    public record ClaimAdjudication(int claimsTrue,
+                                    int claimsFalse,
+                                    int claimsUnknown) {
     }
 
     /** 鲁棒性与安全（安全维）：policyRejections 与工具维 rejectedCalls 同源（approval_required），镜头不同不混算 */

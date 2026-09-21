@@ -1,0 +1,3 @@
+SAFE-03 content hash is unchanged on identical rewrite and repeats after ABA; not a monotonic generation
+SAFE-03 two concurrent successful writes to different flags preserve only one update: ['b']
+Defect characterization complete; temporary files removed; zero real I/O to deployment.

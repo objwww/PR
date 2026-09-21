@@ -1,6 +1,13 @@
 # primary v9 写作要求增量草案（M-d T6 草案半场；2026-09-19）
 
-状态：**草案**——未投产。基线 = am4-native-v8（R7_PRIMARY_DEFAULT_PROMPT，协议键冻结）。
+状态：**已投产（BA-177，2026-09-19）**——三增量落入共享规约
+`control-app/.../alert/application/ReportWritingRubric.java` 的 `PROMPT_SECTION`
+（AlertAm4Config 缺省 prompt 内联段已切换为该常量拼接，PROMPT_VERSION 默认
+am4-native-v9）；把握检出锚同步共享化（SixElementsChecker 经
+`ReportWritingRubric.confidenceLevelOf` 检出，另认 BA-175 确定性摘要
+「结论置信度：高/中/未定论」锚）。以下草案原文留档备查。
+
+基线 = am4-native-v8（R7_PRIMARY_DEFAULT_PROMPT，协议键冻结）。
 v9 不改任何输出协议键（PrimaryDecision.parse 逐字对齐不破坏），只做三处增量，
 应用路径：Prompt 工作台 diff v8↔v9 → 审批（R2 门）→ release_asset 新版本激活 →
 rca_model_call.role_digest 对账。该装配文件当前属主会话在途改动面，等可写窗口再动。

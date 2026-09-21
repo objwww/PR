@@ -1,0 +1,7 @@
+REPRODUCED: missing evidence row retains SUPPORTS
+REPRODUCED: unresolved locator retains SUPPORTS / ROOT_CAUSE
+REPRODUCED: model locator index overflow escapes admission
+REPRODUCED: actual config missing-channel lookup causes NPE before terminal record
+REPRODUCED: 48-hour-old notification is sent despite 24-hour max age
+REPRODUCED: valid platform error response produces invalid last_error JSON
+6 defects characterized; no network or database was used.

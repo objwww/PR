@@ -27,6 +27,8 @@ class OperationStateMachineTest {
                 new Edge(OperationStatus.PREPARED, OperationStatus.CANCELLED_BEFORE_DISPATCH),
                 new Edge(OperationStatus.DISPATCHED, OperationStatus.ACKNOWLEDGED),
                 new Edge(OperationStatus.DISPATCHED, OperationStatus.UNKNOWN),
+                // BA-191：真执行确定性判败专用边（FAILED_CONFIRMED 终态，锁按释放矩阵放行）
+                new Edge(OperationStatus.DISPATCHED, OperationStatus.FAILED_CONFIRMED),
                 new Edge(OperationStatus.ACKNOWLEDGED, OperationStatus.VERIFIED),
                 new Edge(OperationStatus.ACKNOWLEDGED, OperationStatus.UNKNOWN),
                 new Edge(OperationStatus.UNKNOWN, OperationStatus.RECONCILING),

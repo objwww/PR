@@ -1,0 +1,17 @@
+{
+  "adFailure": "off",
+  "productCatalogFailure": "on",
+  "loadGeneratorFloodHomepage": "off",
+  "kafkaQueueProblems": "off",
+  "paymentUnreachable": "off",
+  "emailMemoryLeak": "off",
+  "intlShippingSlowdown": "off",
+  "adHighCpu": "off",
+  "paymentFailure": "off",
+  "cartFailure": "off",
+  "adManualGc": "off",
+  "recommendationCacheFailure": "off",
+  "imageSlowLoad": "off",
+  "failedReadinessProbe": "off",
+  "paymentServiceFailure": "off"
+}

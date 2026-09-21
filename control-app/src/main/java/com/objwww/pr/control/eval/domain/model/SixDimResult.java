@@ -19,7 +19,7 @@ public record SixDimResult(Dim<DimensionCounts.Result> result,
                            Dim<DimensionCounts.Process> process,
                            Dim<DimensionCounts.Tool> tool,
                            Dim<DimensionCounts.Cost> cost,
-                           Dim<DimensionCounts.Collaboration> collaboration,
+                           Dim<DimensionCounts.ClaimAdjudication> claimAdjudication,
                            Dim<DimensionCounts.Safety> safety) {
 
     public SixDimResult {
@@ -27,7 +27,7 @@ public record SixDimResult(Dim<DimensionCounts.Result> result,
         Objects.requireNonNull(process, "process 不得为 null");
         Objects.requireNonNull(tool, "tool 不得为 null");
         Objects.requireNonNull(cost, "cost 不得为 null");
-        Objects.requireNonNull(collaboration, "collaboration 不得为 null");
+        Objects.requireNonNull(claimAdjudication, "claimAdjudication 不得为 null");
         Objects.requireNonNull(safety, "safety 不得为 null");
     }
 

@@ -447,6 +447,20 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .optional();
     }
 
+    /** ME-T12b（D09）：run 的预登记行（V165；一 run 一登记 uq，无登记 → empty） */
+    @Override
+    public Optional<PreregistrationRow> findPreregistration(UUID evalRunId) {
+        return jdbc.sql("""
+                        select min_clusters, prereg_digest, registered_at
+                        from eval_preregistration where eval_run_id = :runId
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> new PreregistrationRow(
+                        rs.getInt("min_clusters"), rs.getString("prereg_digest"),
+                        ts(rs, "registered_at")))
+                .optional();
+    }
+
     /** EV-07 自动落档 baseline（终态钩子）：同 dataset_version + 同 panel 的上一个
      *  终态 run；panel 取 launch_plan 快照原文键（无快照/未填同视 null=全量原表） */
     @Override
@@ -651,7 +665,9 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                 .list();
     }
 
-    /** EV-09：场景轮次聚合（actual_root_cause 以 jsonb 原文文本计 distinct，null 记一值） */
+    /** EV-09：场景轮次聚合（actual_root_cause 以 jsonb 原文文本计 distinct，null 记一值；
+     *  eval_case_result 仅终态结清时写行，count(*) 即实际终态落档轮次——D01 的
+     *  completedRounds 观测面；plannedRounds 对照归应用服务，SQL 不变） */
     @Override
     public List<ScenarioRoundStatRow> listScenarioRoundStatsForRuns(Iterable<UUID> evalRunIds) {
         List<UUID> ids = new ArrayList<>();
@@ -739,6 +755,7 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
     // ------------------------------------------------------------------ P4 安全裁决投影
 
     /** run 全部安全裁决行（P4；红队归属=案例键解析到 REDTEAM 分区；禁 N+1）。
+     *  ME-T02（V158）起带 tally::text（null=旧行如实为空）。
      *  join 顺序必须先限定数据集版本再挂案例——v1/v2 数据集共用 case_key 时
      *  （V142 退役 V141 种子），反向 join 会行倍增（195 实证 assessed 6=3×2） */
     @Override
@@ -747,7 +764,8 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         select s.scenario_id, s.round_no, s.verdict,
                                s.violations::text as violations_json,
                                s.redteam,
-                               ec.root_cause_hit
+                               ec.root_cause_hit,
+                               s.tally::text as tally_json
                           from eval_case_safety s
                           left join eval_case_result ec
                                  on ec.eval_run_id = s.eval_run_id
@@ -763,8 +781,235 @@ public class PostgresEvalQueryReader implements EvalQueryReader {
                         rs.getString("verdict"),
                         rs.getString("violations_json"),
                         rs.getBoolean("redteam"),
-                        (Boolean) rs.getObject("root_cause_hit")))
+                        (Boolean) rs.getObject("root_cause_hit"),
+                        rs.getString("tally_json")))
                 .list();
+    }
+
+    // ------------------------------------------------------------------ M-e T11 行为评测投影
+
+    /** run 全部行为评测行（ME-T04/V160；单查询禁 N+1；未评 run → 空表如实缺席） */
+    @Override
+    public List<CaseBehaviorRow> listCaseBehavior(UUID evalRunId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               trace_digest, coverage::text as coverage_json,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               evidence_refs::text as evidence_refs_json
+                          from eval_case_behavior
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc, grader_version asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> behaviorRow(rs))
+                .list();
+    }
+
+    /** 单案例行为评测行（案例详情抽屉；case_result_id 直键；无落档 → 空表） */
+    @Override
+    public List<CaseBehaviorRow> listCaseBehaviorForCase(UUID caseResultId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               trace_digest, coverage::text as coverage_json,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               evidence_refs::text as evidence_refs_json
+                          from eval_case_behavior
+                         where case_result_id = :caseResultId
+                         order by grader_version asc
+                        """)
+                .param("caseResultId", caseResultId)
+                .query((rs, i) -> behaviorRow(rs))
+                .list();
+    }
+
+    /** jsonb 五列 ::text 原文上抛（解析归应用服务），其余直读 */
+    private static CaseBehaviorRow behaviorRow(ResultSet rs) throws SQLException {
+        return new CaseBehaviorRow(
+                rs.getObject("case_result_id", UUID.class),
+                rs.getString("scenario_id"),
+                rs.getInt("round_no"),
+                rs.getString("grader_version"),
+                rs.getString("trace_digest"),
+                rs.getString("coverage_json"),
+                rs.getString("checks_json"),
+                rs.getString("metrics_json"),
+                rs.getString("failure_labels_json"),
+                rs.getString("evidence_refs_json"));
+    }
+
+    // ------------------------------------------------------------------ ME-T12 死循环评测投影
+
+    /** run 全部死循环评测行（ME-T12/V162；单查询禁 N+1；未评 run → 空表如实缺席） */
+    @Override
+    public List<CaseLoopRow> listCaseLoop(UUID evalRunId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               stop_reason, detection_event_index,
+                               first_no_progress_event_index, post_stop_new_actions,
+                               physical_calls_from_onset, tokens_from_onset,
+                               seconds_from_onset,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json
+                          from eval_case_loop
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc, grader_version asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> loopRow(rs))
+                .list();
+    }
+
+    /** 单案例死循环评测行（案例详情抽屉；case_result_id 直键；无落档 → 空表） */
+    @Override
+    public List<CaseLoopRow> listCaseLoopForCase(UUID caseResultId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               stop_reason, detection_event_index,
+                               first_no_progress_event_index, post_stop_new_actions,
+                               physical_calls_from_onset, tokens_from_onset,
+                               seconds_from_onset,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json
+                          from eval_case_loop
+                         where case_result_id = :caseResultId
+                         order by grader_version asc
+                        """)
+                .param("caseResultId", caseResultId)
+                .query((rs, i) -> loopRow(rs))
+                .list();
+    }
+
+    /** jsonb 三列 ::text 原文上抛（解析归应用服务），可空标量盒式直读（null 如实） */
+    private static CaseLoopRow loopRow(ResultSet rs) throws SQLException {
+        return new CaseLoopRow(
+                rs.getObject("case_result_id", UUID.class),
+                rs.getString("scenario_id"),
+                rs.getInt("round_no"),
+                rs.getString("grader_version"),
+                rs.getString("stop_reason"),
+                (Integer) rs.getObject("detection_event_index"),
+                (Integer) rs.getObject("first_no_progress_event_index"),
+                rs.getInt("post_stop_new_actions"),
+                (Long) rs.getObject("physical_calls_from_onset"),
+                (Long) rs.getObject("tokens_from_onset"),
+                (Long) rs.getObject("seconds_from_onset"),
+                rs.getString("checks_json"),
+                rs.getString("metrics_json"),
+                rs.getString("failure_labels_json"));
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 协作评测投影
+
+    /** run 全部协作评测行（ME-T12a/V163；单查询禁 N+1；未评 run → 空表如实缺席） */
+    @Override
+    public List<CaseCollabRow> listCaseCollab(UUID evalRunId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               edge_count, admitted_count, token_cost_total,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               suspected_attributions::text as suspected_attributions_json,
+                               supported_attributions::text as supported_attributions_json
+                          from eval_case_collab
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc, grader_version asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> collabRow(rs))
+                .list();
+    }
+
+    /** 单案例协作评测行（案例详情抽屉；case_result_id 直键；无落档 → 空表） */
+    @Override
+    public List<CaseCollabRow> listCaseCollabForCase(UUID caseResultId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               edge_count, admitted_count, token_cost_total,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               suspected_attributions::text as suspected_attributions_json,
+                               supported_attributions::text as supported_attributions_json
+                          from eval_case_collab
+                         where case_result_id = :caseResultId
+                         order by grader_version asc
+                        """)
+                .param("caseResultId", caseResultId)
+                .query((rs, i) -> collabRow(rs))
+                .list();
+    }
+
+    /** jsonb 五列 ::text 原文上抛（解析归应用服务），可空标量盒式直读（null 如实） */
+    private static CaseCollabRow collabRow(ResultSet rs) throws SQLException {
+        return new CaseCollabRow(
+                rs.getObject("case_result_id", UUID.class),
+                rs.getString("scenario_id"),
+                rs.getInt("round_no"),
+                rs.getString("grader_version"),
+                (Integer) rs.getObject("edge_count"),
+                (Integer) rs.getObject("admitted_count"),
+                (Long) rs.getObject("token_cost_total"),
+                rs.getString("checks_json"),
+                rs.getString("metrics_json"),
+                rs.getString("failure_labels_json"),
+                rs.getString("suspected_attributions_json"),
+                rs.getString("supported_attributions_json"));
+    }
+
+    // ------------------------------------------------------------------ ME-T12a 漂移评测投影
+
+    /** run 全部漂移评测行（ME-T12a/V164；单查询禁 N+1；未评 run → 空表如实缺席） */
+    @Override
+    public List<CaseDriftRow> listCaseDrift(UUID evalRunId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               summary_digest,
+                               consumption::text as consumption_json,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               deferred::text as deferred_json
+                          from eval_case_drift
+                         where eval_run_id = :runId
+                         order by scenario_id asc, round_no asc, grader_version asc
+                        """)
+                .param("runId", evalRunId)
+                .query((rs, i) -> driftRow(rs))
+                .list();
+    }
+
+    /** 单案例漂移评测行（案例详情抽屉；case_result_id 直键；无落档 → 空表） */
+    @Override
+    public List<CaseDriftRow> listCaseDriftForCase(UUID caseResultId) {
+        return jdbc.sql("""
+                        select case_result_id, scenario_id, round_no, grader_version,
+                               summary_digest,
+                               consumption::text as consumption_json,
+                               checks::text as checks_json, metrics::text as metrics_json,
+                               failure_labels::text as failure_labels_json,
+                               deferred::text as deferred_json
+                          from eval_case_drift
+                         where case_result_id = :caseResultId
+                         order by grader_version asc
+                        """)
+                .param("caseResultId", caseResultId)
+                .query((rs, i) -> driftRow(rs))
+                .list();
+    }
+
+    /** jsonb 五列 ::text 原文上抛（解析归应用服务），summary_digest 可空直读（null 如实） */
+    private static CaseDriftRow driftRow(ResultSet rs) throws SQLException {
+        return new CaseDriftRow(
+                rs.getObject("case_result_id", UUID.class),
+                rs.getString("scenario_id"),
+                rs.getInt("round_no"),
+                rs.getString("grader_version"),
+                rs.getString("summary_digest"),
+                rs.getString("consumption_json"),
+                rs.getString("checks_json"),
+                rs.getString("metrics_json"),
+                rs.getString("failure_labels_json"),
+                rs.getString("deferred_json"));
     }
 
     // ------------------------------------------------------------------ P7 judge 裁决投影

@@ -55,9 +55,10 @@ class TraceDetailControllerTest {
         fake.byRun.put(runId, List.of(
                 new RcaToolSpanDetailReader.ToolSpanDetail(invocationId, taskId, "logs.query", 2,
                         "{\"timeRange\":\"last_30m\"}", "{\"status\":\"success\",\"data\":[",
-                        evidenceId.toString(), "logs_window", "loki"),
+                        evidenceId.toString(), "logs_window", "loki",
+                        "INVALID_ARGS: 缺必填字段 from"),
                 new RcaToolSpanDetailReader.ToolSpanDetail(UUID.randomUUID(), taskId, "change.query", 3,
-                        null, null, null, null, null)));
+                        null, null, null, null, null, null)));
         TraceDetailController controller = new TraceDetailController(fake);
 
         @SuppressWarnings("unchecked")
@@ -72,12 +73,15 @@ class TraceDetailControllerTest {
                 .containsEntry("callSeq", 2L)
                 .containsEntry("evidenceRef", evidenceId.toString())
                 .containsEntry("evidenceType", "logs_window")
-                .containsEntry("evidenceSource", "loki");
-        // 未产证据的调用行（如 VALIDATE_ONLY/失败）三要素如实 null，不造数
+                .containsEntry("evidenceSource", "loki")
+                // BA-190（W3）：拒因具体消息随明细透出
+                .containsEntry("reasonDetail", "INVALID_ARGS: 缺必填字段 from");
+        // 未产证据的调用行（如 VALIDATE_ONLY/失败）三要素如实 null，不造数；无详情如实 null
         assertThat(details.get(1))
                 .containsEntry("scopeSummary", null)
                 .containsEntry("resultSummary", null)
-                .containsEntry("evidenceRef", null);
+                .containsEntry("evidenceRef", null)
+                .containsEntry("reasonDetail", null);
     }
 
     @Test

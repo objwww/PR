@@ -1,0 +1,7 @@
+rc 0
+PrimaryClaimAdmissionTest :: Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in com.objwww.pr.control.alert.application.a
+R7ActionGuardAdmissionTest :: Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.077 s -- in com.objwww.pr.control.alert.application.a
+PrimaryFinalClaimProjectorTest :: Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in com.objwww.pr.control.alert.application.ag
+ContextAssemblerTest :: Tests run: 22, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.492 s -- in com.objwww.pr.control.alert.application.a
+FencedNotifyExecutorTest :: Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.058 s -- in com.objwww.pr.notify.domain.service.Fence
+WebhookChannelTest :: Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.270 s -- in com.objwww.pr.notify.domain.channel.Webhoo

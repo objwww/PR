@@ -1,0 +1,10 @@
+#!/bin/sh
+echo '=== 容器 class 串 ==='
+docker exec deploy-control-app-1 sh -c "grep -a -o '::long\|::bigint' /app/app.jar | sort | uniq -c | head" 2>/dev/null || echo 'jar 直接 grep 失败（压缩流）'
+echo '=== 容器解压 class ==='
+docker exec deploy-control-app-1 sh -c "cd /tmp && cp /app/app.jar j.zip && busybox unzip -o -q j.zip 'BOOT-INF/classes/com/objwww/pr/control/infrastructure/persistence/PostgresAgentOpsReader.class' -d /tmp/j 2>/dev/null; grep -a -o '::long\|::bigint' /tmp/j/BOOT-INF/classes/com/objwww/pr/control/infrastructure/persistence/PostgresAgentOpsReader.class | sort | uniq -c" || echo 'busybox unzip 也失败'
+echo '=== 容器镜像 ID vs 最新镜像 ID ==='
+docker inspect deploy-control-app-1 --format '{{.Image}}'
+docker image inspect pr-agent/control-app:0.0.1-SNAPSHOT --format '{{.Id}}'
+echo '=== 容器启动时间 ==='
+docker inspect deploy-control-app-1 --format '{{.State.StartedAt}}'

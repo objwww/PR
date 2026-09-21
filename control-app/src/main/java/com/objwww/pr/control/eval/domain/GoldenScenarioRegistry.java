@@ -114,7 +114,30 @@ public final class GoldenScenarioRegistry {
             return null;
         }
         return new GoldenCase.Injection(flag.toString(), variant.toString(),
-                baseline.toString());
+                baseline.toString(), changeLedger(injection, s));
+    }
+
+    /** BA-185 change_ledger 扩展块（S27 变更回归；缺块 = null 不联动，
+     *  块出现则 service/actor 双必填——半配 = 注册缺陷，fail-fast 不猜） */
+    private static GoldenCase.Injection.ChangeLedger changeLedger(
+            Map<?, ?> injection, Map<String, Object> s) {
+        Object raw = injection.get("change_ledger");
+        if (raw == null) {
+            return null;
+        }
+        if (!(raw instanceof Map<?, ?> ledger)) {
+            throw new IllegalArgumentException("场景 " + s.get("scenario_id")
+                    + " change_ledger 必须是映射（service/actor）");
+        }
+        Object service = ledger.get("service");
+        Object actor = ledger.get("actor");
+        if (service == null || service.toString().isBlank()
+                || actor == null || actor.toString().isBlank()) {
+            throw new IllegalArgumentException("场景 " + s.get("scenario_id")
+                    + " change_ledger 缺 service/actor（半配 = 注册缺陷）");
+        }
+        return new GoldenCase.Injection.ChangeLedger(
+                service.toString(), actor.toString());
     }
 
     /** 首条 expected_alerts 的 labels_frozen（C-6 指纹输入面；缺省 = 空映射） */

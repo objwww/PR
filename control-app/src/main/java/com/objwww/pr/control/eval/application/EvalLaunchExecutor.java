@@ -8,6 +8,7 @@ import com.objwww.pr.control.eval.domain.GoldenScenarioRegistry;
 import com.objwww.pr.control.eval.domain.model.EvalLaunchPlan;
 import com.objwww.pr.control.eval.domain.model.EvalRunCommand;
 import com.objwww.pr.control.eval.domain.repository.EvalPhaseEventSink;
+import com.objwww.pr.control.eval.domain.repository.EvalPreregistrationSink;
 import com.objwww.pr.control.eval.domain.repository.EvalRunCommandRepository;
 import com.objwww.pr.control.eval.domain.repository.EvalRunRepository;
 
@@ -45,6 +46,10 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
     private final EvalLaunchGate gate;
     /** EV-07 终态自动落档钩子（可空 = 不装配自动落档，测试对照面） */
     private final EvalComparisonAutoRecorder autoRecorder;
+    /** BA-190：启动方注入的 run-tag（env 静态值）；空 = runner 批开始按 evalRunId 派生 */
+    private final String configuredRunTag;
+    /** ME-T12b：预登记落库面（V165；null = 不登记，runner 侧 fail-soft） */
+    private final EvalPreregistrationSink preregistrationSink;
 
     public EvalLaunchExecutor(GoldenScenarioRegistry registry,
                               Map<String, ScenarioDriver> driversByRole,
@@ -62,6 +67,54 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
                               String workerId,
                               EvalLaunchGate gate,
                               EvalComparisonAutoRecorder autoRecorder) {
+        this(registry, driversByRole, alertProbe, incidentProbe, rcaRunResolver, scorer,
+                evalRuns, reportGenerator, phaseSink, commands, baseMetadata, defaultRounds,
+                clock, workerId, gate, autoRecorder, "");
+    }
+
+    /** BA-190 全参形态：configuredRunTag（可空/空串 = 空 tag 兜底派生生效） */
+    public EvalLaunchExecutor(GoldenScenarioRegistry registry,
+                              Map<String, ScenarioDriver> driversByRole,
+                              AlertProbe alertProbe,
+                              IncidentResolutionProbe incidentProbe,
+                              RcaRunResolver rcaRunResolver,
+                              SingleCaseScorer scorer,
+                              EvalRunRepository evalRuns,
+                              BaselineReportGenerator reportGenerator,
+                              EvalPhaseEventSink phaseSink,
+                              EvalRunCommandRepository commands,
+                              EvalRunMetadata baseMetadata,
+                              int defaultRounds,
+                              EvalBatchRunner.EvalClock clock,
+                              String workerId,
+                              EvalLaunchGate gate,
+                              EvalComparisonAutoRecorder autoRecorder,
+                              String configuredRunTag) {
+        this(registry, driversByRole, alertProbe, incidentProbe, rcaRunResolver, scorer,
+                evalRuns, reportGenerator, phaseSink, commands, baseMetadata, defaultRounds,
+                clock, workerId, gate, autoRecorder, configuredRunTag, null);
+    }
+
+    /** ME-T12b 全参形态：preregistrationSink = 预登记落库面（可空 = 不登记，runner
+     *  fail-soft；验收面读不到登记时质量面如实 INCONCLUSIVE 不猜） */
+    public EvalLaunchExecutor(GoldenScenarioRegistry registry,
+                              Map<String, ScenarioDriver> driversByRole,
+                              AlertProbe alertProbe,
+                              IncidentResolutionProbe incidentProbe,
+                              RcaRunResolver rcaRunResolver,
+                              SingleCaseScorer scorer,
+                              EvalRunRepository evalRuns,
+                              BaselineReportGenerator reportGenerator,
+                              EvalPhaseEventSink phaseSink,
+                              EvalRunCommandRepository commands,
+                              EvalRunMetadata baseMetadata,
+                              int defaultRounds,
+                              EvalBatchRunner.EvalClock clock,
+                              String workerId,
+                              EvalLaunchGate gate,
+                              EvalComparisonAutoRecorder autoRecorder,
+                              String configuredRunTag,
+                              EvalPreregistrationSink preregistrationSink) {
         this.registry = Objects.requireNonNull(registry);
         this.driversByRole = Objects.requireNonNull(driversByRole);
         this.alertProbe = Objects.requireNonNull(alertProbe);
@@ -78,6 +131,8 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
         this.workerId = Objects.requireNonNull(workerId);
         this.gate = Objects.requireNonNull(gate);
         this.autoRecorder = autoRecorder;
+        this.configuredRunTag = configuredRunTag == null ? "" : configuredRunTag;
+        this.preregistrationSink = preregistrationSink;
     }
 
     /**
@@ -105,7 +160,7 @@ public class EvalLaunchExecutor implements EvalRunWorker.LaunchExecutor {
         return new EvalBatchRunner(effective, driversByRole, alertProbe, incidentProbe,
                 rcaRunResolver, scorer, evalRuns, reportGenerator, overlaid,
                 plan.roundsPerScenario() == null ? defaultRounds : plan.roundsPerScenario(),
-                clock)
+                clock, configuredRunTag, preregistrationSink)
                 .runBatch(command.evalRunId(), lifecycle);
     }
 
